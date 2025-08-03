@@ -19,7 +19,7 @@ cursor-mcp-bridge/
 ## 快速使用
 1. **添加配置文件开启mcp服务器**：
     - `.mcp.json` - MCP服务器配置
-    " "cursor-project-advisor": {
+    cursor-project-advisor": {
           "command": "node",
           "args": [
             "{path_need_be_replaced}/mcp-server/dist/index-correct.js"
