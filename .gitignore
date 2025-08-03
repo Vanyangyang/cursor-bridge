@@ -37,3 +37,8 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Development reference files
+completeelems.html
+conversations.html
+newconversation.html
