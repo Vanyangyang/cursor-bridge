@@ -14,8 +14,6 @@ cursor-mcp-bridge/
 │   ├── package.json                   # 服务器依赖配置
 │   └── node_modules/                  # 服务器依赖包
 ├── console-complete-fixed.js          # Cursor客户端脚本
-├── conversations.html                  # Cursor DOM结构参考
-└── completeelems.html                 # 完成状态DOM参考
 ```
 
 ## 快速使用
@@ -31,7 +29,6 @@ cursor-mcp-bridge/
     `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
 3. **在Claude Code中使用MCP工具**：
    - `mcp__cursor-project-advisor__consult` - 咨询Cursor获取基于项目上下文的专业建议
-   - `mcp__cursor-project-advisor__status` - 检查连接状态
 
 ## 核心价值
 
