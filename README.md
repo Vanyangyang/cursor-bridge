@@ -22,7 +22,7 @@ cursor-mcp-bridge/
     " "cursor-project-advisor": {
           "command": "node",
           "args": [
-            "G:/u2dProject/u6project/VESPERIX/scripts/cursor-mcp-bridge/mcp-server/dist/index-correct.js"
+            "{path_need_be_replaced}/mcp-server/dist/index-correct.js"
           ]
         }
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
