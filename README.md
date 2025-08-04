@@ -33,6 +33,12 @@
      }
    }
    ```
+  或者直接使用命令行安装：
+   **Windows **：
+  claude mcp add cursor-project-advisor -- cmd /c npx -y cursor-mcp-bridge
+   **Mac/Linux **：
+  claude mcp add cursor-project-advisor npx -y cursor-mcp-bridge
+
 
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
    `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
