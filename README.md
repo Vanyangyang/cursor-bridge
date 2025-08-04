@@ -8,25 +8,29 @@
 
    **Windows 配置**：
    ```json
-   "cursor-project-advisor": {
-     "command": "cmd",
-     "args": [
-       "/c",
-       "npx",
-       "-y",
-       "cursor-mcp-bridge"
-     ]
-   }
+   "mcpServers": {
+       "cursor-project-advisor": {
+         "command": "cmd",
+         "args": [
+           "/c",
+           "npx",
+           "-y",
+           "cursor-mcp-bridge"
+         ]
+       }
+     }
    ```
 
    **Mac/Linux 配置**：
    ```json
-   "cursor-project-advisor": {
-     "command": "npx",
-     "args": [
-       "-y",
-       "cursor-mcp-bridge"
-     ]
+   "mcpServers": {
+     "cursor-project-advisor": {
+       "command": "npx",
+       "args": [
+         "-y",
+         "cursor-mcp-bridge"
+       ]
+     }
    }
    ```
 
