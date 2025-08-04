@@ -10,7 +10,7 @@ cursor-mcp-bridge/
 │   ├── src/
 │   │   └── index-correct.ts           # 主要TypeScript源文件
 │   ├── dis/
-│   │   └── index-correct.cjs          # 编译后的服务器文件
+│   │   └── index-correct.js          # 编译后的服务器文件
 │   ├── package.json                   # 服务器依赖配置
 │   └── node_modules/                  # 服务器依赖包
 ├── console-complete-fixed.js          # Cursor客户端脚本
