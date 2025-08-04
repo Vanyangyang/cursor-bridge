@@ -8,26 +8,41 @@
 
    **Windows 配置**：
    ```json
-   "cursor-project-advisor": {
-     "command": "cmd",
-     "args": [
-       "/c",
-       "npx",
-       "-y",
-       "cursor-mcp-bridge"
-     ]
-   }
+   "mcpServers": {
+       "cursor-project-advisor": {
+         "command": "cmd",
+         "args": [
+           "/c",
+           "npx",
+           "-y",
+           "cursor-mcp-bridge"
+         ]
+       }
+     }
    ```
 
    **Mac/Linux 配置**：
    ```json
-   "cursor-project-advisor": {
-     "command": "npx",
-     "args": [
-       "-y",
-       "cursor-mcp-bridge"
-     ]
+   "mcpServers": {
+     "cursor-project-advisor": {
+       "command": "npx",
+       "args": [
+         "-y",
+         "cursor-mcp-bridge"
+       ]
+     }
    }
+   ```
+  **或者直接使用命令行安装**：
+  
+   **Windows 配置**：
+   ```json
+     claude mcp add cursor-project-advisor -- cmd /c npx -y cursor-mcp-bridge
+   ```
+
+   **Mac/Linux 配置**：
+   ```json
+    claude mcp add cursor-project-advisor npx -y cursor-mcp-bridge
    ```
 
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
