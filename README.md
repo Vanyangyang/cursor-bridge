@@ -34,6 +34,7 @@
    }
    ```
   **或者直接使用命令行安装**：
+  
      **Windows 配置**：
    ```json
      claude mcp add cursor-project-advisor -- cmd /c npx -y cursor-mcp-bridge
