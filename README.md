@@ -14,24 +14,21 @@ cursor-mcp-bridge/
 │   ├── package.json                   # 服务器依赖配置
 │   └── node_modules/                  # 服务器依赖包
 ├── console-complete-fixed.js          # Cursor客户端脚本
-├── conversations.html                  # Cursor DOM结构参考
-└── completeelems.html                 # 完成状态DOM参考
 ```
 
 ## 快速使用
 1. **添加配置文件开启mcp服务器**：
     - `.mcp.json` - MCP服务器配置
-    " "cursor-project-advisor": {
+    cursor-project-advisor": {
           "command": "node",
           "args": [
-            "G:/u2dProject/u6project/VESPERIX/scripts/cursor-mcp-bridge/mcp-server/dist/index-correct.js"
+            "{path_need_be_replaced}/mcp-server/dist/index-correct.js"
           ]
         }
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
     `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
 3. **在Claude Code中使用MCP工具**：
    - `mcp__cursor-project-advisor__consult` - 咨询Cursor获取基于项目上下文的专业建议
-   - `mcp__cursor-project-advisor__status` - 检查连接状态
 
 ## 核心价值
 
