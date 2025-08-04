@@ -9,7 +9,7 @@ cursor-mcp-bridge/
 ├── mcp-server/                         # MCP服务器
 │   ├── src/
 │   │   └── index-correct.ts           # 主要TypeScript源文件
-│   ├── dist-correct/
+│   ├── dis/
 │   │   └── index-correct.cjs          # 编译后的服务器文件
 │   ├── package.json                   # 服务器依赖配置
 │   └── node_modules/                  # 服务器依赖包
