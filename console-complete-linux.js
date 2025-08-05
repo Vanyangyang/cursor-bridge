@@ -213,7 +213,7 @@
         },
 
         // 等待新消息出现（等待AI回复）
-        waitForNewMessage: function (initialMaxIndex, timeout = 240000) {
+        waitForNewMessage: function (initialMaxIndex, timeout = 600000) {
             return new Promise((resolve, reject) => {
                 const startTime = Date.now();
 
@@ -344,8 +344,114 @@
             return null;
         },
 
+        // 🎯 基于按钮状态的等待完成方法（改进版）
+        waitForButtonComplete: function (timeout = 600000) {
+            console.error('⏳ 等待按钮状态变化...');
+
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+                let hasSeenStopButton = false;
+                let lastButtonState = null;
+                let stateHistory = [];
+
+                const checkInterval = setInterval(() => {
+                    // 更精确的按钮查找：先找图标，再找按钮
+                    let button = null;
+                    let icon = null;
+
+                    // 优先查找带有箭头或停止图标的按钮
+                    const arrowIcon = document.querySelector('.codicon-arrow-up-two');
+                    const stopIcon = document.querySelector('.codicon-debug-stop');
+
+                    if (stopIcon) {
+                        icon = stopIcon;
+                        button = stopIcon.closest('.anysphere-icon-button');
+                    } else if (arrowIcon) {
+                        icon = arrowIcon;
+                        button = arrowIcon.closest('.anysphere-icon-button');
+                    }
+
+                    if (!button || !icon) {
+                        // 备用：查找任何按钮
+                        button = document.querySelector('.anysphere-icon-button');
+                        if (button) {
+                            icon = button.querySelector('[class*="codicon"]');
+                        }
+                    }
+
+                    if (!button || !icon) {
+                        console.error('❌ 未找到发送按钮');
+                        return;
+                    }
+
+                    const iconClass = icon.className;
+                    const isDisabled = button.getAttribute('data-disabled') === 'true';
+                    const currentState = `${iconClass.match(/codicon-[\w-]+/)?.[0] || 'unknown'}_${isDisabled ? 'disabled' : 'enabled'}`;
+
+                    // 记录状态变化
+                    if (currentState !== lastButtonState) {
+                        const timestamp = new Date().toLocaleTimeString();
+                        console.error(`🔄 ${timestamp} 按钮状态: ${currentState}`);
+                        stateHistory.push({ time: timestamp, state: currentState });
+                        lastButtonState = currentState;
+                    }
+
+                    // 检测到停止按钮
+                    if (iconClass.includes('codicon-debug-stop')) {
+                        hasSeenStopButton = true;
+                    }
+
+                    // 完成条件1：从停止按钮变回上箭头
+                    if (hasSeenStopButton && iconClass.includes('codicon-arrow-up-two')) {
+                        clearInterval(checkInterval);
+                        console.error('✅ 检测到按钮从停止变回上箭头，消息完成！');
+                        console.error('📊 状态历史:', stateHistory);
+                        setTimeout(() => resolve(true), 500);
+                        return;
+                    }
+
+                    // 完成条件2：上箭头按钮从启用变为禁用（快速发送的情况）
+                    if (iconClass.includes('codicon-arrow-up-two') && stateHistory.length >= 2) {
+                        const recent = stateHistory.slice(-2);
+                        if (recent[0].state.includes('arrow-up-two_enabled') &&
+                            recent[1].state.includes('arrow-up-two_disabled')) {
+                            clearInterval(checkInterval);
+                            console.error('✅ 检测到按钮从启用变为禁用，消息完成！');
+                            console.error('📊 状态历史:', stateHistory);
+                            setTimeout(() => resolve(true), 500);
+                            return;
+                        }
+                    }
+
+                    // 完成条件3：长时间保持禁用状态（10秒）
+                    if (iconClass.includes('codicon-arrow-up-two') && isDisabled) {
+                        const disabledDuration = stateHistory
+                            .slice()
+                            .reverse()
+                            .findIndex(s => !s.state.includes('disabled'));
+
+                        if (disabledDuration > 100) { // 100次检查 = 10秒
+                            clearInterval(checkInterval);
+                            console.error('✅ 按钮长时间保持禁用状态，认为消息已完成');
+                            console.error('📊 状态历史:', stateHistory);
+                            setTimeout(() => resolve(true), 500);
+                            return;
+                        }
+                    }
+
+                    // 超时检查
+                    if (Date.now() - startTime > timeout) {
+                        clearInterval(checkInterval);
+                        console.error('❌ 等待超时，最后状态:', currentState);
+                        console.error('📊 状态历史:', stateHistory);
+                        reject(new Error('等待按钮状态超时'));
+                    }
+                }, 100);
+            });
+        },
+
         // 等待指定消息完成
-        waitForSpecificMessageComplete: function (targetMessageIndex, timeout = 240000) {
+        waitForSpecificMessageComplete: function (targetMessageIndex, timeout = 600000) {
             return new Promise((resolve, reject) => {
                 const startTime = Date.now();
                 let consecutiveSuccessCount = 0;
@@ -564,7 +670,7 @@
             return null;
         },
 
-        sendMessageAndWait: async function (message, timeout = 240000) {
+        sendMessageAndWait: async function (message, timeout = 600000) {
             console.error('🚀 发送消息并等待响应...');
             console.error('📝 消息内容:', message);
 
@@ -604,13 +710,13 @@
                 console.error('⏳ 等待新消息出现...');
                 const newMessageIndex = await this.waitForNewMessage(initialMaxIndex, timeout);
 
-                // 6. 等待消息完成
-                console.error(`⏳ 等待消息 ${newMessageIndex} 完成...`);
-                await this.waitForSpecificMessageComplete(newMessageIndex, timeout);
+                // 6. 🎯 使用按钮状态检测等待消息完成
+                console.error('⏳ 等待按钮状态变化...');
+                await this.waitForButtonComplete(timeout);
 
-                // 额外等待内容稳定
-                console.error('⏳ 等待内容稳定...');
-                await this.waitForContentStability(newMessageIndex, 20000);
+                // 额外等待内容稳定（缩短时间）
+                // console.error('⏳ 等待内容稳定...');
+                // await this.waitForContentStability(newMessageIndex, 10000); // 10秒足够
 
                 // 7. 重新获取最新的最大消息索引
                 const finalMaxIndex = this.getCurrentMaxMessageIndex();
