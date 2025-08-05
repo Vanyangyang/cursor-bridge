@@ -51,9 +51,8 @@
    - 使用 `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
    
    **Linux环境**：
-   - 如果 `console-complete-fixed.js` 在Linux下无法正常工作（出现无限轮询或检测链断裂问题）
-   - 请使用 `console-complete-linux.js`（Linux优化版，测试版本）
-   - 该版本针对Linux平台的DOM渲染时序差异进行了特殊优化
+   - 如果 `console-complete-fixed.js` 在Linux下无法正常工作
+   - 请使用 `console-complete-linux.js`（Linux优化版，测试版本，在此感谢🙏车友cx（耄耋头像）的车友的大力支持）（控制台开启复制粘贴的代码 allow pasting）
 
 3. **在Claude Code中使用MCP工具**：
    - `mcp__cursor-project-advisor__consult` - 咨询Cursor获取基于项目上下文的专业建议
