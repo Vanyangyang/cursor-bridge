@@ -50,8 +50,8 @@
    **Windows环境**：
    - 使用 `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
    
-   **Linux环境**：
-   - 如果 `console-complete-fixed.js` 在Linux下无法正常工作
+   **Linux环境 &windows脚本故障备用方案**：
+   - 如果 `console-complete-fixed.js` 无法正常工作
    - 请使用 `console-complete-linux.js`（Linux优化版，测试版本，在此感谢🙏车友cx（耄耋头像）的车友的大力支持）（控制台开启复制粘贴的代码 allow pasting）
 
 3. **在Claude Code中使用MCP工具**：
