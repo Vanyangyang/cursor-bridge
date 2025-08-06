@@ -71,3 +71,7 @@
 - **DOM分析**：精确的消息检测和内容提取
 - **双AI协作**：Claude Code分析 + Cursor项目理解
 
+## 常见问题
+
+- **MCP服务器显示"Error: Not connected"**：请尝试开启管理员权限运行cursor再试（感谢🙏车友flycat的调试协助）
+- **MCP服务器显示"错误：未找到输入框"**：请保持cursor的聊天窗口是一直显示的状态，不可隐藏（感谢🙏车友flycat的调试协助）
