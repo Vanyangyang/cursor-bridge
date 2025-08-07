@@ -1,9 +1,10 @@
-// Cursor完整客户端 - 最终修复版
-// 修复了以下关键问题：
-// 1. 复制按钮查找逻辑（不再假设在倒数第二个div）
-// 2. 消息完成检测（优先检查复制按钮，备用检查文本内容）
-// 3. Linux下opacity空值处理
-// 4. 简短消息的内容检测
+// Cursor完整客户端 - 备份版本（包含New Tab功能）
+// 此文件为备份脚本，包含完整功能集合
+// 主要包含的功能：
+// 1. 基础的Cursor-Claude桥接通信
+// 2. New Tab按钮点击功能（已移植到fixed版本）
+// 3. 消息检测和内容提取
+// 4. WebSocket通信处理
 
 (function () {
     'use strict';
@@ -79,6 +80,66 @@
 
             console.error('❌ 未找到发送按钮');
             return null;
+        },
+
+        // 查找新标签页按钮 - 基于实际DOM结构
+        findNewTabButton: function () {
+            const selectors = [
+                // 最精确的选择器 - 基于实际HTML结构
+                'a.action-label.codicon.codicon-add-two[role="button"]',
+                'a[aria-label*="New Chat"]',
+                '.action-item .action-label.codicon-add-two',
+                '.codicon-add-two[role="button"]',
+                // 备用选择器
+                '.codicon-add-two',
+                '.action-label.codicon-add-two'
+            ];
+
+            for (const selector of selectors) {
+                const button = document.querySelector(selector);
+                if (button) {
+                    console.error('✅ 找到新标签页按钮:', selector);
+                    console.error('📍 按钮信息:', {
+                        tagName: button.tagName,
+                        className: button.className,
+                        ariaLabel: button.getAttribute('aria-label')
+                    });
+                    return button;
+                }
+            }
+            
+            console.error('❌ 未找到新标签页按钮');
+            return null;
+        },
+
+        // 点击新标签页按钮
+        clickNewTabButton: function () {
+            console.error('🆕 查找并点击新标签页按钮...');
+            
+            const button = this.findNewTabButton();
+            if (!button) {
+                throw new Error('未找到新标签页按钮');
+            }
+            
+            // 确保按钮可点击
+            if (button.hasAttribute('tabindex') && button.getAttribute('tabindex') === '-1') {
+                throw new Error('按钮当前不可点击');
+            }
+            
+            // 模拟点击事件（针对<a>标签）
+            button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+            button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            
+            // 也尝试触发回车键事件（因为它有role="button"）
+            button.dispatchEvent(new KeyboardEvent('keydown', { 
+                key: 'Enter', 
+                code: 'Enter', 
+                bubbles: true 
+            }));
+            
+            console.error('✅ 新标签页按钮点击成功');
+            return true;
         },
 
         setLexicalText: function (element, text) {
@@ -848,6 +909,10 @@
                     await this.handleSendAndWait(message);
                     break;
 
+                case 'newTab':
+                    await this.handleNewTab(message);
+                    break;
+
                 default:
                     console.warn('⚠️ 未知消息类型:', message.type);
             }
@@ -872,6 +937,24 @@
             } catch (error) {
                 console.error('❌ 执行失败:', error);
 
+                // 发送错误结果
+                this.sendResult(message.requestId, false, null, error.message);
+            }
+        }
+
+        async handleNewTab(message) {
+            console.error('🆕 执行新标签页操作');
+            
+            try {
+                const success = window.cursorPreciseInjector.clickNewTabButton();
+                
+                console.error('✅ 新标签页操作成功');
+                // 发送成功结果
+                this.sendResult(message.requestId, true, 'New tab button clicked successfully');
+                
+            } catch (error) {
+                console.error('❌ 新标签页操作失败:', error.message);
+                
                 // 发送错误结果
                 this.sendResult(message.requestId, false, null, error.message);
             }
