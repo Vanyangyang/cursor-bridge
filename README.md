@@ -66,7 +66,7 @@
 
 ## 技术架构
 
-- **MCP服务器**：`cursor-project-advisor` (重命名自cursor-bridge-correct)
+- **MCP服务器**：`cursor-project-advisor` 
 - **WebSocket通信**：端口8766
 - **DOM分析**：精确的消息检测和内容提取
 - **双AI协作**：Claude Code分析 + Cursor项目理解
