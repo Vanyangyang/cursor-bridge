@@ -42,5 +42,11 @@ completeelems.html
 conversations.html
 newconversation.html
 
-# Local MCP server (now using npx)
-mcp-server/
+# Local MCP server build artifacts and dependencies
+mcp-server/node_modules/
+mcp-server/dist/
+mcp-server/package-lock.json
+mcp-server/*.log
+mcp-server/.cache/
+mcp-server/*.tmp
+mcp-server/src/*.backup
