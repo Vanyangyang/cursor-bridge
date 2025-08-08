@@ -36,12 +36,15 @@
      "command": "npx",
      "args": ["-y", "cursor-mcp-bridge"],
      "env": {
-       "CURSOR_MESSAGE_PREFIX": "【项目分析模式】请务必先使用Cursor自带的搜索工具全面了解项目，不要直接分析：1)先搜索相关代码文件和配置 2)再分析项目架构和依赖关系 3)基于完整搜索结果提供建议。不修改代码，不生成长代码块："
+       "CURSOR_MESSAGE_PREFIX": "【项目分析模式】请务必先使用Cursor自带的搜索工具全面了解项目，不要直接分析：1)先搜索相关代码文件和配置 2)再分析项目架构和依赖关系 3)基于完整搜索结果提供建议。不修改代码，不生成长代码块：",
+       "CURSOR_MESSAGE_TIMEOUT": "360000"
      }
    }
    ```
 
-   > **新功能说明**: `CURSOR_MESSAGE_PREFIX` 环境变量允许自定义发送给Cursor的分析指令前缀。默认配置专门优化了Cursor的项目索引工具调用成功率，引导Cursor优先使用自身的搜索和分析工具进行深度项目理解，从而提供更准确的项目级建议。
+   > **环境变量说明**: 
+   > - `CURSOR_MESSAGE_PREFIX`: 自定义发送给Cursor的分析指令前缀。默认配置专门优化了Cursor的项目索引工具调用成功率，引导Cursor优先使用自身的搜索和分析工具进行深度项目理解，从而提供更准确的项目级建议。
+   > - `CURSOR_MESSAGE_TIMEOUT`: 消息请求超时时间（毫秒）。默认值为360000（6分钟），可根据项目复杂度和网络情况调整。
 
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
    
