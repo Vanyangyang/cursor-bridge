@@ -75,5 +75,5 @@
 
 ## 故障排查
 
-- **MCP服务器显示"Error: Not connected"**：请尝试开启管理员权限运行cursor再试（感谢🙏车友flycat的调试协助）
+- **MCP服务器显示"Error: Not connected"**：1️⃣尝试检查是否在cursor开发者控制台贴入运行了相应的js脚本。2️⃣请尝试开启管理员权限运行cursor再试（感谢🙏车友flycat的调试协助）。
 - **MCP服务器显示"错误：未找到输入框"**：请保持cursor的聊天窗口是一直显示的状态，不可隐藏（感谢🙏车友flycat的调试协助）
