@@ -107,7 +107,7 @@
                     return button;
                 }
             }
-
+            
             console.error('❌ 未找到新标签页按钮');
             return null;
         },
@@ -115,29 +115,29 @@
         // 点击新标签页按钮
         clickNewTabButton: function () {
             console.error('🆕 查找并点击新标签页按钮...');
-
+            
             const button = this.findNewTabButton();
             if (!button) {
                 throw new Error('未找到新标签页按钮');
             }
-
+            
             // 确保按钮可点击
             if (button.hasAttribute('tabindex') && button.getAttribute('tabindex') === '-1') {
                 throw new Error('按钮当前不可点击');
             }
-
+            
             // 模拟点击事件（针对<a>标签）
             button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
             button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
             button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
+            
             // 也尝试触发回车键事件（因为它有role="button"）
-            button.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                bubbles: true
+            button.dispatchEvent(new KeyboardEvent('keydown', { 
+                key: 'Enter', 
+                code: 'Enter', 
+                bubbles: true 
             }));
-
+            
             console.error('✅ 新标签页按钮点击成功');
             return true;
         },
@@ -215,102 +215,6 @@
                 console.error('❌ 点击失败:', error.message);
                 return false;
             }
-        },
-
-        // 点击发送按钮并验证状态变化（基于正确状态流转）
-        clickSendButtonWithVerification: async function (button, maxRetries = 3, retryDelay = 5000) {
-            console.error('🚀 点击发送按钮并验证状态变化...');
-
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                console.error(`🎯 尝试点击 ${attempt}/${maxRetries}`);
-
-                // 记录点击前的按钮状态
-                const initialIcon = button.querySelector('[class*="codicon"]');
-                const initialIconClass = initialIcon ? initialIcon.className : '';
-                const isInitialArrow = initialIconClass.includes('codicon-arrow-up-two');
-
-                console.error('📊 点击前状态:', {
-                    icon: initialIconClass.match(/codicon-[\w-]+/)?.[0] || 'unknown',
-                    isArrow: isInitialArrow
-                });
-
-                // 执行点击
-                const clicked = this.clickSendButton(button);
-                if (!clicked) {
-                    console.error('❌ 基础点击失败，停止重试');
-                    return false;
-                }
-
-                // 延迟0.5秒让UI状态更新
-                console.error('⏳ 等待0.5秒让UI状态更新...');
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // 检查点击后的状态
-                const currentIcon = button.querySelector('[class*="codicon"]');
-                const currentIconClass = currentIcon ? currentIcon.className : '';
-                const isNowStop = currentIconClass.includes('codicon-debug-stop');
-
-                console.error('📊 点击后状态:', {
-                    icon: currentIconClass.match(/codicon-[\w-]+/)?.[0] || 'unknown',
-                    isStop: isNowStop
-                });
-
-                // 成功判断：从上箭头变成停止图标
-                if (isInitialArrow && isNowStop) {
-                    console.error('✅ 检测到正确状态变化：上箭头 → 停止，点击成功');
-                    return true;
-                }
-
-                // 如果是最后一次尝试，返回失败
-                if (attempt >= maxRetries) {
-                    console.error('❌ 达到最大重试次数，未检测到预期状态变化');
-                    return false;
-                }
-
-                // 等待重试间隔
-                console.error(`⚠️ 未检测到预期状态变化（上箭头→停止），${retryDelay}ms后重试...`);
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
-            }
-
-            return false;
-        },
-
-        // 等待按钮状态变化
-        waitForButtonStateChange: function (button, initialIconClass, initialDisabled, timeout = 3000) {
-            return new Promise((resolve) => {
-                const startTime = Date.now();
-
-                const checkInterval = setInterval(() => {
-                    const currentIcon = button.querySelector('[class*="codicon"]');
-                    const currentIconClass = currentIcon ? currentIcon.className : '';
-                    const currentDisabled = button.getAttribute('data-disabled') === 'true';
-
-                    // 检查图标是否变化（比如从上箭头变为停止）
-                    const iconChanged = currentIconClass !== initialIconClass;
-                    // 检查禁用状态是否变化
-                    const disabledChanged = currentDisabled !== initialDisabled;
-
-                    if (iconChanged || disabledChanged) {
-                        console.error('🔄 检测到状态变化:', {
-                            iconFrom: initialIconClass.match(/codicon-[\w-]+/)?.[0] || 'unknown',
-                            iconTo: currentIconClass.match(/codicon-[\w-]+/)?.[0] || 'unknown',
-                            disabledFrom: initialDisabled,
-                            disabledTo: currentDisabled
-                        });
-                        clearInterval(checkInterval);
-                        resolve(true);
-                        return;
-                    }
-
-                    // 检查超时
-                    if (Date.now() - startTime > timeout) {
-                        console.error('⏰ 状态变化检查超时');
-                        clearInterval(checkInterval);
-                        resolve(false);
-                        return;
-                    }
-                }, 100); // 每100ms检查一次
-            });
         },
 
         // 获取当前最大消息索引
@@ -857,10 +761,10 @@
                     throw new Error('未找到发送按钮');
                 }
 
-                // 4. 点击发送按钮并验证状态变化
-                const clicked = await this.clickSendButtonWithVerification(sendButton);
+                // 4. 点击发送按钮
+                const clicked = this.clickSendButton(sendButton);
                 if (!clicked) {
-                    throw new Error('点击发送按钮失败或状态未变化');
+                    throw new Error('点击发送按钮失败');
                 }
 
                 // 5. 等待新消息出现
@@ -932,131 +836,12 @@
             this.maxReconnectAttempts = 10;
             this.reconnectDelay = 1000;
 
-            // 心跳机制配置
-            const isLinux = /linux/i.test(navigator.userAgent) || /linux/i.test(navigator.platform);
-            this.heartbeatConfig = isLinux ? {
-                interval: 15000,      // Linux: 15秒心跳
-                timeout: 5000,        // 5秒pong超时
-                maxMissed: 2          // 最多丢失2次心跳
-            } : {
-                interval: 30000,      // Windows: 30秒心跳
-                timeout: 10000,       // 10秒pong超时
-                maxMissed: 3          // 最多丢失3次心跳
-            };
-
-            this.heartbeatTimer = null;
-            this.heartbeatTimeoutTimer = null;
-            this.lastPong = Date.now();
-            this.missedHeartbeats = 0;
-
-            console.error(`💓 心跳配置 (${isLinux ? 'Linux' : 'Windows'}):`, this.heartbeatConfig);
-
             this.init();
         }
 
         init() {
             console.error('🔌 连接到MCP服务器...');
             this.connect();
-        }
-
-        // 启动心跳机制
-        startHeartbeat() {
-            console.error('💓 启动心跳机制...');
-            this.stopHeartbeat(); // 确保没有重复的定时器
-
-            this.heartbeatTimer = setInterval(() => {
-                this.sendPing();
-            }, this.heartbeatConfig.interval);
-
-            // 立即发送第一个心跳
-            setTimeout(() => this.sendPing(), 1000);
-        }
-
-        // 停止心跳机制
-        stopHeartbeat() {
-            if (this.heartbeatTimer) {
-                clearInterval(this.heartbeatTimer);
-                this.heartbeatTimer = null;
-                console.error('💓 心跳已停止');
-            }
-
-            if (this.heartbeatTimeoutTimer) {
-                clearTimeout(this.heartbeatTimeoutTimer);
-                this.heartbeatTimeoutTimer = null;
-            }
-        }
-
-        // 发送心跳ping
-        sendPing() {
-            if (!this.isConnected || this.ws.readyState !== WebSocket.OPEN) {
-                console.error('💔 连接不可用，跳过心跳');
-                return;
-            }
-
-            const pingMessage = {
-                type: 'ping',
-                timestamp: Date.now(),
-                clientId: 'cursor-bridge'
-            };
-
-            try {
-                this.ws.send(JSON.stringify(pingMessage));
-                console.error(`💓 发送心跳 (已丢失: ${this.missedHeartbeats}/${this.heartbeatConfig.maxMissed})`);
-
-                // 设置心跳超时检测
-                this.heartbeatTimeoutTimer = setTimeout(() => {
-                    this.handleHeartbeatTimeout();
-                }, this.heartbeatConfig.timeout);
-
-            } catch (error) {
-                console.error('💔 发送心跳失败:', error.message);
-                this.handleHeartbeatTimeout();
-            }
-        }
-
-        // 处理心跳pong响应
-        handlePong(message) {
-            const now = Date.now();
-            const rtt = now - (message.timestamp || now);
-
-            this.lastPong = now;
-            this.missedHeartbeats = 0;
-
-            // 清除超时定时器
-            if (this.heartbeatTimeoutTimer) {
-                clearTimeout(this.heartbeatTimeoutTimer);
-                this.heartbeatTimeoutTimer = null;
-            }
-
-            console.error(`💚 收到心跳响应 (RTT: ${rtt}ms)`);
-        }
-
-        // 处理心跳超时
-        handleHeartbeatTimeout() {
-            this.missedHeartbeats++;
-            console.error(`💔 心跳超时 ${this.missedHeartbeats}/${this.heartbeatConfig.maxMissed}`);
-
-            if (this.missedHeartbeats >= this.heartbeatConfig.maxMissed) {
-                console.error('💀 心跳丢失过多，强制重连...');
-                this.forceReconnect();
-            }
-        }
-
-        // 强制重连（无上限）
-        forceReconnect() {
-            this.stopHeartbeat();
-
-            if (this.ws) {
-                this.ws.close();
-            }
-
-            this.isConnected = false;
-            this.missedHeartbeats = 0;
-
-            // 延迟重连，避免过于频繁
-            setTimeout(() => {
-                this.reconnectUnlimited();
-            }, 2000);
         }
 
         connect() {
@@ -1069,23 +854,11 @@
                     console.error('✅ 已连接到MCP服务器');
                     this.isConnected = true;
                     this.reconnectAttempts = 0;
-                    this.missedHeartbeats = 0;
-                    this.lastPong = Date.now();
-
-                    // 启动心跳机制
-                    this.startHeartbeat();
                 };
 
                 this.ws.onmessage = (event) => {
                     try {
                         const message = JSON.parse(event.data);
-
-                        // 处理心跳pong响应
-                        if (message.type === 'pong') {
-                            this.handlePong(message);
-                            return;
-                        }
-
                         this.handleServerMessage(message);
                     } catch (error) {
                         console.error('❌ 解析消息失败:', error);
@@ -1095,8 +868,7 @@
                 this.ws.onclose = () => {
                     console.error('❌ 与MCP服务器断开连接');
                     this.isConnected = false;
-                    this.stopHeartbeat();
-                    this.reconnectUnlimited(); // 使用无限重连
+                    this.reconnect();
                 };
 
                 this.ws.onerror = (error) => {
@@ -1105,7 +877,7 @@
 
             } catch (error) {
                 console.error('❌ 创建WebSocket失败:', error);
-                this.reconnectUnlimited(); // 使用无限重连
+                this.reconnect();
             }
         }
 
@@ -1121,22 +893,6 @@
             console.error(`🔄 ${delay}ms后重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
             setTimeout(() => {
-                this.connect();
-            }, delay);
-        }
-
-        // 无限重连方法
-        reconnectUnlimited() {
-            this.reconnectAttempts++;
-
-            // 智能退避策略：最大30秒，但不会无限增长
-            let delay = this.reconnectDelay * Math.pow(2, Math.min(this.reconnectAttempts - 1, 5));
-            delay = Math.min(delay, 30000); // 最大30秒
-
-            console.error(`🔄 ${delay}ms后重连 (第${this.reconnectAttempts}次尝试，无上限)`);
-
-            setTimeout(() => {
-                console.error(`🔄 开始第${this.reconnectAttempts}次重连尝试...`);
                 this.connect();
             }, delay);
         }
@@ -1188,17 +944,17 @@
 
         async handleNewTab(message) {
             console.error('🆕 执行新标签页操作');
-
+            
             try {
                 const success = window.cursorPreciseInjector.clickNewTabButton();
-
+                
                 console.error('✅ 新标签页操作成功');
                 // 发送成功结果
                 this.sendResult(message.requestId, true, 'New tab button clicked successfully');
-
+                
             } catch (error) {
                 console.error('❌ 新标签页操作失败:', error.message);
-
+                
                 // 发送错误结果
                 this.sendResult(message.requestId, false, null, error.message);
             }
@@ -1252,21 +1008,6 @@
 
         const messages = document.querySelectorAll('[data-message-index]');
         console.error('消息数量:', messages.length);
-
-        // 心跳状态诊断
-        if (window.cursorClient) {
-            const client = window.cursorClient;
-            console.error('💓 心跳状态:', {
-                连接状态: client.isConnected ? '✅ 已连接' : '❌ 未连接',
-                WebSocket状态: client.ws ? `状态码: ${client.ws.readyState}` : '❌ 无WebSocket',
-                重连次数: client.reconnectAttempts,
-                丢失心跳: client.missedHeartbeats,
-                最大允许丢失: client.heartbeatConfig?.maxMissed || 'N/A',
-                心跳间隔: `${(client.heartbeatConfig?.interval || 0) / 1000}秒`,
-                最后pong时间: new Date(client.lastPong).toLocaleTimeString(),
-                心跳定时器: client.heartbeatTimer ? '✅ 运行中' : '❌ 未运行'
-            });
-        }
     };
 
     // 清理函数
@@ -1280,18 +1021,10 @@
         console.error('✅ 清理完成');
     };
 
-    console.error('🎉 Cursor完整客户端已就绪（心跳增强版）！');
-    console.error('💓 心跳机制已启用 - Linux环境自动优化');
-    console.error('🔄 无限重连 - 永不放弃连接');
-    console.error('');
+    console.error('🎉 Cursor完整客户端已就绪（最终版）！');
     console.error('💡 使用方法：');
     console.error('testMessage("你的消息") - 测试发送消息');
-    console.error('diagnose() - 诊断响应元素和心跳状态');
+    console.error('diagnose() - 诊断响应元素');
     console.error('cleanupCursorClient() - 清理客户端连接');
-    console.error('');
-    console.error('💓 心跳机制特性：');
-    console.error(`- Linux环境: 15秒心跳, 最多丢失2次`);
-    console.error(`- Windows环境: 30秒心跳, 最多丢失3次`);
-    console.error(`- 智能重连: 最大30秒间隔, 无次数限制`);
 
 })();
