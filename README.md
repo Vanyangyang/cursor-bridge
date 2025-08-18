@@ -48,12 +48,12 @@
 
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
    
-   **Windows环境**：
-   - **推荐使用**: `console-complete-fixed.js`（稳定增强版，包含完整功能和New Tab支持）（控制台开启复制粘贴的代码 allow pasting）
+   **推荐使用**：
+   - `console-complete-backup.js`（控制台开启复制粘贴的代码 allow pasting）
    
-   **Linux环境 & 备用方案**：
-   - 如果 `console-complete-fixed.js` 无法正常工作
-   - 请使用 `console-complete-backup.js`（功能完整的备份脚本，在此感谢🙏车友cx（耄耋头像）的车友的大力支持）（控制台开启复制粘贴的代码 allow pasting）
+   ** 备用方案**：
+   - 如果 `console-complete-backup.js` 无法正常工作
+   - 请使用 `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
 
 3. **在Claude Code中使用MCP工具**：
    - `mcp__cursor-project-advisor__consult` - 咨询Cursor获取基于项目上下文的专业建议
@@ -76,4 +76,6 @@
 ## 故障排查
 
 - **MCP服务器显示"Error: Not connected"**：1️⃣尝试检查是否在cursor开发者控制台贴入运行了相应的js脚本。2️⃣请尝试开启管理员权限运行cursor再试（感谢🙏车友flycat的调试协助）。
-- **MCP服务器显示"错误：未找到输入框"**：请保持cursor的聊天窗口是一直显示的状态，不可隐藏（感谢🙏车友flycat的调试协助）
+- **MCP服务器显示"错误：未找到输入框"**：请保持cursor的聊天窗口是一直显示的状态，不可隐藏
+
+- （在此感谢🙏车友cx（耄耋头像）的车友的大力支持）（感谢🙏车友flycat的调试协助）
