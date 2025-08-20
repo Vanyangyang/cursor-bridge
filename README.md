@@ -43,7 +43,7 @@
    ```
 
    > **环境变量说明**: 
-   > - `CURSOR_MESSAGE_PREFIX`: 自定义发送给Cursor的分析指令前缀。默认配置专门优化了Cursor的项目索引工具调用成功率，引导Cursor优先使用自身的搜索和分析工具进行深度项目理解，从而提供更准确的项目级建议。
+   > - `CURSOR_MESSAGE_PREFIX`: 自定义发送给Cursor的分析指令前缀。当前这段仅供参考（可自行定制）。默认配置专门优化了Cursor的项目索引工具调用成功率，引导Cursor优先使用自身的搜索和分析工具进行深度项目理解，从而提供更准确的项目级建议。
    > - `CURSOR_MESSAGE_TIMEOUT`: 消息请求超时时间（毫秒）。默认值为360000（6分钟），可根据项目复杂度和网络情况调整。
 
 2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
