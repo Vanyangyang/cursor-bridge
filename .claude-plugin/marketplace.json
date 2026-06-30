@@ -9,7 +9,7 @@
       "name": "cursor-bridge",
       "source": ".",
       "description": "从 Claude Code 直驱 Cursor IDE 的 agent 做语义代码检索（CDP 直驱，无 console 注入）。需 Cursor 带 --remote-debugging-port=9223 在跑。",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "author": {
         "name": "Vanyangyang"
       }

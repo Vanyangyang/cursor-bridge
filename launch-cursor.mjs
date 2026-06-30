@@ -98,7 +98,11 @@ export async function ensureCursorRunning({ waitMs = 30000 } = {}) {
   return { ok: true, status: 'launched', exe, port: CDP_PORT, message: `已启动 Cursor（${exe}，打开 ${PROJECT_PATH}），CDP ${CDP_PORT} 就绪。` };
 }
 
-const isMain = import.meta.url === pathToFileURL(process.argv[1] || '').href;
+// 仅在「直接 node launch-cursor.mjs」时自执行。文件名守卫不可省：被 esbuild 打进 server 单文件后，
+// import.meta.url 和 process.argv[1] 对所有内联模块都指向同一个 bundle，光靠 === 会让本块误判为入口
+// → 往 stdout 打 JSON 污染 MCP 协议流 + process.exit 杀掉 server。
+const isMain = import.meta.url === pathToFileURL(process.argv[1] || '').href
+  && import.meta.url.endsWith('launch-cursor.mjs');
 if (isMain) {
   ensureCursorRunning()
     .then((r) => { console.log(JSON.stringify(r)); process.exit(r.ok ? 0 : 1); })
