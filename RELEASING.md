@@ -1,8 +1,9 @@
 # 发布新版本（维护者）
 
 本仓库作为 **Claude Code 插件 + 自带 marketplace** 分发。用户经
-`claude plugin marketplace add github:Vanyangyang/cursor-bridge` +
+`claude plugin marketplace add Vanyangyang/cursor-bridge` +
 `claude plugin install cursor-bridge@vanyangyang` 安装，CC 后台 auto-update 会拉新版本。
+（注意：marketplace 源格式用 `owner/repo`，**不是** `github:owner/repo`——后者被当前 CLI 拒绝。）
 
 ## 改了源码后的发布步骤
 
