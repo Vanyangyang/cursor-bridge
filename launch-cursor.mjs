@@ -25,15 +25,36 @@ const CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
 // 不从本文件位置上推目录——发布为 npm 包后文件在 node_modules/npx 缓存里，上推会指向错目录。
 const PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
 
-const EXE_CANDIDATES = [
-  process.env.CURSOR_EXE,
-  'D:\\ide\\cursor\\Cursor.exe',
+// 注册表探测：从 cursor:// 协议处理器 + Uninstall DisplayIcon 解析 Cursor.exe，
+// 任何安装位置（C 盘默认 / 任意盘自定义）都能自动找到，不依赖写死路径。仅 Windows。
+function cursorFromRegistry() {
+  const queries = [
+    'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
+    'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
+    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
+    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor" /v DisplayIcon',
+  ];
+  for (const q of queries) {
+    try {
+      const out = execSync(q, { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);   // 抓 X:\...\Cursor.exe（带不带引号都行）
+      if (m && existsSync(m[1])) return m[1];
+    } catch {}
+  }
+  return null;
+}
+
+// 默认安装位置兜底（注册表查不到时）
+const EXE_FALLBACKS = [
   `${process.env.LOCALAPPDATA || ''}\\Programs\\cursor\\Cursor.exe`,
   'C:\\Program Files\\cursor\\Cursor.exe',
-].filter(Boolean);
+];
 
 function findCursorExe() {
-  for (const p of EXE_CANDIDATES) { try { if (existsSync(p)) return p; } catch {} }
+  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;  // 最高优先级覆盖
+  const fromReg = cursorFromRegistry();
+  if (fromReg) return fromReg;
+  for (const p of EXE_FALLBACKS) { try { if (existsSync(p)) return p; } catch {} }
   return null;
 }
 function cdpUp(timeoutMs = 1500) {
@@ -86,7 +107,7 @@ export async function ensureCursorRunning({ waitMs = 30000 } = {}) {
       message: `Cursor 正在运行但没带 --remote-debugging-port=${CDP_PORT}（单实例锁会忽略 flag）。请先彻底退出 Cursor（全部窗口 + 托盘），cursor-bridge 会在下次调用时自动带 flag 拉起；或手动带 flag 重启。注意：不主动 kill 以免丢未保存内容。` };
   }
   const exe = findCursorExe();
-  if (!exe) return { ok: false, status: 'no-exe', port: CDP_PORT, message: `找不到 Cursor.exe（试过：${EXE_CANDIDATES.join(' , ')}）。设环境变量 CURSOR_EXE 指定。` };
+  if (!exe) return { ok: false, status: 'no-exe', port: CDP_PORT, message: `找不到 Cursor.exe（注册表 + 默认安装位置都没命中）。设环境变量 CURSOR_EXE 指定 Cursor.exe 完整路径。` };
 
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
   if (PROJECT_PATH && existsSync(PROJECT_PATH)) args.push(PROJECT_PATH);   // 打开本项目让 Cursor 建索引
