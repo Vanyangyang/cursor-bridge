@@ -29,7 +29,7 @@ Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evalua
 ### 方式 A：作为 Claude Code 插件安装（推荐）
 
 ```bash
-claude plugin marketplace add github:Vanyangyang/cursor-bridge
+claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
 ```
 
