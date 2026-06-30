@@ -79,10 +79,10 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 | `CURSOR_PROJECT_PATH` | 当前工作目录 | 让 Cursor 打开/建索引的项目根 |
 | `CURSOR_EXE` | 自动探测 | `Cursor.exe` 路径（自动探测失败时显式指定） |
 
-## 何时用 / 何时不用
+## 使用建议
 
-- ✅ 需要 Cursor 原生 embedding 语义召回质量的代码定位（关键字搜不准、要按「意图」找）。
-- ❌ 关键字/符号能直接命中时——用本地 grep 或 codegraph（亚秒级，远快于经 GUI 遥控 agent 的 ~90s）。
+- ✅ 用于按「意图」做语义召回的代码定位、跨文件理解（借 Cursor 原生 embedding 质量）。
+- ⏱️ 单次约 ~90s 且串行（一次一个）。**建议并行使用**：丢后台 / 与其它工作并行推进，不要在主线阻塞等它返回。
 
 ## 文件结构
 
