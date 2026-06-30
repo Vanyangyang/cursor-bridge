@@ -1,9 +1,45 @@
 {
-  "name": "cursor-bridge",
-  "version": "1.0.0",
-  "description": "MCP server: Claude Code 经 CDP 直驱 Cursor IDE agent 检索（语义搜索+Instant Grep）。CDP 直驱架构，无 console 注入。",
+  "name": "cursor-mcp-bridge",
+  "version": "2.0.0",
+  "description": "MCP server: drive Cursor IDE's agent for semantic code search from Claude Code (or any MCP client) over CDP. CDP direct-drive, no console injection.",
   "type": "module",
   "main": "server.mjs",
+  "bin": {
+    "cursor-mcp-bridge": "server.mjs"
+  },
+  "files": [
+    "server.mjs",
+    "launch-cursor.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cursor",
+    "cursor-ide",
+    "claude-code",
+    "cdp",
+    "semantic-search",
+    "code-search",
+    "ai-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vanyangyang/cursor-bridge.git"
+  },
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/Vanyangyang/cursor-bridge/issues"
+  },
+  "author": "Vanyangyang",
+  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "ws": "^8.18.0"
