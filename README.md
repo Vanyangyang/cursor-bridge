@@ -22,15 +22,36 @@ Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evalua
 - **Cursor 带远程调试口启动**：`--remote-debugging-port=9223`，已登录、已打开目标项目（并完成建索引）。
 - Node.js 18+。
 
-## 安装
+## 安装与使用
 
-```bash
-npm install
+> npm 包名为 **`cursor-mcp-bridge`**（仓库名是 `cursor-bridge`）。
+
+### 方式 A：npx 一键接入（推荐，无需手动 clone/install）
+
+在你的 MCP 客户端配置里（如 Claude Code 的 `.mcp.json`）加：
+
+```json
+{
+  "mcpServers": {
+    "cursor-bridge": {
+      "command": "npx",
+      "args": ["-y", "cursor-mcp-bridge"],
+      "env": { "CURSOR_PROJECT_PATH": "C:/path/to/your/project" }
+    }
+  }
+}
 ```
 
-依赖：`@modelcontextprotocol/sdk`、`ws`。
+`npx -y cursor-mcp-bridge` 会自动拉取并运行最新版，依赖（`@modelcontextprotocol/sdk`、`ws`）自动安装。
+`CURSOR_PROJECT_PATH` 指向你要让 Cursor 建索引的项目根；不设则用 MCP 客户端启动时的工作目录。
 
-## 在 `.mcp.json` 中注册
+### 方式 B：从源码运行
+
+```bash
+git clone https://github.com/Vanyangyang/cursor-bridge.git
+cd cursor-bridge
+npm install
+```
 
 ```json
 {
@@ -44,6 +65,8 @@ npm install
 ```
 
 server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）；设 `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` 可关闭。
+
+> 🪟 **平台**：自动拉起 Cursor 目前仅支持 **Windows**（用 `tasklist` + 默认 `Cursor.exe` 安装路径，可用 `CURSOR_EXE` 覆盖）。macOS/Linux 下请先手动带 `--remote-debugging-port=9223 --remote-allow-origins=http://localhost:9223` 启动 Cursor，再用 `cursor_search`。
 
 ## 工具
 
@@ -60,6 +83,8 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口 |
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时（ms） |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | — | 设 `1` 关闭启动即自动拉起 Cursor |
+| `CURSOR_PROJECT_PATH` | 当前工作目录 | 让 Cursor 打开/建索引的项目根 |
+| `CURSOR_EXE` | 自动探测 | `Cursor.exe` 路径（自动探测失败时显式指定） |
 
 ## 何时用 / 何时不用
 

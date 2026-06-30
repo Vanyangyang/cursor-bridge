@@ -16,15 +16,14 @@
  */
 import { spawn, execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { pathToFileURL, fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { pathToFileURL } from 'url';
 import http from 'http';
 
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
-const __dir = dirname(fileURLToPath(import.meta.url));
-// 项目根：env 优先，否则从本文件位置上推 3 级（cursor-bridge → scripts → .claude → 项目根）。
-const PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || resolve(__dir, '..', '..', '..');
+// 项目根：env 优先（推荐显式设 CURSOR_PROJECT_PATH），否则用 MCP 客户端启动时的工作目录（= 用户当前项目）。
+// 不从本文件位置上推目录——发布为 npm 包后文件在 node_modules/npx 缓存里，上推会指向错目录。
+const PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
 
 const EXE_CANDIDATES = [
   process.env.CURSOR_EXE,
