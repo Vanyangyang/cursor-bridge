@@ -1,0 +1,11 @@
+{
+  "name": "cursor-bridge",
+  "version": "1.0.0",
+  "description": "MCP server: Claude Code 经 CDP 直驱 Cursor IDE agent 检索（语义搜索+Instant Grep）。CDP 直驱架构，无 console 注入。",
+  "type": "module",
+  "main": "server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  }
+}

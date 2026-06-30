@@ -1,80 +1,75 @@
-# Cursor Project Advisor - MCP工具
+# cursor-bridge
 
-通过WebSocket实现Claude Code与Cursor AI的实时通信桥接，利用Cursor对项目的深度理解能力。
+> MCP server：让 **Claude Code 直驱 Cursor IDE 里的 agent 做代码检索**（语义搜索 + Instant Grep，agent 自动编排）。
+> **CDP 直驱架构，无 console 注入、无 WebSocket 回连。**
 
-## 快速使用
+借用 Cursor 原生 embedding 的语义召回质量，给 Claude Code 补一个「语义代码定位」能力——当本地 grep / codegraph 不足以靠关键字命中、需要语义召回时使用。
 
-1. **在 `.mcp.json` 中添加配置**：
+## 架构
 
-   **Windows 配置**：
-   ```json
-   "cursor-project-advisor": {
-     "command": "cmd",
-     "args": [
-       "/c",
-       "npx",
-       "-y",
-       "cursor-mcp-bridge"
-     ]
-   }
-   ```
+```
+Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evaluate + Input)-->  Cursor 渲染进程
+```
 
-   **Mac/Linux 配置**：
-   ```json
-   "cursor-project-advisor": {
-     "command": "npx",
-     "args": [
-       "-y",
-       "cursor-mcp-bridge"
-     ]
-   }
-   ```
+- server 每次查询新建一条 CDP 连接（**串行**，GUI 单输入框一次只能跑一个），直接驱动 Cursor 的 chat DOM + 真实键盘事件。
+- Cursor 的语义搜索没有纯检索接口/独立 UI，只能经 `@Codebase`/agent chat 跑：填查询 → 真实 Enter → 等生成完成 → 抓回复。
+- 完成信号 = 停止钮（`codicon-stop` 等）数量从 `>0 → 0`。
 
-   **环境变量配置（可选）**：
-   ```json
-   "cursor-project-advisor": {
-     "command": "npx",
-     "args": ["-y", "cursor-mcp-bridge"],
-     "env": {
-       "CURSOR_MESSAGE_PREFIX": "【项目分析模式】请务必先使用Cursor自带的搜索工具全面了解项目，不要直接分析：1)先搜索相关代码文件和配置 2)再分析项目架构和依赖关系 3)基于完整搜索结果提供建议。不修改代码，不生成长代码块：",
-       "CURSOR_MESSAGE_TIMEOUT": "360000"
-     }
-   }
-   ```
+> ⚠️ Cursor 是 agent（比纯检索更主动）。prompt 已强约束「只列 `path:行号`、不读正文、不改代码」，但这是 **prompt 约束而非技术沙箱**——理论上 agent 仍有写能力，勿当隔离环境。
 
-   > **环境变量说明**: 
-   > - `CURSOR_MESSAGE_PREFIX`: 自定义发送给Cursor的分析指令前缀。当前这段仅供参考（可自行定制）。默认配置专门优化了Cursor的项目索引工具调用成功率，引导Cursor优先使用自身的搜索和分析工具进行深度项目理解，从而提供更准确的项目级建议。
-   > - `CURSOR_MESSAGE_TIMEOUT`: 消息请求超时时间（毫秒）。默认值为360000（6分钟），可根据项目复杂度和网络情况调整。
+## 前提
 
-2. **在Cursor开发者工具（Help->Toggle Developer Tools）Console中运行**：
-   
-   **推荐使用**：
-   - `console-complete-backup.js`（控制台开启复制粘贴的代码 allow pasting）
-   
-   ** 备用方案**：
-   - 如果 `console-complete-backup.js` 无法正常工作
-   - 请使用 `console-complete-fixed.js`（控制台开启复制粘贴的代码 allow pasting）
+- **Cursor 带远程调试口启动**：`--remote-debugging-port=9223`，已登录、已打开目标项目（并完成建索引）。
+- Node.js 18+。
 
-3. **在Claude Code中使用MCP工具**：
-   - `mcp__cursor-project-advisor__consult` - 咨询Cursor获取基于项目上下文的专业建议
-   - `mcp__cursor-project-advisor__cursor_new_tab` - 在Cursor中打开新标签页
+## 安装
 
-## 核心价值
+```bash
+npm install
+```
 
-- **上下文自动扩展**：基于传递的关键信息，Cursor自动检索补充相关代码
-- **深度项目理解**：利用检索模型理解整个代码库结构和依赖关系
-- **智能关联分析**：自动找到相关代码模式、类似实现和潜在影响
-- **架构一致性**：基于项目现有代码风格提供符合规范的建议
+依赖：`@modelcontextprotocol/sdk`、`ws`。
 
-## 技术架构
+## 在 `.mcp.json` 中注册
 
-- **MCP服务器**：`cursor-project-advisor` 
-- **WebSocket通信**：端口8766
-- **DOM分析**：精确的消息检测和内容提取
-- **双AI协作**：Claude Code分析 + Cursor项目理解
+```json
+{
+  "mcpServers": {
+    "cursor-bridge": {
+      "command": "node",
+      "args": ["path/to/cursor-bridge/server.mjs"]
+    }
+  }
+}
+```
 
-## 故障排查
+server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）；设 `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` 可关闭。
 
-- **MCP服务器显示"Error: Not connected"**：1️⃣尝试检查是否在cursor开发者控制台贴入运行了相应的js脚本。2️⃣请尝试开启管理员权限运行cursor再试（感谢🙏车友flycat的调试协助）。
-- **MCP服务器显示"错误：未找到输入框"**：请保持cursor的聊天窗口是一直显示的状态，不可隐藏
+## 工具
 
+| 工具 | 作用 |
+|------|------|
+| `cursor_search` | 用 Cursor agent 检索定位代码，入参 `query`（自然语言意图）。返回 `path:行号` 清单。单次约 ~90s（实测 66~175s 波动）、串行。 |
+| `cursor_status` | 检查与 Cursor CDP（9223）的连接/队列状态。 |
+| `cursor_launch` | 确保 Cursor 带 CDP 调试口在运行；未运行则自动拉起（带 `--remote-debugging-port` + `--remote-allow-origins` + 打开项目建索引）。返回 `already`/`launched`/`running-no-debug`/`port-not-cursor`/`no-exe`/`timeout`。 |
+
+## 环境变量
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口 |
+| `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时（ms） |
+| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | — | 设 `1` 关闭启动即自动拉起 Cursor |
+
+## 何时用 / 何时不用
+
+- ✅ 需要 Cursor 原生 embedding 语义召回质量的代码定位（关键字搜不准、要按「意图」找）。
+- ❌ 关键字/符号能直接命中时——用本地 grep 或 codegraph（亚秒级，远快于经 GUI 遥控 agent 的 ~90s）。
+
+## 文件
+
+- `server.mjs` — MCP server 主入口（CDP 直驱 + 工具定义）。
+- `launch-cursor.mjs` — 确保/拉起带 CDP 的 Cursor。
+- `probe-*.mjs` — CDP 链路探针（输入框定位、填字、发送、回复抓取等，实测脚本）。
+- `agents-autopilot.mjs` / `autopilot-switch.py` — autopilot 辅助。
+- `test-*.mjs` — 检索/批量自测脚本。
