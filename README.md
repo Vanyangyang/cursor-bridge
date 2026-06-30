@@ -3,7 +3,12 @@
 > MCP server：让 **Claude Code 直驱 Cursor IDE 里的 agent 做代码检索**（语义搜索 + Instant Grep，agent 自动编排）。
 > **CDP 直驱架构，无 console 注入、无 WebSocket 回连。**
 
-借用 Cursor 原生 embedding 的语义召回质量，给 Claude Code 补一个「语义代码定位」能力——当本地 grep / codegraph 不足以靠关键字命中、需要语义召回时使用。
+借用 Cursor 原生 embedding 的语义召回质量，给主调 agent（Claude Code 等 MCP 客户端）补一个「按意图做语义代码定位」的能力。
+
+## 优点
+
+- **省主调 agent 的上下文**：检索、读文件、推理这些重活都在 Cursor 自己的上下文里跑，只把精炼的 `path:行号` 清单回传给主调方。主调 agent 的上下文窗口不被中间的大量文件内容和搜索噪音占用——相当于把「探索」外包出去，只拿回「结论」。
+- **借 Cursor 的项目理解力**：Cursor 对整个项目建了 embedding 语义索引，叠加 agent 自动编排（多轮检索、跟引用），对「按意图找」「跨文件理解」这类语义查询的召回质量，强于纯关键字检索。
 
 ## 架构
 
