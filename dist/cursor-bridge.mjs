@@ -10602,13 +10602,25 @@ function cursorFromRegistry() {
 }
 function findCursorExe() {
   if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
-  const fromReg = cursorFromRegistry();
-  if (fromReg) return fromReg;
-  for (const p of EXE_FALLBACKS) {
-    try {
-      if (existsSync(p)) return p;
-    } catch {
+  if (IS_WIN) {
+    const fromReg = cursorFromRegistry();
+    if (fromReg) return fromReg;
+    for (const p of WIN_FALLBACKS) {
+      try {
+        if (existsSync(p)) return p;
+      } catch {
+      }
     }
+    return null;
+  }
+  if (IS_MAC) {
+    for (const p of MAC_CANDIDATES) {
+      try {
+        if (existsSync(p)) return p;
+      } catch {
+      }
+    }
+    return null;
   }
   return null;
 }
@@ -10654,7 +10666,12 @@ function cdpIsCursor(timeoutMs = 1500) {
 }
 function cursorRunning() {
   try {
-    return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', { encoding: "utf8", windowsHide: true }));
+    if (IS_WIN) return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', { encoding: "utf8", windowsHide: true }));
+    if (IS_MAC) {
+      execSync("pgrep -f 'Cursor.app/Contents/MacOS/Cursor'", { stdio: "ignore" });
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -10678,11 +10695,11 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
       ok: false,
       status: "running-no-debug",
       port: CDP_PORT,
-      message: `Cursor \u6B63\u5728\u8FD0\u884C\u4F46\u6CA1\u5E26 --remote-debugging-port=${CDP_PORT}\uFF08\u5355\u5B9E\u4F8B\u9501\u4F1A\u5FFD\u7565 flag\uFF09\u3002\u8BF7\u5148\u5F7B\u5E95\u9000\u51FA Cursor\uFF08\u5168\u90E8\u7A97\u53E3 + \u6258\u76D8\uFF09\uFF0Ccursor-bridge \u4F1A\u5728\u4E0B\u6B21\u8C03\u7528\u65F6\u81EA\u52A8\u5E26 flag \u62C9\u8D77\uFF1B\u6216\u624B\u52A8\u5E26 flag \u91CD\u542F\u3002\u6CE8\u610F\uFF1A\u4E0D\u4E3B\u52A8 kill \u4EE5\u514D\u4E22\u672A\u4FDD\u5B58\u5185\u5BB9\u3002`
+      message: `Cursor \u6B63\u5728\u8FD0\u884C\u4F46\u6CA1\u5E26 --remote-debugging-port=${CDP_PORT}\uFF08\u5355\u5B9E\u4F8B\u9501\u4F1A\u5FFD\u7565 flag\uFF09\u3002\u8BF7\u5148\u5F7B\u5E95\u9000\u51FA Cursor\uFF08Windows\uFF1A\u5168\u90E8\u7A97\u53E3+\u6258\u76D8\uFF1BmacOS\uFF1ACmd+Q\uFF09\uFF0Ccursor-bridge \u4F1A\u5728\u4E0B\u6B21\u8C03\u7528\u65F6\u81EA\u52A8\u5E26 flag \u62C9\u8D77\uFF1B\u6216\u624B\u52A8\u5E26 flag \u91CD\u542F\u3002\u6CE8\u610F\uFF1A\u4E0D\u4E3B\u52A8 kill \u4EE5\u514D\u4E22\u672A\u4FDD\u5B58\u5185\u5BB9\u3002`
     };
   }
   const exe = findCursorExe();
-  if (!exe) return { ok: false, status: "no-exe", port: CDP_PORT, message: `\u627E\u4E0D\u5230 Cursor.exe\uFF08\u6CE8\u518C\u8868 + \u9ED8\u8BA4\u5B89\u88C5\u4F4D\u7F6E\u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A Cursor.exe \u5B8C\u6574\u8DEF\u5F84\u3002` };
+  if (!exe) return { ok: false, status: "no-exe", port: CDP_PORT, message: `\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\uFF08Windows\uFF1A\u6CE8\u518C\u8868/\u9ED8\u8BA4\u4F4D\u7F6E\uFF1BmacOS\uFF1A/Applications/Cursor.app \u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u5B8C\u6574\u8DEF\u5F84\u3002` };
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
   if (PROJECT_PATH && existsSync(PROJECT_PATH)) args.push(PROJECT_PATH);
   const child = spawn(exe, args, { detached: true, stdio: "ignore", windowsHide: false });
@@ -10691,15 +10708,21 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
   if (!up) return { ok: false, status: "timeout", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002` };
   return { ok: true, status: "launched", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C\u6253\u5F00 ${PROJECT_PATH}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002` };
 }
-var CDP_PORT, CDP_ORIGIN, PROJECT_PATH, EXE_FALLBACKS, isMain;
+var CDP_PORT, CDP_ORIGIN, PROJECT_PATH, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES, isMain;
 var init_launch_cursor = __esm({
   "launch-cursor.mjs"() {
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
     PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
-    EXE_FALLBACKS = [
+    IS_WIN = process.platform === "win32";
+    IS_MAC = process.platform === "darwin";
+    WIN_FALLBACKS = [
       `${process.env.LOCALAPPDATA || ""}\\Programs\\cursor\\Cursor.exe`,
       "C:\\Program Files\\cursor\\Cursor.exe"
+    ];
+    MAC_CANDIDATES = [
+      "/Applications/Cursor.app/Contents/MacOS/Cursor",
+      `${process.env.HOME || ""}/Applications/Cursor.app/Contents/MacOS/Cursor`
     ];
     isMain = import.meta.url === pathToFileURL(process.argv[1] || "").href && import.meta.url.endsWith("launch-cursor.mjs");
     if (isMain) {

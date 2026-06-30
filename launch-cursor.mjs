@@ -44,18 +44,33 @@ function cursorFromRegistry() {
   return null;
 }
 
-// 默认安装位置兜底（注册表查不到时）
-const EXE_FALLBACKS = [
+const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
+
+// Windows 默认安装位置兜底（注册表查不到时）
+const WIN_FALLBACKS = [
   `${process.env.LOCALAPPDATA || ''}\\Programs\\cursor\\Cursor.exe`,
   'C:\\Program Files\\cursor\\Cursor.exe',
 ];
+// macOS 默认 Cursor.app 位置（直接 spawn app 内的二进制，flag 才能可靠传给 Electron）
+const MAC_CANDIDATES = [
+  '/Applications/Cursor.app/Contents/MacOS/Cursor',
+  `${process.env.HOME || ''}/Applications/Cursor.app/Contents/MacOS/Cursor`,
+];
 
 function findCursorExe() {
-  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;  // 最高优先级覆盖
-  const fromReg = cursorFromRegistry();
-  if (fromReg) return fromReg;
-  for (const p of EXE_FALLBACKS) { try { if (existsSync(p)) return p; } catch {} }
-  return null;
+  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;  // 最高优先级覆盖（任意平台）
+  if (IS_WIN) {
+    const fromReg = cursorFromRegistry();   // 注册表探测：任何安装位置都能找到
+    if (fromReg) return fromReg;
+    for (const p of WIN_FALLBACKS) { try { if (existsSync(p)) return p; } catch {} }
+    return null;
+  }
+  if (IS_MAC) {
+    for (const p of MAC_CANDIDATES) { try { if (existsSync(p)) return p; } catch {} }
+    return null;
+  }
+  return null;   // Linux 等：用 CURSOR_EXE 指定可执行文件路径
 }
 function cdpUp(timeoutMs = 1500) {
   return new Promise((resolve) => {
@@ -83,8 +98,11 @@ function cdpIsCursor(timeoutMs = 1500) {
   });
 }
 function cursorRunning() {
-  try { return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', { encoding: 'utf8', windowsHide: true })); }
-  catch { return false; }
+  try {
+    if (IS_WIN) return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', { encoding: 'utf8', windowsHide: true }));
+    if (IS_MAC) { execSync("pgrep -f 'Cursor.app/Contents/MacOS/Cursor'", { stdio: 'ignore' }); return true; }  // pgrep 命中=退出码0；无则抛错→false
+    return false;
+  } catch { return false; }
 }
 async function waitForCdp(maxMs = 30000, stepMs = 1000) {
   const start = Date.now();
@@ -104,10 +122,10 @@ export async function ensureCursorRunning({ waitMs = 30000 } = {}) {
   }
   if (cursorRunning()) {
     return { ok: false, status: 'running-no-debug', port: CDP_PORT,
-      message: `Cursor 正在运行但没带 --remote-debugging-port=${CDP_PORT}（单实例锁会忽略 flag）。请先彻底退出 Cursor（全部窗口 + 托盘），cursor-bridge 会在下次调用时自动带 flag 拉起；或手动带 flag 重启。注意：不主动 kill 以免丢未保存内容。` };
+      message: `Cursor 正在运行但没带 --remote-debugging-port=${CDP_PORT}（单实例锁会忽略 flag）。请先彻底退出 Cursor（Windows：全部窗口+托盘；macOS：Cmd+Q），cursor-bridge 会在下次调用时自动带 flag 拉起；或手动带 flag 重启。注意：不主动 kill 以免丢未保存内容。` };
   }
   const exe = findCursorExe();
-  if (!exe) return { ok: false, status: 'no-exe', port: CDP_PORT, message: `找不到 Cursor.exe（注册表 + 默认安装位置都没命中）。设环境变量 CURSOR_EXE 指定 Cursor.exe 完整路径。` };
+  if (!exe) return { ok: false, status: 'no-exe', port: CDP_PORT, message: `找不到 Cursor 可执行文件（Windows：注册表/默认位置；macOS：/Applications/Cursor.app 都没命中）。设环境变量 CURSOR_EXE 指定完整路径。` };
 
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
   if (PROJECT_PATH && existsSync(PROJECT_PATH)) args.push(PROJECT_PATH);   // 打开本项目让 Cursor 建索引
