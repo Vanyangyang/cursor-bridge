@@ -24,28 +24,21 @@ Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evalua
 
 ## 安装与使用
 
-> npm 包名为 **`cursor-mcp-bridge`**（仓库名是 `cursor-bridge`）。
+> 本仓库是一个 **Claude Code 插件**，并自带 marketplace（仓库即市场）。
 
-### 方式 A：npx 一键接入（推荐，无需手动 clone/install）
+### 方式 A：作为 Claude Code 插件安装（推荐）
 
-在你的 MCP 客户端配置里（如 Claude Code 的 `.mcp.json`）加：
-
-```json
-{
-  "mcpServers": {
-    "cursor-bridge": {
-      "command": "npx",
-      "args": ["-y", "cursor-mcp-bridge"],
-      "env": { "CURSOR_PROJECT_PATH": "C:/path/to/your/project" }
-    }
-  }
-}
+```bash
+claude plugin marketplace add github:Vanyangyang/cursor-bridge
+claude plugin install cursor-bridge@vanyangyang
 ```
 
-`npx -y cursor-mcp-bridge` 会自动拉取并运行最新版，依赖（`@modelcontextprotocol/sdk`、`ws`）自动安装。
-`CURSOR_PROJECT_PATH` 指向你要让 Cursor 建索引的项目根；不设则用 MCP 客户端启动时的工作目录。
+安装后重启 Claude Code（或 `/reload-plugins`），`cursor-bridge` MCP server 会**自动注册并连接**，无需手动改 `.mcp.json`。
+运行所需依赖已打包进 `dist/cursor-bridge.mjs`（零额外安装）。
 
-### 方式 B：从源码运行
+> 默认让 Cursor 建索引的项目根 = 当前工作目录；要指定的话给该 MCP server 设环境变量 `CURSOR_PROJECT_PATH`。
+
+### 方式 B：从源码运行（开发/其它 MCP 客户端）
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git
@@ -91,10 +84,20 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 - ✅ 需要 Cursor 原生 embedding 语义召回质量的代码定位（关键字搜不准、要按「意图」找）。
 - ❌ 关键字/符号能直接命中时——用本地 grep 或 codegraph（亚秒级，远快于经 GUI 遥控 agent 的 ~90s）。
 
-## 文件
+## 文件结构
 
-- `server.mjs` — MCP server 主入口（CDP 直驱 + 工具定义）。
-- `launch-cursor.mjs` — 确保/拉起带 CDP 的 Cursor。
-- `probe-*.mjs` — CDP 链路探针（输入框定位、填字、发送、回复抓取等，实测脚本）。
-- `agents-autopilot.mjs` / `autopilot-switch.py` — autopilot 辅助。
-- `test-*.mjs` — 检索/批量自测脚本。
+```
+.claude-plugin/
+  plugin.json          # 插件清单
+  marketplace.json     # 自带 marketplace（仓库即市场）
+.mcp.json              # 声明 MCP server，指向 dist/cursor-bridge.mjs
+dist/cursor-bridge.mjs # 打包产物：零依赖单文件（插件实际运行的就是它）
+server.mjs             # MCP server 源码主入口（CDP 直驱 + 工具定义）
+launch-cursor.mjs      # 确保/拉起带 CDP 的 Cursor
+build.mjs              # esbuild 打包脚本（npm run build → 重建 dist/）
+probe-*.mjs            # CDP 链路探针（实测脚本）
+agents-autopilot.mjs / autopilot-switch.py  # autopilot 辅助
+test-*.mjs             # 检索/批量自测脚本
+```
+
+> 插件运行的是 **`dist/cursor-bridge.mjs`**（已内联 `@modelcontextprotocol/sdk`、`ws`），所以 `/plugin install` 后无需任何额外 `npm install`。改了 `server.mjs`/`launch-cursor.mjs` 后跑 `npm install && npm run build` 重建该产物。发布流程见 [`RELEASING.md`](./RELEASING.md)。

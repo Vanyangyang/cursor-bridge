@@ -1,34 +1,26 @@
 {
   "name": "cursor-mcp-bridge",
   "version": "2.0.0",
-  "description": "MCP server: drive Cursor IDE's agent for semantic code search from Claude Code (or any MCP client) over CDP. CDP direct-drive, no console injection.",
+  "description": "MCP server: drive Cursor IDE's agent for semantic code search from Claude Code over CDP. Distributed as a Claude Code plugin. CDP direct-drive, no console injection.",
   "type": "module",
   "main": "server.mjs",
-  "bin": {
-    "cursor-mcp-bridge": "server.mjs"
-  },
-  "files": [
-    "server.mjs",
-    "launch-cursor.mjs",
-    "README.md",
-    "LICENSE"
-  ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "build": "node build.mjs"
   },
   "keywords": [
     "mcp",
     "model-context-protocol",
+    "claude-code",
+    "claude-code-plugin",
     "cursor",
     "cursor-ide",
-    "claude-code",
     "cdp",
     "semantic-search",
-    "code-search",
-    "ai-agent"
+    "code-search"
   ],
   "repository": {
     "type": "git",
@@ -43,5 +35,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

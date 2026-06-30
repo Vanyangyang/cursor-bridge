@@ -1,0 +1,18 @@
+{
+  "name": "vanyangyang",
+  "description": "Vanyangyang 的 Claude Code 插件市场——目前提供 cursor-bridge（驱动 Cursor 做语义检索）。",
+  "owner": {
+    "name": "Vanyangyang"
+  },
+  "plugins": [
+    {
+      "name": "cursor-bridge",
+      "source": ".",
+      "description": "从 Claude Code 直驱 Cursor IDE 的 agent 做语义代码检索（CDP 直驱，无 console 注入）。需 Cursor 带 --remote-debugging-port=9223 在跑。",
+      "version": "2.0.0",
+      "author": {
+        "name": "Vanyangyang"
+      }
+    }
+  ]
+}
