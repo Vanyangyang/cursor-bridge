@@ -233,7 +233,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         '前提：Cursor 带 --remote-debugging-port=9223 启动、已登录、打开本项目。' +
         '注意：① 经 GUI 遥控 agent，单次约 ~90s（实测 66~175s 波动）且串行（一次一个）；' +
         '② Cursor 是 agent 非纯检索，prompt 已约束只列 path:行号、不读正文/不改代码，但非技术隔离，别当沙箱；' +
-        '③ 慢于 codegraph（本地亚秒），仅在需要 embedding 语义召回时用。',
+        '③ 因单次较慢且串行，建议并行/后台使用——与其它工作并行推进，别在主线阻塞等它返回。',
       inputSchema: {
         type: 'object',
         properties: {
