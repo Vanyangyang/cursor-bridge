@@ -10583,8 +10583,28 @@ import { spawn, execSync } from "child_process";
 import { existsSync } from "fs";
 import { pathToFileURL } from "url";
 import http from "http";
+function cursorFromRegistry() {
+  const queries = [
+    'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
+    'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
+    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
+    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor" /v DisplayIcon'
+  ];
+  for (const q of queries) {
+    try {
+      const out = execSync(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
+      if (m && existsSync(m[1])) return m[1];
+    } catch {
+    }
+  }
+  return null;
+}
 function findCursorExe() {
-  for (const p of EXE_CANDIDATES) {
+  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
+  const fromReg = cursorFromRegistry();
+  if (fromReg) return fromReg;
+  for (const p of EXE_FALLBACKS) {
     try {
       if (existsSync(p)) return p;
     } catch {
@@ -10662,7 +10682,7 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
     };
   }
   const exe = findCursorExe();
-  if (!exe) return { ok: false, status: "no-exe", port: CDP_PORT, message: `\u627E\u4E0D\u5230 Cursor.exe\uFF08\u8BD5\u8FC7\uFF1A${EXE_CANDIDATES.join(" , ")}\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u3002` };
+  if (!exe) return { ok: false, status: "no-exe", port: CDP_PORT, message: `\u627E\u4E0D\u5230 Cursor.exe\uFF08\u6CE8\u518C\u8868 + \u9ED8\u8BA4\u5B89\u88C5\u4F4D\u7F6E\u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A Cursor.exe \u5B8C\u6574\u8DEF\u5F84\u3002` };
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
   if (PROJECT_PATH && existsSync(PROJECT_PATH)) args.push(PROJECT_PATH);
   const child = spawn(exe, args, { detached: true, stdio: "ignore", windowsHide: false });
@@ -10671,18 +10691,16 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
   if (!up) return { ok: false, status: "timeout", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002` };
   return { ok: true, status: "launched", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C\u6253\u5F00 ${PROJECT_PATH}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002` };
 }
-var CDP_PORT, CDP_ORIGIN, PROJECT_PATH, EXE_CANDIDATES, isMain;
+var CDP_PORT, CDP_ORIGIN, PROJECT_PATH, EXE_FALLBACKS, isMain;
 var init_launch_cursor = __esm({
   "launch-cursor.mjs"() {
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
     PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
-    EXE_CANDIDATES = [
-      process.env.CURSOR_EXE,
-      "D:\\ide\\cursor\\Cursor.exe",
+    EXE_FALLBACKS = [
       `${process.env.LOCALAPPDATA || ""}\\Programs\\cursor\\Cursor.exe`,
       "C:\\Program Files\\cursor\\Cursor.exe"
-    ].filter(Boolean);
+    ];
     isMain = import.meta.url === pathToFileURL(process.argv[1] || "").href && import.meta.url.endsWith("launch-cursor.mjs");
     if (isMain) {
       ensureCursorRunning().then((r) => {

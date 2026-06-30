@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "MCP server: 从 Claude Code 直驱 Cursor IDE 的 agent 做语义代码检索（CDP 直驱，无 console 注入）。",
   "author": {
     "name": "Vanyangyang"

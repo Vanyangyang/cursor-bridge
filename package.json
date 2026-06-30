@@ -1,6 +1,6 @@
 {
   "name": "cursor-mcp-bridge",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "MCP server: drive Cursor IDE's agent for semantic code search from Claude Code over CDP. Distributed as a Claude Code plugin. CDP direct-drive, no console injection.",
   "type": "module",
   "main": "server.mjs",
