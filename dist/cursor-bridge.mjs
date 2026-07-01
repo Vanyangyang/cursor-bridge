@@ -10626,7 +10626,7 @@ function findCursorExe() {
 }
 function cdpUp(timeoutMs = 1500) {
   return new Promise((resolve) => {
-    const req = http.get({ host: "localhost", port: CDP_PORT, path: "/json/version" }, (res) => {
+    const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
       resolve(res.statusCode === 200);
     });
@@ -10642,7 +10642,7 @@ function cdpUp(timeoutMs = 1500) {
 }
 function cdpIsCursor(timeoutMs = 1500) {
   return new Promise((resolve) => {
-    const req = http.get({ host: "localhost", port: CDP_PORT, path: "/json/list" }, (res) => {
+    const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
@@ -10708,11 +10708,12 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
   if (!up) return { ok: false, status: "timeout", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002` };
   return { ok: true, status: "launched", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C\u6253\u5F00 ${PROJECT_PATH}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002` };
 }
-var CDP_PORT, CDP_ORIGIN, PROJECT_PATH, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES, isMain;
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_PATH, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES, isMain;
 var init_launch_cursor = __esm({
   "launch-cursor.mjs"() {
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
+    CDP_HOST = "127.0.0.1";
     PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
     IS_WIN = process.platform === "win32";
     IS_MAC = process.platform === "darwin";
@@ -19320,9 +19321,10 @@ var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 18e4);
 var SEARCH_PREFIX = "\u53EA\u505A\u4EE3\u7801\u68C0\u7D22\u5B9A\u4F4D\uFF1A\u5217\u51FA\u4E0E\u4E0B\u9762\u610F\u56FE\u76F8\u5173\u7684\u6587\u4EF6\u8DEF\u5F84 + \u884C\u53F7\u8303\u56F4\uFF08\u5F62\u5982 Assets/Scripts/X.cs:120-180\uFF09\uFF0C\u9010\u884C\u5217\u51FA\u5373\u53EF\u3002\u4E0D\u8981\u8BFB\u53D6\u6587\u4EF6\u6B63\u6587\u3001\u4E0D\u8981\u4FEE\u6539\u4EFB\u4F55\u4EE3\u7801\u3001\u4E0D\u8981\u5C55\u5F00\u957F\u7BC7\u89E3\u91CA\u3002\n\n\u610F\u56FE\uFF1A";
+var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
   return new Promise((resolve, reject) => {
-    const req = http2.get({ host: "localhost", port: CDP_PORT2, path }, (res) => {
+    const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
