@@ -21,6 +21,9 @@ import http from 'http';
 
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
+// 探测连接目标用字面 IP，不用 'localhost'——Windows 上常优先解析到 ::1，但 Chromium 只监听 IPv4 127.0.0.1（2026-07 实测 ECONNREFUSED）。
+// CDP_ORIGIN 仍保留 localhost 字符串：它是 --remote-allow-origins 的值，需跟 server.mjs 发的 WS Origin 头一致，与探测连接无关。
+const CDP_HOST = '127.0.0.1';
 // 项目根：env 优先（推荐显式设 CURSOR_PROJECT_PATH），否则用 MCP 客户端启动时的工作目录（= 用户当前项目）。
 // 不从本文件位置上推目录——发布为 npm 包后文件在 node_modules/npx 缓存里，上推会指向错目录。
 const PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
@@ -74,7 +77,7 @@ function findCursorExe() {
 }
 function cdpUp(timeoutMs = 1500) {
   return new Promise((resolve) => {
-    const req = http.get({ host: 'localhost', port: CDP_PORT, path: '/json/version' }, (res) => { res.resume(); resolve(res.statusCode === 200); });
+    const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: '/json/version' }, (res) => { res.resume(); resolve(res.statusCode === 200); });
     req.on('error', () => resolve(false));
     req.setTimeout(timeoutMs, () => { try { req.destroy(); } catch {} resolve(false); });
   });
@@ -84,7 +87,7 @@ function cdpUp(timeoutMs = 1500) {
 // 并先排除已知别家 IDE（windsurf 等）。不用裸子串 `cursor`——它会把 url/title 含该字样的别家 target 误判（2026-06-08 review #3）。
 function cdpIsCursor(timeoutMs = 1500) {
   return new Promise((resolve) => {
-    const req = http.get({ host: 'localhost', port: CDP_PORT, path: '/json/list' }, (res) => {
+    const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: '/json/list' }, (res) => {
       let d = ''; res.on('data', (c) => d += c);
       res.on('end', () => {
         try {

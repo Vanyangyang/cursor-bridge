@@ -36,9 +36,13 @@ const SEARCH_PREFIX =
   '逐行列出即可。不要读取文件正文、不要修改任何代码、不要展开长篇解释。\n\n意图：';
 
 // ---------- CDP helpers ----------
+// 连接目标用字面 IP '127.0.0.1'，不用 'localhost'：Windows 上 "localhost" DNS 常优先解析到 ::1，
+// 但 Chromium --remote-debugging-port 只监听 IPv4 127.0.0.1（非双栈），会导致 ECONNREFUSED（2026-07 实测）。
+// ORIGIN 仍用 localhost 字符串——它只是 WS 握手 Origin 头，需跟 launch-cursor.mjs 的 --remote-allow-origins 保持一致，与连接目标无关。
+const CDP_HOST = '127.0.0.1';
 function httpJson(path) {
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: 'localhost', port: CDP_PORT, path }, (res) => {
+    const req = http.get({ host: CDP_HOST, port: CDP_PORT, path }, (res) => {
       let d = ''; res.on('data', (c) => d += c);
       res.on('end', () => { try { resolve(JSON.parse(d)); } catch { reject(new Error('CDP 非 JSON 响应')); } });
     });
