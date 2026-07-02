@@ -10583,6 +10583,17 @@ import { spawn, execSync } from "child_process";
 import { existsSync } from "fs";
 import { pathToFileURL } from "url";
 import http from "http";
+function looksLikePluginRuntimePath(candidate) {
+  const p = candidate.replace(/\//g, "\\").toLowerCase();
+  return p.includes("\\.codex\\.tmp\\marketplaces\\") || p.includes("\\.codex\\plugins\\cache\\") || p.includes("\\.claude\\plugins\\cache\\") || p.includes("\\appdata\\local\\npm-cache\\_npx\\");
+}
+function resolveProjectPath() {
+  const explicit = process.env.CURSOR_PROJECT_PATH;
+  if (explicit) return explicit;
+  const cwd = process.cwd();
+  if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
+  return cwd;
+}
 function cursorFromRegistry() {
   const queries = [
     'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
@@ -10706,7 +10717,8 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
   child.unref();
   const up = await waitForCdp(waitMs);
   if (!up) return { ok: false, status: "timeout", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002` };
-  return { ok: true, status: "launched", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C\u6253\u5F00 ${PROJECT_PATH}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002` };
+  const target = PROJECT_PATH ? `\u6253\u5F00 ${PROJECT_PATH}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
+  return { ok: true, status: "launched", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002` };
 }
 var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_PATH, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES, isMain;
 var init_launch_cursor = __esm({
@@ -10714,7 +10726,7 @@ var init_launch_cursor = __esm({
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
     CDP_HOST = "127.0.0.1";
-    PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
+    PROJECT_PATH = resolveProjectPath();
     IS_WIN = process.platform === "win32";
     IS_MAC = process.platform === "darwin";
     WIN_FALLBACKS = [

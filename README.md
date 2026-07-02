@@ -89,7 +89,7 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口 |
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时（ms） |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | — | 设 `1` 关闭启动即自动拉起 Cursor |
-| `CURSOR_PROJECT_PATH` | 当前工作目录 | 让 Cursor 打开/建索引的项目根 |
+| `CURSOR_PROJECT_PATH` | 自动判断 | 让 Cursor 打开/建索引的项目根；未设置且运行目录是插件缓存时，不传路径并让 Cursor 恢复上次工作区 |
 | `CURSOR_EXE` | 自动探测 | `Cursor.exe` 路径（自动探测失败时显式指定） |
 
 ## 使用建议

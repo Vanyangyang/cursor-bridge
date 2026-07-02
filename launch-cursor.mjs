@@ -7,7 +7,7 @@
  * 关键点：
  *   - 必须带 --remote-debugging-port=9223 + --remote-allow-origins（Chromium 111+/Electron 否则 CDP WS 403）。
  *     端口用 9223（避开 9222 等常见 Electron 调试口，避免端口冲突——2026-06-08 实测撞过）。
- *   - 启动时带项目路径，让 Cursor 打开本项目（语义搜索需对本项目建索引）。
+ *   - 显式 CURSOR_PROJECT_PATH 时带项目路径；插件缓存目录下不带路径，让 Cursor 恢复上次工作区。
  *   - ⚠️ Cursor 是用户日常 IDE（非专用 bridge），单实例锁下「在跑但没带 flag」时【绝不主动 kill】
  *     （会打断用户工作 + 丢未保存内容），只返回 running-no-debug 指引，由用户决定是否重启。
  *   - detached + unref：拉起的 Cursor 脱离 MCP server 独立存活。
@@ -24,9 +24,27 @@ const CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
 // 探测连接目标用字面 IP，不用 'localhost'——Windows 上常优先解析到 ::1，但 Chromium 只监听 IPv4 127.0.0.1（2026-07 实测 ECONNREFUSED）。
 // CDP_ORIGIN 仍保留 localhost 字符串：它是 --remote-allow-origins 的值，需跟 server.mjs 发的 WS Origin 头一致，与探测连接无关。
 const CDP_HOST = '127.0.0.1';
-// 项目根：env 优先（推荐显式设 CURSOR_PROJECT_PATH），否则用 MCP 客户端启动时的工作目录（= 用户当前项目）。
-// 不从本文件位置上推目录——发布为 npm 包后文件在 node_modules/npx 缓存里，上推会指向错目录。
-const PROJECT_PATH = process.env.CURSOR_PROJECT_PATH || process.cwd();
+// 项目根：env 优先（推荐显式设 CURSOR_PROJECT_PATH）。
+// 没有 env 时，只有 cwd 看起来像真实项目时才传给 Cursor；Codex/Claude 插件缓存目录
+// 不是工作区，不能传。否则不带路径启动 Cursor，让它恢复上次打开的工作区。
+function looksLikePluginRuntimePath(candidate) {
+  const p = candidate.replace(/\//g, '\\').toLowerCase();
+  return p.includes('\\.codex\\.tmp\\marketplaces\\') ||
+    p.includes('\\.codex\\plugins\\cache\\') ||
+    p.includes('\\.claude\\plugins\\cache\\') ||
+    p.includes('\\appdata\\local\\npm-cache\\_npx\\');
+}
+
+function resolveProjectPath() {
+  const explicit = process.env.CURSOR_PROJECT_PATH;
+  if (explicit) return explicit;
+
+  const cwd = process.cwd();
+  if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
+  return cwd;
+}
+
+const PROJECT_PATH = resolveProjectPath();
 
 // 注册表探测：从 cursor:// 协议处理器 + Uninstall DisplayIcon 解析 Cursor.exe，
 // 任何安装位置（C 盘默认 / 任意盘自定义）都能自动找到，不依赖写死路径。仅 Windows。
@@ -137,7 +155,8 @@ export async function ensureCursorRunning({ waitMs = 30000 } = {}) {
 
   const up = await waitForCdp(waitMs);
   if (!up) return { ok: false, status: 'timeout', exe, port: CDP_PORT, message: `已启动 Cursor（${exe}），但 ${waitMs}ms 内 CDP ${CDP_PORT} 未就绪，稍后重试。` };
-  return { ok: true, status: 'launched', exe, port: CDP_PORT, message: `已启动 Cursor（${exe}，打开 ${PROJECT_PATH}），CDP ${CDP_PORT} 就绪。` };
+  const target = PROJECT_PATH ? `打开 ${PROJECT_PATH}` : '恢复上次工作区';
+  return { ok: true, status: 'launched', exe, port: CDP_PORT, message: `已启动 Cursor（${exe}，${target}），CDP ${CDP_PORT} 就绪。` };
 }
 
 // 仅在「直接 node launch-cursor.mjs」时自执行。文件名守卫不可省：被 esbuild 打进 server 单文件后，
