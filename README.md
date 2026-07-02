@@ -29,9 +29,9 @@ Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evalua
 
 ## 安装与使用
 
-> 本仓库是一个 **Claude Code 插件**，并自带 marketplace（仓库即市场）。
+> 本仓库是一个 **双制式插件仓库**：同时支持 Claude Code 插件和 Codex marketplace。
 
-### 方式 A：作为 Claude Code 插件安装（推荐）
+### 方式 A：作为 Claude Code 插件安装
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
@@ -43,7 +43,15 @@ claude plugin install cursor-bridge@vanyangyang
 
 > 默认让 Cursor 建索引的项目根 = 当前工作目录；要指定的话给该 MCP server 设环境变量 `CURSOR_PROJECT_PATH`。
 
-### 方式 B：从源码运行（开发/其它 MCP 客户端）
+### 方式 B：作为 Codex marketplace 安装
+
+```bash
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+```
+
+Codex 会读取仓库内 `.agents/plugins/marketplace.json` 和 `.codex-plugin/plugin.json`，注册同一套 `cursor_search` / `cursor_status` / `cursor_launch` MCP 工具。安装后开启新 Codex 线程或重启 Codex，让新插件工具进入当前会话。
+
+### 方式 C：从源码运行（开发/其它 MCP 客户端）
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git
@@ -95,6 +103,10 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 .claude-plugin/
   plugin.json          # 插件清单
   marketplace.json     # 自带 marketplace（仓库即市场）
+.agents/plugins/
+  marketplace.json     # Codex marketplace 入口
+.codex-plugin/
+  plugin.json          # Codex 插件清单 + MCP 配置
 .mcp.json              # 声明 MCP server，指向 dist/cursor-bridge.mjs
 dist/cursor-bridge.mjs # 打包产物：零依赖单文件（插件实际运行的就是它）
 server.mjs             # MCP server 源码主入口（CDP 直驱 + 工具定义）
@@ -105,4 +117,4 @@ agents-autopilot.mjs / autopilot-switch.py  # autopilot 辅助
 test-*.mjs             # 检索/批量自测脚本
 ```
 
-> 插件运行的是 **`dist/cursor-bridge.mjs`**（已内联 `@modelcontextprotocol/sdk`、`ws`），所以 `/plugin install` 后无需任何额外 `npm install`。改了 `server.mjs`/`launch-cursor.mjs` 后跑 `npm install && npm run build` 重建该产物。发布流程见 [`RELEASING.md`](./RELEASING.md)。
+> 插件运行的是 **`dist/cursor-bridge.mjs`**（已内联 `@modelcontextprotocol/sdk`、`ws`），所以 Claude Code / Codex 安装后无需任何额外 `npm install`。改了 `server.mjs`/`launch-cursor.mjs` 后跑 `npm install && npm run build` 重建该产物。发布流程见 [`RELEASING.md`](./RELEASING.md)。
