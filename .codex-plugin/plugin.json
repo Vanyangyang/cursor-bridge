@@ -1,0 +1,35 @@
+{
+  "name": "cursor-bridge",
+  "version": "2.0.6",
+  "description": "MCP server: drive Cursor IDE's agent for semantic code search over CDP.",
+  "author": {
+    "name": "Vanyangyang"
+  },
+  "repository": "https://github.com/Vanyangyang/cursor-bridge",
+  "license": "MIT",
+  "mcpServers": {
+    "cursor-bridge": {
+      "command": "node",
+      "args": [
+        "./dist/cursor-bridge.mjs"
+      ],
+      "cwd": ".",
+      "default_tools_approval_mode": "approve"
+    }
+  },
+  "interface": {
+    "displayName": "Cursor Bridge",
+    "shortDescription": "Drive Cursor semantic search from Codex over CDP.",
+    "longDescription": "Expose cursor_search, cursor_status, and cursor_launch so Codex can ask Cursor IDE for project-aware semantic search through its agent, without console injection.",
+    "developerName": "Vanyangyang",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Use Cursor Bridge to search this project with Cursor's semantic agent.",
+      "Check whether Cursor Bridge can launch Cursor with CDP and report status."
+    ],
+    "websiteURL": "https://github.com/Vanyangyang/cursor-bridge"
+  }
+}
