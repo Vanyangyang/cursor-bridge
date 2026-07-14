@@ -2,14 +2,14 @@
 /**
  * cursor-bridge — MCP server（CDP 直驱架构）
  *
- * 让 Claude Code 调 Cursor IDE 里的 agent 检索（语义搜索 + Instant Grep，agent 自动编排）。
+ * 让 Codex 调 Cursor IDE 里的 agent 做语义检索与边界明确的委托执行。
  * Cursor 的语义搜索【没有纯检索接口/独立 UI】（2026-06-08 CDP 实测：
  *   window.vscode 是 sandbox preload 无 command API；Ctrl+Shift+F 是普通全文搜索），
  *   只能跑 agent 拿（用户拍板 B1）。故走 @Codebase/agent chat：填查询 → Enter → 等完成 → 抓回复。
  *
  * 架构（CDP 直驱，无需 console+WS 回连）：
  *   Claude Code --(MCP stdio)--> 本 server --(CDP 9223 Runtime.evaluate + Input)--> Cursor 渲染进程
- *   server 每次查询新建 CDP 连接（串行，GUI 单输入框），直接驱动 DOM + 真实键盘。
+ *   GUI 操作通过互斥锁串行；独立顶层 Cursor Agent 在提交后可并行运行，再按 agentId 逐项取回。
  *
  * 实测确认的链路（2026-06-08，见 .claude/scripts/cursor-bridge/probe-*.mjs）：
  *   - 输入框 `.aislash-editor-input`（lexical contenteditable）；Ctrl+L 开/关 chat（toggle）。
@@ -34,6 +34,10 @@ const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 180000);
 const SEARCH_PREFIX =
   '只做代码检索定位：列出与下面意图相关的文件路径 + 行号范围（形如 Assets/Scripts/X.cs:120-180），' +
   '逐行列出即可。不要读取文件正文、不要修改任何代码、不要展开长篇解释。\n\n意图：';
+
+const DO_DEFAULT_CONTRACT =
+  '\n\n完成要求：在当前 Cursor 已打开的工作区内直接完成任务；不要推送远端。' +
+  '结束前检查实际改动并运行与风险匹配的验证。最终回复必须列出：完成内容、改动文件、验证结果、仍有风险或阻塞。';
 
 // ---------- CDP helpers ----------
 // 连接目标用字面 IP '127.0.0.1'，不用 'localhost'：Windows 上 "localhost" DNS 常优先解析到 ::1，
@@ -97,28 +101,295 @@ function exprFill(text) {
   const js = JSON.stringify(text);
   return `(function(){const inp=document.querySelector('.aislash-editor-input');if(!inp||inp.offsetParent===null)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});inp.dispatchEvent(new Event('input',{bubbles:true}));return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
 }
-// 生成中/完成信号：stop 钮（codicon-stop/debug-stop/aria含Stop）数 + 最长 markdown 长度
+// 生成中/完成信号：stop 钮数量 + 当前会话中最后一个真实消息 markdown。
+// 排除模型选择器里的 markdown，避免短回复被 "Cursor Grok ..." 等模型标签盖过。
 const EXPR_SNAP = `(function(){
-  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')];
-  let mdMax=0; for(const m of md){const t=(m.innerText||'').length; if(t>mdMax)mdMax=t;}
+  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
+    .filter(e=>e.offsetParent!==null&&!e.closest('.ui-model-picker__trigger,[class*=model-picker]'));
+  const texts=md.map(m=>(m.innerText||'').trim()).filter(Boolean);
+  const last=texts[texts.length-1]||'';
+  let hash=0; for(let i=0;i<last.length;i++)hash=((hash<<5)-hash+last.charCodeAt(i))|0;
   const stop=[...document.querySelectorAll('[class*=codicon-stop],[class*=debug-stop],[aria-label*=Stop],[aria-label*=stop],[aria-label*=Cancel],[title*=Stop]')].filter(e=>e.offsetParent!==null).length;
-  return JSON.stringify({mdMax, stop});
+  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop});
 })()`;
-// 抓答案：最长 markdown-root 的纯文本
+// 抓答案：最后一个可见且不属于模型选择器的 markdown；短回复同样有效。
 const EXPR_EXTRACT = `(function(){
-  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')].filter(e=>e.offsetParent!==null);
-  let best=''; for(const m of md){const t=(m.innerText||'').trim(); if(t.length>best.length)best=t;}
-  return best;
+  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
+    .filter(e=>e.offsetParent!==null&&!e.closest('.ui-model-picker__trigger,[class*=model-picker]'));
+  const texts=md.map(m=>(m.innerText||'').trim()).filter(Boolean);
+  return texts[texts.length-1]||'';
 })()`;
 // "New Agent" 新对话钮中心坐标（aria-label 含 New Agent/New Chat）；返回 JSON 坐标或空串。
 const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>e.offsetParent!==null&&/New Agent|New Chat/i.test(e.getAttribute('aria-label')||''));if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
+const EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
+const EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+
+// Cursor 3.7 的 Agent History 菜单由 React 提供 entries + onOpenEntry(id)。
+// 内部接口集中封装在这里；探测失败时只允许在发送前降级 FIFO，绝不重复提交已发送任务。
+const REACT_ADAPTER_BODY = `
+  const findAdapter=()=>{
+    const label=[...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);
+    if(!label)return null;
+    const nodes=[]; let n=label;
+    for(let i=0;n&&i<18;i++,n=n.parentElement)nodes.push(n);
+    for(const node of nodes){
+      for(const key of Object.keys(node)){
+        if(!key.startsWith('__reactFiber$')&&!key.startsWith('__reactProps$'))continue;
+        const seed=node[key];
+        let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
+        for(let j=0;f&&j<36;j++,f=f.return){
+          for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
+            if(p&&Array.isArray(p.entries)&&typeof p.onOpenEntry==='function')return {props:p};
+          }
+        }
+      }
+    }
+    return null;
+  };
+  const a=findAdapter();`;
+
+const EXPR_HISTORY_ENTRIES = `(function(){${REACT_ADAPTER_BODY}
+  if(!a)return JSON.stringify({ok:false,error:'REACT_ADAPTER_UNAVAILABLE'});
+  const entries=a.props.entries.map((e,index)=>{
+    const raw=e.timestamp;
+    let timestamp=raw instanceof Date?raw.getTime():Number(raw);
+    if(!Number.isFinite(timestamp))timestamp=Date.parse(String(raw||''));
+    if(!Number.isFinite(timestamp))timestamp=index;
+    return {
+      id:String(e.id||''),label:String(e.label||''),searchText:String(e.searchText||''),timestamp,
+      isSelected:!!e.isSelected,showSpinner:!!e.showSpinner,
+      icon:String(typeof e.icon==='string'?e.icon:(e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
+    };
+  }).filter(e=>e.id);
+  return JSON.stringify({ok:true,entries});
+})()`;
+
+function exprOpenAgent(agentId) {
+  const id = JSON.stringify(String(agentId));
+  return `(function(){${REACT_ADAPTER_BODY}
+    if(!a)return 'REACT_ADAPTER_UNAVAILABLE';
+    const e=a.props.entries.find(x=>String(x.id||'')===${id}); if(!e)return 'AGENT_NOT_FOUND';
+    a.props.onOpenEntry(${id}); return 'OPENED';
+  })()`;
+}
+
+function normalizeAllowedPath(value) {
+  const raw = String(value || '').trim().replace(/\\/g, '/');
+  const prefix = /^[a-zA-Z]:/.test(raw) ? raw.slice(0, 2).toLowerCase() : '';
+  const body = prefix ? raw.slice(2) : raw;
+  const parts = [];
+  for (const part of body.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (parts.length > 0 && parts[parts.length - 1] !== '..') parts.pop();
+      else parts.push('..');
+    } else {
+      parts.push(part.toLowerCase());
+    }
+  }
+  const normalized = (prefix ? prefix + '/' : '') + parts.join('/');
+  return normalized || '.';
+}
+
+function pathsOverlap(a, b) {
+  const left = normalizeAllowedPath(a);
+  const right = normalizeAllowedPath(b);
+  return left === '.' || right === '.' || left === right || left.startsWith(right + '/') || right.startsWith(left + '/');
+}
+
+function selectNewAgentEntry(beforeEntries, afterEntries) {
+  const before = new Set((beforeEntries || []).map((e) => e.id));
+  const fresh = (afterEntries || []).map((e, index) => ({ ...e, _index: index })).filter((e) => e.id && !before.has(e.id));
+  if (fresh.length === 0) return null;
+  const selected = fresh.filter((e) => e.isSelected);
+  const pool = selected.length > 0 ? selected : fresh;
+  return [...pool].sort((a, b) => (Number(b.timestamp || 0) - Number(a.timestamp || 0)) || b._index - a._index)[0];
+}
+
 class CursorBridge {
-  constructor() { this.busy = false; this.queue = []; this._healing = null; }
+  constructor() {
+    this.busy = false;
+    this.queue = [];
+    this._healing = null;
+    this.tasks = new Map();
+    this.nextTaskId = 1;
+    this.activeParallel = new Map();
+    this._uiTail = Promise.resolve();
+    this._drainTimer = null;
+    this.parallelRestoreAgentId = null;
+  }
 
   async search(query) {
     await this._ensureCursor();
-    return new Promise((resolve, reject) => { this.queue.push({ query, resolve, reject }); this._drain(); });
+    const job = this._enqueue('search', SEARCH_PREFIX + query, {
+      timeoutMs: QUERY_TIMEOUT,
+      newChat: true,
+      execution: 'fifo',
+      readOnly: true,
+      allowedPaths: [],
+    });
+    return job.promise;
+  }
+
+  async doTask(prompt, options = {}) {
+    const text = String(prompt || '').trim();
+    if (!text) throw new Error('prompt 不能为空');
+    if (text.length > 100000) throw new Error('prompt 过长（最大 100000 字符）');
+    await this._ensureCursor();
+
+    const execution = String(options.execution || 'fifo');
+    if (execution !== 'fifo' && execution !== 'parallel_agent') {
+      throw new Error(`execution 不支持 ${execution}；只能是 fifo 或 parallel_agent`);
+    }
+    const readOnly = options.readOnly === true;
+    const timeoutMs = Math.max(30000, Math.min(900000, Number(options.timeoutMs || 600000)));
+    const allowedPaths = Array.isArray(options.allowedPaths)
+      ? options.allowedPaths.map((x) => String(x).trim()).filter(Boolean)
+      : [];
+    if (readOnly && allowedPaths.length > 0) {
+      throw new Error('read_only=true 与 allowed_paths 不能同时使用；只读任务不得声明写入范围');
+    }
+    if (execution === 'parallel_agent' && !readOnly && allowedPaths.length === 0) {
+      throw new Error('parallel_agent 写任务必须提供 allowed_paths；纯读取任务请显式设置 read_only=true');
+    }
+    if (execution === 'parallel_agent' && !readOnly) {
+      this._validateParallelAllowedPaths(allowedPaths);
+      this._assertNoParallelPathConflict(allowedPaths);
+    }
+
+    const contract = String(options.completionContract || '').trim();
+    let fullPrompt = text;
+    if (readOnly) fullPrompt += '\n\n只读边界：不得修改、创建或删除任何文件，不得执行会改变工作区状态的命令。';
+    if (allowedPaths.length > 0) {
+      fullPrompt += '\n\n允许修改范围（不得越界）：\n' + allowedPaths.map((x) => '- ' + x).join('\n');
+    }
+    fullPrompt += contract ? '\n\n验收与回报合同：\n' + contract : DO_DEFAULT_CONTRACT;
+
+    const job = this._enqueue('do', fullPrompt, {
+      timeoutMs,
+      newChat: execution === 'parallel_agent' ? true : options.newChat !== false,
+      execution,
+      readOnly,
+      allowedPaths,
+    });
+    if (options.background !== false) return this._taskView(job);
+    await job.promise;
+    return this._taskView(job, true);
+  }
+
+  _assertNoParallelPathConflict(allowedPaths) {
+    const live = [...this.tasks.values()].filter((job) =>
+      job.execution === 'parallel_agent' && !job.readOnly && job.status !== 'completed' && job.status !== 'failed');
+    for (const job of live) {
+      const overlap = allowedPaths.some((a) => job.allowedPaths.some((b) => pathsOverlap(a, b)));
+      if (overlap) throw new Error(`parallel_agent allowed_paths 与任务 ${job.id} 重叠；请改用 fifo 或拆成不重叠路径`);
+    }
+  }
+
+  _validateParallelAllowedPaths(allowedPaths) {
+    for (const raw of allowedPaths) {
+      const slash = String(raw).replace(/\\/g, '/');
+      if (/[*?\[\]{}!]/.test(slash)) throw new Error(`parallel_agent allowed_paths 不接受 glob：${raw}`);
+      if (/^[a-zA-Z]:\//.test(slash) || slash.startsWith('/')) {
+        throw new Error(`parallel_agent allowed_paths 必须使用工作区相对路径：${raw}`);
+      }
+      const normalized = normalizeAllowedPath(slash);
+      if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
+        throw new Error(`parallel_agent allowed_paths 不得为空或越出工作区：${raw}`);
+      }
+    }
+  }
+
+  _enqueue(kind, prompt, options) {
+    const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
+    let resolvePromise;
+    let rejectPromise;
+    const promise = new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    promise.catch(() => {});
+    const job = {
+      id,
+      kind,
+      prompt,
+      timeoutMs: options.timeoutMs,
+      newChat: options.newChat,
+      execution: options.execution || 'fifo',
+      effectiveExecution: options.execution || 'fifo',
+      readOnly: options.readOnly === true,
+      allowedPaths: options.allowedPaths || [],
+      status: 'queued',
+      phase: 'queued',
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      finishedAt: null,
+      sentAt: null,
+      agentId: null,
+      agentLabel: null,
+      fallbackReason: null,
+      result: null,
+      error: null,
+      settled: false,
+      promise,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+    };
+    this.tasks.set(id, job);
+    this.queue.push(job);
+    this._trimTasks();
+    this._drain();
+    return job;
+  }
+
+  _finishJob(job, result) {
+    if (job.settled) return;
+    job.result = result;
+    job.status = 'completed';
+    job.phase = 'completed';
+    job.finishedAt = new Date().toISOString();
+    job.settled = true;
+    job.resolve(result);
+  }
+
+  _failJob(job, error) {
+    if (job.settled) return;
+    const e = error instanceof Error ? error : new Error(String(error));
+    job.error = e.message;
+    job.status = 'failed';
+    job.phase = 'failed';
+    job.finishedAt = new Date().toISOString();
+    job.settled = true;
+    job.reject(e);
+  }
+
+  _orphanParallelJob(job, error) {
+    const e = error instanceof Error ? error : new Error(String(error));
+    job.error = e.message;
+    job.status = 'needs_attention';
+    job.phase = 'orphaned';
+    job.finishedAt = null;
+    // 保留在 activeParallel：真实 Cursor Agent 可能仍在运行，继续占用 allowed_paths 并阻止 FIFO。
+    this.activeParallel.set(job.id, job);
+    if (!job.settled) {
+      job.settled = true;
+      job.reject(e);
+    }
+  }
+
+  _withUiLock(fn) {
+    const run = this._uiTail.then(fn, fn);
+    this._uiTail = run.catch(() => {});
+    return run;
+  }
+
+  _scheduleDrain(delay = 400) {
+    if (this._drainTimer) return;
+    this._drainTimer = setTimeout(() => {
+      this._drainTimer = null;
+      this._drain();
+    }, delay);
   }
 
   // 自愈：每次查询前委托 ensureCursorRunning。并发去重。失败静默降级（_run 报清晰错）。
@@ -140,92 +411,484 @@ class CursorBridge {
   }
   async _drain() {
     if (this.busy || this.queue.length === 0) return;
+    if (this.queue[0].effectiveExecution !== 'parallel_agent' && this.activeParallel.size > 0) {
+      this._scheduleDrain();
+      return;
+    }
     this.busy = true;
     const job = this.queue.shift();
-    try { job.resolve(await this._run(job.query)); }
-    catch (e) { job.reject(e); }
-    finally { this.busy = false; this._drain(); }
+    job.status = 'running';
+    job.startedAt = new Date().toISOString();
+    try {
+      if (job.effectiveExecution === 'parallel_agent') {
+        job.phase = 'submitting';
+        const submitted = await this._withUiLock(() => this._submitParallelAgent(job));
+        if (submitted.fallbackReason) {
+          job.effectiveExecution = 'fifo';
+          job.fallbackReason = submitted.fallbackReason;
+          if (this.activeParallel.size > 0) {
+            job.status = 'queued';
+            job.phase = 'queued';
+            this.queue.unshift(job);
+            return;
+          }
+          job.phase = 'running';
+          const result = await this._withUiLock(() => this._run(job.prompt, job));
+          this._finishJob(job, result);
+        } else {
+          job.agentId = submitted.agent.id;
+          job.agentLabel = submitted.agent.label || null;
+          job.sentAt = new Date().toISOString();
+          job.phase = 'running';
+          if (!this.parallelRestoreAgentId && submitted.previousSelectedId) {
+            this.parallelRestoreAgentId = submitted.previousSelectedId;
+          }
+          this.activeParallel.set(job.id, job);
+          this._monitorParallelAgent(job).catch((e) => this._failParallelJob(job, e));
+        }
+      } else {
+        job.phase = 'running';
+        const result = await this._withUiLock(() => this._run(job.prompt, job));
+        this._finishJob(job, result);
+      }
+    } catch (e) {
+      if (e && e.sent) {
+        job.error = `发送状态不确定，继续按 agentId 监控：${e.message}`;
+        if (job.agentId) {
+          job.phase = 'running';
+          this.activeParallel.set(job.id, job);
+          this._monitorParallelAgent(job).catch((monitorError) => this._failParallelJob(job, monitorError));
+        } else {
+          this._orphanParallelJob(job, e);
+        }
+      } else {
+        this._failJob(job, e);
+      }
+    } finally {
+      this.busy = false;
+      this._drain();
+      this._maybeRestoreParallelOrigin();
+    }
   }
 
-  async _run(query) {
+  async _run(prompt, options = {}) {
     const page = await findPage();
     const c = makeClient(page.webSocketDebuggerUrl);
     await c.ready;
     try {
-      // 1) 确保 chat 面板打开（Ctrl+L toggle：不可见才开）
-      let vis = await evalJS(c, EXPR_VISIBLE);
-      if (!vis) { await chord(c, 2, 'L', 'KeyL', 76); await sleep(1300); vis = await evalJS(c, EXPR_VISIBLE); }
-      if (!vis) throw new Error('无法打开 Cursor chat 面板（.aislash-editor-input 不可见）。Cursor 是否登录且窗口正常？');
+      await this._ensureChatPanel(c);
       // 1.5) 开新对话（避免上下文累积 + 回复区干净，extract 不串旧对话）；找不到钮则跳过沿用当前
-      await this._newChat(c);
+      if (options.newChat !== false) await this._newChat(c);
       // 2) 填查询
-      const filled = await evalJS(c, exprFill(SEARCH_PREFIX + query));
+      const filled = await evalJS(c, exprFill(prompt));
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('填入查询失败（输入框状态异常）');
       await sleep(450);
+      let baseline = { messageCount: 0 };
+      try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
       // 3) Enter 发送
       await chord(c, 0, 'Enter', 'Enter', 13);
       // 4) 等完成（stop 钮 >0 出现过 → 归 0）
-      return await this._waitComplete(c);
+      return await this._waitComplete(c, options.timeoutMs || QUERY_TIMEOUT, baseline.messageCount || 0);
     } finally { c.close(); }
+  }
+
+  async _ensureChatPanel(c) {
+    let vis = await evalJS(c, EXPR_VISIBLE);
+    if (!vis) {
+      await chord(c, 2, 'L', 'KeyL', 76);
+      await sleep(1300);
+      vis = await evalJS(c, EXPR_VISIBLE);
+    }
+    if (!vis) throw new Error('无法打开 Cursor chat 面板（.aislash-editor-input 不可见）。Cursor 是否登录且窗口正常？');
   }
 
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
   // 而非新建（aria 标注 "New Agent (Ctrl+N) / [Alt] Replace Agent"）。2026-06-08 实测回复区 markdown DOM 清空
   // 2719→17，避免 extract 串旧对话。找不到钮则跳过沿用当前（不阻断查询）。
   async _newChat(c) {
+    return this._clickNewAgent(c, true);
+  }
+
+  async _clickNewAgent(c, replaceCurrent) {
     try {
       const pos = await evalJS(c, EXPR_FIND_NEWAGENT);
       if (!pos) return false;
       const { x, y } = JSON.parse(pos);
-      await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, modifiers: 1 });   // modifiers:1 = Alt → Replace Agent
-      await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, modifiers: 1 });
+      const modifiers = replaceCurrent ? 1 : 0;
+      await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, modifiers });
+      await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, modifiers });
       await sleep(1100);   // 等新对话初始化（输入框重建 + 回复区清空）
       return true;
     } catch { return false; }
   }
 
-  async _waitComplete(c) {
+  async _ensureHistoryOpen(c) {
+    if (await evalJS(c, EXPR_HISTORY_OPEN)) return true;
+    const pos = await evalJS(c, EXPR_FIND_HISTORY);
+    if (!pos) return false;
+    const { x, y } = JSON.parse(pos);
+    await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    await sleep(450);
+    return !!(await evalJS(c, EXPR_HISTORY_OPEN));
+  }
+
+  async _closeHistory(c) {
+    try {
+      if (await evalJS(c, EXPR_HISTORY_OPEN)) {
+        await chord(c, 0, 'Escape', 'Escape', 27);
+        await sleep(180);
+      }
+    } catch {}
+  }
+
+  async _readAgentEntries(c, keepOpen = false) {
+    if (!(await this._ensureHistoryOpen(c))) throw new Error('Agent History 菜单不可用');
+    try {
+      const snapshot = JSON.parse(await evalJS(c, EXPR_HISTORY_ENTRIES));
+      if (!snapshot.ok) throw new Error(snapshot.error || 'Agent History React adapter 不可用');
+      return snapshot.entries || [];
+    } finally {
+      if (!keepOpen) await this._closeHistory(c);
+    }
+  }
+
+  async _submitParallelAgent(job) {
+    const page = await findPage();
+    const c = makeClient(page.webSocketDebuggerUrl);
+    await c.ready;
+    let sent = false;
+    try {
+      await this._ensureChatPanel(c);
+      let before;
+      try {
+        before = await this._readAgentEntries(c);
+      } catch (e) {
+        return { fallbackReason: `parallel_agent 前置能力不可用：${e.message}` };
+      }
+      const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
+      if (!(await this._clickNewAgent(c, false))) {
+        return { fallbackReason: '找不到 Cursor New Agent 按钮，已在发送前降级 FIFO' };
+      }
+
+      let agent = null;
+      // 大多数 Cursor 版本在点击 New Agent 后即登记 local:<UUID>；先在发送前绑定身份。
+      for (let i = 0; i < 5 && !agent; i++) {
+        try { agent = selectNewAgentEntry(before, await this._readAgentEntries(c)); } catch {}
+        if (!agent) await sleep(350);
+      }
+      if (agent) {
+        job.agentId = agent.id;
+        job.agentLabel = agent.label || null;
+      }
+
+      await this._closeHistory(c);
+      await this._ensureChatPanel(c);
+      const filled = await evalJS(c, exprFill(job.prompt));
+      if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('parallel_agent 填入任务失败');
+      await sleep(350);
+      sent = true;
+      await chord(c, 0, 'Enter', 'Enter', 13);
+      job.sentAt = new Date().toISOString();
+
+      // Cursor 3.7 可能只在首次消息发送后才把 composer 登记进 Agent History。
+      // 发送后仍只按 before/after ID 差分绑定；若失败则进入 needs_attention，绝不重发或释放路径。
+      for (let i = 0; i < 12 && !agent; i++) {
+        await sleep(350);
+        try { agent = selectNewAgentEntry(before, await this._readAgentEntries(c)); } catch {}
+      }
+      if (!agent) {
+        const e = new Error('任务可能已发送，但无法从 Agent History 捕获唯一 agentId；已保留占用，禁止自动重发');
+        e.sent = true;
+        throw e;
+      }
+      job.agentId = agent.id;
+      job.agentLabel = agent.label || null;
+      return { agent, previousSelectedId };
+    } catch (e) {
+      if (sent) e.sent = true;
+      throw e;
+    } finally {
+      await this._closeHistory(c);
+      c.close();
+    }
+  }
+
+  async _readParallelEntry(job) {
+    return this._withUiLock(async () => {
+      const page = await findPage();
+      const c = makeClient(page.webSocketDebuggerUrl);
+      await c.ready;
+      try {
+        const entries = await this._readAgentEntries(c);
+        return entries.find((e) => e.id === job.agentId) || null;
+      } finally { c.close(); }
+    });
+  }
+
+  async _monitorParallelAgent(job) {
+    const started = Date.now();
+    let sawGenerating = false;
+    let completedStable = 0;
+    let missingPolls = 0;
+    let transientErrors = 0;
+    let collectionAttempts = 0;
+    let lastCollectionError = '';
+    while (Date.now() - started < job.timeoutMs) {
+      await sleep(1400);
+      let entry;
+      try {
+        entry = await this._readParallelEntry(job);
+        transientErrors = 0;
+      } catch (e) {
+        transientErrors++;
+        // Cursor 切换 Agent、收起侧栏或 History 菜单重渲染时可能短暂不可读。
+        // 保留约一分钟恢复窗口；超出后进入 needs_attention，绝不把已发送任务自动重发。
+        if (transientErrors >= 45) throw new Error(`连续无法读取 Agent History：${e.message}`);
+        continue;
+      }
+      if (!entry) {
+        missingPolls++;
+        if (missingPolls >= 45) throw new Error(`Agent History 中持续丢失 ${job.agentId}`);
+        continue;
+      }
+      missingPolls = 0;
+      if (entry.showSpinner) {
+        sawGenerating = true;
+        completedStable = 0;
+        continue;
+      }
+      if (/error|failed|warning|circle-slash/i.test(entry.icon || '')) {
+        const e = new Error(`Cursor Agent ${job.agentId} 显示失败状态 ${entry.icon}`);
+        e.confirmedTerminal = true;
+        throw e;
+      }
+      const completedIcon = /check-circled|check/i.test(entry.icon || '');
+      if (completedIcon) {
+        completedStable++;
+        // 极短任务可能在首次轮询前已完成；此时以两次稳定完成状态替代 sawGenerating。
+        if (sawGenerating || completedStable >= 2) {
+          job.phase = 'collecting';
+          let result;
+          try {
+            result = await this._withUiLock(() => this._collectParallelAgent(job));
+          } catch (e) {
+            // Agent 已完成但 DOM/React 视图尚未稳定时，不把一次提取失败误判为任务失败。
+            // 继续绑定同一个 agentId 重试；只有 History 明确显示失败图标才是 confirmedTerminal。
+            collectionAttempts++;
+            lastCollectionError = e.message;
+            job.error = `第 ${collectionAttempts} 次回收未完成，继续重试：${e.message}`;
+            job.phase = 'running';
+            completedStable = 0;
+            await sleep(1200);
+            continue;
+          }
+          job.error = null;
+          this.activeParallel.delete(job.id);
+          this._finishJob(job, result);
+          this._drain();
+          this._maybeRestoreParallelOrigin();
+          return;
+        }
+      } else {
+        completedStable = 0;
+      }
+    }
+    const detail = lastCollectionError ? `；最后回收错误：${lastCollectionError}` : '';
+    throw new Error(`Cursor parallel_agent 任务超时 (${job.timeoutMs}ms)${detail}`);
+  }
+
+  async _waitForSelectedAgent(c, agentId, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const entries = await this._readAgentEntries(c);
+      const target = entries.find((e) => e.id === agentId);
+      if (target && target.isSelected) return true;
+      await sleep(250);
+    }
+    throw new Error(`打开 ${agentId} 后未确认其成为当前选中 Agent`);
+  }
+
+  async _collectParallelAgent(job) {
+    const page = await findPage();
+    const c = makeClient(page.webSocketDebuggerUrl);
+    await c.ready;
+    let previousSelectedId = null;
+    try {
+      const entries = await this._readAgentEntries(c, true);
+      previousSelectedId = (entries.find((e) => e.isSelected) || {}).id || null;
+      const opened = await evalJS(c, exprOpenAgent(job.agentId));
+      if (opened !== 'OPENED') throw new Error(`无法打开 ${job.agentId}: ${opened}`);
+      await this._closeHistory(c);
+      await this._waitForSelectedAgent(c, job.agentId);
+
+      let answer = '';
+      let lastKey = '';
+      let stable = 0;
+      // Agent History 已给出完成图标，但打开会话后的 Markdown/虚拟列表仍可能延迟挂载。
+      // 给视图约 24 秒稳定时间，并允许只有一个可见 Markdown（常见于用户 prompt 不是 markdown 的情况）。
+      for (let i = 0; i < 80; i++) {
+        let snap = { messageCount: 0, replyLength: 0, replyHash: 0 };
+        try { snap = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
+        const candidate = String(await evalJS(c, EXPR_EXTRACT) || '').trim();
+        if (candidate && Number(snap.stop || 0) === 0) {
+          const key = `${snap.replyLength}:${snap.replyHash}`;
+          if (key === lastKey) stable++; else { lastKey = key; stable = 0; }
+          if (stable >= 1) { answer = candidate; break; }
+        }
+        await sleep(300);
+      }
+      if (!answer) throw new Error(`已打开 ${job.agentId}，但未找到助手最终回复`);
+
+      if (previousSelectedId && previousSelectedId !== job.agentId) {
+        if (await this._ensureHistoryOpen(c)) {
+          await evalJS(c, exprOpenAgent(previousSelectedId));
+          await this._closeHistory(c);
+          await this._waitForSelectedAgent(c, previousSelectedId);
+        }
+      }
+      return answer;
+    } finally {
+      await this._closeHistory(c);
+      c.close();
+    }
+  }
+
+  _failParallelJob(job, error) {
+    if (error && error.confirmedTerminal) {
+      this.activeParallel.delete(job.id);
+      this._failJob(job, error);
+      this._drain();
+      this._maybeRestoreParallelOrigin();
+      return;
+    }
+    this._orphanParallelJob(job, error);
+  }
+
+  _maybeRestoreParallelOrigin() {
+    if (!this.parallelRestoreAgentId || this.busy || this.activeParallel.size > 0 ||
+        this.queue.some((job) => job.execution === 'parallel_agent')) return;
+    const agentId = this.parallelRestoreAgentId;
+    this.parallelRestoreAgentId = null;
+    this._withUiLock(async () => {
+      const page = await findPage();
+      const c = makeClient(page.webSocketDebuggerUrl);
+      await c.ready;
+      try {
+        if (await this._ensureHistoryOpen(c)) {
+          await evalJS(c, exprOpenAgent(agentId));
+          await sleep(450);
+        }
+      } finally {
+        await this._closeHistory(c);
+        c.close();
+      }
+    }).catch((e) => console.error('⚠️ 恢复原 Cursor Agent 失败：' + e.message));
+  }
+
+  async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0) {
     const start = Date.now();
     const INTERVAL = 1000;
     let sawStop = false;        // 观察到生成中（stop 钮出现过）
-    let lastMd = 0, stableMd = 0;
+    let lastReplyKey = '', stableReply = 0;
     await sleep(1200);          // 给发送后 stop 钮起来留时间
-    while (Date.now() - start < QUERY_TIMEOUT) {
-      let s; try { s = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch { s = { stop: 0, mdMax: 0 }; }
+    while (Date.now() - start < timeoutMs) {
+      let s;
+      try { s = JSON.parse(await evalJS(c, EXPR_SNAP)); }
+      catch { s = { stop: 0, messageCount: 0, replyLength: 0, replyHash: 0 }; }
       if (s.stop > 0) sawStop = true;
 
-      // 主路径：生成过且停止钮归 0 + 有实质回复 → 完成
-      if (sawStop && s.stop === 0 && s.mdMax > 40) {
+      // 主路径：确认生成过、停止钮归零且存在非空回复；不再硬编码回复长度。
+      if (sawStop && s.stop === 0 && s.replyLength > 0) {
         await sleep(800);      // 宽限：最后一次 DOM 追加
         const ans = await evalJS(c, EXPR_EXTRACT);
-        if (ans && ans.length > 0) return ans;
+        if (ans) return ans;
       }
-      // 兜底：始终没采到 stop 钮（信号失效）但文本稳定 → 完成
-      if (!sawStop && s.mdMax > 80) {
-        if (s.mdMax === lastMd) { stableMd++; if (stableMd >= 6) { const ans = await evalJS(c, EXPR_EXTRACT); if (ans) return ans; } }
-        else { stableMd = 0; lastMd = s.mdMax; }
+      // 兜底：没采到 stop 时，必须比发送前多出用户+助手两条消息，并且最后回复稳定。
+      if (!sawStop && s.messageCount >= baselineCount + 2 && s.replyLength > 0) {
+        const key = `${s.replyLength}:${s.replyHash}`;
+        if (key === lastReplyKey) {
+          stableReply++;
+          if (stableReply >= 4) {
+            const ans = await evalJS(c, EXPR_EXTRACT);
+            if (ans) return ans;
+          }
+        } else {
+          stableReply = 0;
+          lastReplyKey = key;
+        }
       }
       await sleep(INTERVAL);
     }
-    // 超时：有内容则返回当前，否则报错（绝不返回空）
+    // 超时只接受已观察到生成，或消息数明确增加到助手回复；避免把用户 prompt 当结果。
+    let finalSnap = { messageCount: 0 };
+    try { finalSnap = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
     const ans = await evalJS(c, EXPR_EXTRACT);
-    if (ans && ans.length > 40) return ans;
-    throw new Error(`Cursor 查询超时 (${QUERY_TIMEOUT}ms) 未产生实质回复`);
+    if (ans && (sawStop || finalSnap.messageCount >= baselineCount + 2)) return ans;
+    throw new Error(`Cursor 任务超时 (${timeoutMs}ms) 未产生可确认的助手回复`);
   }
 
-  async status() {
+  _taskView(job, includeResult = false) {
+    const view = {
+      taskId: job.id,
+      kind: job.kind,
+      status: job.status,
+      phase: job.phase,
+      execution: job.execution,
+      effectiveExecution: job.effectiveExecution,
+      readOnly: job.readOnly,
+      allowedPaths: job.allowedPaths,
+      agentId: job.agentId,
+      agentLabel: job.agentLabel,
+      fallbackReason: job.fallbackReason,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      sentAt: job.sentAt,
+      finishedAt: job.finishedAt,
+      error: job.error,
+    };
+    if (includeResult || job.status === 'completed' || job.status === 'failed') view.result = job.result;
+    return view;
+  }
+
+  _trimTasks() {
+    if (this.tasks.size <= 50) return;
+    for (const [id, job] of this.tasks) {
+      if (job.status === 'completed' || job.status === 'failed') this.tasks.delete(id);
+      if (this.tasks.size <= 50) break;
+    }
+  }
+
+  async status(taskId = '') {
+    if (taskId) {
+      const job = this.tasks.get(String(taskId));
+      if (!job) return { found: false, taskId: String(taskId) };
+      return { found: true, ...this._taskView(job, true) };
+    }
+    const parallelRunning = this.activeParallel.size;
+    const uiBusy = this.busy;
+    const common = {
+      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
+      uiBusy,
+      parallelRunning,
+      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0,
+      queued: this.queue.length,
+      activeParallel: [...this.activeParallel.values()].map((job) => this._taskView(job)),
+      recentTasks: [...this.tasks.values()].slice(-10).map((job) => this._taskView(job)),
+      cdpPort: CDP_PORT,
+    };
     try {
       const ver = await httpJson('/json/version');
       const page = await findPage();
-      return { connected: true, busy: this.busy, queued: this.queue.length, cdpPort: CDP_PORT, browser: ver.Browser, page: (page.url || '').slice(0, 60) };
+      return { connected: true, ...common, browser: ver.Browser, page: (page.url || '').slice(0, 60) };
     } catch (e) {
-      return { connected: false, busy: this.busy, queued: this.queue.length, cdpPort: CDP_PORT, error: e.message };
+      return { connected: false, ...common, error: e.message };
     }
   }
 }
 
 const bridge = new CursorBridge();
-const server = new Server({ name: 'cursor-bridge', version: '1.0.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'cursor-bridge', version: '2.0.7' }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -247,9 +910,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'cursor_do',
+      description:
+        '把边界明确的任务交给 Cursor agent 执行。默认 execution=fifo 后台排队；' +
+        'execution=parallel_agent 会串行操控 UI 提交到独立顶层 Agent，再按稳定 agentId 并行跟踪和逐项收回。' +
+        '并行写任务必须提供不重叠的 allowed_paths；只读任务应设置 read_only=true。' +
+        '用 cursor_status(task_id) 查询状态和原始回复。Cursor 结果不是正式验证，主 Agent 仍需检查真实改动。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: '原样交给 Cursor 的任务内容，必须包含明确目标、边界和完成合同' },
+          background: { type: 'boolean', default: true, description: '默认 true：立即返回 taskId；false：等待该任务进入终态' },
+          execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo 保持单对话串行；parallel_agent 使用独立顶层 Agent 并行运行' },
+          read_only: { type: 'boolean', default: false, description: '显式声明任务不得修改工作区；parallel_agent 只读任务应设 true' },
+          new_chat: { type: 'boolean', default: true, description: 'fifo 是否使用干净对话；parallel_agent 始终强制独立 New Agent' },
+          timeout_ms: { type: 'integer', minimum: 30000, maximum: 900000, default: 600000, description: '单任务超时，默认 10 分钟' },
+          allowed_paths: { type: 'array', items: { type: 'string' }, description: '工作区相对路径的写入范围声明；并行写任务必填、不得含 glob/越界，且不得与活动并行任务重叠。它不是文件系统沙箱' },
+          completion_contract: { type: 'string', description: '可选：自定义验收和最终回报格式' },
+        },
+        required: ['prompt'],
+      },
+    },
+    {
       name: 'cursor_status',
-      description: '检查 cursor-bridge 与 Cursor CDP（9223）的连接/队列状态。',
-      inputSchema: { type: 'object', properties: {} },
+      description: '检查 Cursor CDP、FIFO 队列和活动并行 Agent；传 task_id 可精确查询 cursor_do 的 agentId、阶段与结果。',
+      inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: '可选：cursor_do 返回的 taskId' } } },
     },
     {
       name: 'cursor_launch',
@@ -268,8 +953,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const result = await bridge.search(String((args && args.query) || ''));
       return { content: [{ type: 'text', text: String(result) }] };
     }
+    if (name === 'cursor_do') {
+      const result = await bridge.doTask(String((args && args.prompt) || ''), {
+        background: !args || args.background !== false,
+        execution: args && args.execution,
+        readOnly: !!(args && args.read_only),
+        newChat: !args || args.new_chat !== false,
+        timeoutMs: args && args.timeout_ms,
+        allowedPaths: args && args.allowed_paths,
+        completionContract: args && args.completion_contract,
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === 'cursor_status') {
-      return { content: [{ type: 'text', text: JSON.stringify(await bridge.status(), null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
     }
     if (name === 'cursor_launch') {
       const { ensureCursorRunning } = await import('./launch-cursor.mjs');
@@ -306,4 +1003,4 @@ if (isMain) {
   process.on('SIGINT', () => process.exit(0));
   main().catch((e) => { console.error('❌ 致命错误:', e); process.exit(1); });
 }
-export { CursorBridge, bridge };
+export { CursorBridge, bridge, normalizeAllowedPath, pathsOverlap, selectNewAgentEntry };

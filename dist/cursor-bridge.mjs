@@ -19333,6 +19333,7 @@ var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 18e4);
 var SEARCH_PREFIX = "\u53EA\u505A\u4EE3\u7801\u68C0\u7D22\u5B9A\u4F4D\uFF1A\u5217\u51FA\u4E0E\u4E0B\u9762\u610F\u56FE\u76F8\u5173\u7684\u6587\u4EF6\u8DEF\u5F84 + \u884C\u53F7\u8303\u56F4\uFF08\u5F62\u5982 Assets/Scripts/X.cs:120-180\uFF09\uFF0C\u9010\u884C\u5217\u51FA\u5373\u53EF\u3002\u4E0D\u8981\u8BFB\u53D6\u6587\u4EF6\u6B63\u6587\u3001\u4E0D\u8981\u4FEE\u6539\u4EFB\u4F55\u4EE3\u7801\u3001\u4E0D\u8981\u5C55\u5F00\u957F\u7BC7\u89E3\u91CA\u3002\n\n\u610F\u56FE\uFF1A";
+var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
   return new Promise((resolve, reject) => {
@@ -19437,29 +19438,265 @@ function exprFill(text) {
   return `(function(){const inp=document.querySelector('.aislash-editor-input');if(!inp||inp.offsetParent===null)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});inp.dispatchEvent(new Event('input',{bubbles:true}));return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
 }
 var EXPR_SNAP = `(function(){
-  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')];
-  let mdMax=0; for(const m of md){const t=(m.innerText||'').length; if(t>mdMax)mdMax=t;}
+  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
+    .filter(e=>e.offsetParent!==null&&!e.closest('.ui-model-picker__trigger,[class*=model-picker]'));
+  const texts=md.map(m=>(m.innerText||'').trim()).filter(Boolean);
+  const last=texts[texts.length-1]||'';
+  let hash=0; for(let i=0;i<last.length;i++)hash=((hash<<5)-hash+last.charCodeAt(i))|0;
   const stop=[...document.querySelectorAll('[class*=codicon-stop],[class*=debug-stop],[aria-label*=Stop],[aria-label*=stop],[aria-label*=Cancel],[title*=Stop]')].filter(e=>e.offsetParent!==null).length;
-  return JSON.stringify({mdMax, stop});
+  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop});
 })()`;
 var EXPR_EXTRACT = `(function(){
-  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')].filter(e=>e.offsetParent!==null);
-  let best=''; for(const m of md){const t=(m.innerText||'').trim(); if(t.length>best.length)best=t;}
-  return best;
+  const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
+    .filter(e=>e.offsetParent!==null&&!e.closest('.ui-model-picker__trigger,[class*=model-picker]'));
+  const texts=md.map(m=>(m.innerText||'').trim()).filter(Boolean);
+  return texts[texts.length-1]||'';
 })()`;
 var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>e.offsetParent!==null&&/New Agent|New Chat/i.test(e.getAttribute('aria-label')||''));if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+var EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
+var EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+var REACT_ADAPTER_BODY = `
+  const findAdapter=()=>{
+    const label=[...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);
+    if(!label)return null;
+    const nodes=[]; let n=label;
+    for(let i=0;n&&i<18;i++,n=n.parentElement)nodes.push(n);
+    for(const node of nodes){
+      for(const key of Object.keys(node)){
+        if(!key.startsWith('__reactFiber$')&&!key.startsWith('__reactProps$'))continue;
+        const seed=node[key];
+        let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
+        for(let j=0;f&&j<36;j++,f=f.return){
+          for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
+            if(p&&Array.isArray(p.entries)&&typeof p.onOpenEntry==='function')return {props:p};
+          }
+        }
+      }
+    }
+    return null;
+  };
+  const a=findAdapter();`;
+var EXPR_HISTORY_ENTRIES = `(function(){${REACT_ADAPTER_BODY}
+  if(!a)return JSON.stringify({ok:false,error:'REACT_ADAPTER_UNAVAILABLE'});
+  const entries=a.props.entries.map((e,index)=>{
+    const raw=e.timestamp;
+    let timestamp=raw instanceof Date?raw.getTime():Number(raw);
+    if(!Number.isFinite(timestamp))timestamp=Date.parse(String(raw||''));
+    if(!Number.isFinite(timestamp))timestamp=index;
+    return {
+      id:String(e.id||''),label:String(e.label||''),searchText:String(e.searchText||''),timestamp,
+      isSelected:!!e.isSelected,showSpinner:!!e.showSpinner,
+      icon:String(typeof e.icon==='string'?e.icon:(e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
+    };
+  }).filter(e=>e.id);
+  return JSON.stringify({ok:true,entries});
+})()`;
+function exprOpenAgent(agentId) {
+  const id = JSON.stringify(String(agentId));
+  return `(function(){${REACT_ADAPTER_BODY}
+    if(!a)return 'REACT_ADAPTER_UNAVAILABLE';
+    const e=a.props.entries.find(x=>String(x.id||'')===${id}); if(!e)return 'AGENT_NOT_FOUND';
+    a.props.onOpenEntry(${id}); return 'OPENED';
+  })()`;
+}
+function normalizeAllowedPath(value) {
+  const raw = String(value || "").trim().replace(/\\/g, "/");
+  const prefix = /^[a-zA-Z]:/.test(raw) ? raw.slice(0, 2).toLowerCase() : "";
+  const body = prefix ? raw.slice(2) : raw;
+  const parts = [];
+  for (const part of body.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (parts.length > 0 && parts[parts.length - 1] !== "..") parts.pop();
+      else parts.push("..");
+    } else {
+      parts.push(part.toLowerCase());
+    }
+  }
+  const normalized = (prefix ? prefix + "/" : "") + parts.join("/");
+  return normalized || ".";
+}
+function pathsOverlap(a, b) {
+  const left = normalizeAllowedPath(a);
+  const right = normalizeAllowedPath(b);
+  return left === "." || right === "." || left === right || left.startsWith(right + "/") || right.startsWith(left + "/");
+}
+function selectNewAgentEntry(beforeEntries, afterEntries) {
+  const before = new Set((beforeEntries || []).map((e) => e.id));
+  const fresh = (afterEntries || []).map((e, index) => ({ ...e, _index: index })).filter((e) => e.id && !before.has(e.id));
+  if (fresh.length === 0) return null;
+  const selected = fresh.filter((e) => e.isSelected);
+  const pool = selected.length > 0 ? selected : fresh;
+  return [...pool].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0) || b._index - a._index)[0];
+}
 var CursorBridge = class {
   constructor() {
     this.busy = false;
     this.queue = [];
     this._healing = null;
+    this.tasks = /* @__PURE__ */ new Map();
+    this.nextTaskId = 1;
+    this.activeParallel = /* @__PURE__ */ new Map();
+    this._uiTail = Promise.resolve();
+    this._drainTimer = null;
+    this.parallelRestoreAgentId = null;
   }
   async search(query) {
     await this._ensureCursor();
-    return new Promise((resolve, reject) => {
-      this.queue.push({ query, resolve, reject });
-      this._drain();
+    const job = this._enqueue("search", SEARCH_PREFIX + query, {
+      timeoutMs: QUERY_TIMEOUT,
+      newChat: true,
+      execution: "fifo",
+      readOnly: true,
+      allowedPaths: []
     });
+    return job.promise;
+  }
+  async doTask(prompt, options = {}) {
+    const text = String(prompt || "").trim();
+    if (!text) throw new Error("prompt \u4E0D\u80FD\u4E3A\u7A7A");
+    if (text.length > 1e5) throw new Error("prompt \u8FC7\u957F\uFF08\u6700\u5927 100000 \u5B57\u7B26\uFF09");
+    await this._ensureCursor();
+    const execution = String(options.execution || "fifo");
+    if (execution !== "fifo" && execution !== "parallel_agent") {
+      throw new Error(`execution \u4E0D\u652F\u6301 ${execution}\uFF1B\u53EA\u80FD\u662F fifo \u6216 parallel_agent`);
+    }
+    const readOnly = options.readOnly === true;
+    const timeoutMs = Math.max(3e4, Math.min(9e5, Number(options.timeoutMs || 6e5)));
+    const allowedPaths = Array.isArray(options.allowedPaths) ? options.allowedPaths.map((x) => String(x).trim()).filter(Boolean) : [];
+    if (readOnly && allowedPaths.length > 0) {
+      throw new Error("read_only=true \u4E0E allowed_paths \u4E0D\u80FD\u540C\u65F6\u4F7F\u7528\uFF1B\u53EA\u8BFB\u4EFB\u52A1\u4E0D\u5F97\u58F0\u660E\u5199\u5165\u8303\u56F4");
+    }
+    if (execution === "parallel_agent" && !readOnly && allowedPaths.length === 0) {
+      throw new Error("parallel_agent \u5199\u4EFB\u52A1\u5FC5\u987B\u63D0\u4F9B allowed_paths\uFF1B\u7EAF\u8BFB\u53D6\u4EFB\u52A1\u8BF7\u663E\u5F0F\u8BBE\u7F6E read_only=true");
+    }
+    if (execution === "parallel_agent" && !readOnly) {
+      this._validateParallelAllowedPaths(allowedPaths);
+      this._assertNoParallelPathConflict(allowedPaths);
+    }
+    const contract = String(options.completionContract || "").trim();
+    let fullPrompt = text;
+    if (readOnly) fullPrompt += "\n\n\u53EA\u8BFB\u8FB9\u754C\uFF1A\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u4EFB\u4F55\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u4F1A\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002";
+    if (allowedPaths.length > 0) {
+      fullPrompt += "\n\n\u5141\u8BB8\u4FEE\u6539\u8303\u56F4\uFF08\u4E0D\u5F97\u8D8A\u754C\uFF09\uFF1A\n" + allowedPaths.map((x) => "- " + x).join("\n");
+    }
+    fullPrompt += contract ? "\n\n\u9A8C\u6536\u4E0E\u56DE\u62A5\u5408\u540C\uFF1A\n" + contract : DO_DEFAULT_CONTRACT;
+    const job = this._enqueue("do", fullPrompt, {
+      timeoutMs,
+      newChat: execution === "parallel_agent" ? true : options.newChat !== false,
+      execution,
+      readOnly,
+      allowedPaths
+    });
+    if (options.background !== false) return this._taskView(job);
+    await job.promise;
+    return this._taskView(job, true);
+  }
+  _assertNoParallelPathConflict(allowedPaths) {
+    const live = [...this.tasks.values()].filter((job) => job.execution === "parallel_agent" && !job.readOnly && job.status !== "completed" && job.status !== "failed");
+    for (const job of live) {
+      const overlap = allowedPaths.some((a) => job.allowedPaths.some((b) => pathsOverlap(a, b)));
+      if (overlap) throw new Error(`parallel_agent allowed_paths \u4E0E\u4EFB\u52A1 ${job.id} \u91CD\u53E0\uFF1B\u8BF7\u6539\u7528 fifo \u6216\u62C6\u6210\u4E0D\u91CD\u53E0\u8DEF\u5F84`);
+    }
+  }
+  _validateParallelAllowedPaths(allowedPaths) {
+    for (const raw of allowedPaths) {
+      const slash = String(raw).replace(/\\/g, "/");
+      if (/[*?\[\]{}!]/.test(slash)) throw new Error(`parallel_agent allowed_paths \u4E0D\u63A5\u53D7 glob\uFF1A${raw}`);
+      if (/^[a-zA-Z]:\//.test(slash) || slash.startsWith("/")) {
+        throw new Error(`parallel_agent allowed_paths \u5FC5\u987B\u4F7F\u7528\u5DE5\u4F5C\u533A\u76F8\u5BF9\u8DEF\u5F84\uFF1A${raw}`);
+      }
+      const normalized = normalizeAllowedPath(slash);
+      if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
+        throw new Error(`parallel_agent allowed_paths \u4E0D\u5F97\u4E3A\u7A7A\u6216\u8D8A\u51FA\u5DE5\u4F5C\u533A\uFF1A${raw}`);
+      }
+    }
+  }
+  _enqueue(kind, prompt, options) {
+    const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
+    let resolvePromise;
+    let rejectPromise;
+    const promise = new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    promise.catch(() => {
+    });
+    const job = {
+      id,
+      kind,
+      prompt,
+      timeoutMs: options.timeoutMs,
+      newChat: options.newChat,
+      execution: options.execution || "fifo",
+      effectiveExecution: options.execution || "fifo",
+      readOnly: options.readOnly === true,
+      allowedPaths: options.allowedPaths || [],
+      status: "queued",
+      phase: "queued",
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      startedAt: null,
+      finishedAt: null,
+      sentAt: null,
+      agentId: null,
+      agentLabel: null,
+      fallbackReason: null,
+      result: null,
+      error: null,
+      settled: false,
+      promise,
+      resolve: resolvePromise,
+      reject: rejectPromise
+    };
+    this.tasks.set(id, job);
+    this.queue.push(job);
+    this._trimTasks();
+    this._drain();
+    return job;
+  }
+  _finishJob(job, result) {
+    if (job.settled) return;
+    job.result = result;
+    job.status = "completed";
+    job.phase = "completed";
+    job.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    job.settled = true;
+    job.resolve(result);
+  }
+  _failJob(job, error2) {
+    if (job.settled) return;
+    const e = error2 instanceof Error ? error2 : new Error(String(error2));
+    job.error = e.message;
+    job.status = "failed";
+    job.phase = "failed";
+    job.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    job.settled = true;
+    job.reject(e);
+  }
+  _orphanParallelJob(job, error2) {
+    const e = error2 instanceof Error ? error2 : new Error(String(error2));
+    job.error = e.message;
+    job.status = "needs_attention";
+    job.phase = "orphaned";
+    job.finishedAt = null;
+    this.activeParallel.set(job.id, job);
+    if (!job.settled) {
+      job.settled = true;
+      job.reject(e);
+    }
+  }
+  _withUiLock(fn) {
+    const run = this._uiTail.then(fn, fn);
+    this._uiTail = run.catch(() => {
+    });
+    return run;
+  }
+  _scheduleDrain(delay = 400) {
+    if (this._drainTimer) return;
+    this._drainTimer = setTimeout(() => {
+      this._drainTimer = null;
+      this._drain();
+    }, delay);
   }
   // 自愈：每次查询前委托 ensureCursorRunning。并发去重。失败静默降级（_run 报清晰错）。
   // 统一走 ensureCursorRunning 复用其【单一身份校验来源】（cdpUp + cdpIsCursor）——避免热路径裸 /json/version 检查
@@ -19486,104 +19723,473 @@ var CursorBridge = class {
   }
   async _drain() {
     if (this.busy || this.queue.length === 0) return;
+    if (this.queue[0].effectiveExecution !== "parallel_agent" && this.activeParallel.size > 0) {
+      this._scheduleDrain();
+      return;
+    }
     this.busy = true;
     const job = this.queue.shift();
+    job.status = "running";
+    job.startedAt = (/* @__PURE__ */ new Date()).toISOString();
     try {
-      job.resolve(await this._run(job.query));
+      if (job.effectiveExecution === "parallel_agent") {
+        job.phase = "submitting";
+        const submitted = await this._withUiLock(() => this._submitParallelAgent(job));
+        if (submitted.fallbackReason) {
+          job.effectiveExecution = "fifo";
+          job.fallbackReason = submitted.fallbackReason;
+          if (this.activeParallel.size > 0) {
+            job.status = "queued";
+            job.phase = "queued";
+            this.queue.unshift(job);
+            return;
+          }
+          job.phase = "running";
+          const result = await this._withUiLock(() => this._run(job.prompt, job));
+          this._finishJob(job, result);
+        } else {
+          job.agentId = submitted.agent.id;
+          job.agentLabel = submitted.agent.label || null;
+          job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
+          job.phase = "running";
+          if (!this.parallelRestoreAgentId && submitted.previousSelectedId) {
+            this.parallelRestoreAgentId = submitted.previousSelectedId;
+          }
+          this.activeParallel.set(job.id, job);
+          this._monitorParallelAgent(job).catch((e) => this._failParallelJob(job, e));
+        }
+      } else {
+        job.phase = "running";
+        const result = await this._withUiLock(() => this._run(job.prompt, job));
+        this._finishJob(job, result);
+      }
     } catch (e) {
-      job.reject(e);
+      if (e && e.sent) {
+        job.error = `\u53D1\u9001\u72B6\u6001\u4E0D\u786E\u5B9A\uFF0C\u7EE7\u7EED\u6309 agentId \u76D1\u63A7\uFF1A${e.message}`;
+        if (job.agentId) {
+          job.phase = "running";
+          this.activeParallel.set(job.id, job);
+          this._monitorParallelAgent(job).catch((monitorError) => this._failParallelJob(job, monitorError));
+        } else {
+          this._orphanParallelJob(job, e);
+        }
+      } else {
+        this._failJob(job, e);
+      }
     } finally {
       this.busy = false;
       this._drain();
+      this._maybeRestoreParallelOrigin();
     }
   }
-  async _run(query) {
+  async _run(prompt, options = {}) {
     const page = await findPage();
     const c = makeClient(page.webSocketDebuggerUrl);
     await c.ready;
     try {
-      let vis = await evalJS(c, EXPR_VISIBLE);
-      if (!vis) {
-        await chord(c, 2, "L", "KeyL", 76);
-        await sleep(1300);
-        vis = await evalJS(c, EXPR_VISIBLE);
-      }
-      if (!vis) throw new Error("\u65E0\u6CD5\u6253\u5F00 Cursor chat \u9762\u677F\uFF08.aislash-editor-input \u4E0D\u53EF\u89C1\uFF09\u3002Cursor \u662F\u5426\u767B\u5F55\u4E14\u7A97\u53E3\u6B63\u5E38\uFF1F");
-      await this._newChat(c);
-      const filled = await evalJS(c, exprFill(SEARCH_PREFIX + query));
+      await this._ensureChatPanel(c);
+      if (options.newChat !== false) await this._newChat(c);
+      const filled = await evalJS(c, exprFill(prompt));
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
       await sleep(450);
+      let baseline = { messageCount: 0 };
+      try {
+        baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
+      } catch {
+      }
       await chord(c, 0, "Enter", "Enter", 13);
-      return await this._waitComplete(c);
+      return await this._waitComplete(c, options.timeoutMs || QUERY_TIMEOUT, baseline.messageCount || 0);
     } finally {
       c.close();
     }
+  }
+  async _ensureChatPanel(c) {
+    let vis = await evalJS(c, EXPR_VISIBLE);
+    if (!vis) {
+      await chord(c, 2, "L", "KeyL", 76);
+      await sleep(1300);
+      vis = await evalJS(c, EXPR_VISIBLE);
+    }
+    if (!vis) throw new Error("\u65E0\u6CD5\u6253\u5F00 Cursor chat \u9762\u677F\uFF08.aislash-editor-input \u4E0D\u53EF\u89C1\uFF09\u3002Cursor \u662F\u5426\u767B\u5F55\u4E14\u7A97\u53E3\u6B63\u5E38\uFF1F");
   }
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
   // 而非新建（aria 标注 "New Agent (Ctrl+N) / [Alt] Replace Agent"）。2026-06-08 实测回复区 markdown DOM 清空
   // 2719→17，避免 extract 串旧对话。找不到钮则跳过沿用当前（不阻断查询）。
   async _newChat(c) {
+    return this._clickNewAgent(c, true);
+  }
+  async _clickNewAgent(c, replaceCurrent) {
     try {
       const pos = await evalJS(c, EXPR_FIND_NEWAGENT);
       if (!pos) return false;
       const { x, y } = JSON.parse(pos);
-      await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers: 1 });
-      await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers: 1 });
+      const modifiers = replaceCurrent ? 1 : 0;
+      await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers });
+      await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
       await sleep(1100);
       return true;
     } catch {
       return false;
     }
   }
-  async _waitComplete(c) {
+  async _ensureHistoryOpen(c) {
+    if (await evalJS(c, EXPR_HISTORY_OPEN)) return true;
+    const pos = await evalJS(c, EXPR_FIND_HISTORY);
+    if (!pos) return false;
+    const { x, y } = JSON.parse(pos);
+    await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+    await sleep(450);
+    return !!await evalJS(c, EXPR_HISTORY_OPEN);
+  }
+  async _closeHistory(c) {
+    try {
+      if (await evalJS(c, EXPR_HISTORY_OPEN)) {
+        await chord(c, 0, "Escape", "Escape", 27);
+        await sleep(180);
+      }
+    } catch {
+    }
+  }
+  async _readAgentEntries(c, keepOpen = false) {
+    if (!await this._ensureHistoryOpen(c)) throw new Error("Agent History \u83DC\u5355\u4E0D\u53EF\u7528");
+    try {
+      const snapshot = JSON.parse(await evalJS(c, EXPR_HISTORY_ENTRIES));
+      if (!snapshot.ok) throw new Error(snapshot.error || "Agent History React adapter \u4E0D\u53EF\u7528");
+      return snapshot.entries || [];
+    } finally {
+      if (!keepOpen) await this._closeHistory(c);
+    }
+  }
+  async _submitParallelAgent(job) {
+    const page = await findPage();
+    const c = makeClient(page.webSocketDebuggerUrl);
+    await c.ready;
+    let sent = false;
+    try {
+      await this._ensureChatPanel(c);
+      let before;
+      try {
+        before = await this._readAgentEntries(c);
+      } catch (e) {
+        return { fallbackReason: `parallel_agent \u524D\u7F6E\u80FD\u529B\u4E0D\u53EF\u7528\uFF1A${e.message}` };
+      }
+      const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
+      if (!await this._clickNewAgent(c, false)) {
+        return { fallbackReason: "\u627E\u4E0D\u5230 Cursor New Agent \u6309\u94AE\uFF0C\u5DF2\u5728\u53D1\u9001\u524D\u964D\u7EA7 FIFO" };
+      }
+      let agent = null;
+      for (let i = 0; i < 5 && !agent; i++) {
+        try {
+          agent = selectNewAgentEntry(before, await this._readAgentEntries(c));
+        } catch {
+        }
+        if (!agent) await sleep(350);
+      }
+      if (agent) {
+        job.agentId = agent.id;
+        job.agentLabel = agent.label || null;
+      }
+      await this._closeHistory(c);
+      await this._ensureChatPanel(c);
+      const filled = await evalJS(c, exprFill(job.prompt));
+      if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("parallel_agent \u586B\u5165\u4EFB\u52A1\u5931\u8D25");
+      await sleep(350);
+      sent = true;
+      await chord(c, 0, "Enter", "Enter", 13);
+      job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
+      for (let i = 0; i < 12 && !agent; i++) {
+        await sleep(350);
+        try {
+          agent = selectNewAgentEntry(before, await this._readAgentEntries(c));
+        } catch {
+        }
+      }
+      if (!agent) {
+        const e = new Error("\u4EFB\u52A1\u53EF\u80FD\u5DF2\u53D1\u9001\uFF0C\u4F46\u65E0\u6CD5\u4ECE Agent History \u6355\u83B7\u552F\u4E00 agentId\uFF1B\u5DF2\u4FDD\u7559\u5360\u7528\uFF0C\u7981\u6B62\u81EA\u52A8\u91CD\u53D1");
+        e.sent = true;
+        throw e;
+      }
+      job.agentId = agent.id;
+      job.agentLabel = agent.label || null;
+      return { agent, previousSelectedId };
+    } catch (e) {
+      if (sent) e.sent = true;
+      throw e;
+    } finally {
+      await this._closeHistory(c);
+      c.close();
+    }
+  }
+  async _readParallelEntry(job) {
+    return this._withUiLock(async () => {
+      const page = await findPage();
+      const c = makeClient(page.webSocketDebuggerUrl);
+      await c.ready;
+      try {
+        const entries = await this._readAgentEntries(c);
+        return entries.find((e) => e.id === job.agentId) || null;
+      } finally {
+        c.close();
+      }
+    });
+  }
+  async _monitorParallelAgent(job) {
+    const started = Date.now();
+    let sawGenerating = false;
+    let completedStable = 0;
+    let missingPolls = 0;
+    let transientErrors = 0;
+    let collectionAttempts = 0;
+    let lastCollectionError = "";
+    while (Date.now() - started < job.timeoutMs) {
+      await sleep(1400);
+      let entry;
+      try {
+        entry = await this._readParallelEntry(job);
+        transientErrors = 0;
+      } catch (e) {
+        transientErrors++;
+        if (transientErrors >= 45) throw new Error(`\u8FDE\u7EED\u65E0\u6CD5\u8BFB\u53D6 Agent History\uFF1A${e.message}`);
+        continue;
+      }
+      if (!entry) {
+        missingPolls++;
+        if (missingPolls >= 45) throw new Error(`Agent History \u4E2D\u6301\u7EED\u4E22\u5931 ${job.agentId}`);
+        continue;
+      }
+      missingPolls = 0;
+      if (entry.showSpinner) {
+        sawGenerating = true;
+        completedStable = 0;
+        continue;
+      }
+      if (/error|failed|warning|circle-slash/i.test(entry.icon || "")) {
+        const e = new Error(`Cursor Agent ${job.agentId} \u663E\u793A\u5931\u8D25\u72B6\u6001 ${entry.icon}`);
+        e.confirmedTerminal = true;
+        throw e;
+      }
+      const completedIcon = /check-circled|check/i.test(entry.icon || "");
+      if (completedIcon) {
+        completedStable++;
+        if (sawGenerating || completedStable >= 2) {
+          job.phase = "collecting";
+          let result;
+          try {
+            result = await this._withUiLock(() => this._collectParallelAgent(job));
+          } catch (e) {
+            collectionAttempts++;
+            lastCollectionError = e.message;
+            job.error = `\u7B2C ${collectionAttempts} \u6B21\u56DE\u6536\u672A\u5B8C\u6210\uFF0C\u7EE7\u7EED\u91CD\u8BD5\uFF1A${e.message}`;
+            job.phase = "running";
+            completedStable = 0;
+            await sleep(1200);
+            continue;
+          }
+          job.error = null;
+          this.activeParallel.delete(job.id);
+          this._finishJob(job, result);
+          this._drain();
+          this._maybeRestoreParallelOrigin();
+          return;
+        }
+      } else {
+        completedStable = 0;
+      }
+    }
+    const detail = lastCollectionError ? `\uFF1B\u6700\u540E\u56DE\u6536\u9519\u8BEF\uFF1A${lastCollectionError}` : "";
+    throw new Error(`Cursor parallel_agent \u4EFB\u52A1\u8D85\u65F6 (${job.timeoutMs}ms)${detail}`);
+  }
+  async _waitForSelectedAgent(c, agentId, timeoutMs = 15e3) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const entries = await this._readAgentEntries(c);
+      const target = entries.find((e) => e.id === agentId);
+      if (target && target.isSelected) return true;
+      await sleep(250);
+    }
+    throw new Error(`\u6253\u5F00 ${agentId} \u540E\u672A\u786E\u8BA4\u5176\u6210\u4E3A\u5F53\u524D\u9009\u4E2D Agent`);
+  }
+  async _collectParallelAgent(job) {
+    const page = await findPage();
+    const c = makeClient(page.webSocketDebuggerUrl);
+    await c.ready;
+    let previousSelectedId = null;
+    try {
+      const entries = await this._readAgentEntries(c, true);
+      previousSelectedId = (entries.find((e) => e.isSelected) || {}).id || null;
+      const opened = await evalJS(c, exprOpenAgent(job.agentId));
+      if (opened !== "OPENED") throw new Error(`\u65E0\u6CD5\u6253\u5F00 ${job.agentId}: ${opened}`);
+      await this._closeHistory(c);
+      await this._waitForSelectedAgent(c, job.agentId);
+      let answer = "";
+      let lastKey = "";
+      let stable = 0;
+      for (let i = 0; i < 80; i++) {
+        let snap = { messageCount: 0, replyLength: 0, replyHash: 0 };
+        try {
+          snap = JSON.parse(await evalJS(c, EXPR_SNAP));
+        } catch {
+        }
+        const candidate = String(await evalJS(c, EXPR_EXTRACT) || "").trim();
+        if (candidate && Number(snap.stop || 0) === 0) {
+          const key = `${snap.replyLength}:${snap.replyHash}`;
+          if (key === lastKey) stable++;
+          else {
+            lastKey = key;
+            stable = 0;
+          }
+          if (stable >= 1) {
+            answer = candidate;
+            break;
+          }
+        }
+        await sleep(300);
+      }
+      if (!answer) throw new Error(`\u5DF2\u6253\u5F00 ${job.agentId}\uFF0C\u4F46\u672A\u627E\u5230\u52A9\u624B\u6700\u7EC8\u56DE\u590D`);
+      if (previousSelectedId && previousSelectedId !== job.agentId) {
+        if (await this._ensureHistoryOpen(c)) {
+          await evalJS(c, exprOpenAgent(previousSelectedId));
+          await this._closeHistory(c);
+          await this._waitForSelectedAgent(c, previousSelectedId);
+        }
+      }
+      return answer;
+    } finally {
+      await this._closeHistory(c);
+      c.close();
+    }
+  }
+  _failParallelJob(job, error2) {
+    if (error2 && error2.confirmedTerminal) {
+      this.activeParallel.delete(job.id);
+      this._failJob(job, error2);
+      this._drain();
+      this._maybeRestoreParallelOrigin();
+      return;
+    }
+    this._orphanParallelJob(job, error2);
+  }
+  _maybeRestoreParallelOrigin() {
+    if (!this.parallelRestoreAgentId || this.busy || this.activeParallel.size > 0 || this.queue.some((job) => job.execution === "parallel_agent")) return;
+    const agentId = this.parallelRestoreAgentId;
+    this.parallelRestoreAgentId = null;
+    this._withUiLock(async () => {
+      const page = await findPage();
+      const c = makeClient(page.webSocketDebuggerUrl);
+      await c.ready;
+      try {
+        if (await this._ensureHistoryOpen(c)) {
+          await evalJS(c, exprOpenAgent(agentId));
+          await sleep(450);
+        }
+      } finally {
+        await this._closeHistory(c);
+        c.close();
+      }
+    }).catch((e) => console.error("\u26A0\uFE0F \u6062\u590D\u539F Cursor Agent \u5931\u8D25\uFF1A" + e.message));
+  }
+  async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0) {
     const start = Date.now();
     const INTERVAL = 1e3;
     let sawStop = false;
-    let lastMd = 0, stableMd = 0;
+    let lastReplyKey = "", stableReply = 0;
     await sleep(1200);
-    while (Date.now() - start < QUERY_TIMEOUT) {
+    while (Date.now() - start < timeoutMs) {
       let s;
       try {
         s = JSON.parse(await evalJS(c, EXPR_SNAP));
       } catch {
-        s = { stop: 0, mdMax: 0 };
+        s = { stop: 0, messageCount: 0, replyLength: 0, replyHash: 0 };
       }
       if (s.stop > 0) sawStop = true;
-      if (sawStop && s.stop === 0 && s.mdMax > 40) {
+      if (sawStop && s.stop === 0 && s.replyLength > 0) {
         await sleep(800);
         const ans2 = await evalJS(c, EXPR_EXTRACT);
-        if (ans2 && ans2.length > 0) return ans2;
+        if (ans2) return ans2;
       }
-      if (!sawStop && s.mdMax > 80) {
-        if (s.mdMax === lastMd) {
-          stableMd++;
-          if (stableMd >= 6) {
+      if (!sawStop && s.messageCount >= baselineCount + 2 && s.replyLength > 0) {
+        const key = `${s.replyLength}:${s.replyHash}`;
+        if (key === lastReplyKey) {
+          stableReply++;
+          if (stableReply >= 4) {
             const ans2 = await evalJS(c, EXPR_EXTRACT);
             if (ans2) return ans2;
           }
         } else {
-          stableMd = 0;
-          lastMd = s.mdMax;
+          stableReply = 0;
+          lastReplyKey = key;
         }
       }
       await sleep(INTERVAL);
     }
+    let finalSnap = { messageCount: 0 };
+    try {
+      finalSnap = JSON.parse(await evalJS(c, EXPR_SNAP));
+    } catch {
+    }
     const ans = await evalJS(c, EXPR_EXTRACT);
-    if (ans && ans.length > 40) return ans;
-    throw new Error(`Cursor \u67E5\u8BE2\u8D85\u65F6 (${QUERY_TIMEOUT}ms) \u672A\u4EA7\u751F\u5B9E\u8D28\u56DE\u590D`);
+    if (ans && (sawStop || finalSnap.messageCount >= baselineCount + 2)) return ans;
+    throw new Error(`Cursor \u4EFB\u52A1\u8D85\u65F6 (${timeoutMs}ms) \u672A\u4EA7\u751F\u53EF\u786E\u8BA4\u7684\u52A9\u624B\u56DE\u590D`);
   }
-  async status() {
+  _taskView(job, includeResult = false) {
+    const view = {
+      taskId: job.id,
+      kind: job.kind,
+      status: job.status,
+      phase: job.phase,
+      execution: job.execution,
+      effectiveExecution: job.effectiveExecution,
+      readOnly: job.readOnly,
+      allowedPaths: job.allowedPaths,
+      agentId: job.agentId,
+      agentLabel: job.agentLabel,
+      fallbackReason: job.fallbackReason,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      sentAt: job.sentAt,
+      finishedAt: job.finishedAt,
+      error: job.error
+    };
+    if (includeResult || job.status === "completed" || job.status === "failed") view.result = job.result;
+    return view;
+  }
+  _trimTasks() {
+    if (this.tasks.size <= 50) return;
+    for (const [id, job] of this.tasks) {
+      if (job.status === "completed" || job.status === "failed") this.tasks.delete(id);
+      if (this.tasks.size <= 50) break;
+    }
+  }
+  async status(taskId = "") {
+    if (taskId) {
+      const job = this.tasks.get(String(taskId));
+      if (!job) return { found: false, taskId: String(taskId) };
+      return { found: true, ...this._taskView(job, true) };
+    }
+    const parallelRunning = this.activeParallel.size;
+    const uiBusy = this.busy;
+    const common = {
+      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
+      uiBusy,
+      parallelRunning,
+      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0,
+      queued: this.queue.length,
+      activeParallel: [...this.activeParallel.values()].map((job) => this._taskView(job)),
+      recentTasks: [...this.tasks.values()].slice(-10).map((job) => this._taskView(job)),
+      cdpPort: CDP_PORT2
+    };
     try {
       const ver = await httpJson("/json/version");
       const page = await findPage();
-      return { connected: true, busy: this.busy, queued: this.queue.length, cdpPort: CDP_PORT2, browser: ver.Browser, page: (page.url || "").slice(0, 60) };
+      return { connected: true, ...common, browser: ver.Browser, page: (page.url || "").slice(0, 60) };
     } catch (e) {
-      return { connected: false, busy: this.busy, queued: this.queue.length, cdpPort: CDP_PORT2, error: e.message };
+      return { connected: false, ...common, error: e.message };
     }
   }
 };
 var bridge = new CursorBridge();
-var server = new Server({ name: "cursor-bridge", version: "1.0.0" }, { capabilities: { tools: {} } });
+var server = new Server({ name: "cursor-bridge", version: "2.0.7" }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
@@ -19598,9 +20204,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       }
     },
     {
+      name: "cursor_do",
+      description: "\u628A\u8FB9\u754C\u660E\u786E\u7684\u4EFB\u52A1\u4EA4\u7ED9 Cursor agent \u6267\u884C\u3002\u9ED8\u8BA4 execution=fifo \u540E\u53F0\u6392\u961F\uFF1Bexecution=parallel_agent \u4F1A\u4E32\u884C\u64CD\u63A7 UI \u63D0\u4EA4\u5230\u72EC\u7ACB\u9876\u5C42 Agent\uFF0C\u518D\u6309\u7A33\u5B9A agentId \u5E76\u884C\u8DDF\u8E2A\u548C\u9010\u9879\u6536\u56DE\u3002\u5E76\u884C\u5199\u4EFB\u52A1\u5FC5\u987B\u63D0\u4F9B\u4E0D\u91CD\u53E0\u7684 allowed_paths\uFF1B\u53EA\u8BFB\u4EFB\u52A1\u5E94\u8BBE\u7F6E read_only=true\u3002\u7528 cursor_status(task_id) \u67E5\u8BE2\u72B6\u6001\u548C\u539F\u59CB\u56DE\u590D\u3002Cursor \u7ED3\u679C\u4E0D\u662F\u6B63\u5F0F\u9A8C\u8BC1\uFF0C\u4E3B Agent \u4ECD\u9700\u68C0\u67E5\u771F\u5B9E\u6539\u52A8\u3002",
+      inputSchema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "\u539F\u6837\u4EA4\u7ED9 Cursor \u7684\u4EFB\u52A1\u5185\u5BB9\uFF0C\u5FC5\u987B\u5305\u542B\u660E\u786E\u76EE\u6807\u3001\u8FB9\u754C\u548C\u5B8C\u6210\u5408\u540C" },
+          background: { type: "boolean", default: true, description: "\u9ED8\u8BA4 true\uFF1A\u7ACB\u5373\u8FD4\u56DE taskId\uFF1Bfalse\uFF1A\u7B49\u5F85\u8BE5\u4EFB\u52A1\u8FDB\u5165\u7EC8\u6001" },
+          execution: { type: "string", enum: ["fifo", "parallel_agent"], default: "fifo", description: "fifo \u4FDD\u6301\u5355\u5BF9\u8BDD\u4E32\u884C\uFF1Bparallel_agent \u4F7F\u7528\u72EC\u7ACB\u9876\u5C42 Agent \u5E76\u884C\u8FD0\u884C" },
+          read_only: { type: "boolean", default: false, description: "\u663E\u5F0F\u58F0\u660E\u4EFB\u52A1\u4E0D\u5F97\u4FEE\u6539\u5DE5\u4F5C\u533A\uFF1Bparallel_agent \u53EA\u8BFB\u4EFB\u52A1\u5E94\u8BBE true" },
+          new_chat: { type: "boolean", default: true, description: "fifo \u662F\u5426\u4F7F\u7528\u5E72\u51C0\u5BF9\u8BDD\uFF1Bparallel_agent \u59CB\u7EC8\u5F3A\u5236\u72EC\u7ACB New Agent" },
+          timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "\u5355\u4EFB\u52A1\u8D85\u65F6\uFF0C\u9ED8\u8BA4 10 \u5206\u949F" },
+          allowed_paths: { type: "array", items: { type: "string" }, description: "\u5DE5\u4F5C\u533A\u76F8\u5BF9\u8DEF\u5F84\u7684\u5199\u5165\u8303\u56F4\u58F0\u660E\uFF1B\u5E76\u884C\u5199\u4EFB\u52A1\u5FC5\u586B\u3001\u4E0D\u5F97\u542B glob/\u8D8A\u754C\uFF0C\u4E14\u4E0D\u5F97\u4E0E\u6D3B\u52A8\u5E76\u884C\u4EFB\u52A1\u91CD\u53E0\u3002\u5B83\u4E0D\u662F\u6587\u4EF6\u7CFB\u7EDF\u6C99\u7BB1" },
+          completion_contract: { type: "string", description: "\u53EF\u9009\uFF1A\u81EA\u5B9A\u4E49\u9A8C\u6536\u548C\u6700\u7EC8\u56DE\u62A5\u683C\u5F0F" }
+        },
+        required: ["prompt"]
+      }
+    },
+    {
       name: "cursor_status",
-      description: "\u68C0\u67E5 cursor-bridge \u4E0E Cursor CDP\uFF089223\uFF09\u7684\u8FDE\u63A5/\u961F\u5217\u72B6\u6001\u3002",
-      inputSchema: { type: "object", properties: {} }
+      description: "\u68C0\u67E5 Cursor CDP\u3001FIFO \u961F\u5217\u548C\u6D3B\u52A8\u5E76\u884C Agent\uFF1B\u4F20 task_id \u53EF\u7CBE\u786E\u67E5\u8BE2 cursor_do \u7684 agentId\u3001\u9636\u6BB5\u4E0E\u7ED3\u679C\u3002",
+      inputSchema: { type: "object", properties: { task_id: { type: "string", description: "\u53EF\u9009\uFF1Acursor_do \u8FD4\u56DE\u7684 taskId" } } }
     },
     {
       name: "cursor_launch",
@@ -19616,8 +20240,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const result = await bridge.search(String(args && args.query || ""));
       return { content: [{ type: "text", text: String(result) }] };
     }
+    if (name === "cursor_do") {
+      const result = await bridge.doTask(String(args && args.prompt || ""), {
+        background: !args || args.background !== false,
+        execution: args && args.execution,
+        readOnly: !!(args && args.read_only),
+        newChat: !args || args.new_chat !== false,
+        timeoutMs: args && args.timeout_ms,
+        allowedPaths: args && args.allowed_paths,
+        completionContract: args && args.completion_contract
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === "cursor_status") {
-      return { content: [{ type: "text", text: JSON.stringify(await bridge.status(), null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
     }
     if (name === "cursor_launch") {
       const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
@@ -19656,5 +20292,8 @@ if (isMain2) {
 }
 export {
   CursorBridge,
-  bridge
+  bridge,
+  normalizeAllowedPath,
+  pathsOverlap,
+  selectNewAgentEntry
 };

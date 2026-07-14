@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "2.0.7",
-  "description": "MCP server: 从 Claude Code 直驱 Cursor IDE 的 agent 做语义代码检索（CDP 直驱，无 console 注入）。",
+  "version": "2.1.0",
+  "description": "从 Claude Code 直驱 Cursor IDE agent 做语义检索与边界明确的委托执行，支持 FIFO 和安全的顶层 Agent 并行模式。",
   "author": {
     "name": "Vanyangyang"
   },
