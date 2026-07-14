@@ -1,7 +1,7 @@
 interface:
   display_name: "Cursor 委托执行"
-  short_description: "将已规划的中轻型任务委托给 Cursor，支持安全并行、收回与复核"
-  default_prompt: "使用 $cursor-delegate 将这组已规划、边界明确的中轻型任务安全委托给 Cursor，并逐项收回和复核结果。"
+  short_description: "在委托开启时把已规划任务交给 Cursor，支持安全并行、收回与复核"
+  default_prompt: "在 cursor_do 可用且用户未禁用委托时，使用 $cursor-delegate 将这组已规划、边界明确的中轻型任务安全交给 Cursor；否则由主 Agent 直接完成。"
 
 dependencies:
   tools:

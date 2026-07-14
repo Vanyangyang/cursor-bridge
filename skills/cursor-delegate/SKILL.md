@@ -1,11 +1,17 @@
 ---
 name: cursor-delegate
-description: "将主 Agent 已规划、边界明确且可独立验收的中轻型实现、文档、配置或工具任务委托给 Cursor Bridge；支持 execution=fifo 串行执行，以及仅在任务互不依赖、写入路径不重叠时使用 execution=parallel_agent 派发多个顶层 Cursor Agent，再按 task_id/agent_id 收回并由主 Agent 复核。Use when planned execution work is ready to hand off, the user asks Cursor to execute bounded work, or several independent tasks can run concurrently. Do not use to delegate product direction, scope or architecture decisions, Unity Scene/Prefab or PlayMode operations, formal verification verdicts, Tower state decisions, or unbounded investigation."
+description: "将主 Agent 已规划、边界明确且可独立验收的中轻型实现、文档、配置或工具任务委托给 Cursor Bridge；支持 execution=fifo 串行执行，以及仅在任务互不依赖、写入路径不重叠时使用 execution=parallel_agent 派发多个顶层 Cursor Agent，再按 task_id/agent_id 收回并由主 Agent 复核。Use when planned execution work is ready to hand off, the user asks Cursor to execute bounded work, or several independent tasks can run concurrently. Do not use when the user opts out, cursor_do is unavailable, CURSOR_BRIDGE_DELEGATION=off, or for product direction, architecture decisions, Unity Scene/Prefab or PlayMode operations, formal verification verdicts, Tower state decisions, or unbounded investigation."
 ---
 
 # Cursor Delegate
 
 把 Cursor 当作执行副手。主 Agent 始终保留方向判断、范围裁决、结果审查和正式验证。
+
+## 尊重委托开关
+
+- 用户明确说“不使用 Cursor”“不要委托”或等价指令时，禁止调用 `cursor_do`；该否决高于本 skill 的默认工作流。
+- `cursor_do` 未出现在可用工具中，或 `cursor_status` 返回 `delegationMode=off` 时，不尝试绕过、重新启用或反复调用；由主 Agent 直接完成任务。
+- `CURSOR_BRIDGE_DELEGATION=off` 只关闭委托执行，不代表 `cursor_search`、`cursor_status` 或 `cursor_launch` 不可用。
 
 ## 日常默认工作流
 
@@ -15,7 +21,7 @@ description: "将主 Agent 已规划、边界明确且可独立验收的中轻�
 
 - 主 Agent 决定做什么、为什么做、允许改哪里、如何验收；不要把这些判断转交 Cursor。
 - Cursor 负责已决定方案内的检索、窄实现、文档、配置、脚本和工具修改。
-- 默认一项任务调用一次 `cursor_do`，使用 `background=true`、`new_chat=true`；主 Agent 可在后台继续不冲突的工作。
+- 委托开启时，默认一项任务调用一次 `cursor_do`，使用 `background=true`、`new_chat=true`；主 Agent 可在后台继续不冲突的工作。
 - 默认选择 `execution=fifo`。只有确实需要同时推进且满足并行合同的任务才使用 `parallel_agent`。
 - 不注入唯一终止标记，不设置最小回复长度。完成判断只依赖任务状态、稳定 `task_id/agent_id` 和实际结果。
 

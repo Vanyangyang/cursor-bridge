@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Drive Cursor IDE agents over CDP for semantic search and bounded delegated execution, including safe top-level Agent parallelism.",
   "author": {
     "name": "Vanyangyang"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Cursor Bridge",
     "shortDescription": "Delegate bounded work to Cursor with safe Agent parallelism.",
-    "longDescription": "Expose cursor_search, cursor_do, cursor_status, and cursor_launch. Cursor Bridge can retain FIFO compatibility or submit independent bounded tasks to separate top-level Cursor Agents, track them by stable agent ID, and collect each result without using Cursor /multitask.",
+    "longDescription": "Expose cursor_search, cursor_status, cursor_launch, and—unless CURSOR_BRIDGE_DELEGATION=off—cursor_do. Cursor Bridge can retain FIFO compatibility or submit independent bounded tasks to separate top-level Cursor Agents, track them by stable agent ID, and collect each result without using Cursor /multitask.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,8 +28,8 @@
     ],
     "defaultPrompt": [
       "Use Cursor Bridge to search this project with Cursor's semantic agent.",
-      "Use cursor_do to delegate this planned bounded task, then query cursor_status and verify the real result.",
-      "Submit these independent non-overlapping tasks as separate top-level Cursor Agents and collect them by task ID."
+      "When cursor_do is available, delegate this planned bounded task, then query cursor_status and verify the real result; otherwise complete it directly.",
+      "When cursor_do is available, submit independent non-overlapping tasks as separate top-level Cursor Agents and collect them by task ID; otherwise keep execution in the main agent."
     ],
     "websiteURL": "https://github.com/Vanyangyang/cursor-bridge"
   }

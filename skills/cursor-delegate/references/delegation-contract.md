@@ -2,6 +2,12 @@
 
 只在构造任务信封、选择 `execution` 或处理异常状态时读取本文件。
 
+## 委托开关
+
+- `CURSOR_BRIDGE_DELEGATION=off` 时，Bridge 不暴露 `cursor_do`，直接调用也必须失败；其他检索、状态和启动工具继续可用。
+- 用户明确拒绝委托、`cursor_do` 不可用或 `cursor_status.delegationMode=off` 时，主 Agent 直接执行，不得要求用户重新开启，也不得用其他调用绕过。
+- 重新开启需要以 `CURSOR_BRIDGE_DELEGATION=on` 或未设置该变量启动新的 MCP server 进程；运行中的进程不动态切换。
+
 ## 任务信封
 
 每项任务必须独立提供：
