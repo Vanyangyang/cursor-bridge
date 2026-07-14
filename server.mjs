@@ -30,6 +30,12 @@ const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 180000);
 
+function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
+  return String(value || 'on').trim().toLowerCase() === 'off' ? 'off' : 'on';
+}
+
+const DELEGATION_MODE = normalizeDelegationMode();
+
 // 只读检索 prompt：Cursor agent 当精准定位器用，约束操作类型（不读正文/不改码/不长篇），由 CC 拿清单后自己读真文件。
 const SEARCH_PREFIX =
   '只做代码检索定位：列出与下面意图相关的文件路径 + 行号范围（形如 Assets/Scripts/X.cs:120-180），' +
@@ -208,7 +214,9 @@ function selectNewAgentEntry(beforeEntries, afterEntries) {
 }
 
 class CursorBridge {
-  constructor() {
+  constructor(options = {}) {
+    this.delegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
+    this.delegationEnabled = this.delegationMode !== 'off';
     this.busy = false;
     this.queue = [];
     this._healing = null;
@@ -233,6 +241,9 @@ class CursorBridge {
   }
 
   async doTask(prompt, options = {}) {
+    if (!this.delegationEnabled) {
+      throw new Error('cursor_do 已通过 CURSOR_BRIDGE_DELEGATION=off 禁用；请由主 Agent 直接完成任务');
+    }
     const text = String(prompt || '').trim();
     if (!text) throw new Error('prompt 不能为空');
     if (text.length > 100000) throw new Error('prompt 过长（最大 100000 字符）');
@@ -862,12 +873,14 @@ class CursorBridge {
   async status(taskId = '') {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId) };
-      return { found: true, ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), delegationMode: this.delegationMode, delegationEnabled: this.delegationEnabled };
+      return { found: true, delegationMode: this.delegationMode, delegationEnabled: this.delegationEnabled, ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const common = {
+      delegationMode: this.delegationMode,
+      delegationEnabled: this.delegationEnabled,
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
       parallelRunning,
@@ -888,7 +901,7 @@ class CursorBridge {
 }
 
 const bridge = new CursorBridge();
-const server = new Server({ name: 'cursor-bridge', version: '2.0.7' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'cursor-bridge', version: '2.1.1' }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -909,7 +922,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['query'],
       },
     },
-    {
+    bridge.delegationEnabled ? {
       name: 'cursor_do',
       description:
         '把边界明确的任务交给 Cursor agent 执行。默认 execution=fifo 后台排队；' +
@@ -930,7 +943,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         required: ['prompt'],
       },
-    },
+    } : null,
     {
       name: 'cursor_status',
       description: '检查 Cursor CDP、FIFO 队列和活动并行 Agent；传 task_id 可精确查询 cursor_do 的 agentId、阶段与结果。',
@@ -943,7 +956,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         '返回 status：already / launched / running-no-debug（在跑但没带 flag，需先彻底退出 Cursor）/ port-not-cursor（9223 被别的 IDE 占）/ no-exe / timeout。',
       inputSchema: { type: 'object', properties: {} },
     },
-  ],
+  ].filter(Boolean),
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -1003,4 +1016,4 @@ if (isMain) {
   process.on('SIGINT', () => process.exit(0));
   main().catch((e) => { console.error('❌ 致命错误:', e); process.exit(1); });
 }
-export { CursorBridge, bridge, normalizeAllowedPath, pathsOverlap, selectNewAgentEntry };
+export { CursorBridge, bridge, normalizeAllowedPath, normalizeDelegationMode, pathsOverlap, selectNewAgentEntry };
