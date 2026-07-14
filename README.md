@@ -79,7 +79,7 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 | 工具 | 作用 |
 |------|------|
 | `cursor_search` | 用 Cursor agent 检索定位代码，入参 `query`（自然语言意图）。返回 `path:行号` 清单。单次约 ~90s（实测 66~175s 波动）、串行。 |
-| `cursor_do` | 委托边界明确的任务。`execution=fifo` 保持兼容；`execution=parallel_agent` 提交独立顶层 Agent。并行只读任务设 `read_only=true`；并行写任务必须给出两两不重叠的 `allowed_paths`。 |
+| `cursor_do` | 委托边界明确的任务。`execution=fifo` 保持兼容；`execution=parallel_agent` 提交独立顶层 Agent。并行只读任务设 `read_only=true`；并行写任务必须给出两两不重叠的 `allowed_paths`。设置 `CURSOR_BRIDGE_DELEGATION=off` 后不再暴露。 |
 | `cursor_status` | 检查 CDP、队列、活动并行 Agent；传 `task_id` 精确取回对应状态与原始回复。 |
 | `cursor_launch` | 确保 Cursor 带 CDP 调试口在运行；未运行则自动拉起（带 `--remote-debugging-port` + `--remote-allow-origins` + 打开项目建索引）。返回 `already`/`launched`/`running-no-debug`/`port-not-cursor`/`no-exe`/`timeout`。 |
 
@@ -92,8 +92,18 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口 |
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时（ms） |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | — | 设 `1` 关闭启动即自动拉起 Cursor |
+| `CURSOR_BRIDGE_DELEGATION` | `on` | 设 `off` 禁用并隐藏 `cursor_do`；`cursor_search`、`cursor_status`、`cursor_launch` 保持可用。修改后需重启 MCP server / Codex / Claude Code。 |
 | `CURSOR_PROJECT_PATH` | 自动判断 | 让 Cursor 打开/建索引的项目根；未设置且运行目录是插件缓存时，不传路径并让 Cursor 恢复上次工作区 |
 | `CURSOR_EXE` | 自动探测 | `Cursor.exe` 路径（自动探测失败时显式指定） |
+
+临时关闭 Codex 委托执行（PowerShell）：
+
+```powershell
+$env:CURSOR_BRIDGE_DELEGATION='off'
+codex
+```
+
+关闭后 `cursor-delegate` skill 必须由主 Agent 直接完成任务，不得尝试绕过或要求重新启用。删除该环境变量或设为 `on`，再重启客户端即可恢复。
 
 ## 使用建议
 
