@@ -1,9 +1,9 @@
 # cursor-bridge
 
-> MCP server：让 **Claude Code 直驱 Cursor IDE 里的 agent 做代码检索**（语义搜索 + Instant Grep，agent 自动编排）。
+> MCP server：让 **Codex/Claude Code 直驱 Cursor IDE agent 做语义检索与边界明确的委托执行**。
 > **CDP 直驱架构，无 console 注入、无 WebSocket 回连。**
 
-借用 Cursor 原生 embedding 的语义召回质量，给主调 agent（Claude Code 等 MCP 客户端）补一个「按意图做语义代码定位」的能力。
+借用 Cursor 原生 embedding 和执行能力，为主 Agent 提供语义定位、FIFO 委托，以及不依赖 `/multitask` 的独立顶层 Agent 并行池。
 
 ## 优点
 
@@ -13,12 +13,12 @@
 ## 架构
 
 ```
-Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evaluate + Input)-->  Cursor 渲染进程
+Codex / Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evaluate + Input)-->  Cursor 渲染进程
 ```
 
-- server 每次查询新建一条 CDP 连接（**串行**，GUI 单输入框一次只能跑一个），直接驱动 Cursor 的 chat DOM + 真实键盘事件。
+- GUI 操作通过互斥锁串行，避免多个任务同时争抢输入框；`parallel_agent` 提交完成后，各顶层 Cursor Agent 可并行运行，再按稳定 `agentId` 逐项取回。
 - Cursor 的语义搜索没有纯检索接口/独立 UI，只能经 `@Codebase`/agent chat 跑：填查询 → 真实 Enter → 等生成完成 → 抓回复。
-- 完成信号 = 停止钮（`codicon-stop` 等）数量从 `>0 → 0`。
+- FIFO 完成信号来自停止钮（`codicon-stop` 等）与回复稳定性；`parallel_agent` 还会结合 Agent History 状态和稳定 `agentId` 回收结果。
 
 > ⚠️ Cursor 是 agent（比纯检索更主动）。prompt 已强约束「只列 `path:行号`、不读正文、不改代码」，但这是 **prompt 约束而非技术沙箱**——理论上 agent 仍有写能力，勿当隔离环境。
 
@@ -49,7 +49,7 @@ claude plugin install cursor-bridge@vanyangyang
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 ```
 
-Codex 会读取仓库内 `.agents/plugins/marketplace.json` 和 `.codex-plugin/plugin.json`，注册同一套 `cursor_search` / `cursor_status` / `cursor_launch` MCP 工具。安装后开启新 Codex 线程或重启 Codex，让新插件工具进入当前会话。
+Codex 会读取仓库内 `.agents/plugins/marketplace.json` 和 `.codex-plugin/plugin.json`，注册 `cursor_search` / `cursor_do` / `cursor_status` / `cursor_launch`。安装后开启新 Codex 线程或重启 Codex，让新工具与 `cursor-delegate` skill 进入会话。
 
 ### 方式 C：从源码运行（开发/其它 MCP 客户端）
 
@@ -79,8 +79,11 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 | 工具 | 作用 |
 |------|------|
 | `cursor_search` | 用 Cursor agent 检索定位代码，入参 `query`（自然语言意图）。返回 `path:行号` 清单。单次约 ~90s（实测 66~175s 波动）、串行。 |
-| `cursor_status` | 检查与 Cursor CDP（9223）的连接/队列状态。 |
+| `cursor_do` | 委托边界明确的任务。`execution=fifo` 保持兼容；`execution=parallel_agent` 提交独立顶层 Agent。并行只读任务设 `read_only=true`；并行写任务必须给出两两不重叠的 `allowed_paths`。 |
+| `cursor_status` | 检查 CDP、队列、活动并行 Agent；传 `task_id` 精确取回对应状态与原始回复。 |
 | `cursor_launch` | 确保 Cursor 带 CDP 调试口在运行；未运行则自动拉起（带 `--remote-debugging-port` + `--remote-allow-origins` + 打开项目建索引）。返回 `already`/`launched`/`running-no-debug`/`port-not-cursor`/`no-exe`/`timeout`。 |
+
+`cursor_do` 默认以 `background=true`、`new_chat=true` 使用；主 Agent 保存返回的 `task_id`，再通过 `cursor_status(task_id)` 回收。`submitting`、`running`、`collecting` 都是正常进行态，超过两分钟本身不代表失败。Bridge 不要求唯一终止标记或最低回复长度。
 
 ## 环境变量
 
@@ -95,7 +98,9 @@ server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）�
 ## 使用建议
 
 - ✅ 用于按「意图」做语义召回的代码定位、跨文件理解（借 Cursor 原生 embedding 质量）。
-- ⏱️ 单次约 ~90s 且串行（一次一个）。**建议并行使用**：丢后台 / 与其它工作并行推进，不要在主线阻塞等它返回。
+- ✅ 把 Cursor 当执行副手：产品方向、范围裁决和最终验证仍由主 Agent 负责。
+- 🔀 只有任务互不依赖且写入范围不重叠时才用 `parallel_agent`；其余情况使用 `fifo`。
+- 🪪 始终用 `task_id` 查询；并行任务还会绑定 Agents Window 的 `local:<UUID>`，不靠当前可见对话猜结果。
 
 ## 文件结构
 
@@ -112,6 +117,8 @@ dist/cursor-bridge.mjs # 打包产物：零依赖单文件（插件实际运行�
 server.mjs             # MCP server 源码主入口（CDP 直驱 + 工具定义）
 launch-cursor.mjs      # 确保/拉起带 CDP 的 Cursor
 build.mjs              # esbuild 打包脚本（npm run build → 重建 dist/）
+skills/cursor-delegate/ # 委托门禁、拆分、收回与主 Agent 复核规则
+test/                  # 调度、路径冲突与 Agent 身份选择的 node:test 门禁
 probe-*.mjs            # CDP 链路探针（实测脚本）
 agents-autopilot.mjs / autopilot-switch.py  # autopilot 辅助
 test-*.mjs             # 检索/批量自测脚本
