@@ -19336,13 +19336,12 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
   return String(value || "on").trim().toLowerCase() === "off" ? "off" : "on";
 }
 var DELEGATION_MODE = normalizeDelegationMode();
-var DELEGATION_POLICIES = Object.freeze(["off", "manual", "auto", "active", "eager"]);
+var DELEGATION_POLICIES = Object.freeze(["manual", "auto", "active", "eager"]);
 var DELEGATION_POLICY_GUIDANCE = Object.freeze({
-  off: "Do not delegate execution to Cursor. Search, status, policy, and launch tools remain available.",
-  manual: "Delegate only when the user explicitly asks to use Cursor.",
-  auto: "Delegate bounded work when the time or quality benefit is clear; otherwise keep it local.",
-  active: "Evaluate every non-trivial task and normally delegate at least one separable bounded slice when useful.",
-  eager: "Maximize safe bounded delegation and parallelism while preserving non-overlapping paths and main-agent review."
+  manual: "Cursor waits until the user asks for it. Ordinary work stays with the main agent.",
+  auto: "Cursor helps when a clear, bounded handoff is likely to save meaningful time or add a useful second pass. Small one-step edits usually stay local.",
+  active: "Cursor works as a regular teammate. For most non-trivial tasks, look for one useful, separable piece to hand off while keeping decisions and final review with the main agent.",
+  eager: "Hand Cursor every safe, separable piece you can, including small probes and mechanical work. Run independent tasks in parallel when their paths do not overlap. Product decisions and final approval still stay with the main agent."
 });
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = "active") {
   const normalized = String(value || "").trim().toLowerCase();
@@ -19352,7 +19351,7 @@ function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fal
 }
 var DELEGATION_POLICY = normalizeDelegationPolicy(
   process.env.CURSOR_BRIDGE_POLICY,
-  DELEGATION_MODE === "off" ? "off" : "active"
+  "active"
 );
 var SEARCH_PREFIX = "\u53EA\u505A\u4EE3\u7801\u68C0\u7D22\u5B9A\u4F4D\uFF1A\u5217\u51FA\u4E0E\u4E0B\u9762\u610F\u56FE\u76F8\u5173\u7684\u6587\u4EF6\u8DEF\u5F84 + \u884C\u53F7\u8303\u56F4\uFF08\u5F62\u5982 Assets/Scripts/X.cs:120-180\uFF09\uFF0C\u9010\u884C\u5217\u51FA\u5373\u53EF\u3002\u4E0D\u8981\u8BFB\u53D6\u6587\u4EF6\u6B63\u6587\u3001\u4E0D\u8981\u4FEE\u6539\u4EFB\u4F55\u4EE3\u7801\u3001\u4E0D\u8981\u5C55\u5F00\u957F\u7BC7\u89E3\u91CA\u3002\n\n\u610F\u56FE\uFF1A";
 var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
@@ -19556,8 +19555,8 @@ var CursorBridge = class {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     const requestedPolicy = options.delegationPolicy === void 0 ? DELEGATION_POLICY : options.delegationPolicy;
     this.delegationPolicyDefault = "active";
-    this.delegationPolicySource = this.environmentDelegationMode === "off" ? "environment-lock" : options.delegationPolicy !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_POLICY ? "environment" : "default";
-    this.delegationPolicy = this.environmentDelegationMode === "off" ? "off" : normalizeDelegationPolicy(requestedPolicy);
+    this.delegationPolicySource = options.delegationPolicy !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_POLICY ? "environment" : "default";
+    this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
     this.busy = false;
     this.queue = [];
@@ -19570,7 +19569,7 @@ var CursorBridge = class {
     this.parallelRestoreAgentId = null;
   }
   _syncDelegationState() {
-    this.delegationEnabled = this.environmentDelegationMode !== "off" && this.delegationPolicy !== "off";
+    this.delegationEnabled = this.environmentDelegationMode !== "off";
     this.delegationMode = this.delegationEnabled ? "on" : "off";
   }
   delegationPolicyView() {
@@ -19596,7 +19595,7 @@ var CursorBridge = class {
     if (!DELEGATION_POLICIES.includes(normalized)) {
       throw new Error(`unsupported delegation policy: ${value}`);
     }
-    if (this.environmentDelegationMode === "off" && normalized !== "off") {
+    if (this.environmentDelegationMode === "off") {
       throw new Error("CURSOR_BRIDGE_DELEGATION=off locks delegation off until the MCP server is restarted without that setting");
     }
     const previousPolicy = this.delegationPolicy;
@@ -19618,8 +19617,7 @@ var CursorBridge = class {
   }
   async doTask(prompt, options = {}) {
     if (!this.delegationEnabled) {
-      const reason = this.environmentDelegationMode === "off" ? "CURSOR_BRIDGE_DELEGATION=off" : `session policy=${this.delegationPolicy}`;
-      throw new Error(`cursor_do is disabled by ${reason}; use cursor_policy to inspect the active policy`);
+      throw new Error("cursor_do is disabled by CURSOR_BRIDGE_DELEGATION=off; restart the MCP server without that setting to enable delegation");
     }
     const text = String(prompt || "").trim();
     if (!text) throw new Error("prompt \u4E0D\u80FD\u4E3A\u7A7A");
@@ -20266,61 +20264,61 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "cursor_search",
-      description: "\u7528 Cursor IDE \u91CC\u7684 agent \u68C0\u7D22\uFF08\u8BED\u4E49\u641C\u7D22 + Instant Grep\uFF0Cagent \u81EA\u52A8\u7F16\u6392\uFF09\u5B9A\u4F4D\u672C\u9879\u76EE\u4EE3\u7801\u3002\u9002\u5408\u9700\u8981 Cursor \u539F\u751F embedding \u8BED\u4E49\u53EC\u56DE\u8D28\u91CF\u7684\u4EE3\u7801\u5B9A\u4F4D\u3002\u524D\u63D0\uFF1ACursor \u5E26 --remote-debugging-port=9223 \u542F\u52A8\u3001\u5DF2\u767B\u5F55\u3001\u6253\u5F00\u672C\u9879\u76EE\u3002\u6CE8\u610F\uFF1A\u2460 \u7ECF GUI \u9065\u63A7 agent\uFF0C\u5355\u6B21\u7EA6 ~90s\uFF08\u5B9E\u6D4B 66~175s \u6CE2\u52A8\uFF09\u4E14\u4E32\u884C\uFF08\u4E00\u6B21\u4E00\u4E2A\uFF09\uFF1B\u2461 Cursor \u662F agent \u975E\u7EAF\u68C0\u7D22\uFF0Cprompt \u5DF2\u7EA6\u675F\u53EA\u5217 path:\u884C\u53F7\u3001\u4E0D\u8BFB\u6B63\u6587/\u4E0D\u6539\u4EE3\u7801\uFF0C\u4F46\u975E\u6280\u672F\u9694\u79BB\uFF0C\u522B\u5F53\u6C99\u7BB1\uFF1B\u2462 \u56E0\u5355\u6B21\u8F83\u6162\u4E14\u4E32\u884C\uFF0C\u5EFA\u8BAE\u5E76\u884C/\u540E\u53F0\u4F7F\u7528\u2014\u2014\u4E0E\u5176\u5B83\u5DE5\u4F5C\u5E76\u884C\u63A8\u8FDB\uFF0C\u522B\u5728\u4E3B\u7EBF\u963B\u585E\u7B49\u5B83\u8FD4\u56DE\u3002",
+      description: "Ask Cursor to find where something lives in the current project using its semantic search and grep tools. Use this when ordinary text search is not enough. A search usually takes around 90 seconds and runs one at a time, so keep other work moving while it runs. Cursor is prompted to return a short path-and-line list without editing files, but this is a behavioral instruction rather than a security sandbox.",
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: '\u81EA\u7136\u8BED\u8A00\u68C0\u7D22\u610F\u56FE\uFF0C\u4F8B\u5982 "where is battle damage calculated" \u6216 "\u7075\u5BA0\u6355\u83B7\u903B\u8F91\u5728\u54EA"' }
+          query: { type: "string", description: 'Describe what you want to find, for example: "Where is battle damage calculated?"' }
         },
         required: ["query"]
       }
     },
     bridge.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
-      description: "\u628A\u8FB9\u754C\u660E\u786E\u7684\u4EFB\u52A1\u4EA4\u7ED9 Cursor agent \u6267\u884C\u3002\u9ED8\u8BA4 execution=fifo \u540E\u53F0\u6392\u961F\uFF1Bexecution=parallel_agent \u4F1A\u4E32\u884C\u64CD\u63A7 UI \u63D0\u4EA4\u5230\u72EC\u7ACB\u9876\u5C42 Agent\uFF0C\u518D\u6309\u7A33\u5B9A agentId \u5E76\u884C\u8DDF\u8E2A\u548C\u9010\u9879\u6536\u56DE\u3002\u5E76\u884C\u5199\u4EFB\u52A1\u5FC5\u987B\u63D0\u4F9B\u4E0D\u91CD\u53E0\u7684 allowed_paths\uFF1B\u53EA\u8BFB\u4EFB\u52A1\u5E94\u8BBE\u7F6E read_only=true\u3002\u7528 cursor_status(task_id) \u67E5\u8BE2\u72B6\u6001\u548C\u539F\u59CB\u56DE\u590D\u3002Cursor \u7ED3\u679C\u4E0D\u662F\u6B63\u5F0F\u9A8C\u8BC1\uFF0C\u4E3B Agent \u4ECD\u9700\u68C0\u67E5\u771F\u5B9E\u6539\u52A8\u3002",
+      description: "Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification.",
       inputSchema: {
         type: "object",
         properties: {
-          prompt: { type: "string", description: "\u539F\u6837\u4EA4\u7ED9 Cursor \u7684\u4EFB\u52A1\u5185\u5BB9\uFF0C\u5FC5\u987B\u5305\u542B\u660E\u786E\u76EE\u6807\u3001\u8FB9\u754C\u548C\u5B8C\u6210\u5408\u540C" },
-          background: { type: "boolean", default: true, description: "\u9ED8\u8BA4 true\uFF1A\u7ACB\u5373\u8FD4\u56DE taskId\uFF1Bfalse\uFF1A\u7B49\u5F85\u8BE5\u4EFB\u52A1\u8FDB\u5165\u7EC8\u6001" },
-          execution: { type: "string", enum: ["fifo", "parallel_agent"], default: "fifo", description: "fifo \u4FDD\u6301\u5355\u5BF9\u8BDD\u4E32\u884C\uFF1Bparallel_agent \u4F7F\u7528\u72EC\u7ACB\u9876\u5C42 Agent \u5E76\u884C\u8FD0\u884C" },
-          read_only: { type: "boolean", default: false, description: "\u663E\u5F0F\u58F0\u660E\u4EFB\u52A1\u4E0D\u5F97\u4FEE\u6539\u5DE5\u4F5C\u533A\uFF1Bparallel_agent \u53EA\u8BFB\u4EFB\u52A1\u5E94\u8BBE true" },
-          new_chat: { type: "boolean", default: true, description: "fifo \u662F\u5426\u4F7F\u7528\u5E72\u51C0\u5BF9\u8BDD\uFF1Bparallel_agent \u59CB\u7EC8\u5F3A\u5236\u72EC\u7ACB New Agent" },
-          timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "\u5355\u4EFB\u52A1\u8D85\u65F6\uFF0C\u9ED8\u8BA4 10 \u5206\u949F" },
-          allowed_paths: { type: "array", items: { type: "string" }, description: "\u5DE5\u4F5C\u533A\u76F8\u5BF9\u8DEF\u5F84\u7684\u5199\u5165\u8303\u56F4\u58F0\u660E\uFF1B\u5E76\u884C\u5199\u4EFB\u52A1\u5FC5\u586B\u3001\u4E0D\u5F97\u542B glob/\u8D8A\u754C\uFF0C\u4E14\u4E0D\u5F97\u4E0E\u6D3B\u52A8\u5E76\u884C\u4EFB\u52A1\u91CD\u53E0\u3002\u5B83\u4E0D\u662F\u6587\u4EF6\u7CFB\u7EDF\u6C99\u7BB1" },
-          completion_contract: { type: "string", description: "\u53EF\u9009\uFF1A\u81EA\u5B9A\u4E49\u9A8C\u6536\u548C\u6700\u7EC8\u56DE\u62A5\u683C\u5F0F" }
+          prompt: { type: "string", description: "The task Cursor should receive. State the goal, boundaries, and what a complete result looks like." },
+          background: { type: "boolean", default: true, description: "When true, return the task ID immediately. When false, wait for the task to finish or need attention." },
+          execution: { type: "string", enum: ["fifo", "parallel_agent"], default: "fifo", description: "fifo uses the compatible serial queue. parallel_agent creates a separate top-level Cursor Agent." },
+          read_only: { type: "boolean", default: false, description: "Set true when Cursor must not change the workspace." },
+          new_chat: { type: "boolean", default: true, description: "Start fifo work in a clean chat. parallel_agent always starts a separate Agent." },
+          timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "How long to wait before timing out, in milliseconds. The default is 10 minutes." },
+          allowed_paths: { type: "array", items: { type: "string" }, description: "Workspace-relative paths Cursor may write. Parallel write tasks require non-overlapping paths. This declaration is not a filesystem sandbox." },
+          completion_contract: { type: "string", description: "Optional acceptance checks or a required final-report format." }
         },
         required: ["prompt"]
       }
     } : null,
     {
       name: "cursor_policy",
-      description: "Inspect or change the session-level Cursor delegation policy. This controls orchestration aggressiveness, not an every-N-calls counter. Policies: off, manual, auto, active, eager. active is the recommended default. CURSOR_BRIDGE_DELEGATION=off is an environment lock and cannot be overridden at runtime.",
+      description: "Choose how readily the main agent should hand suitable work to Cursor. This does not run Cursor by itself and is not a call-frequency setting. Use manual when Cursor should wait for an explicit request, auto for selective help, active for regular teamwork, or eager for every safe separable task. The choice never gives Cursor authority over product decisions, overlapping writes, or final approval. Omit mode to see the current choice.",
       inputSchema: {
         type: "object",
         properties: {
           mode: {
             type: "string",
             enum: [...DELEGATION_POLICIES],
-            description: "Optional policy to apply. Omit it to inspect the current policy."
+            description: "How readily to hand suitable work to Cursor: manual waits for you, auto is selective, active treats Cursor as a regular teammate, and eager hands off every safe separable task. Omit this field to see the current choice."
           },
           scope: {
             type: "string",
             enum: ["session"],
             default: "session",
-            description: "Policy lifetime. Only the current MCP server session is supported."
+            description: "How long the choice lasts. It currently applies until this MCP server is restarted."
           }
         }
       }
     },
     {
       name: "cursor_status",
-      description: "\u68C0\u67E5 Cursor CDP\u3001FIFO \u961F\u5217\u548C\u6D3B\u52A8\u5E76\u884C Agent\uFF1B\u4F20 task_id \u53EF\u7CBE\u786E\u67E5\u8BE2 cursor_do \u7684 agentId\u3001\u9636\u6BB5\u4E0E\u7ED3\u679C\u3002",
-      inputSchema: { type: "object", properties: { task_id: { type: "string", description: "\u53EF\u9009\uFF1Acursor_do \u8FD4\u56DE\u7684 taskId" } } }
+      description: "See whether Cursor is connected, what is queued or running, and what the current delegation policy is. Pass a task ID to collect that task's latest state and result.",
+      inputSchema: { type: "object", properties: { task_id: { type: "string", description: "A task ID returned by cursor_do. Omit it for an overall status view." } } }
     },
     {
       name: "cursor_launch",
-      description: "\u786E\u4FDD Cursor \u5E26 CDP \u8C03\u8BD5\u53E3(9223)\u5728\u8FD0\u884C\uFF1A\u672A\u8FD0\u884C\u5219\u81EA\u52A8\u62C9\u8D77\uFF08\u5E26 --remote-debugging-port + --remote-allow-origins + \u6253\u5F00\u672C\u9879\u76EE\u5EFA\u7D22\u5F15\uFF09\uFF1B\u5DF2\u5E26 flag \u5219\u76F4\u63A5\u8FD4\u56DE\u3002\u8FD4\u56DE status\uFF1Aalready / launched / running-no-debug\uFF08\u5728\u8DD1\u4F46\u6CA1\u5E26 flag\uFF0C\u9700\u5148\u5F7B\u5E95\u9000\u51FA Cursor\uFF09/ port-not-cursor\uFF089223 \u88AB\u522B\u7684 IDE \u5360\uFF09/ no-exe / timeout\u3002",
+      description: "Make sure Cursor is running with the CDP debugging port that Cursor Bridge needs. On Windows, this can launch Cursor and open the current project automatically. The result explains whether Cursor was already ready, was launched, needs a full restart with debugging enabled, could not be found, or timed out.",
       inputSchema: { type: "object", properties: {} }
     }
   ].filter(Boolean)

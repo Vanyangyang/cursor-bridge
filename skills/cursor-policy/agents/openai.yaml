@@ -1,13 +1,13 @@
 interface:
   display_name: "Cursor Policy"
-  short_description: "Set Cursor delegation policy for the current session"
-  default_prompt: "Use $cursor-policy to inspect or set the current Cursor Bridge delegation mode to off, manual, auto, active, or eager, then report the effective session policy without treating it as a numeric call frequency."
+  short_description: "Choose how readily the primary agent hands work to Cursor"
+  default_prompt: "Use $cursor-policy to help me choose manual, auto, active, or eager based on when I want Cursor involved, apply that mode for this session, and explain what will change in practice."
 
 dependencies:
   tools:
     - type: "mcp"
       value: "cursor-bridge"
-      description: "Inspect or set the session-scoped Cursor delegation policy"
+      description: "Inspect or set how readily this session delegates work to Cursor"
 
 policy:
   allow_implicit_invocation: true

@@ -1,13 +1,13 @@
 interface:
   display_name: "Cursor Delegation"
-  short_description: "Delegate bounded Cursor work, then collect and verify safely"
-  default_prompt: "Use $cursor-delegate under the effective session policy to hand Cursor a bounded task with clear purpose, scope, invariants, and acceptance checks, allow limited investigation and implementation inside that envelope, then collect and verify the real result in the primary agent."
+  short_description: "Give Cursor a useful bounded task, then review what it did"
+  default_prompt: "Use $cursor-delegate to decide whether Cursor can take a useful, clearly bounded part of this work under the current mode. If it can, give Cursor a clear task, collect the result, inspect the real changes, and keep final approval with the primary agent."
 
 dependencies:
   tools:
     - type: "mcp"
       value: "cursor-bridge"
-      description: "Dispatch, track, and collect top-level Cursor Agent tasks over CDP"
+      description: "Send work to Cursor, follow each task, and collect the result"
 
 policy:
   allow_implicit_invocation: true

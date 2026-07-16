@@ -86,22 +86,33 @@ At startup, the server automatically ensures that Cursor is running with CDP ena
 | `cursor_search` | Ask a Cursor agent to locate code by natural-language intent and return a focused `path:line` list. Calls are serialized and typically take about 90 seconds, with observed runs varying from roughly 66 to 175 seconds. |
 | `cursor_do` | Delegate a bounded task. Use `execution=fifo` for compatible serial execution or `execution=parallel_agent` for an independent top-level Agent. Set `read_only=true` for parallel read-only work. Parallel write tasks require pairwise non-overlapping `allowed_paths`. The tool is hidden when `CURSOR_BRIDGE_DELEGATION=off`. |
 | `cursor_status` | Inspect CDP connectivity, FIFO work, and active parallel Agents. Pass `task_id` to retrieve the exact task state and raw response. It also reports the effective delegation policy. |
-| `cursor_policy` | Set or inspect the session-scoped delegation policy. Pass one of `off`, `manual`, `auto`, `active`, or `eager`; the result reports the effective policy for the current session. |
+| `cursor_policy` | Set or inspect how readily the primary agent hands work to Cursor. The public choices are `manual`, `auto`, `active`, and `eager`; the result reports the effective choice for the current session. |
 | `cursor_launch` | Ensure Cursor is running with a CDP debugging port. It returns `already`, `launched`, `running-no-debug`, `port-not-cursor`, `no-exe`, or `timeout`. |
 
 Use `cursor_do` with `background=true` and `new_chat=true` by default. Save its `task_id`, then collect it with `cursor_status(task_id)`. `submitting`, `running`, and `collecting` are normal in-progress states; exceeding two minutes is not itself a failure. Cursor Bridge does not require a unique completion marker or a minimum response length.
 
-## Delegation policies
+## Choose how readily Cursor joins the work
 
-Delegation policy controls **how proactively the primary agent considers Cursor**, not a mechanical frequency such as “call Cursor every N tool invocations.” Safety boundaries, path isolation rules, and primary-agent verification remain unchanged in every enabled mode.
+This setting is about judgment, not a counter. Cursor Bridge does not call Cursor every N tool uses. The primary agent looks at the actual task and decides whether a handoff will save time or catch omissions.
 
-| Policy | Scheduling behavior |
-|---|---|
-| `off` | Do not delegate execution to `cursor_do`. Search, status, policy inspection, and launch remain separate capabilities unless disabled by host configuration. |
-| `manual` | Delegate only when the user explicitly asks to use Cursor or directly invokes the delegation workflow. |
-| `auto` | Use a cautious heuristic. Delegate when scope and payoff are clear and collection overhead is likely to be worthwhile. |
-| `active` | **Recommended default.** Proactively delegate bounded light-to-medium work, limited implementation discovery, tests, documentation, configuration, and independent second passes when doing so saves primary-agent time or reduces omissions. |
-| `eager` | Maximize safe use of bounded delegation and non-overlapping parallel Agents, including small read-only probes and independent mechanical tasks. Do not relax product, architecture, path, or verification boundaries. |
+| Mode | Choose this when | What the primary agent does |
+|---|---|---|
+| `manual` | You want full control over every handoff. | Uses Cursor only after you explicitly ask for it. |
+| `auto` | You want occasional help without many background tasks. | Hands off work only when the scope is clean, the result is easy to check, and the likely benefit clearly outweighs dispatch and review time. |
+| `active` | You want Cursor to be a regular implementation partner. **Recommended for most users.** | For a non-trivial task, normally looks for one useful bounded slice—such as local implementation, tests, documentation, configuration, or a second check—to send to Cursor while the primary agent continues other work. |
+| `eager` | You have enough independent work to benefit from frequent delegation or parallel Agents. | Uses Cursor whenever a safe bounded slice exists, including small read-only probes and independent mechanical work, and parallelizes tasks whose write paths do not overlap. |
+
+Cursor is a good fit when a task has a clear goal, a limited path or subsystem, and a result the primary agent can verify with a diff, test, count, or concrete document check. It is especially useful for repetitive edits, local implementation discovery, tests, documentation, configuration, and independent second passes.
+
+Cursor stays out when:
+
+- you say not to use it;
+- the task is a tiny edit that is faster to complete directly;
+- the unresolved question is product direction, architecture, creative intent, or another decision the primary agent must own;
+- the task depends on exclusive GUI state or shared mutable runtime state;
+- there is no clean scope, no safe path boundary, or no practical way to verify the returned work.
+
+Changing modes never weakens those boundaries or transfers final verification to Cursor.
 
 Set a session policy through the MCP tool and verify the returned effective policy:
 
@@ -109,7 +120,7 @@ Set a session policy through the MCP tool and verify the returned effective poli
 cursor_policy({mode: "active"})
 ```
 
-`cursor_status` echoes the effective policy so orchestration prompts can make consistent decisions. Session policy does not mean “every N calls,” and changing policy must not bypass an explicit user opt-out.
+`cursor_status` echoes the effective mode so later handoff decisions stay consistent. A direct “do not use Cursor” request always wins over the selected mode.
 
 Codex users may invoke `$cursor-policy` or ask the primary agent in natural language to inspect or change the mode. Cursor Bridge does not claim a built-in `/cursor` command: the Codex plugin manifest has no custom slash-command surface, and other hosts may differ. Use the skill, the MCP tool, or ordinary natural-language instructions unless the current host explicitly exposes a verified wrapper.
 
@@ -120,12 +131,12 @@ Codex users may invoke `$cursor-policy` or ask the primary agent in natural lang
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor remote-debugging port. |
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | Per-query timeout in milliseconds. |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable automatic Cursor launch at server startup. |
-| `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. `cursor_search`, `cursor_status`, `cursor_policy`, and `cursor_launch` remain available. Restart the MCP server, Codex, or Claude Code after changing it. |
-| `CURSOR_BRIDGE_POLICY` | `active` | Initial session policy: `off`, `manual`, `auto`, `active`, or `eager`. The legacy value `on` maps to `active`; `cursor_policy` may change the in-memory policy for the current session. |
+| `CURSOR_BRIDGE_DELEGATION` | `on` | Administrator-level compatibility switch. Set it to `off` only when the host must disable and hide `cursor_do` entirely; this is not a normal user policy. Other tools remain available. Restart the MCP server, Codex, or Claude Code after changing it. |
+| `CURSOR_BRIDGE_POLICY` | `active` | Initial user-facing mode: `manual`, `auto`, `active`, or `eager`. The legacy value `on` maps to `active`; `cursor_policy` may change the in-memory mode for the current session. |
 | `CURSOR_PROJECT_PATH` | auto-detected | Project root for Cursor to open and index. If unset while running from a plugin cache, the launcher omits the path and lets Cursor restore its previous workspace. |
 | `CURSOR_EXE` | auto-detected | Explicit path to `Cursor.exe` when automatic detection fails. |
 
-Temporarily disable delegated execution for a Codex launch in PowerShell:
+Administrators can temporarily disable delegated execution for a Codex launch in PowerShell:
 
 ```powershell
 $env:CURSOR_BRIDGE_DELEGATION='off'

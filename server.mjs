@@ -35,13 +35,12 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
 }
 
 const DELEGATION_MODE = normalizeDelegationMode();
-const DELEGATION_POLICIES = Object.freeze(['off', 'manual', 'auto', 'active', 'eager']);
+const DELEGATION_POLICIES = Object.freeze(['manual', 'auto', 'active', 'eager']);
 const DELEGATION_POLICY_GUIDANCE = Object.freeze({
-  off: 'Do not delegate execution to Cursor. Search, status, policy, and launch tools remain available.',
-  manual: 'Delegate only when the user explicitly asks to use Cursor.',
-  auto: 'Delegate bounded work when the time or quality benefit is clear; otherwise keep it local.',
-  active: 'Evaluate every non-trivial task and normally delegate at least one separable bounded slice when useful.',
-  eager: 'Maximize safe bounded delegation and parallelism while preserving non-overlapping paths and main-agent review.',
+  manual: 'Cursor waits until the user asks for it. Ordinary work stays with the main agent.',
+  auto: 'Cursor helps when a clear, bounded handoff is likely to save meaningful time or add a useful second pass. Small one-step edits usually stay local.',
+  active: 'Cursor works as a regular teammate. For most non-trivial tasks, look for one useful, separable piece to hand off while keeping decisions and final review with the main agent.',
+  eager: 'Hand Cursor every safe, separable piece you can, including small probes and mechanical work. Run independent tasks in parallel when their paths do not overlap. Product decisions and final approval still stay with the main agent.',
 });
 
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = 'active') {
@@ -53,7 +52,7 @@ function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fal
 
 const DELEGATION_POLICY = normalizeDelegationPolicy(
   process.env.CURSOR_BRIDGE_POLICY,
-  DELEGATION_MODE === 'off' ? 'off' : 'active',
+  'active',
 );
 
 // 只读检索 prompt：Cursor agent 当精准定位器用，约束操作类型（不读正文/不改码/不长篇），由 CC 拿清单后自己读真文件。
@@ -238,16 +237,12 @@ class CursorBridge {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     const requestedPolicy = options.delegationPolicy === undefined ? DELEGATION_POLICY : options.delegationPolicy;
     this.delegationPolicyDefault = 'active';
-    this.delegationPolicySource = this.environmentDelegationMode === 'off'
-      ? 'environment-lock'
-      : options.delegationPolicy !== undefined
-        ? 'constructor'
-        : process.env.CURSOR_BRIDGE_POLICY
-          ? 'environment'
-          : 'default';
-    this.delegationPolicy = this.environmentDelegationMode === 'off'
-      ? 'off'
-      : normalizeDelegationPolicy(requestedPolicy);
+    this.delegationPolicySource = options.delegationPolicy !== undefined
+      ? 'constructor'
+      : process.env.CURSOR_BRIDGE_POLICY
+        ? 'environment'
+        : 'default';
+    this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
     this.busy = false;
     this.queue = [];
@@ -261,7 +256,7 @@ class CursorBridge {
   }
 
   _syncDelegationState() {
-    this.delegationEnabled = this.environmentDelegationMode !== 'off' && this.delegationPolicy !== 'off';
+    this.delegationEnabled = this.environmentDelegationMode !== 'off';
     this.delegationMode = this.delegationEnabled ? 'on' : 'off';
   }
 
@@ -289,7 +284,7 @@ class CursorBridge {
     if (!DELEGATION_POLICIES.includes(normalized)) {
       throw new Error(`unsupported delegation policy: ${value}`);
     }
-    if (this.environmentDelegationMode === 'off' && normalized !== 'off') {
+    if (this.environmentDelegationMode === 'off') {
       throw new Error('CURSOR_BRIDGE_DELEGATION=off locks delegation off until the MCP server is restarted without that setting');
     }
     const previousPolicy = this.delegationPolicy;
@@ -313,10 +308,7 @@ class CursorBridge {
 
   async doTask(prompt, options = {}) {
     if (!this.delegationEnabled) {
-      const reason = this.environmentDelegationMode === 'off'
-        ? 'CURSOR_BRIDGE_DELEGATION=off'
-        : `session policy=${this.delegationPolicy}`;
-      throw new Error(`cursor_do is disabled by ${reason}; use cursor_policy to inspect the active policy`);
+      throw new Error('cursor_do is disabled by CURSOR_BRIDGE_DELEGATION=off; restart the MCP server without that setting to enable delegation');
     }
     const text = String(prompt || '').trim();
     if (!text) throw new Error('prompt 不能为空');
@@ -984,16 +976,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'cursor_search',
       description:
-        '用 Cursor IDE 里的 agent 检索（语义搜索 + Instant Grep，agent 自动编排）定位本项目代码。' +
-        '适合需要 Cursor 原生 embedding 语义召回质量的代码定位。' +
-        '前提：Cursor 带 --remote-debugging-port=9223 启动、已登录、打开本项目。' +
-        '注意：① 经 GUI 遥控 agent，单次约 ~90s（实测 66~175s 波动）且串行（一次一个）；' +
-        '② Cursor 是 agent 非纯检索，prompt 已约束只列 path:行号、不读正文/不改代码，但非技术隔离，别当沙箱；' +
-        '③ 因单次较慢且串行，建议并行/后台使用——与其它工作并行推进，别在主线阻塞等它返回。',
+        'Ask Cursor to find where something lives in the current project using its semantic search and grep tools. ' +
+        'Use this when ordinary text search is not enough. A search usually takes around 90 seconds and runs one at a time, so keep other work moving while it runs. ' +
+        'Cursor is prompted to return a short path-and-line list without editing files, but this is a behavioral instruction rather than a security sandbox.',
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: '自然语言检索意图，例如 "where is battle damage calculated" 或 "灵宠捕获逻辑在哪"' },
+          query: { type: 'string', description: 'Describe what you want to find, for example: "Where is battle damage calculated?"' },
         },
         required: ['query'],
       },
@@ -1001,21 +990,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     bridge.environmentDelegationMode !== 'off' ? {
       name: 'cursor_do',
       description:
-        '把边界明确的任务交给 Cursor agent 执行。默认 execution=fifo 后台排队；' +
-        'execution=parallel_agent 会串行操控 UI 提交到独立顶层 Agent，再按稳定 agentId 并行跟踪和逐项收回。' +
-        '并行写任务必须提供不重叠的 allowed_paths；只读任务应设置 read_only=true。' +
-        '用 cursor_status(task_id) 查询状态和原始回复。Cursor 结果不是正式验证，主 Agent 仍需检查真实改动。',
+        'Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. ' +
+        'Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. ' +
+        'Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification.',
       inputSchema: {
         type: 'object',
         properties: {
-          prompt: { type: 'string', description: '原样交给 Cursor 的任务内容，必须包含明确目标、边界和完成合同' },
-          background: { type: 'boolean', default: true, description: '默认 true：立即返回 taskId；false：等待该任务进入终态' },
-          execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo 保持单对话串行；parallel_agent 使用独立顶层 Agent 并行运行' },
-          read_only: { type: 'boolean', default: false, description: '显式声明任务不得修改工作区；parallel_agent 只读任务应设 true' },
-          new_chat: { type: 'boolean', default: true, description: 'fifo 是否使用干净对话；parallel_agent 始终强制独立 New Agent' },
-          timeout_ms: { type: 'integer', minimum: 30000, maximum: 900000, default: 600000, description: '单任务超时，默认 10 分钟' },
-          allowed_paths: { type: 'array', items: { type: 'string' }, description: '工作区相对路径的写入范围声明；并行写任务必填、不得含 glob/越界，且不得与活动并行任务重叠。它不是文件系统沙箱' },
-          completion_contract: { type: 'string', description: '可选：自定义验收和最终回报格式' },
+          prompt: { type: 'string', description: 'The task Cursor should receive. State the goal, boundaries, and what a complete result looks like.' },
+          background: { type: 'boolean', default: true, description: 'When true, return the task ID immediately. When false, wait for the task to finish or need attention.' },
+          execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo uses the compatible serial queue. parallel_agent creates a separate top-level Cursor Agent.' },
+          read_only: { type: 'boolean', default: false, description: 'Set true when Cursor must not change the workspace.' },
+          new_chat: { type: 'boolean', default: true, description: 'Start fifo work in a clean chat. parallel_agent always starts a separate Agent.' },
+          timeout_ms: { type: 'integer', minimum: 30000, maximum: 900000, default: 600000, description: 'How long to wait before timing out, in milliseconds. The default is 10 minutes.' },
+          allowed_paths: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative paths Cursor may write. Parallel write tasks require non-overlapping paths. This declaration is not a filesystem sandbox.' },
+          completion_contract: { type: 'string', description: 'Optional acceptance checks or a required final-report format.' },
         },
         required: ['prompt'],
       },
@@ -1023,36 +1011,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'cursor_policy',
       description:
-        'Inspect or change the session-level Cursor delegation policy. This controls orchestration aggressiveness, not an every-N-calls counter. ' +
-        'Policies: off, manual, auto, active, eager. active is the recommended default. ' +
-        'CURSOR_BRIDGE_DELEGATION=off is an environment lock and cannot be overridden at runtime.',
+        'Choose how readily the main agent should hand suitable work to Cursor. ' +
+        'This does not run Cursor by itself and is not a call-frequency setting. ' +
+        'Use manual when Cursor should wait for an explicit request, auto for selective help, active for regular teamwork, or eager for every safe separable task. ' +
+        'The choice never gives Cursor authority over product decisions, overlapping writes, or final approval. Omit mode to see the current choice.',
       inputSchema: {
         type: 'object',
         properties: {
           mode: {
             type: 'string',
             enum: [...DELEGATION_POLICIES],
-            description: 'Optional policy to apply. Omit it to inspect the current policy.',
+            description: 'How readily to hand suitable work to Cursor: manual waits for you, auto is selective, active treats Cursor as a regular teammate, and eager hands off every safe separable task. Omit this field to see the current choice.',
           },
           scope: {
             type: 'string',
             enum: ['session'],
             default: 'session',
-            description: 'Policy lifetime. Only the current MCP server session is supported.',
+            description: 'How long the choice lasts. It currently applies until this MCP server is restarted.',
           },
         },
       },
     },
     {
       name: 'cursor_status',
-      description: '检查 Cursor CDP、FIFO 队列和活动并行 Agent；传 task_id 可精确查询 cursor_do 的 agentId、阶段与结果。',
-      inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: '可选：cursor_do 返回的 taskId' } } },
+      description: 'See whether Cursor is connected, what is queued or running, and what the current delegation policy is. Pass a task ID to collect that task\'s latest state and result.',
+      inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: 'A task ID returned by cursor_do. Omit it for an overall status view.' } } },
     },
     {
       name: 'cursor_launch',
       description:
-        '确保 Cursor 带 CDP 调试口(9223)在运行：未运行则自动拉起（带 --remote-debugging-port + --remote-allow-origins + 打开本项目建索引）；已带 flag 则直接返回。' +
-        '返回 status：already / launched / running-no-debug（在跑但没带 flag，需先彻底退出 Cursor）/ port-not-cursor（9223 被别的 IDE 占）/ no-exe / timeout。',
+        'Make sure Cursor is running with the CDP debugging port that Cursor Bridge needs. On Windows, this can launch Cursor and open the current project automatically. ' +
+        'The result explains whether Cursor was already ready, was launched, needs a full restart with debugging enabled, could not be found, or timed out.',
       inputSchema: { type: 'object', properties: {} },
     },
   ].filter(Boolean),

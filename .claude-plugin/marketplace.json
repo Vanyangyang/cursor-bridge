@@ -1,6 +1,6 @@
 {
   "name": "vanyangyang",
-  "description": "Vanyangyang's Claude Code plugin marketplace, currently featuring Cursor Bridge for semantic search and policy-controlled bounded delegation.",
+  "description": "Vanyangyang's Claude Code plugins, including Cursor Bridge for code search and clearly bounded Cursor handoffs.",
   "owner": {
     "name": "Vanyangyang"
   },
@@ -8,8 +8,8 @@
     {
       "name": "cursor-bridge",
       "source": ".",
-      "description": "Drive Cursor IDE agents from Claude Code for semantic search, cursor_policy session controls, FIFO delegation, and safe top-level Agent parallelism. Cursor must run with --remote-debugging-port=9223.",
-      "version": "2.2.0",
+      "description": "Ask Cursor to find code or complete bounded tasks, choose how readily it should help, and safely track FIFO or independent Agent work. Cursor must run with --remote-debugging-port=9223.",
+      "version": "2.2.1",
       "author": {
         "name": "Vanyangyang"
       }
