@@ -1,3 +1,4 @@
+注：暂时不支持cursor3.0 新版UI
 # cursor-bridge
 
 > MCP server：让 **Codex/Claude Code 直驱 Cursor IDE agent 做语义检索与边界明确的委托执行**。
