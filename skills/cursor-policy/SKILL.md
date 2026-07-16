@@ -5,7 +5,7 @@ description: "Help the user choose, inspect, or change how readily the primary a
 
 # Cursor Policy
 
-Help the user choose how much initiative the primary agent should take when handing work to Cursor, then use `cursor_policy` to inspect or change the current session.
+Help the user choose how much initiative the primary agent should take when handing work to Cursor, then use `cursor_policy` to inspect or change the durable preference.
 
 ## Explain the choices plainly
 
@@ -23,9 +23,10 @@ Use Cursor when the task has a clear goal, a limited path or subsystem, and a re
 ## Apply the choice
 
 1. If the user only asks what is active now, call `cursor_policy` without `mode`.
-2. If the user chooses a mode, call `cursor_policy` with `manual`, `auto`, `active`, or `eager`.
-3. Report the effective mode returned by the tool in one plain sentence, followed by a short description of what will change in practice.
-4. Keep later behavior consistent with the mode echoed by `cursor_status`.
+2. If the user chooses a mode, call `cursor_policy` with `manual`, `auto`, `active`, or `eager`. Omit `scope` so the default persistent choice survives MCP server restarts.
+3. Use `scope: session` only when the user explicitly asks for a temporary override.
+4. Report the effective mode and whether it persists across restart in one plain sentence, followed by a short description of what will change in practice.
+5. Keep later behavior consistent with the current policy included in the live tool descriptions and echoed by `cursor_status`.
 
 Do not offer `off` as a user mode. If the user wants no automatic delegation, recommend `manual` and honor their explicit instruction not to use Cursor. `CURSOR_BRIDGE_DELEGATION=off` is a legacy administrator-level host switch for fully disabling `cursor_do`, not a normal policy choice. If inspection reports an administrator-disabled state, explain it rather than trying to override it.
 

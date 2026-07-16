@@ -7,7 +7,7 @@ Read this file only when constructing a task envelope, choosing an `execution` m
 - When `CURSOR_BRIDGE_DELEGATION=off`, Bridge does not expose `cursor_do`, and direct invocation must fail. Search, status, policy, and launch tools remain available.
 - When the user opts out, `cursor_do` is unavailable, or `cursor_status.delegationMode=off`, complete the task in the primary agent. Do not ask the user to re-enable delegation or bypass the setting through another call.
 - Re-enable the environment-level kill switch by starting a new MCP server process with `CURSOR_BRIDGE_DELEGATION=on` or with the variable unset. A running process does not dynamically change this environment setting.
-- The public session modes are `manual`, `auto`, `active`, and `eager`. They decide how readily suitable work is handed off; they are not numeric call frequencies and never relax the task-envelope, path, independence, or verification contracts below. `CURSOR_BRIDGE_DELEGATION=off` remains an administrator-level compatibility switch, not a user policy.
+- The public modes are `manual`, `auto`, `active`, and `eager`. They persist across MCP server restarts by default and are injected into the live tool descriptions; `scope: session` is reserved for an intentional temporary override. They decide how readily suitable work is handed off, are not numeric call frequencies, and never relax the task-envelope, path, independence, or verification contracts below. `CURSOR_BRIDGE_DELEGATION=off` remains an administrator-level compatibility switch, not a user policy.
 
 ## Task envelope
 

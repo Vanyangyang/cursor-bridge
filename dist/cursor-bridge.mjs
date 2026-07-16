@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve.call(this, root, ref);
+      let _sch = resolve2.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve(root, ref) {
+    function resolve2(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3648,7 +3648,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve(baseURI, relativeURI, options) {
+    function resolve2(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3906,7 +3906,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve,
+      resolve: resolve2,
       resolveComponent,
       equal,
       serialize,
@@ -10636,42 +10636,42 @@ function findCursorExe() {
   return null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve(res.statusCode === 200);
+      resolve2(res.statusCode === 200);
     });
-    req.on("error", () => resolve(false));
+    req.on("error", () => resolve2(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve(false);
+      resolve2(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve(false);
-          resolve(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve2(false);
+          resolve2(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve(false);
+          resolve2(false);
         }
       });
     });
-    req.on("error", () => resolve(false));
+    req.on("error", () => resolve2(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve(false);
+      resolve2(false);
     });
   });
 }
@@ -18074,7 +18074,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -18091,7 +18091,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -18169,7 +18169,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve(parseResult.data);
+            resolve2(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -18430,12 +18430,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve, interval);
+      const timeoutId = setTimeout(resolve2, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -19305,16 +19305,21 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve();
+        resolve2();
       } else {
-        this._stdout.once("drain", resolve);
+        this._stdout.once("drain", resolve2);
       }
     });
   }
 };
+
+// server.mjs
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -19343,27 +19348,69 @@ var DELEGATION_POLICY_GUIDANCE = Object.freeze({
   active: "Cursor works as a regular teammate. For most non-trivial tasks, look for one useful, separable piece to hand off while keeping decisions and final review with the main agent.",
   eager: "Hand Cursor every safe, separable piece you can, including small probes and mechanical work. Run independent tasks in parallel when their paths do not overlap. Product decisions and final approval still stay with the main agent."
 });
+function resolveDelegationPolicyFile(value = process.env.CURSOR_BRIDGE_POLICY_FILE) {
+  const configured = String(value || "").trim();
+  if (configured) return resolve(configured);
+  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(configRoot, "cursor-bridge", "policy.json");
+}
+var DELEGATION_POLICY_FILE = resolveDelegationPolicyFile();
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = "active") {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "on") return "active";
   if (DELEGATION_POLICIES.includes(normalized)) return normalized;
   return fallback;
 }
-var DELEGATION_POLICY = normalizeDelegationPolicy(
+var DELEGATION_POLICY_DEFAULT = normalizeDelegationPolicy(
   process.env.CURSOR_BRIDGE_POLICY,
   "active"
 );
+function readPersistedDelegationPolicy(filePath = DELEGATION_POLICY_FILE) {
+  if (!filePath) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+    const candidate = typeof parsed === "string" ? parsed : parsed && parsed.policy;
+    const normalized = normalizeDelegationPolicy(candidate, "");
+    return DELEGATION_POLICIES.includes(normalized) ? normalized : null;
+  } catch (error2) {
+    if (error2 && error2.code === "ENOENT") return null;
+    console.error(`[cursor-bridge] ignoring unreadable policy file ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    return null;
+  }
+}
+function writePersistedDelegationPolicy(filePath, policy) {
+  if (!filePath) throw new Error("persistent cursor_policy storage is disabled for this server");
+  const normalized = normalizeDelegationPolicy(policy, "");
+  if (!DELEGATION_POLICIES.includes(normalized)) {
+    throw new Error(`unsupported delegation policy: ${policy}`);
+  }
+  const target = resolve(filePath);
+  mkdirSync(dirname(target), { recursive: true });
+  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    writeFileSync(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}
+`, {
+      encoding: "utf8",
+      mode: 384
+    });
+    renameSync(temporary, target);
+  } catch (error2) {
+    rmSync(temporary, { force: true });
+    throw new Error(`failed to persist cursor_policy at ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+  }
+  return target;
+}
 var SEARCH_PREFIX = "\u53EA\u505A\u4EE3\u7801\u68C0\u7D22\u5B9A\u4F4D\uFF1A\u5217\u51FA\u4E0E\u4E0B\u9762\u610F\u56FE\u76F8\u5173\u7684\u6587\u4EF6\u8DEF\u5F84 + \u884C\u53F7\u8303\u56F4\uFF08\u5F62\u5982 Assets/Scripts/X.cs:120-180\uFF09\uFF0C\u9010\u884C\u5217\u51FA\u5373\u53EF\u3002\u4E0D\u8981\u8BFB\u53D6\u6587\u4EF6\u6B63\u6587\u3001\u4E0D\u8981\u4FEE\u6539\u4EFB\u4F55\u4EE3\u7801\u3001\u4E0D\u8981\u5C55\u5F00\u957F\u7BC7\u89E3\u91CA\u3002\n\n\u610F\u56FE\uFF1A";
 var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve(JSON.parse(d));
+          resolve2(JSON.parse(d));
         } catch {
           reject(new Error("CDP \u975E JSON \u54CD\u5E94"));
         }
@@ -19553,9 +19600,13 @@ function selectNewAgentEntry(beforeEntries, afterEntries) {
 var CursorBridge = class {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    const requestedPolicy = options.delegationPolicy === void 0 ? DELEGATION_POLICY : options.delegationPolicy;
-    this.delegationPolicyDefault = "active";
-    this.delegationPolicySource = options.delegationPolicy !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_POLICY ? "environment" : "default";
+    this.policyFile = options.policyFile === null ? null : resolve(options.policyFile || DELEGATION_POLICY_FILE);
+    this.delegationPolicyDefault = DELEGATION_POLICY_DEFAULT;
+    const persistedPolicy = options.delegationPolicy === void 0 ? readPersistedDelegationPolicy(this.policyFile) : null;
+    const requestedPolicy = options.delegationPolicy !== void 0 ? options.delegationPolicy : persistedPolicy || this.delegationPolicyDefault;
+    this.persistedDelegationPolicy = persistedPolicy;
+    this.delegationPolicySource = options.delegationPolicy !== void 0 ? "constructor" : persistedPolicy ? "persistent" : process.env.CURSOR_BRIDGE_POLICY ? "environment" : "default";
+    this.delegationPolicyScope = persistedPolicy ? "persistent" : "session";
     this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
     this.busy = false;
@@ -19573,11 +19624,18 @@ var CursorBridge = class {
     this.delegationMode = this.delegationEnabled ? "on" : "off";
   }
   delegationPolicyView() {
+    const restartPolicy = this.persistedDelegationPolicy || this.delegationPolicyDefault;
+    const policyStored = this.delegationPolicyScope === "persistent" && this.persistedDelegationPolicy === this.delegationPolicy;
     return {
-      scope: "session",
+      scope: this.delegationPolicyScope,
       policy: this.delegationPolicy,
       policySource: this.delegationPolicySource,
       policyDefault: this.delegationPolicyDefault,
+      persistedPolicy: this.persistedDelegationPolicy,
+      policyFile: this.policyFile,
+      policyStored,
+      persistsAcrossRestart: this.delegationPolicy === restartPolicy,
+      restartPolicy,
       guidance: DELEGATION_POLICY_GUIDANCE[this.delegationPolicy],
       delegationMode: this.delegationMode,
       delegationEnabled: this.delegationEnabled,
@@ -19587,9 +19645,10 @@ var CursorBridge = class {
       runningTasksUnchanged: true
     };
   }
-  setDelegationPolicy(value, scope = "session") {
-    if (scope !== "session") {
-      throw new Error("cursor_policy currently supports scope=session only");
+  setDelegationPolicy(value, scope = "persistent") {
+    const normalizedScope = String(scope || "persistent").trim().toLowerCase();
+    if (normalizedScope !== "persistent" && normalizedScope !== "session") {
+      throw new Error("cursor_policy supports scope=persistent or scope=session");
     }
     const normalized = normalizeDelegationPolicy(value, "");
     if (!DELEGATION_POLICIES.includes(normalized)) {
@@ -19598,9 +19657,14 @@ var CursorBridge = class {
     if (this.environmentDelegationMode === "off") {
       throw new Error("CURSOR_BRIDGE_DELEGATION=off locks delegation off until the MCP server is restarted without that setting");
     }
+    if (normalizedScope === "persistent") {
+      writePersistedDelegationPolicy(this.policyFile, normalized);
+    }
     const previousPolicy = this.delegationPolicy;
     this.delegationPolicy = normalized;
-    this.delegationPolicySource = "runtime";
+    this.delegationPolicySource = normalizedScope === "persistent" ? "persistent" : "runtime";
+    this.delegationPolicyScope = normalizedScope;
+    if (normalizedScope === "persistent") this.persistedDelegationPolicy = normalized;
     this._syncDelegationState();
     return { previousPolicy, ...this.delegationPolicyView() };
   }
@@ -19683,8 +19747,8 @@ var CursorBridge = class {
     const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve, reject) => {
-      resolvePromise = resolve;
+    const promise = new Promise((resolve2, reject) => {
+      resolvePromise = resolve2;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -20258,13 +20322,17 @@ var CursorBridge = class {
     }
   }
 };
-var bridge = new CursorBridge();
-var server = new Server({ name: "cursor-bridge", version: "2.2.0" }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+function delegationPolicyToolContext(bridgeInstance) {
+  const view = bridgeInstance.delegationPolicyView();
+  const restartText = view.policyStored ? "This choice is persisted and will remain after the MCP server restarts." : view.persistsAcrossRestart ? `A restart currently resolves to the same ${view.restartPolicy} policy.` : `This temporary session override resets to ${view.restartPolicy} after restart.`;
+  return `Current effective Cursor participation policy: ${view.policy}. ${view.guidance} ${restartText} A direct user opt-out always wins.`;
+}
+function buildToolDefinitions(bridgeInstance) {
+  const policyContext = delegationPolicyToolContext(bridgeInstance);
+  return [
     {
       name: "cursor_search",
-      description: "Ask Cursor to find where something lives in the current project using its semantic search and grep tools. Use this when ordinary text search is not enough. A search usually takes around 90 seconds and runs one at a time, so keep other work moving while it runs. Cursor is prompted to return a short path-and-line list without editing files, but this is a behavioral instruction rather than a security sandbox.",
+      description: `${policyContext} Ask Cursor to find where something lives in the current project using its semantic search and grep tools. Use this when ordinary text search is not enough. A search usually takes around 90 seconds and runs one at a time, so keep other work moving while it runs. Cursor is prompted to return a short path-and-line list without editing files, but this is a behavioral instruction rather than a security sandbox.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -20273,9 +20341,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["query"]
       }
     },
-    bridge.environmentDelegationMode !== "off" ? {
+    bridgeInstance.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
-      description: "Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification.",
+      description: `${policyContext} Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -20293,7 +20361,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     } : null,
     {
       name: "cursor_policy",
-      description: "Choose how readily the main agent should hand suitable work to Cursor. This does not run Cursor by itself and is not a call-frequency setting. Use manual when Cursor should wait for an explicit request, auto for selective help, active for regular teamwork, or eager for every safe separable task. The choice never gives Cursor authority over product decisions, overlapping writes, or final approval. Omit mode to see the current choice.",
+      description: `${policyContext} Choose how readily the main agent should hand suitable work to Cursor. This does not run Cursor by itself and is not a call-frequency setting. Use manual when Cursor should wait for an explicit request, auto for selective help, active for regular teamwork, or eager for every safe separable task. Persistent is the default scope; session is available only for an intentional temporary override. The choice never gives Cursor authority over product decisions, overlapping writes, or final approval. Omit mode to see the current choice.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -20304,16 +20372,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           scope: {
             type: "string",
-            enum: ["session"],
-            default: "session",
-            description: "How long the choice lasts. It currently applies until this MCP server is restarted."
+            enum: ["persistent", "session"],
+            default: "persistent",
+            description: "persistent stores the choice across MCP server restarts. session intentionally keeps it only until this server restarts."
           }
         }
       }
     },
     {
       name: "cursor_status",
-      description: "See whether Cursor is connected, what is queued or running, and what the current delegation policy is. Pass a task ID to collect that task's latest state and result.",
+      description: `${policyContext} See whether Cursor is connected, what is queued or running, and what the current delegation policy is. Pass a task ID to collect that task's latest state and result.`,
       inputSchema: { type: "object", properties: { task_id: { type: "string", description: "A task ID returned by cursor_do. Omit it for an overall status view." } } }
     },
     {
@@ -20321,7 +20389,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: "Make sure Cursor is running with the CDP debugging port that Cursor Bridge needs. On Windows, this can launch Cursor and open the current project automatically. The result explains whether Cursor was already ready, was launched, needs a full restart with debugging enabled, could not be found, or timed out.",
       inputSchema: { type: "object", properties: {} }
     }
-  ].filter(Boolean)
+  ].filter(Boolean);
+}
+var bridge = new CursorBridge();
+var server = new Server(
+  { name: "cursor-bridge", version: "2.2.2" },
+  { capabilities: { tools: { listChanged: true } } }
+);
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: buildToolDefinitions(bridge)
 }));
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
@@ -20344,7 +20420,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "cursor_policy") {
       const mode = args && args.mode;
-      const result = mode === void 0 ? bridge.delegationPolicyView() : bridge.setDelegationPolicy(mode, args && args.scope || "session");
+      const result = mode === void 0 ? bridge.delegationPolicyView() : bridge.setDelegationPolicy(mode, args && args.scope || "persistent");
+      if (mode !== void 0) {
+        try {
+          await server.sendToolListChanged();
+        } catch (error2) {
+          console.error(`[cursor-bridge] policy changed but tools/list_changed notification failed: ${error2 instanceof Error ? error2.message : String(error2)}`);
+        }
+      }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_status") {

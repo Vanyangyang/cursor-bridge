@@ -22,6 +22,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocket } from 'ws';
 import http from 'http';
 import { pathToFileURL } from 'url';
@@ -43,6 +46,17 @@ const DELEGATION_POLICY_GUIDANCE = Object.freeze({
   eager: 'Hand Cursor every safe, separable piece you can, including small probes and mechanical work. Run independent tasks in parallel when their paths do not overlap. Product decisions and final approval still stay with the main agent.',
 });
 
+function resolveDelegationPolicyFile(value = process.env.CURSOR_BRIDGE_POLICY_FILE) {
+  const configured = String(value || '').trim();
+  if (configured) return resolve(configured);
+  const configRoot = process.platform === 'win32' && process.env.APPDATA
+    ? process.env.APPDATA
+    : process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
+  return join(configRoot, 'cursor-bridge', 'policy.json');
+}
+
+const DELEGATION_POLICY_FILE = resolveDelegationPolicyFile();
+
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = 'active') {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'on') return 'active';
@@ -50,10 +64,46 @@ function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fal
   return fallback;
 }
 
-const DELEGATION_POLICY = normalizeDelegationPolicy(
+const DELEGATION_POLICY_DEFAULT = normalizeDelegationPolicy(
   process.env.CURSOR_BRIDGE_POLICY,
   'active',
 );
+
+function readPersistedDelegationPolicy(filePath = DELEGATION_POLICY_FILE) {
+  if (!filePath) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
+    const candidate = typeof parsed === 'string' ? parsed : parsed && parsed.policy;
+    const normalized = normalizeDelegationPolicy(candidate, '');
+    return DELEGATION_POLICIES.includes(normalized) ? normalized : null;
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return null;
+    console.error(`[cursor-bridge] ignoring unreadable policy file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function writePersistedDelegationPolicy(filePath, policy) {
+  if (!filePath) throw new Error('persistent cursor_policy storage is disabled for this server');
+  const normalized = normalizeDelegationPolicy(policy, '');
+  if (!DELEGATION_POLICIES.includes(normalized)) {
+    throw new Error(`unsupported delegation policy: ${policy}`);
+  }
+  const target = resolve(filePath);
+  mkdirSync(dirname(target), { recursive: true });
+  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    writeFileSync(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    renameSync(temporary, target);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw new Error(`failed to persist cursor_policy at ${target}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return target;
+}
 
 // 只读检索 prompt：Cursor agent 当精准定位器用，约束操作类型（不读正文/不改码/不长篇），由 CC 拿清单后自己读真文件。
 const SEARCH_PREFIX =
@@ -235,13 +285,25 @@ function selectNewAgentEntry(beforeEntries, afterEntries) {
 class CursorBridge {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    const requestedPolicy = options.delegationPolicy === undefined ? DELEGATION_POLICY : options.delegationPolicy;
-    this.delegationPolicyDefault = 'active';
+    this.policyFile = options.policyFile === null
+      ? null
+      : resolve(options.policyFile || DELEGATION_POLICY_FILE);
+    this.delegationPolicyDefault = DELEGATION_POLICY_DEFAULT;
+    const persistedPolicy = options.delegationPolicy === undefined
+      ? readPersistedDelegationPolicy(this.policyFile)
+      : null;
+    const requestedPolicy = options.delegationPolicy !== undefined
+      ? options.delegationPolicy
+      : persistedPolicy || this.delegationPolicyDefault;
+    this.persistedDelegationPolicy = persistedPolicy;
     this.delegationPolicySource = options.delegationPolicy !== undefined
       ? 'constructor'
-      : process.env.CURSOR_BRIDGE_POLICY
-        ? 'environment'
-        : 'default';
+      : persistedPolicy
+        ? 'persistent'
+        : process.env.CURSOR_BRIDGE_POLICY
+          ? 'environment'
+          : 'default';
+    this.delegationPolicyScope = persistedPolicy ? 'persistent' : 'session';
     this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
     this.busy = false;
@@ -261,11 +323,19 @@ class CursorBridge {
   }
 
   delegationPolicyView() {
+    const restartPolicy = this.persistedDelegationPolicy || this.delegationPolicyDefault;
+    const policyStored = this.delegationPolicyScope === 'persistent'
+      && this.persistedDelegationPolicy === this.delegationPolicy;
     return {
-      scope: 'session',
+      scope: this.delegationPolicyScope,
       policy: this.delegationPolicy,
       policySource: this.delegationPolicySource,
       policyDefault: this.delegationPolicyDefault,
+      persistedPolicy: this.persistedDelegationPolicy,
+      policyFile: this.policyFile,
+      policyStored,
+      persistsAcrossRestart: this.delegationPolicy === restartPolicy,
+      restartPolicy,
       guidance: DELEGATION_POLICY_GUIDANCE[this.delegationPolicy],
       delegationMode: this.delegationMode,
       delegationEnabled: this.delegationEnabled,
@@ -276,9 +346,10 @@ class CursorBridge {
     };
   }
 
-  setDelegationPolicy(value, scope = 'session') {
-    if (scope !== 'session') {
-      throw new Error('cursor_policy currently supports scope=session only');
+  setDelegationPolicy(value, scope = 'persistent') {
+    const normalizedScope = String(scope || 'persistent').trim().toLowerCase();
+    if (normalizedScope !== 'persistent' && normalizedScope !== 'session') {
+      throw new Error('cursor_policy supports scope=persistent or scope=session');
     }
     const normalized = normalizeDelegationPolicy(value, '');
     if (!DELEGATION_POLICIES.includes(normalized)) {
@@ -287,9 +358,14 @@ class CursorBridge {
     if (this.environmentDelegationMode === 'off') {
       throw new Error('CURSOR_BRIDGE_DELEGATION=off locks delegation off until the MCP server is restarted without that setting');
     }
+    if (normalizedScope === 'persistent') {
+      writePersistedDelegationPolicy(this.policyFile, normalized);
+    }
     const previousPolicy = this.delegationPolicy;
     this.delegationPolicy = normalized;
-    this.delegationPolicySource = 'runtime';
+    this.delegationPolicySource = normalizedScope === 'persistent' ? 'persistent' : 'runtime';
+    this.delegationPolicyScope = normalizedScope;
+    if (normalizedScope === 'persistent') this.persistedDelegationPolicy = normalized;
     this._syncDelegationState();
     return { previousPolicy, ...this.delegationPolicyView() };
   }
@@ -968,14 +1044,23 @@ class CursorBridge {
   }
 }
 
-const bridge = new CursorBridge();
-const server = new Server({ name: 'cursor-bridge', version: '2.2.0' }, { capabilities: { tools: {} } });
+function delegationPolicyToolContext(bridgeInstance) {
+  const view = bridgeInstance.delegationPolicyView();
+  const restartText = view.policyStored
+    ? 'This choice is persisted and will remain after the MCP server restarts.'
+    : view.persistsAcrossRestart
+      ? `A restart currently resolves to the same ${view.restartPolicy} policy.`
+      : `This temporary session override resets to ${view.restartPolicy} after restart.`;
+  return `Current effective Cursor participation policy: ${view.policy}. ${view.guidance} ${restartText} A direct user opt-out always wins.`;
+}
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+function buildToolDefinitions(bridgeInstance) {
+  const policyContext = delegationPolicyToolContext(bridgeInstance);
+  return [
     {
       name: 'cursor_search',
       description:
+        `${policyContext} ` +
         'Ask Cursor to find where something lives in the current project using its semantic search and grep tools. ' +
         'Use this when ordinary text search is not enough. A search usually takes around 90 seconds and runs one at a time, so keep other work moving while it runs. ' +
         'Cursor is prompted to return a short path-and-line list without editing files, but this is a behavioral instruction rather than a security sandbox.',
@@ -987,9 +1072,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['query'],
       },
     },
-    bridge.environmentDelegationMode !== 'off' ? {
+    bridgeInstance.environmentDelegationMode !== 'off' ? {
       name: 'cursor_do',
       description:
+        `${policyContext} ` +
         'Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. ' +
         'Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. ' +
         'Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification.',
@@ -1011,9 +1097,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'cursor_policy',
       description:
+        `${policyContext} ` +
         'Choose how readily the main agent should hand suitable work to Cursor. ' +
         'This does not run Cursor by itself and is not a call-frequency setting. ' +
         'Use manual when Cursor should wait for an explicit request, auto for selective help, active for regular teamwork, or eager for every safe separable task. ' +
+        'Persistent is the default scope; session is available only for an intentional temporary override. ' +
         'The choice never gives Cursor authority over product decisions, overlapping writes, or final approval. Omit mode to see the current choice.',
       inputSchema: {
         type: 'object',
@@ -1025,16 +1113,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           scope: {
             type: 'string',
-            enum: ['session'],
-            default: 'session',
-            description: 'How long the choice lasts. It currently applies until this MCP server is restarted.',
+            enum: ['persistent', 'session'],
+            default: 'persistent',
+            description: 'persistent stores the choice across MCP server restarts. session intentionally keeps it only until this server restarts.',
           },
         },
       },
     },
     {
       name: 'cursor_status',
-      description: 'See whether Cursor is connected, what is queued or running, and what the current delegation policy is. Pass a task ID to collect that task\'s latest state and result.',
+      description: `${policyContext} See whether Cursor is connected, what is queued or running, and what the current delegation policy is. Pass a task ID to collect that task's latest state and result.`,
       inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: 'A task ID returned by cursor_do. Omit it for an overall status view.' } } },
     },
     {
@@ -1044,7 +1132,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         'The result explains whether Cursor was already ready, was launched, needs a full restart with debugging enabled, could not be found, or timed out.',
       inputSchema: { type: 'object', properties: {} },
     },
-  ].filter(Boolean),
+  ].filter(Boolean);
+}
+
+const bridge = new CursorBridge();
+const server = new Server(
+  { name: 'cursor-bridge', version: '2.2.2' },
+  { capabilities: { tools: { listChanged: true } } },
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: buildToolDefinitions(bridge),
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -1070,7 +1168,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const mode = args && args.mode;
       const result = mode === undefined
         ? bridge.delegationPolicyView()
-        : bridge.setDelegationPolicy(mode, (args && args.scope) || 'session');
+        : bridge.setDelegationPolicy(mode, (args && args.scope) || 'persistent');
+      if (mode !== undefined) {
+        try {
+          await server.sendToolListChanged();
+        } catch (error) {
+          console.error(`[cursor-bridge] policy changed but tools/list_changed notification failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_status') {
