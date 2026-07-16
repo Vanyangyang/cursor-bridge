@@ -1,102 +1,103 @@
-# Cursor 委托合同
+# Cursor Delegation Contract
 
-只在构造任务信封、选择 `execution` 或处理异常状态时读取本文件。
+Read this file only when constructing a task envelope, choosing an `execution` mode, or recovering from an abnormal state.
 
-## 委托开关
+## Delegation controls
 
-- `CURSOR_BRIDGE_DELEGATION=off` 时，Bridge 不暴露 `cursor_do`，直接调用也必须失败；其他检索、状态和启动工具继续可用。
-- 用户明确拒绝委托、`cursor_do` 不可用或 `cursor_status.delegationMode=off` 时，主 Agent 直接执行，不得要求用户重新开启，也不得用其他调用绕过。
-- 重新开启需要以 `CURSOR_BRIDGE_DELEGATION=on` 或未设置该变量启动新的 MCP server 进程；运行中的进程不动态切换。
+- When `CURSOR_BRIDGE_DELEGATION=off`, Bridge does not expose `cursor_do`, and direct invocation must fail. Search, status, policy, and launch tools remain available.
+- When the user opts out, `cursor_do` is unavailable, or `cursor_status.delegationMode=off`, complete the task in the primary agent. Do not ask the user to re-enable delegation or bypass the setting through another call.
+- Re-enable the environment-level kill switch by starting a new MCP server process with `CURSOR_BRIDGE_DELEGATION=on` or with the variable unset. A running process does not dynamically change this environment setting.
+- Session policy is a scheduling control, not a numeric call frequency. `off`, `manual`, `auto`, `active`, and `eager` never relax the task-envelope, path, independence, or verification contracts below.
 
-## 任务信封
+## Task envelope
 
-每项任务必须独立提供：
+Provide every task independently:
 
-| 字段 | 要求 |
+| Field | Requirement |
 |---|---|
-| `prompt` | 写明单一目标、必要上下文、禁止动作和预期回报；不得让 Cursor 重做主 Agent 的范围裁决。 |
-| `execution` | 只能使用 `fifo` 或 `parallel_agent`。无法证明安全并行时使用 `fifo`。 |
-| `read_only` | 查询与分析使用 `true`；任何文件修改使用 `false`。 |
-| `allowed_paths` | `read_only=false` 时必填，使用最小工作区相对路径集合；不得含 glob、绝对路径或越出工作区的 `..`。`read_only=true` 时不得同时传此字段。它不是文件系统沙箱。 |
-| `completion_contract` | 写明交付物、验证命令、允许的未完成项和最终回报格式。 |
-| `background` | 默认 `true`，让主 Agent 可继续处理独立工作。 |
-| `new_chat` | 默认 `true`，为任务建立干净的顶层 Cursor Agent。 |
+| `prompt` | State one objective, the necessary context, prohibited actions, and the expected report. Do not ask Cursor to repeat the primary agent's scope decision. |
+| `execution` | Use only `fifo` or `parallel_agent`. Use `fifo` when safe parallelism cannot be demonstrated. |
+| `read_only` | Use `true` for lookup and analysis; use `false` for any file modification. |
+| `allowed_paths` | Required when `read_only=false`. Provide the smallest workspace-relative path set, with no glob, absolute path, or workspace-escaping `..`. Omit it when `read_only=true`. This is not a filesystem sandbox. |
+| `completion_contract` | State the deliverables, validation commands, permitted incomplete items, and final report format. |
+| `background` | Default to `true` so the primary agent may continue independent work. |
+| `new_chat` | Default to `true` to create a clean top-level Cursor Agent. |
 
-## 路由合同
+## Routing contract
 
-选择 `parallel_agent` 前必须同时满足：
+Choose `parallel_agent` only when all conditions hold:
 
-1. 各任务没有数据、顺序或决策依赖。
-2. 写任务的规范化 `allowed_paths` 两两不重叠。
-3. 任务不共享 Unity、浏览器、数据库或其他可变运行时状态。
-4. 每项结果可以单独验收；一项失败不会使其他结果失去意义。
+1. Tasks have no data, ordering, or decision dependency.
+2. Normalized `allowed_paths` for write tasks are pairwise non-overlapping.
+3. Tasks do not share Unity, browser, database, or other mutable runtime state.
+4. Each result can be accepted independently; one failure does not invalidate the other results.
 
-任一条件不成立就使用 `fifo`。存在顺序依赖时，不要预先提交整个队列；先收回并验收前序任务，再决定是否提交后序任务。
+Use `fifo` when any condition fails. For ordered work, do not pre-submit the full queue. Collect and accept the predecessor before deciding whether to submit its dependent task.
 
-## 调用样例
+## Call examples
 
-只读并行任务：
+Parallel read-only task:
 
 ```json
 {
-  "prompt": "读取指定文件并返回结论，不修改任何文件。",
+  "prompt": "Read the specified files and return conclusions without modifying any file.",
   "execution": "parallel_agent",
   "read_only": true,
   "background": true,
   "new_chat": true,
-  "completion_contract": "返回结论、依据文件与未确认项。"
+  "completion_contract": "Return conclusions, evidence files, and unresolved questions."
 }
 ```
 
-受限写任务：
+Bounded write task:
 
 ```json
 {
-  "prompt": "按既定方案完成指定工具脚本，不扩大范围。",
+  "prompt": "Implement the specified tool script under the fixed design without expanding scope.",
   "execution": "parallel_agent",
   "read_only": false,
   "background": true,
   "new_chat": true,
   "allowed_paths": ["Tools/Example/"],
-  "completion_contract": "列出改动文件并运行指定静态验证；失败时保留原始错误。"
+  "completion_contract": "List changed files and run the specified static check; preserve the original error when validation fails."
 }
 ```
 
-有依赖或路径相交的任务把 `execution` 改为 `fifo`，并在前序任务验收后再派发下一项。
+For dependent or path-overlapping work, change `execution` to `fifo` and submit the next task only after accepting its predecessor.
 
-## 身份与收回合同
+## Identity and collection contract
 
-- `task_id` 是主 Agent 查询和汇总任务的稳定身份；每次派发后立即保存。
-- `agent_id` 把 `parallel_agent` 任务绑定到 Agents Window 中的独立顶层会话；并行任务缺少该字段时不得假定身份安全。
-- 只通过 `cursor_status(task_id)` 判断对应任务状态，不依赖当前选中的对话或最新一条回复。
-- 结果至少应包含：任务状态、摘要、改动文件、执行的验证、失败或阻塞，以及原始 Cursor 回复。
-- 不要求 Cursor 输出唯一终止标记或满足最小回复长度；Bridge 以 Agent 状态、停止生成和回答内容稳定性判断完成。
+- `task_id` is the stable identity used by the primary agent to query and summarize a task. Save it immediately after dispatch.
+- `agent_id` binds a `parallel_agent` task to an independent top-level session in the Agents Window. Do not assume safe identity when a parallel task lacks it.
+- Determine task state only through `cursor_status(task_id)`, not the currently selected chat or latest visible response.
+- A collected result should include at least task state, summary, changed files, validation performed, failures or blockers, and the raw Cursor response.
+- Do not require a unique completion marker or minimum response length. Bridge determines completion from Agent state, stopped generation, and response stability.
 
-### 状态表
+### State table
 
-| 状态 / phase | 主 Agent 行为 |
+| State or phase | Primary-agent action |
 |---|---|
-| `queued/submitting/running/collecting` | 保持原任务，继续按 `task_id` 轮询；超过两分钟不构成失败。 |
-| `completed` | 读取原始回复，再检查真实 diff、允许路径和完成合同。 |
-| `failed` | 读取明确错误；先判断 Cursor Agent 是否真的显示失败，再决定是否返工。 |
-| `needs_attention/orphaned` | 任务可能仍在运行或结果未成功回收；保留路径占用，按 `agent_id` 检查 Agent History，不自动重发。 |
+| `queued/submitting/running/collecting` | Keep the original task and continue polling by `task_id`. More than two minutes is not a failure. |
+| `completed` | Read the raw response, then inspect the real diff, allowed paths, and completion contract. |
+| `failed` | Read the explicit error and determine whether the Cursor Agent actually failed before deciding to rework. |
+| `needs_attention/orphaned` | The task may still be running or its result may not have been collected. Preserve path ownership, inspect Agent History by `agent_id`, and do not resubmit automatically. |
 
-R6 型假阴性处理：若 Agent History 中已存在完整最终回复而自动回收暂未完成，继续查询原 `task_id`。Bridge 应绑定原 `agent_id` 重试提取；禁止通过增加回复长度、注入终止标记或再次提交相同任务规避回收问题。
+For an R6-style false negative, continue querying the original `task_id` when Agent History already contains a complete final response but automatic collection has not finished. Bridge should retry extraction against the original `agent_id`. Do not work around collection by requiring a longer reply, injecting a completion marker, or submitting the same task again.
 
-## 主 Agent 验收合同
+## Primary-agent acceptance contract
 
-Cursor 的完成声明只表示委托执行结束，不是项目验证结论。主 Agent 必须：
+Cursor's completion statement means only that delegated execution ended; it is not project verification. The primary agent must:
 
-1. 检查实际 diff 与 `allowed_paths`。
-2. 区分委托改动和派发前已有改动。
-3. 独立运行适当的编译、静态检查、测试或旅程验证。
-4. 自行决定接受、返工、串行续做或登记阻塞。
-5. 保留正式验证、Tower 状态和产品裁决权。
+1. Inspect the actual diff against `allowed_paths`.
+2. Separate delegated changes from pre-existing workspace changes.
+3. Independently run appropriate compile checks, static checks, tests, or journey validation.
+4. Decide whether to accept, request rework, continue serially, or record a blocker.
+5. Retain formal verification, governance state, and product decision authority.
 
-## 失败与降级
+## Failure and fallback
 
-- `agent_id` 缺失且任务尚未发送：停止扩大并行批次，可安全降级 `fifo`。任务可能已发送或状态为 `needs_attention/orphaned` 时，继续视为占用路径并检查 Agents Window，不得自动重发。
-- 超时但工作区已有修改：先审查修改，不直接重复派发同一任务。
-- 越过 `allowed_paths`：拒绝接收并报告越界文件。
-- 并行任务产生冲突：停止自动汇总，转由主 Agent 审查。
-- Agent History 或回答 DOM 短暂不可读：允许 Bridge 在同一 `agent_id` 上等待并重试；持续不可读时进入 `needs_attention`，不得误判为已完成或另起相同 Agent。
+- If `agent_id` is missing and the task has not been sent, stop expanding the parallel batch and safely fall back to `fifo`. If it may have been sent or is `needs_attention/orphaned`, continue treating its paths as occupied and inspect the Agents Window instead of resubmitting.
+- If a timed-out task changed the workspace, inspect the changes before submitting the same task again.
+- Reject and report any result that modifies files outside `allowed_paths`.
+- Stop automatic integration when parallel tasks conflict and return the batch to primary-agent review.
+- If Agent History or the response DOM is temporarily unreadable, let Bridge wait and retry against the same `agent_id`. Enter `needs_attention` after persistent failure; do not incorrectly mark the task complete or create a duplicate Agent.

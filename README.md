@@ -1,58 +1,61 @@
-# 注：暂时不支持cursor3.0 新版UI
 # cursor-bridge
 
-> MCP server：让 **Codex/Claude Code 直驱 Cursor IDE agent 做语义检索与边界明确的委托执行**。
-> **CDP 直驱架构，无 console 注入、无 WebSocket 回连。**
+[English](./README.md) | [Simplified Chinese](./README.zh-CN.md)
 
-借用 Cursor 原生 embedding 和执行能力，为主 Agent 提供语义定位、FIFO 委托，以及不依赖 `/multitask` 的独立顶层 Agent 并行池。
+> **Compatibility:** Cursor 3.0's redesigned UI is not supported yet.
+>
+> An MCP server that lets **Codex and Claude Code drive Cursor IDE agents for semantic search and bounded delegated execution**.
+> It uses direct CDP control—no console injection and no WebSocket callback channel.
 
-## 优点
+Cursor Bridge reuses Cursor's native project index and agent execution capabilities. It gives a primary agent semantic code location, FIFO delegation, and a pool of independent top-level Cursor Agents without relying on `/multitask`.
 
-- **省主调 agent 的上下文**：检索、读文件、推理这些重活都在 Cursor 自己的上下文里跑，只把精炼的 `path:行号` 清单回传给主调方。主调 agent 的上下文窗口不被中间的大量文件内容和搜索噪音占用——相当于把「探索」外包出去，只拿回「结论」。
-- **借 Cursor 的项目理解力**：Cursor 对整个项目建了 embedding 语义索引，叠加 agent 自动编排（多轮检索、跟引用），对「按意图找」「跨文件理解」这类语义查询的召回质量，强于纯关键字检索。
+## Why use it?
 
-## 架构
+- **Preserve the primary agent's context.** Cursor performs the exploratory search, file reading, and local reasoning in its own context, then returns a focused result such as a `path:line` list or a bounded implementation summary. The primary agent avoids carrying search noise and intermediate file contents.
+- **Reuse Cursor's project understanding.** Cursor combines its project embedding index with agent-driven multi-step search and reference following. This is especially useful for intent-based lookup and cross-file understanding that keyword search alone may miss.
 
+## Architecture
+
+```text
+Codex / Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evaluate + Input)-->  Cursor renderer
 ```
-Codex / Claude Code  --(MCP stdio)-->  cursor-bridge server  --(CDP :9223 Runtime.evaluate + Input)-->  Cursor 渲染进程
-```
 
-- GUI 操作通过互斥锁串行，避免多个任务同时争抢输入框；`parallel_agent` 提交完成后，各顶层 Cursor Agent 可并行运行，再按稳定 `agentId` 逐项取回。
-- Cursor 的语义搜索没有纯检索接口/独立 UI，只能经 `@Codebase`/agent chat 跑：填查询 → 真实 Enter → 等生成完成 → 抓回复。
-- FIFO 完成信号来自停止钮（`codicon-stop` 等）与回复稳定性；`parallel_agent` 还会结合 Agent History 状态和稳定 `agentId` 回收结果。
+- GUI input is serialized behind a mutex so concurrent submissions do not compete for the same input box. After `parallel_agent` submissions complete, independent top-level Cursor Agents may run concurrently and are collected by stable `agentId`.
+- Cursor does not expose a dedicated pure-search API or UI. Semantic search therefore runs through `@Codebase` or agent chat: fill the query, send a real Enter key event, wait for generation, and collect the response.
+- FIFO completion uses the stop-button state (`codicon-stop` and related indicators) plus response stability. `parallel_agent` collection also uses Agent History state and a stable `agentId`.
 
-> ⚠️ Cursor 是 agent（比纯检索更主动）。prompt 已强约束「只列 `path:行号`、不读正文、不改代码」，但这是 **prompt 约束而非技术沙箱**——理论上 agent 仍有写能力，勿当隔离环境。
+> [!WARNING]
+> Cursor is an agent, not a technical sandbox. Search prompts can require a concise `path:line` list and prohibit edits, but these remain prompt-level constraints. Do not treat Cursor Bridge as filesystem isolation.
 
-## 前提
+## Requirements
 
-- **Cursor 带远程调试口启动**：`--remote-debugging-port=9223`，已登录、已打开目标项目（并完成建索引）。
-- Node.js 18+。
+- Cursor must be signed in, have the target project open and indexed, and run with `--remote-debugging-port=9223`.
+- Node.js 18 or later.
 
-## 安装与使用
+## Installation
 
-> 本仓库是一个 **双制式插件仓库**：同时支持 Claude Code 插件和 Codex marketplace。
+This repository is a dual-format plugin repository for both Claude Code and the Codex marketplace.
 
-### 方式 A：作为 Claude Code 插件安装
+### Option A: Claude Code plugin
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
 ```
 
-安装后重启 Claude Code（或 `/reload-plugins`），`cursor-bridge` MCP server 会**自动注册并连接**，无需手动改 `.mcp.json`。
-运行所需依赖已打包进 `dist/cursor-bridge.mjs`（零额外安装）。
+Restart Claude Code, or run `/reload-plugins`, after installation. The `cursor-bridge` MCP server is registered automatically; no manual `.mcp.json` edit is required. Runtime dependencies are bundled into `dist/cursor-bridge.mjs`, so plugin users do not need to run `npm install`.
 
-> 默认让 Cursor 建索引的项目根 = 当前工作目录；要指定的话给该 MCP server 设环境变量 `CURSOR_PROJECT_PATH`。
+By default, Cursor indexes the MCP client's current working directory. Set `CURSOR_PROJECT_PATH` on the MCP server to select a specific project root.
 
-### 方式 B：作为 Codex marketplace 安装
+### Option B: Codex marketplace
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 ```
 
-Codex 会读取仓库内 `.agents/plugins/marketplace.json` 和 `.codex-plugin/plugin.json`，注册 `cursor_search` / `cursor_do` / `cursor_status` / `cursor_launch`。安装后开启新 Codex 线程或重启 Codex，让新工具与 `cursor-delegate` skill 进入会话。
+Codex reads `.agents/plugins/marketplace.json` and `.codex-plugin/plugin.json`, then registers `cursor_search`, `cursor_do`, `cursor_status`, `cursor_policy`, and `cursor_launch`. Start a new Codex task or restart Codex after installation so the tools and the `cursor-delegate` and `cursor-policy` skills enter the session.
 
-### 方式 C：从源码运行（开发/其它 MCP 客户端）
+### Option C: Run from source
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git
@@ -71,68 +74,95 @@ npm install
 }
 ```
 
-server 启动时会**自动确保 Cursor 带 CDP 在跑**（fire-and-forget）；设 `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` 可关闭。
+At startup, the server automatically ensures that Cursor is running with CDP enabled. Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch.
 
-> 🪟 **平台**：自动拉起 Cursor 目前仅支持 **Windows**（用 `tasklist` + 默认 `Cursor.exe` 安装路径，可用 `CURSOR_EXE` 覆盖）。macOS/Linux 下请先手动带 `--remote-debugging-port=9223 --remote-allow-origins=http://localhost:9223` 启动 Cursor，再用 `cursor_search`。
+> [!NOTE]
+> Automatic Cursor launch currently supports Windows only. It uses `tasklist` and the default `Cursor.exe` installation paths; set `CURSOR_EXE` to override detection. On macOS or Linux, start Cursor manually with `--remote-debugging-port=9223 --remote-allow-origins=http://localhost:9223` before calling `cursor_search`.
 
-## 工具
+## MCP tools
 
-| 工具 | 作用 |
-|------|------|
-| `cursor_search` | 用 Cursor agent 检索定位代码，入参 `query`（自然语言意图）。返回 `path:行号` 清单。单次约 ~90s（实测 66~175s 波动）、串行。 |
-| `cursor_do` | 委托边界明确的任务。`execution=fifo` 保持兼容；`execution=parallel_agent` 提交独立顶层 Agent。并行只读任务设 `read_only=true`；并行写任务必须给出两两不重叠的 `allowed_paths`。设置 `CURSOR_BRIDGE_DELEGATION=off` 后不再暴露。 |
-| `cursor_status` | 检查 CDP、队列、活动并行 Agent；传 `task_id` 精确取回对应状态与原始回复。 |
-| `cursor_launch` | 确保 Cursor 带 CDP 调试口在运行；未运行则自动拉起（带 `--remote-debugging-port` + `--remote-allow-origins` + 打开项目建索引）。返回 `already`/`launched`/`running-no-debug`/`port-not-cursor`/`no-exe`/`timeout`。 |
+| Tool | Purpose |
+|---|---|
+| `cursor_search` | Ask a Cursor agent to locate code by natural-language intent and return a focused `path:line` list. Calls are serialized and typically take about 90 seconds, with observed runs varying from roughly 66 to 175 seconds. |
+| `cursor_do` | Delegate a bounded task. Use `execution=fifo` for compatible serial execution or `execution=parallel_agent` for an independent top-level Agent. Set `read_only=true` for parallel read-only work. Parallel write tasks require pairwise non-overlapping `allowed_paths`. The tool is hidden when `CURSOR_BRIDGE_DELEGATION=off`. |
+| `cursor_status` | Inspect CDP connectivity, FIFO work, and active parallel Agents. Pass `task_id` to retrieve the exact task state and raw response. It also reports the effective delegation policy. |
+| `cursor_policy` | Set or inspect the session-scoped delegation policy. Pass one of `off`, `manual`, `auto`, `active`, or `eager`; the result reports the effective policy for the current session. |
+| `cursor_launch` | Ensure Cursor is running with a CDP debugging port. It returns `already`, `launched`, `running-no-debug`, `port-not-cursor`, `no-exe`, or `timeout`. |
 
-`cursor_do` 默认以 `background=true`、`new_chat=true` 使用；主 Agent 保存返回的 `task_id`，再通过 `cursor_status(task_id)` 回收。`submitting`、`running`、`collecting` 都是正常进行态，超过两分钟本身不代表失败。Bridge 不要求唯一终止标记或最低回复长度。
+Use `cursor_do` with `background=true` and `new_chat=true` by default. Save its `task_id`, then collect it with `cursor_status(task_id)`. `submitting`, `running`, and `collecting` are normal in-progress states; exceeding two minutes is not itself a failure. Cursor Bridge does not require a unique completion marker or a minimum response length.
 
-## 环境变量
+## Delegation policies
 
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口 |
-| `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时（ms） |
-| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | — | 设 `1` 关闭启动即自动拉起 Cursor |
-| `CURSOR_BRIDGE_DELEGATION` | `on` | 设 `off` 禁用并隐藏 `cursor_do`；`cursor_search`、`cursor_status`、`cursor_launch` 保持可用。修改后需重启 MCP server / Codex / Claude Code。 |
-| `CURSOR_PROJECT_PATH` | 自动判断 | 让 Cursor 打开/建索引的项目根；未设置且运行目录是插件缓存时，不传路径并让 Cursor 恢复上次工作区 |
-| `CURSOR_EXE` | 自动探测 | `Cursor.exe` 路径（自动探测失败时显式指定） |
+Delegation policy controls **how proactively the primary agent considers Cursor**, not a mechanical frequency such as “call Cursor every N tool invocations.” Safety boundaries, path isolation rules, and primary-agent verification remain unchanged in every enabled mode.
 
-临时关闭 Codex 委托执行（PowerShell）：
+| Policy | Scheduling behavior |
+|---|---|
+| `off` | Do not delegate execution to `cursor_do`. Search, status, policy inspection, and launch remain separate capabilities unless disabled by host configuration. |
+| `manual` | Delegate only when the user explicitly asks to use Cursor or directly invokes the delegation workflow. |
+| `auto` | Use a cautious heuristic. Delegate when scope and payoff are clear and collection overhead is likely to be worthwhile. |
+| `active` | **Recommended default.** Proactively delegate bounded light-to-medium work, limited implementation discovery, tests, documentation, configuration, and independent second passes when doing so saves primary-agent time or reduces omissions. |
+| `eager` | Maximize safe use of bounded delegation and non-overlapping parallel Agents, including small read-only probes and independent mechanical tasks. Do not relax product, architecture, path, or verification boundaries. |
+
+Set a session policy through the MCP tool and verify the returned effective policy:
+
+```text
+cursor_policy({mode: "active"})
+```
+
+`cursor_status` echoes the effective policy so orchestration prompts can make consistent decisions. Session policy does not mean “every N calls,” and changing policy must not bypass an explicit user opt-out.
+
+Codex users may invoke `$cursor-policy` or ask the primary agent in natural language to inspect or change the mode. Cursor Bridge does not claim a built-in `/cursor` command: the Codex plugin manifest has no custom slash-command surface, and other hosts may differ. Use the skill, the MCP tool, or ordinary natural-language instructions unless the current host explicitly exposes a verified wrapper.
+
+## Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor remote-debugging port. |
+| `CURSOR_BRIDGE_TIMEOUT` | `180000` | Per-query timeout in milliseconds. |
+| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable automatic Cursor launch at server startup. |
+| `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. `cursor_search`, `cursor_status`, `cursor_policy`, and `cursor_launch` remain available. Restart the MCP server, Codex, or Claude Code after changing it. |
+| `CURSOR_BRIDGE_POLICY` | `active` | Initial session policy: `off`, `manual`, `auto`, `active`, or `eager`. The legacy value `on` maps to `active`; `cursor_policy` may change the in-memory policy for the current session. |
+| `CURSOR_PROJECT_PATH` | auto-detected | Project root for Cursor to open and index. If unset while running from a plugin cache, the launcher omits the path and lets Cursor restore its previous workspace. |
+| `CURSOR_EXE` | auto-detected | Explicit path to `Cursor.exe` when automatic detection fails. |
+
+Temporarily disable delegated execution for a Codex launch in PowerShell:
 
 ```powershell
 $env:CURSOR_BRIDGE_DELEGATION='off'
 codex
 ```
 
-关闭后 `cursor-delegate` skill 必须由主 Agent 直接完成任务，不得尝试绕过或要求重新启用。删除该环境变量或设为 `on`，再重启客户端即可恢复。
+When delegation is disabled, the `cursor-delegate` skill must complete work in the primary agent and must not attempt to bypass or re-enable delegation. Remove the variable or set it to `on`, then restart the client to restore the tool.
 
-## 使用建议
+## Recommended usage
 
-- ✅ 用于按「意图」做语义召回的代码定位、跨文件理解（借 Cursor 原生 embedding 质量）。
-- ✅ 把 Cursor 当执行副手：产品方向、范围裁决和最终验证仍由主 Agent 负责。
-- 🔀 只有任务互不依赖且写入范围不重叠时才用 `parallel_agent`；其余情况使用 `fifo`。
-- 🪪 始终用 `task_id` 查询；并行任务还会绑定 Agents Window 的 `local:<UUID>`，不靠当前可见对话猜结果。
+- Use `cursor_search` for intent-based semantic lookup and cross-file understanding that benefits from Cursor's project index.
+- Treat Cursor as an execution partner. Keep product direction, scope decisions, architectural boundaries, and final verification with the primary agent.
+- Use `parallel_agent` only for independent tasks with non-overlapping write paths; use `fifo` otherwise.
+- Always collect by `task_id`. Parallel tasks also bind to an Agents Window identity such as `local:<UUID>`; do not infer task identity from the currently visible chat.
+- Allow Cursor to perform limited local investigation inside a clearly defined task envelope. The primary agent does not need to pre-solve every implementation detail before delegating.
 
-## 文件结构
+## Repository layout
 
-```
+```text
 .claude-plugin/
-  plugin.json          # 插件清单
-  marketplace.json     # 自带 marketplace（仓库即市场）
+  plugin.json          # Claude Code plugin manifest
+  marketplace.json     # Repository-local Claude Code marketplace
 .agents/plugins/
-  marketplace.json     # Codex marketplace 入口
+  marketplace.json     # Codex marketplace entry
 .codex-plugin/
-  plugin.json          # Codex 插件清单 + MCP 配置
-.mcp.json              # 声明 MCP server，指向 dist/cursor-bridge.mjs
-dist/cursor-bridge.mjs # 打包产物：零依赖单文件（插件实际运行的就是它）
-server.mjs             # MCP server 源码主入口（CDP 直驱 + 工具定义）
-launch-cursor.mjs      # 确保/拉起带 CDP 的 Cursor
-build.mjs              # esbuild 打包脚本（npm run build → 重建 dist/）
-skills/cursor-delegate/ # 委托门禁、拆分、收回与主 Agent 复核规则
-test/                  # 调度、路径冲突与 Agent 身份选择的 node:test 门禁
-probe-*.mjs            # CDP 链路探针（实测脚本）
-agents-autopilot.mjs / autopilot-switch.py  # autopilot 辅助
-test-*.mjs             # 检索/批量自测脚本
+  plugin.json          # Codex plugin manifest and MCP configuration
+.mcp.json              # MCP server declaration pointing to dist/cursor-bridge.mjs
+dist/cursor-bridge.mjs # Bundled single-file runtime used by installed plugins
+server.mjs             # MCP server source: CDP control and tool definitions
+launch-cursor.mjs      # Cursor/CDP launcher
+build.mjs              # esbuild entry (`npm run build` rebuilds dist/)
+skills/cursor-delegate/ # Delegation, task envelopes, collection, and review rules
+skills/cursor-policy/   # Session policy inspection and switching workflow
+test/                  # node:test coverage for scheduling, path conflicts, and Agent identity
+probe-*.mjs            # CDP integration probes
+agents-autopilot.mjs / autopilot-switch.py  # Autopilot helpers
+test-*.mjs             # Search and batch smoke tests
 ```
 
-> 插件运行的是 **`dist/cursor-bridge.mjs`**（已内联 `@modelcontextprotocol/sdk`、`ws`），所以 Claude Code / Codex 安装后无需任何额外 `npm install`。改了 `server.mjs`/`launch-cursor.mjs` 后跑 `npm install && npm run build` 重建该产物。发布流程见 [`RELEASING.md`](./RELEASING.md)。
+Installed plugins execute `dist/cursor-bridge.mjs`, which bundles `@modelcontextprotocol/sdk` and `ws`. After changing `server.mjs` or `launch-cursor.mjs`, run `npm install && npm run build` to regenerate the bundle. See [RELEASING.md](./RELEASING.md) for the release process.

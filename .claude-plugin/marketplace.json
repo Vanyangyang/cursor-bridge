@@ -1,6 +1,6 @@
 {
   "name": "vanyangyang",
-  "description": "Vanyangyang 的 Claude Code 插件市场——目前提供 cursor-bridge（驱动 Cursor 做语义检索与边界明确的委托执行）。",
+  "description": "Vanyangyang's Claude Code plugin marketplace, currently featuring Cursor Bridge for semantic search and policy-controlled bounded delegation.",
   "owner": {
     "name": "Vanyangyang"
   },
@@ -8,8 +8,8 @@
     {
       "name": "cursor-bridge",
       "source": ".",
-      "description": "从 Claude Code 直驱 Cursor IDE agent 做语义检索与委托执行，支持 FIFO 和安全的顶层 Agent 并行模式。需 Cursor 带 --remote-debugging-port=9223 在跑。",
-      "version": "2.1.1",
+      "description": "Drive Cursor IDE agents from Claude Code for semantic search, cursor_policy session controls, FIFO delegation, and safe top-level Agent parallelism. Cursor must run with --remote-debugging-port=9223.",
+      "version": "2.2.0",
       "author": {
         "name": "Vanyangyang"
       }

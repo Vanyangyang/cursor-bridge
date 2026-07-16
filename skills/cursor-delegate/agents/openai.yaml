@@ -1,13 +1,13 @@
 interface:
-  display_name: "Cursor 委托执行"
-  short_description: "在委托开启时把已规划任务交给 Cursor，支持安全并行、收回与复核"
-  default_prompt: "在 cursor_do 可用且用户未禁用委托时，使用 $cursor-delegate 将这组已规划、边界明确的中轻型任务安全交给 Cursor；否则由主 Agent 直接完成。"
+  display_name: "Cursor Delegation"
+  short_description: "Delegate bounded Cursor work, then collect and verify safely"
+  default_prompt: "Use $cursor-delegate under the effective session policy to hand Cursor a bounded task with clear purpose, scope, invariants, and acceptance checks, allow limited investigation and implementation inside that envelope, then collect and verify the real result in the primary agent."
 
 dependencies:
   tools:
     - type: "mcp"
       value: "cursor-bridge"
-      description: "通过 CDP 派发、跟踪并收回 Cursor 顶层 Agent 任务"
+      description: "Dispatch, track, and collect top-level Cursor Agent tasks over CDP"
 
 policy:
   allow_implicit_invocation: true

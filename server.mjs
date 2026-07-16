@@ -35,6 +35,26 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
 }
 
 const DELEGATION_MODE = normalizeDelegationMode();
+const DELEGATION_POLICIES = Object.freeze(['off', 'manual', 'auto', 'active', 'eager']);
+const DELEGATION_POLICY_GUIDANCE = Object.freeze({
+  off: 'Do not delegate execution to Cursor. Search, status, policy, and launch tools remain available.',
+  manual: 'Delegate only when the user explicitly asks to use Cursor.',
+  auto: 'Delegate bounded work when the time or quality benefit is clear; otherwise keep it local.',
+  active: 'Evaluate every non-trivial task and normally delegate at least one separable bounded slice when useful.',
+  eager: 'Maximize safe bounded delegation and parallelism while preserving non-overlapping paths and main-agent review.',
+});
+
+function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = 'active') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'on') return 'active';
+  if (DELEGATION_POLICIES.includes(normalized)) return normalized;
+  return fallback;
+}
+
+const DELEGATION_POLICY = normalizeDelegationPolicy(
+  process.env.CURSOR_BRIDGE_POLICY,
+  DELEGATION_MODE === 'off' ? 'off' : 'active',
+);
 
 // 只读检索 prompt：Cursor agent 当精准定位器用，约束操作类型（不读正文/不改码/不长篇），由 CC 拿清单后自己读真文件。
 const SEARCH_PREFIX =
@@ -215,8 +235,20 @@ function selectNewAgentEntry(beforeEntries, afterEntries) {
 
 class CursorBridge {
   constructor(options = {}) {
-    this.delegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    this.delegationEnabled = this.delegationMode !== 'off';
+    this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
+    const requestedPolicy = options.delegationPolicy === undefined ? DELEGATION_POLICY : options.delegationPolicy;
+    this.delegationPolicyDefault = 'active';
+    this.delegationPolicySource = this.environmentDelegationMode === 'off'
+      ? 'environment-lock'
+      : options.delegationPolicy !== undefined
+        ? 'constructor'
+        : process.env.CURSOR_BRIDGE_POLICY
+          ? 'environment'
+          : 'default';
+    this.delegationPolicy = this.environmentDelegationMode === 'off'
+      ? 'off'
+      : normalizeDelegationPolicy(requestedPolicy);
+    this._syncDelegationState();
     this.busy = false;
     this.queue = [];
     this._healing = null;
@@ -226,6 +258,45 @@ class CursorBridge {
     this._uiTail = Promise.resolve();
     this._drainTimer = null;
     this.parallelRestoreAgentId = null;
+  }
+
+  _syncDelegationState() {
+    this.delegationEnabled = this.environmentDelegationMode !== 'off' && this.delegationPolicy !== 'off';
+    this.delegationMode = this.delegationEnabled ? 'on' : 'off';
+  }
+
+  delegationPolicyView() {
+    return {
+      scope: 'session',
+      policy: this.delegationPolicy,
+      policySource: this.delegationPolicySource,
+      policyDefault: this.delegationPolicyDefault,
+      guidance: DELEGATION_POLICY_GUIDANCE[this.delegationPolicy],
+      delegationMode: this.delegationMode,
+      delegationEnabled: this.delegationEnabled,
+      environmentLockedOff: this.environmentDelegationMode === 'off',
+      availablePolicies: [...DELEGATION_POLICIES],
+      appliesTo: 'future_submissions',
+      runningTasksUnchanged: true,
+    };
+  }
+
+  setDelegationPolicy(value, scope = 'session') {
+    if (scope !== 'session') {
+      throw new Error('cursor_policy currently supports scope=session only');
+    }
+    const normalized = normalizeDelegationPolicy(value, '');
+    if (!DELEGATION_POLICIES.includes(normalized)) {
+      throw new Error(`unsupported delegation policy: ${value}`);
+    }
+    if (this.environmentDelegationMode === 'off' && normalized !== 'off') {
+      throw new Error('CURSOR_BRIDGE_DELEGATION=off locks delegation off until the MCP server is restarted without that setting');
+    }
+    const previousPolicy = this.delegationPolicy;
+    this.delegationPolicy = normalized;
+    this.delegationPolicySource = 'runtime';
+    this._syncDelegationState();
+    return { previousPolicy, ...this.delegationPolicyView() };
   }
 
   async search(query) {
@@ -242,7 +313,10 @@ class CursorBridge {
 
   async doTask(prompt, options = {}) {
     if (!this.delegationEnabled) {
-      throw new Error('cursor_do 已通过 CURSOR_BRIDGE_DELEGATION=off 禁用；请由主 Agent 直接完成任务');
+      const reason = this.environmentDelegationMode === 'off'
+        ? 'CURSOR_BRIDGE_DELEGATION=off'
+        : `session policy=${this.delegationPolicy}`;
+      throw new Error(`cursor_do is disabled by ${reason}; use cursor_policy to inspect the active policy`);
     }
     const text = String(prompt || '').trim();
     if (!text) throw new Error('prompt 不能为空');
@@ -283,6 +357,7 @@ class CursorBridge {
       execution,
       readOnly,
       allowedPaths,
+      submittedPolicy: this.delegationPolicy,
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -331,6 +406,7 @@ class CursorBridge {
       effectiveExecution: options.execution || 'fifo',
       readOnly: options.readOnly === true,
       allowedPaths: options.allowedPaths || [],
+      submittedPolicy: options.submittedPolicy || null,
       status: 'queued',
       phase: 'queued',
       createdAt: new Date().toISOString(),
@@ -849,6 +925,7 @@ class CursorBridge {
       effectiveExecution: job.effectiveExecution,
       readOnly: job.readOnly,
       allowedPaths: job.allowedPaths,
+      submittedPolicy: job.submittedPolicy,
       agentId: job.agentId,
       agentLabel: job.agentLabel,
       fallbackReason: job.fallbackReason,
@@ -873,14 +950,13 @@ class CursorBridge {
   async status(taskId = '') {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), delegationMode: this.delegationMode, delegationEnabled: this.delegationEnabled };
-      return { found: true, delegationMode: this.delegationMode, delegationEnabled: this.delegationEnabled, ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.delegationPolicyView() };
+      return { found: true, ...this.delegationPolicyView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const common = {
-      delegationMode: this.delegationMode,
-      delegationEnabled: this.delegationEnabled,
+      ...this.delegationPolicyView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
       parallelRunning,
@@ -901,7 +977,7 @@ class CursorBridge {
 }
 
 const bridge = new CursorBridge();
-const server = new Server({ name: 'cursor-bridge', version: '2.1.1' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'cursor-bridge', version: '2.2.0' }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -922,7 +998,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['query'],
       },
     },
-    bridge.delegationEnabled ? {
+    bridge.environmentDelegationMode !== 'off' ? {
       name: 'cursor_do',
       description:
         '把边界明确的任务交给 Cursor agent 执行。默认 execution=fifo 后台排队；' +
@@ -944,6 +1020,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['prompt'],
       },
     } : null,
+    {
+      name: 'cursor_policy',
+      description:
+        'Inspect or change the session-level Cursor delegation policy. This controls orchestration aggressiveness, not an every-N-calls counter. ' +
+        'Policies: off, manual, auto, active, eager. active is the recommended default. ' +
+        'CURSOR_BRIDGE_DELEGATION=off is an environment lock and cannot be overridden at runtime.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: [...DELEGATION_POLICIES],
+            description: 'Optional policy to apply. Omit it to inspect the current policy.',
+          },
+          scope: {
+            type: 'string',
+            enum: ['session'],
+            default: 'session',
+            description: 'Policy lifetime. Only the current MCP server session is supported.',
+          },
+        },
+      },
+    },
     {
       name: 'cursor_status',
       description: '检查 Cursor CDP、FIFO 队列和活动并行 Agent；传 task_id 可精确查询 cursor_do 的 agentId、阶段与结果。',
@@ -976,6 +1075,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         allowedPaths: args && args.allowed_paths,
         completionContract: args && args.completion_contract,
       });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    if (name === 'cursor_policy') {
+      const mode = args && args.mode;
+      const result = mode === undefined
+        ? bridge.delegationPolicyView()
+        : bridge.setDelegationPolicy(mode, (args && args.scope) || 'session');
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_status') {
@@ -1016,4 +1122,13 @@ if (isMain) {
   process.on('SIGINT', () => process.exit(0));
   main().catch((e) => { console.error('❌ 致命错误:', e); process.exit(1); });
 }
-export { CursorBridge, bridge, normalizeAllowedPath, normalizeDelegationMode, pathsOverlap, selectNewAgentEntry };
+export {
+  CursorBridge,
+  bridge,
+  DELEGATION_POLICIES,
+  normalizeAllowedPath,
+  normalizeDelegationMode,
+  normalizeDelegationPolicy,
+  pathsOverlap,
+  selectNewAgentEntry,
+};

@@ -1,6 +1,6 @@
 {
   "name": "cursor-mcp-bridge",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "MCP server for Cursor semantic search and bounded delegated execution over CDP, with FIFO and safe top-level Agent parallel modes.",
   "type": "module",
   "main": "server.mjs",
