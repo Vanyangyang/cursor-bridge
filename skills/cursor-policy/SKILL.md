@@ -1,23 +1,32 @@
 ---
 name: cursor-policy
-description: "Inspect or change Cursor Bridge's session-scoped delegation policy through cursor_policy. Use when the user asks how aggressively Cursor should be delegated work, requests off, manual, auto, active, or eager mode, wants to view the effective policy, or asks for a Cursor delegation frequency control. Explain policy as scheduling aggressiveness rather than a numeric call frequency, and do not promise an unsupported slash command."
+description: "Help the user choose, inspect, or change how readily the primary agent delegates work to Cursor through cursor_policy. Use when the user asks when Cursor will be used, wants more or less Cursor involvement, asks which of manual, auto, active, or eager fits their workflow, wants to view the current mode, or asks for a delegation frequency control. Explain the choice with concrete examples rather than a numeric call frequency, and do not promise an unsupported slash command."
 ---
 
 # Cursor Policy
 
-Use `cursor_policy` to inspect or change the effective delegation policy for the current session.
+Help the user choose how much initiative the primary agent should take when handing work to Cursor, then use `cursor_policy` to inspect or change the current session.
 
-## Apply a policy
+## Explain the choices plainly
 
-1. Map the request to one of the supported modes:
-   - `off`: do not delegate execution through `cursor_do`.
-   - `manual`: delegate only after an explicit user request.
-   - `auto`: use a cautious cost-and-scope heuristic.
-   - `active`: recommended default; proactively delegate bounded light-to-medium work.
-   - `eager`: maximize safe bounded delegation and non-overlapping parallel work.
-2. Call `cursor_policy` with the selected `mode`. Omit `mode` when the user only wants to inspect the current policy.
-3. Report the effective policy returned by the tool. If `cursor_status` is used later, keep behavior consistent with its policy echo.
+- `manual`: choose this when the user wants to approve every handoff. Cursor is used only after an explicit request.
+- `auto`: choose this when the user wants occasional help. Cursor is used only for a clearly bounded task whose likely benefit exceeds dispatch and review time.
+- `active`: recommend this to most users. For a non-trivial task, normally look for one useful bounded implementation, test, documentation, configuration, or review slice to delegate.
+- `eager`: choose this when the user wants Cursor used whenever a safe bounded slice exists, including small read-only probes and independent parallel work.
 
-Treat policy as scheduling aggressiveness, not “call Cursor every N tool invocations.” Never let a mode override an explicit user opt-out, path boundaries, task independence requirements, or primary-agent verification.
+These modes do not count tool calls. They guide judgment about the current task.
+
+## Say when Cursor will and will not be used
+
+Use Cursor when the task has a clear goal, a limited path or subsystem, and a result the primary agent can verify. Keep the work local when it is a tiny direct edit, requires an unresolved product or architecture decision, depends on exclusive GUI or mutable runtime state, lacks a safe path boundary, or cannot be checked afterward. Always respect a direct user opt-out.
+
+## Apply the choice
+
+1. If the user only asks what is active now, call `cursor_policy` without `mode`.
+2. If the user chooses a mode, call `cursor_policy` with `manual`, `auto`, `active`, or `eager`.
+3. Report the effective mode returned by the tool in one plain sentence, followed by a short description of what will change in practice.
+4. Keep later behavior consistent with the mode echoed by `cursor_status`.
+
+Do not offer `off` as a user mode. If the user wants no automatic delegation, recommend `manual` and honor their explicit instruction not to use Cursor. `CURSOR_BRIDGE_DELEGATION=off` is a legacy administrator-level host switch for fully disabling `cursor_do`, not a normal policy choice. If inspection reports an administrator-disabled state, explain it rather than trying to override it.
 
 Do not claim a `/cursor` command. Codex users may invoke `$cursor-policy` when skill invocation is available, or request the change in natural language.

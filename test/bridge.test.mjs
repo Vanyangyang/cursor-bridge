@@ -37,9 +37,10 @@ test('delegation mode recognizes only explicit off and otherwise stays enabled',
   assert.equal(normalizeDelegationMode(''), 'on');
 });
 
-test('delegation policy exposes five ordered orchestration levels and maps legacy on to active', () => {
-  assert.deepEqual(DELEGATION_POLICIES, ['off', 'manual', 'auto', 'active', 'eager']);
-  assert.equal(normalizeDelegationPolicy('off'), 'off');
+test('delegation policy exposes four human-facing collaboration levels and maps legacy on to active', () => {
+  assert.deepEqual(DELEGATION_POLICIES, ['manual', 'auto', 'active', 'eager']);
+  assert.equal(normalizeDelegationPolicy('off'), 'active');
+  assert.equal(normalizeDelegationPolicy('off', ''), '');
   assert.equal(normalizeDelegationPolicy(' MANUAL '), 'manual');
   assert.equal(normalizeDelegationPolicy('auto'), 'auto');
   assert.equal(normalizeDelegationPolicy('active'), 'active');
@@ -48,23 +49,23 @@ test('delegation policy exposes five ordered orchestration levels and maps legac
   assert.equal(normalizeDelegationPolicy('unknown'), 'active');
 });
 
-test('session policy switches delegation without treating policy as a numeric frequency', async () => {
+test('session policy changes how readily Cursor should help without becoming an on-off switch', () => {
   const bridge = new OfflineBridge({ delegationPolicy: 'active' });
   assert.equal(bridge.delegationPolicyView().policy, 'active');
   assert.equal(bridge.delegationEnabled, true);
 
-  const disabled = bridge.setDelegationPolicy('off');
-  assert.equal(disabled.scope, 'session');
-  assert.equal(disabled.previousPolicy, 'active');
-  assert.equal(disabled.policySource, 'runtime');
-  assert.equal(disabled.runningTasksUnchanged, true);
-  assert.equal(disabled.delegationEnabled, false);
-  await assert.rejects(bridge.doTask('must stay local'), /session policy=off/);
+  const selective = bridge.setDelegationPolicy('manual');
+  assert.equal(selective.scope, 'session');
+  assert.equal(selective.previousPolicy, 'active');
+  assert.equal(selective.policySource, 'runtime');
+  assert.equal(selective.runningTasksUnchanged, true);
+  assert.equal(selective.delegationEnabled, true);
+  assert.match(selective.guidance, /waits until the user asks/);
 
   const enabled = bridge.setDelegationPolicy('eager');
   assert.equal(enabled.policy, 'eager');
   assert.equal(enabled.delegationEnabled, true);
-  assert.match(enabled.guidance, /parallelism/);
+  assert.match(enabled.guidance, /in parallel/);
   assert.throws(() => bridge.setDelegationPolicy('frequency=3'), /unsupported delegation policy/);
   assert.throws(() => bridge.setDelegationPolicy('active', 'workspace'), /scope=session/);
 });
@@ -72,13 +73,13 @@ test('session policy switches delegation without treating policy as a numeric fr
 test('disabled delegation rejects cursor_do before Cursor access', async () => {
   const bridge = new OfflineBridge({ delegationMode: 'off' });
   assert.equal(bridge.delegationEnabled, false);
-  assert.equal(bridge.delegationPolicy, 'off');
+  assert.equal(bridge.delegationPolicy, 'active');
   await assert.rejects(bridge.doTask('must not delegate'), /CURSOR_BRIDGE_DELEGATION=off/);
   assert.throws(() => bridge.setDelegationPolicy('active'), /locks delegation off/);
   const missing = await bridge.status('cursor-missing');
   assert.equal(missing.delegationMode, 'off');
   assert.equal(missing.delegationEnabled, false);
-  assert.equal(missing.policy, 'off');
+  assert.equal(missing.policy, 'active');
 });
 
 test('bundled MCP hides cursor_do in off mode and rejects direct calls', async () => {
@@ -129,13 +130,13 @@ test('bundled MCP applies session policy changes without losing the runtime cont
     let listed = await client.listTools();
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_do'), true);
 
-    const disabled = await client.callTool({ name: 'cursor_policy', arguments: { mode: 'off' } });
-    assert.equal(JSON.parse(disabled.content[0].text).delegationEnabled, false);
+    const selective = await client.callTool({ name: 'cursor_policy', arguments: { mode: 'manual' } });
+    assert.equal(JSON.parse(selective.content[0].text).policy, 'manual');
     listed = await client.listTools();
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_do'), true);
-    const blocked = await client.callTool({ name: 'cursor_do', arguments: { prompt: 'must remain local' } });
-    assert.equal(blocked.isError, true);
-    assert.match(blocked.content[0].text, /session policy=off/);
+
+    const removedOff = await client.callTool({ name: 'cursor_policy', arguments: { mode: 'off' } });
+    assert.equal(removedOff.isError, true);
 
     const enabled = await client.callTool({ name: 'cursor_policy', arguments: { mode: 'active' } });
     assert.equal(JSON.parse(enabled.content[0].text).policy, 'active');

@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "2.2.0",
-  "description": "Drive Cursor IDE agents from Claude Code for semantic search, session-policy-controlled bounded delegation, FIFO execution, and safe top-level Agent parallelism through cursor_policy.",
+  "version": "2.2.1",
+  "description": "Let Claude Code ask Cursor to find code or take on clearly bounded work, with manual, auto, active, and eager involvement levels.",
   "author": {
     "name": "Vanyangyang"
   },

@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: "Delegate bounded light-to-medium implementation, limited investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns the direction and risk boundaries. Use proactively when a bounded Cursor pass can save primary-agent time, reduce omissions, or run alongside non-conflicting work; the task needs a clear purpose, allowed scope, invariants, and checkable outcome, but not a fully pre-solved implementation. Supports execution=fifo and execution=parallel_agent for independent tasks with non-overlapping write paths, followed by collection through task_id/agent_id and primary-agent verification. Do not use when the user opts out, cursor_do is unavailable, CURSOR_BRIDGE_DELEGATION=off, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
+description: "Delegate bounded light-to-medium implementation, limited investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns the direction and risk boundaries. Use proactively when a bounded Cursor pass can save primary-agent time, reduce omissions, or run alongside non-conflicting work; the task needs a clear purpose, allowed scope, invariants, and checkable outcome, but not a fully pre-solved implementation. Follow the current manual, auto, active, or eager mode, collect work by task_id or agent_id, and verify it in the primary agent. Do not use when the user opts out, cursor_do is unavailable or administrator-disabled, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
 ---
 
 # Cursor Delegate
@@ -11,19 +11,20 @@ Use Cursor as an execution partner. Keep direction, scope decisions, risk owners
 
 - Do not call `cursor_do` when the user explicitly says not to use Cursor or not to delegate. A direct user opt-out overrides every policy mode.
 - If `cursor_do` is unavailable, or `cursor_status` reports delegation as disabled, do not bypass the setting, repeatedly retry, or ask Cursor to re-enable itself. Complete the work in the primary agent.
-- Treat `CURSOR_BRIDGE_DELEGATION=off` as an execution kill switch. It does not by itself disable `cursor_search`, `cursor_status`, `cursor_policy`, or `cursor_launch`.
+- Treat `CURSOR_BRIDGE_DELEGATION=off` as a legacy administrator-level host switch, not a user policy. It disables delegated execution but does not by itself disable `cursor_search`, `cursor_status`, `cursor_policy`, or `cursor_launch`.
 
-## Apply the session policy
+## Follow the user's chosen level of involvement
 
-Use `cursor_policy` to inspect or set the session-scoped scheduling policy when the user requests a change. Confirm the returned effective policy, and use the value echoed by `cursor_status` for later decisions.
+Use `cursor_policy` when the user asks to inspect or change the mode. Confirm the returned choice and follow the value echoed by `cursor_status` later.
 
-Policy controls delegation **aggressiveness**, not a fixed frequency such as “call Cursor every N tool invocations.” It never relaxes user intent, task boundaries, path isolation, or primary-agent verification.
+The mode answers “how readily should I hand suitable work to Cursor?” It is not a fixed frequency such as “call Cursor every N tool invocations.”
 
-- `off`: do not delegate execution to `cursor_do`.
-- `manual`: delegate only after an explicit user request or direct invocation of this workflow.
-- `auto`: use a cautious heuristic; delegate when the scope and payoff are clear and collection overhead is likely worthwhile.
-- `active`: recommended default; proactively delegate bounded light-to-medium work, limited implementation discovery, tests, documentation, configuration, and independent second passes when doing so saves time or reduces omissions.
-- `eager`: maximize safe bounded delegation and non-overlapping parallel work, including small read-only probes and independent mechanical tasks; keep every normal safety boundary.
+- `manual`: wait for the user to ask for Cursor.
+- `auto`: hand off only when the scope is clean and the likely benefit clearly outweighs dispatch and review time.
+- `active`: recommended default; for a non-trivial task, normally find one useful bounded implementation, test, documentation, configuration, or second-check slice to hand off.
+- `eager`: use Cursor whenever a safe bounded slice exists, including small read-only probes and independent non-overlapping parallel work.
+
+Do not offer `off` as a normal user mode. A user who wants no automatic handoff should choose `manual`; a direct “do not use Cursor” instruction still overrides the mode. The environment-level `CURSOR_BRIDGE_DELEGATION=off` switch is reserved for administrators who need to disable the tool entirely.
 
 Do not assume that the host provides a `/cursor` slash command. Use the MCP policy tool or ordinary user instructions unless the current host exposes a verified wrapper.
 
@@ -35,28 +36,30 @@ Use this responsibility chain:
 
 - Decide what should be achieved, why it matters, what must not change, where Cursor may work, and what evidence makes the result acceptable. Do not delegate product direction, architecture boundaries, or state verdicts.
 - Allow Cursor to locate relevant implementation, compare local approaches, and complete code, documentation, configuration, scripts, tests, and tooling inside those boundaries. Do not require the primary agent to pre-solve the task line by line.
-- When delegation is enabled, normally call `cursor_do` once per independent task with `background=true` and `new_chat=true`, then continue non-conflicting primary-agent work.
+- Once a task has been selected for delegation, normally call `cursor_do` once with `background=true` and `new_chat=true`, then continue non-conflicting primary-agent work.
 - Prefer `execution=fifo` unless the parallel contract is clearly satisfied.
 - Do not inject a unique completion marker or impose a minimum response length. Rely on task state, stable `task_id` or `agent_id`, and the actual result.
 
-## Evaluate delegation proactively
+## Decide whether this task should go to Cursor
 
-Consider delegation as soon as any of the following applies; do not wait until the primary agent has already completed most of the implementation investigation:
+Send a bounded part of the task to Cursor when one or more of these are true:
 
 - The task can be bounded to a path set or subsystem and checked through a diff, test, count, or documentation assertion.
 - The work includes repeated lookup, mechanical edits, test or documentation completion, adapter wiring, configuration cleanup, or an independent second pass.
 - The primary agent has higher-value design, cross-system judgment, or non-conflicting work to continue.
 - Delegation value is uncertain, but a small `read_only=true` implementation-location probe or single-path task can measure it without transferring an unresolved product decision.
 
-Delegate only when all safety conditions still hold:
+Keep the work in the primary agent when any of these are true:
 
-- Purpose, invariants, allowed scope, and a checkable outcome are reasonably clear. Cursor may resolve local implementation details inside the envelope.
-- Each task can be collected independently. The acceptance contract may describe behavior, tests, and prohibitions rather than implementation steps.
-- Cursor does not need to decide product direction, architecture, worldbuilding, or governance state.
-- The task does not require exclusive GUI state or other operations the primary agent must own.
-- Existing user changes can be identified and preserved.
+- The user said not to use Cursor, or the current mode is `manual` and the user has not asked for it.
+- It is a tiny direct edit whose dispatch and review would cost more than doing it locally.
+- Cursor would have to decide product direction, architecture, creative intent, or governance state.
+- The task requires exclusive GUI state or shared mutable runtime state.
+- A safe scope, path boundary, checkable result, or way to preserve existing user changes cannot be established.
 
-Do not reject delegation merely because dispatch has some overhead. Work directly only when the edit is truly immediate, tightly coupled to the primary agent's current writes, or more expensive to collect and verify than to complete locally.
+Before dispatch, make sure the purpose, invariants, allowed scope, and checkable outcome are reasonably clear. Cursor may resolve local implementation details inside that envelope; the primary agent does not need to prescribe every step.
+
+In `active` or `eager`, do not keep suitable work local merely because dispatch has some overhead. Still keep it local whenever one of the exclusions above applies.
 
 For project understanding, establish the cheapest deterministic local baseline first. Use Cursor for semantic candidates, a bounded second evidence surface, or the subsequent implementation. Do not submit the same exact lookup through multiple systems.
 
