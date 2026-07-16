@@ -24,11 +24,12 @@ codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 npm install          # Install sdk/ws and esbuild (dev dependency).
 npm run build        # Produce dist/cursor-bridge.mjs.
 
-# 2. Keep all four version fields in sync.
+# 2. Keep all release version fields in sync.
 #    - .claude-plugin/plugin.json        version
 #    - .claude-plugin/marketplace.json   plugins[0].version
 #    - .codex-plugin/plugin.json         version
 #    - package.json                      version
+#    - server.mjs                        MCP Server version
 
 # 3. Validate the plugin structure.
 claude plugin validate .

@@ -15,7 +15,7 @@ Use Cursor as an execution partner. Keep direction, scope decisions, risk owners
 
 ## Follow the user's chosen level of involvement
 
-Use `cursor_policy` when the user asks to inspect or change the mode. Confirm the returned choice and follow the value echoed by `cursor_status` later.
+Use `cursor_policy` when the user asks to inspect or change the mode. Confirm the returned choice and follow the effective value injected into the live tool descriptions and echoed by `cursor_status` later. Policy changes persist by default; `scope: session` is only for an explicit temporary override.
 
 The mode answers “how readily should I hand suitable work to Cursor?” It is not a fixed frequency such as “call Cursor every N tool invocations.”
 

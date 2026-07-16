@@ -86,7 +86,7 @@ At startup, the server automatically ensures that Cursor is running with CDP ena
 | `cursor_search` | Ask a Cursor agent to locate code by natural-language intent and return a focused `path:line` list. Calls are serialized and typically take about 90 seconds, with observed runs varying from roughly 66 to 175 seconds. |
 | `cursor_do` | Delegate a bounded task. Use `execution=fifo` for compatible serial execution or `execution=parallel_agent` for an independent top-level Agent. Set `read_only=true` for parallel read-only work. Parallel write tasks require pairwise non-overlapping `allowed_paths`. The tool is hidden when `CURSOR_BRIDGE_DELEGATION=off`. |
 | `cursor_status` | Inspect CDP connectivity, FIFO work, and active parallel Agents. Pass `task_id` to retrieve the exact task state and raw response. It also reports the effective delegation policy. |
-| `cursor_policy` | Set or inspect how readily the primary agent hands work to Cursor. The public choices are `manual`, `auto`, `active`, and `eager`; the result reports the effective choice for the current session. |
+| `cursor_policy` | Set or inspect how readily the primary agent hands work to Cursor. The public choices are `manual`, `auto`, `active`, and `eager`; changes persist across MCP server restarts by default, and the effective guidance is included in the live tool descriptions Codex sees. |
 | `cursor_launch` | Ensure Cursor is running with a CDP debugging port. It returns `already`, `launched`, `running-no-debug`, `port-not-cursor`, `no-exe`, or `timeout`. |
 
 Use `cursor_do` with `background=true` and `new_chat=true` by default. Save its `task_id`, then collect it with `cursor_status(task_id)`. `submitting`, `running`, and `collecting` are normal in-progress states; exceeding two minutes is not itself a failure. Cursor Bridge does not require a unique completion marker or a minimum response length.
@@ -114,13 +114,15 @@ Cursor stays out when:
 
 Changing modes never weakens those boundaries or transfers final verification to Cursor.
 
-Set a session policy through the MCP tool and verify the returned effective policy:
+Set a persistent policy through the MCP tool and verify the returned effective policy:
 
 ```text
 cursor_policy({mode: "active"})
 ```
 
-`cursor_status` echoes the effective mode so later handoff decisions stay consistent. A direct “do not use Cursor” request always wins over the selected mode.
+Persistent is the default scope. Use `scope: "session"` only when you intentionally want a temporary override that resets on restart. The durable choice is stored in the user configuration directory, defaults to `%APPDATA%\cursor-bridge\policy.json` on Windows and `$XDG_CONFIG_HOME/cursor-bridge/policy.json` (or `~/.config/cursor-bridge/policy.json`) elsewhere, and can be redirected with `CURSOR_BRIDGE_POLICY_FILE`.
+
+`cursor_status` echoes the effective mode, persistence state, and restart policy. Cursor Bridge also publishes the current policy and guidance in its tool descriptions and sends a `tools/list_changed` notification after a change, so later handoff decisions and newly started Codex tasks can see the durable preference. A direct “do not use Cursor” request always wins over the selected mode.
 
 Codex users may invoke `$cursor-policy` or ask the primary agent in natural language to inspect or change the mode. Cursor Bridge does not claim a built-in `/cursor` command: the Codex plugin manifest has no custom slash-command surface, and other hosts may differ. Use the skill, the MCP tool, or ordinary natural-language instructions unless the current host explicitly exposes a verified wrapper.
 
@@ -132,7 +134,8 @@ Codex users may invoke `$cursor-policy` or ask the primary agent in natural lang
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | Per-query timeout in milliseconds. |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable automatic Cursor launch at server startup. |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Administrator-level compatibility switch. Set it to `off` only when the host must disable and hide `cursor_do` entirely; this is not a normal user policy. Other tools remain available. Restart the MCP server, Codex, or Claude Code after changing it. |
-| `CURSOR_BRIDGE_POLICY` | `active` | Initial user-facing mode: `manual`, `auto`, `active`, or `eager`. The legacy value `on` maps to `active`; `cursor_policy` may change the in-memory mode for the current session. |
+| `CURSOR_BRIDGE_POLICY` | `active` | Bootstrap user-facing mode used only when no persisted choice exists. The legacy value `on` maps to `active`; a persistent `cursor_policy` choice takes precedence on later starts. |
+| `CURSOR_BRIDGE_POLICY_FILE` | platform user config | Override the durable policy file path. The default is `%APPDATA%\cursor-bridge\policy.json` on Windows and the XDG user config directory elsewhere. |
 | `CURSOR_PROJECT_PATH` | auto-detected | Project root for Cursor to open and index. If unset while running from a plugin cache, the launcher omits the path and lets Cursor restore its previous workspace. |
 | `CURSOR_EXE` | auto-detected | Explicit path to `Cursor.exe` when automatic detection fails. |
 

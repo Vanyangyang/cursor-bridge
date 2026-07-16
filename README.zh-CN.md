@@ -83,7 +83,7 @@ server 启动时会自动确保 Cursor 带 CDP 运行。设置 `CURSOR_BRIDGE_NO
 | `cursor_search` | 使用自然语言意图让 Cursor agent 定位代码，并返回精炼的 `path:行号` 清单。调用串行，常见耗时约 90 秒。 |
 | `cursor_do` | 委托有边界的任务。`execution=fifo` 保持串行兼容；`execution=parallel_agent` 提交独立顶层 Agent。并行写任务必须提供互不重叠的 `allowed_paths`。 |
 | `cursor_status` | 检查 CDP、队列与并行 Agent；按 `task_id` 精确收回任务，并回显当前生效策略。 |
-| `cursor_policy` | 设置或查询主 Agent 多主动地把工作交给 Cursor。公开选项为 `manual`、`auto`、`active`、`eager`，并返回当前会话实际生效的档位。 |
+| `cursor_policy` | 设置或查询主 Agent 多主动地把工作交给 Cursor。公开选项为 `manual`、`auto`、`active`、`eager`；默认跨 MCP server 重启持久化，并把当前 guidance 注入 Codex 可见的实时工具描述。 |
 | `cursor_launch` | 确保 Cursor 带 CDP 调试口运行；必要时自动拉起。 |
 
 `cursor_do` 默认使用 `background=true`、`new_chat=true`。保存返回的 `task_id`，再用 `cursor_status(task_id)` 收回。`submitting`、`running`、`collecting` 都是正常进行态；超过两分钟本身不代表失败。Bridge 不需要唯一终止标记或最低回复长度。
@@ -115,7 +115,9 @@ server 启动时会自动确保 Cursor 带 CDP 运行。设置 `CURSOR_BRIDGE_NO
 cursor_policy({mode: "active"})
 ```
 
-`cursor_status` 会回显有效档位，让后续交接保持一致。用户明确说“不要使用 Cursor”时，始终以用户指令为准。
+默认 scope 为 `persistent`。只有明确需要临时覆盖时才使用 `scope: "session"`，该值会在重启后恢复为持久化档位。持久化文件在 Windows 默认为 `%APPDATA%\cursor-bridge\policy.json`，其他平台默认为 `$XDG_CONFIG_HOME/cursor-bridge/policy.json`（或 `~/.config/cursor-bridge/policy.json`）；可通过 `CURSOR_BRIDGE_POLICY_FILE` 改写路径。
+
+`cursor_status` 会回显有效档位、持久化状态和重启后档位。Bridge 还会把当前 policy 与 guidance 写入工具描述，并在切换后发送 `tools/list_changed`，使后续决策和新建 Codex 任务能够看到这项持久偏好。用户明确说“不要使用 Cursor”时，始终以用户指令为准。
 
 Codex 用户可调用 `$cursor-policy`，也可用自然语言要求主 Agent 查看或切换模式。本项目不宣称内建 `/cursor` 命令：Codex 插件 manifest 没有自定义 slash command 接口，其他宿主可能不同。未经当前宿主确认时，请使用 skill、`cursor_policy` 或自然语言指令。
 
@@ -127,7 +129,8 @@ Codex 用户可调用 `$cursor-policy`，也可用自然语言要求主 Agent �
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时，单位毫秒。 |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | 未设置 | 设为 `1` 关闭启动时自动拉起 Cursor。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 管理员级兼容停用开关。只有宿主需要彻底禁用并隐藏 `cursor_do` 时才设为 `off`；它不是普通用户档位。其他工具仍可用，修改后需重启 MCP server 或客户端。 |
-| `CURSOR_BRIDGE_POLICY` | `active` | 初始用户档位：`manual`、`auto`、`active` 或 `eager`。旧值 `on` 映射为 `active`；`cursor_policy` 可修改当前会话的内存档位。 |
+| `CURSOR_BRIDGE_POLICY` | `active` | 仅在没有持久化选择时使用的初始档位。旧值 `on` 映射为 `active`；后续启动优先采用持久化的 `cursor_policy` 选择。 |
+| `CURSOR_BRIDGE_POLICY_FILE` | 平台用户配置目录 | 改写持久化策略文件路径。Windows 默认位于 `%APPDATA%\cursor-bridge\policy.json`，其他平台默认使用 XDG 用户配置目录。 |
 | `CURSOR_PROJECT_PATH` | 自动判断 | Cursor 打开与建索引的项目根。 |
 | `CURSOR_EXE` | 自动探测 | 自动探测失败时显式指定 `Cursor.exe`。 |
 
@@ -158,7 +161,7 @@ server.mjs              # MCP server 源码
 launch-cursor.mjs       # Cursor/CDP 启动器
 build.mjs               # esbuild 打包入口
 skills/cursor-delegate/ # 委托策略、派发、收回与复核规则
-skills/cursor-policy/   # 会话策略查询与切换工作流
+skills/cursor-policy/   # 持久策略查询与切换工作流
 test/                   # 调度、路径冲突与 Agent 身份测试
 probe-*.mjs             # CDP 链路探针
 ```
