@@ -1,73 +1,98 @@
 ---
 name: cursor-delegate
-description: "将主 Agent 已规划、边界明确且可独立验收的中轻型实现、文档、配置或工具任务委托给 Cursor Bridge；支持 execution=fifo 串行执行，以及仅在任务互不依赖、写入路径不重叠时使用 execution=parallel_agent 派发多个顶层 Cursor Agent，再按 task_id/agent_id 收回并由主 Agent 复核。Use when planned execution work is ready to hand off, the user asks Cursor to execute bounded work, or several independent tasks can run concurrently. Do not use when the user opts out, cursor_do is unavailable, CURSOR_BRIDGE_DELEGATION=off, or for product direction, architecture decisions, Unity Scene/Prefab or PlayMode operations, formal verification verdicts, Tower state decisions, or unbounded investigation."
+description: "Delegate bounded light-to-medium implementation, limited investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns the direction and risk boundaries. Use proactively when a bounded Cursor pass can save primary-agent time, reduce omissions, or run alongside non-conflicting work; the task needs a clear purpose, allowed scope, invariants, and checkable outcome, but not a fully pre-solved implementation. Supports execution=fifo and execution=parallel_agent for independent tasks with non-overlapping write paths, followed by collection through task_id/agent_id and primary-agent verification. Do not use when the user opts out, cursor_do is unavailable, CURSOR_BRIDGE_DELEGATION=off, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
 ---
 
 # Cursor Delegate
 
-把 Cursor 当作执行副手。主 Agent 始终保留方向判断、范围裁决、结果审查和正式验证。
+Use Cursor as an execution partner. Keep direction, scope decisions, risk ownership, result review, and final verification with the primary agent.
 
-## 尊重委托开关
+## Respect delegation controls
 
-- 用户明确说“不使用 Cursor”“不要委托”或等价指令时，禁止调用 `cursor_do`；该否决高于本 skill 的默认工作流。
-- `cursor_do` 未出现在可用工具中，或 `cursor_status` 返回 `delegationMode=off` 时，不尝试绕过、重新启用或反复调用；由主 Agent 直接完成任务。
-- `CURSOR_BRIDGE_DELEGATION=off` 只关闭委托执行，不代表 `cursor_search`、`cursor_status` 或 `cursor_launch` 不可用。
+- Do not call `cursor_do` when the user explicitly says not to use Cursor or not to delegate. A direct user opt-out overrides every policy mode.
+- If `cursor_do` is unavailable, or `cursor_status` reports delegation as disabled, do not bypass the setting, repeatedly retry, or ask Cursor to re-enable itself. Complete the work in the primary agent.
+- Treat `CURSOR_BRIDGE_DELEGATION=off` as an execution kill switch. It does not by itself disable `cursor_search`, `cursor_status`, `cursor_policy`, or `cursor_launch`.
 
-## 日常默认工作流
+## Apply the session policy
 
-按以下职责链使用：
+Use `cursor_policy` to inspect or set the session-scoped scheduling policy when the user requests a change. Confirm the returned effective policy, and use the value echoed by `cursor_status` for later decisions.
 
-`主 Agent 调查与裁定范围 → 形成独立任务信封 → Cursor 执行 → cursor_status 按 task_id 收回 → 主 Agent 检查真实改动并验证`
+Policy controls delegation **aggressiveness**, not a fixed frequency such as “call Cursor every N tool invocations.” It never relaxes user intent, task boundaries, path isolation, or primary-agent verification.
 
-- 主 Agent 决定做什么、为什么做、允许改哪里、如何验收；不要把这些判断转交 Cursor。
-- Cursor 负责已决定方案内的检索、窄实现、文档、配置、脚本和工具修改。
-- 委托开启时，默认一项任务调用一次 `cursor_do`，使用 `background=true`、`new_chat=true`；主 Agent 可在后台继续不冲突的工作。
-- 默认选择 `execution=fifo`。只有确实需要同时推进且满足并行合同的任务才使用 `parallel_agent`。
-- 不注入唯一终止标记，不设置最小回复长度。完成判断只依赖任务状态、稳定 `task_id/agent_id` 和实际结果。
+- `off`: do not delegate execution to `cursor_do`.
+- `manual`: delegate only after an explicit user request or direct invocation of this workflow.
+- `auto`: use a cautious heuristic; delegate when the scope and payoff are clear and collection overhead is likely worthwhile.
+- `active`: recommended default; proactively delegate bounded light-to-medium work, limited implementation discovery, tests, documentation, configuration, and independent second passes when doing so saves time or reduces omissions.
+- `eager`: maximize safe bounded delegation and non-overlapping parallel work, including small read-only probes and independent mechanical tasks; keep every normal safety boundary.
 
-## 检查委托门禁
+Do not assume that the host provides a `/cursor` slash command. Use the MCP policy tool or ordinary user instructions unless the current host exposes a verified wrapper.
 
-仅在以下条件全部成立时委托：
+## Follow the default workflow
 
-- 目标、范围和预期结果已经决定。
-- 每项任务都有明确的完成合同，并可被独立检查。
-- 任务不要求 Cursor 自行决定产品、架构、世界观或 Tower 状态。
-- 不涉及 Unity Scene/Prefab、PlayMode 状态或其他独占 GUI 操作。
-- 能识别并保留工作区已有的用户改动。
+Use this responsibility chain:
 
-若派发、等待和复核成本高于直接完成，主 Agent 直接执行。
+`primary agent defines purpose, invariants, and risk boundaries -> form a bounded task envelope -> Cursor investigates locally and executes within the envelope -> collect by task_id -> primary agent inspects the real changes and verifies them`
 
-## 选择执行方式
+- Decide what should be achieved, why it matters, what must not change, where Cursor may work, and what evidence makes the result acceptable. Do not delegate product direction, architecture boundaries, or state verdicts.
+- Allow Cursor to locate relevant implementation, compare local approaches, and complete code, documentation, configuration, scripts, tests, and tooling inside those boundaries. Do not require the primary agent to pre-solve the task line by line.
+- When delegation is enabled, normally call `cursor_do` once per independent task with `background=true` and `new_chat=true`, then continue non-conflicting primary-agent work.
+- Prefer `execution=fifo` unless the parallel contract is clearly satisfied.
+- Do not inject a unique completion marker or impose a minimum response length. Rely on task state, stable `task_id` or `agent_id`, and the actual result.
 
-- 使用 `execution=fifo`：单个日常中轻型任务，或任务存在前后依赖、写入范围相交、共享可变状态、无法证明相互独立。依赖任务必须在上一项验收后再提交下一项。
-- 使用 `execution=parallel_agent`：至少两个任务互不依赖、可分别验收，且所有写入路径互不重叠。
-- 设置 `read_only=true`：任务只允许查询、分析或返回文本，不得修改文件。只读任务仍不得并行操作同一个外部可变状态。
-- 设置 `read_only=false`：必须提供非空、无 glob、不会越出工作区的相对 `allowed_paths`。把范围缩到完成任务所需的最小路径集合；它是调度冲突声明和 prompt 约束，不是文件系统沙箱。
+## Evaluate delegation proactively
 
-不得仅因任务数量多就选择并行。无法确认依赖或路径关系时，默认使用 `fifo`。
+Consider delegation as soon as any of the following applies; do not wait until the primary agent has already completed most of the implementation investigation:
 
-## 派发任务
+- The task can be bounded to a path set or subsystem and checked through a diff, test, count, or documentation assertion.
+- The work includes repeated lookup, mechanical edits, test or documentation completion, adapter wiring, configuration cleanup, or an independent second pass.
+- The primary agent has higher-value design, cross-system judgment, or non-conflicting work to continue.
+- Delegation value is uncertain, but a small `read_only=true` implementation-location probe or single-path task can measure it without transferring an unresolved product decision.
 
-1. 记录相关工作区的派发前状态，用于区分用户已有改动。
-2. 按 [delegation-contract.md](references/delegation-contract.md) 为每项任务形成独立任务信封。
-3. 默认使用 `background=true` 和 `new_chat=true` 调用 `cursor_do`。
-4. 为每项任务保存返回的 `task_id`；`parallel_agent` 还必须保存 `agent_id`。
-5. 若并行任务未返回可用的 `agent_id`，不要继续扩大并行批次；转为 `fifo` 或报告歧义状态。
+Delegate only when all safety conditions still hold:
 
-## 收回结果
+- Purpose, invariants, allowed scope, and a checkable outcome are reasonably clear. Cursor may resolve local implementation details inside the envelope.
+- Each task can be collected independently. The acceptance contract may describe behavior, tests, and prohibitions rather than implementation steps.
+- Cursor does not need to decide product direction, architecture, worldbuilding, or governance state.
+- The task does not require exclusive GUI state or other operations the primary agent must own.
+- Existing user changes can be identified and preserved.
 
-1. 始终用 `cursor_status(task_id)` 查询对应任务，不把当前可见的 Cursor 对话当作任务身份。
-2. `submitting/running/collecting` 都是正常进行态；耗时超过两分钟本身不是失败。等待明确终态后再读取结果。
-3. 将 Cursor 声明的改动与真实 diff、`allowed_paths` 和完成合同逐项对照。
-4. 由主 Agent 运行风险匹配的验证。Cursor 回复不能单独支持“通过”、`Verified` 或 Tower 状态推进。
-5. 分别记录每项任务为完成、部分完成、失败、超时或歧义，再汇总整个批次。
+Do not reject delegation merely because dispatch has some overhead. Work directly only when the edit is truly immediate, tightly coupled to the primary agent's current writes, or more expensive to collect and verify than to complete locally.
 
-状态解释与恢复细节见 [delegation-contract.md](references/delegation-contract.md)。
+For project understanding, establish the cheapest deterministic local baseline first. Use Cursor for semantic candidates, a bounded second evidence surface, or the subsequent implementation. Do not submit the same exact lookup through multiple systems.
 
-## 处理异常
+## Choose the execution mode
 
-- 任务状态为 `needs_attention/orphaned`、歧义或会话无法绑定：视为真实 Cursor Agent 可能仍在运行，保留路径占用，先按 `task_id/agent_id` 检查历史，不要盲目重复提交。
-- Cursor UI 已有最终回复但 Bridge 尚未收回：继续查询原 `task_id`，不得添加终止标记、扩大回复长度或重新派发同一任务。新版 Bridge 会在同一 `agent_id` 上重试；持续失败才进入 `needs_attention`。
-- 任务超时但已产生修改：先审查修改，再决定续做、重试或回退。
-- 修改越过 `allowed_paths`：停止接收该结果并报告越界。
-- 并行任务出现文件冲突：停止后续合并，交由主 Agent 审查并改为串行处理。
+- Use `execution=fifo` for one ordinary task, dependent tasks, overlapping write scopes, shared mutable state, or any case where independence is uncertain. Submit the next dependent task only after accepting the previous result.
+- Use `execution=parallel_agent` only for at least two independent, separately verifiable tasks whose write paths do not overlap.
+- Set `read_only=true` for analysis-only work. Do not run read-only tasks in parallel against the same mutable external state.
+- Set `read_only=false` only with a non-empty set of workspace-relative `allowed_paths` that contains no globs and cannot escape the workspace. Keep the set as small as practical. It is a scheduling declaration and prompt constraint, not a filesystem sandbox.
+
+Do not choose parallel execution merely because there are many tasks. When dependency or path relationships are unclear, use `fifo`.
+
+## Dispatch a task
+
+1. Record the relevant pre-dispatch workspace state so later review can distinguish existing user changes.
+2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md).
+3. Call `cursor_do` with `background=true` and `new_chat=true` by default.
+4. Save each returned `task_id`; also save `agent_id` for `parallel_agent`.
+5. If a parallel submission does not return a usable `agent_id`, stop expanding the parallel batch and use `fifo` or report the ambiguous state.
+
+The envelope may contain a small number of local implementation `open_questions`, but it must also provide `fixed_decisions`, `allowed_paths`, prohibitions, and acceptance checks. Cursor may solve local questions; it must stop and report any branch that would change product direction, architecture, or scope.
+
+## Collect and verify
+
+1. Always query `cursor_status(task_id)` for the exact task. Do not treat the currently visible Cursor chat as task identity.
+2. Treat `submitting`, `running`, and `collecting` as normal in-progress states. More than two minutes is not itself a failure; wait for an explicit terminal state.
+3. Compare Cursor's claimed work with the real diff, `allowed_paths`, and acceptance contract.
+4. Run risk-proportionate verification in the primary agent. Cursor's response alone cannot support a formal pass, verified state, or governance transition.
+5. Record each task as complete, partial, failed, timed out, or ambiguous before summarizing the batch.
+
+Read [delegation-contract.md](references/delegation-contract.md) for state interpretation and recovery details.
+
+## Handle abnormal states
+
+- For `needs_attention`, `orphaned`, ambiguous state, or an unbound session, assume the real Cursor Agent may still be running. Preserve path ownership and inspect history by `task_id` and `agent_id` before resubmitting.
+- If Cursor shows a final UI response but Bridge has not collected it, continue querying the original `task_id`. Do not add a completion marker, increase a response-length requirement, or submit the same task again. Let Bridge retry against the same `agent_id`; escalate only after a persistent `needs_attention` state.
+- If a timed-out task changed files, inspect the changes before deciding whether to continue, retry, or revert.
+- If changes exceed `allowed_paths`, stop accepting the result and report the scope violation.
+- If parallel tasks conflict, stop further integration and return to primary-agent review or serial execution.

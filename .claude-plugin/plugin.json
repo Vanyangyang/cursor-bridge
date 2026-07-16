@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "2.1.1",
-  "description": "从 Claude Code 直驱 Cursor IDE agent 做语义检索与边界明确的委托执行，支持 FIFO 和安全的顶层 Agent 并行模式。",
+  "version": "2.2.0",
+  "description": "Drive Cursor IDE agents from Claude Code for semantic search, session-policy-controlled bounded delegation, FIFO execution, and safe top-level Agent parallelism through cursor_policy.",
   "author": {
     "name": "Vanyangyang"
   },

@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "2.1.1",
-  "description": "Drive Cursor IDE agents over CDP for semantic search and bounded delegated execution, including safe top-level Agent parallelism.",
+  "version": "2.2.0",
+  "description": "Drive Cursor IDE agents over CDP for semantic search, policy-controlled bounded delegation, and safe top-level Agent parallelism.",
   "author": {
     "name": "Vanyangyang"
   },
@@ -19,8 +19,8 @@
   },
   "interface": {
     "displayName": "Cursor Bridge",
-    "shortDescription": "Delegate bounded work to Cursor with safe Agent parallelism.",
-    "longDescription": "Expose cursor_search, cursor_status, cursor_launch, and—unless CURSOR_BRIDGE_DELEGATION=off—cursor_do. Cursor Bridge can retain FIFO compatibility or submit independent bounded tasks to separate top-level Cursor Agents, track them by stable agent ID, and collect each result without using Cursor /multitask.",
+    "shortDescription": "Delegate bounded work to Cursor with session policies and safe Agent parallelism.",
+    "longDescription": "Expose cursor_search, cursor_status, cursor_policy, cursor_launch, and—unless CURSOR_BRIDGE_DELEGATION=off—cursor_do. Session policies from off through eager control delegation aggressiveness rather than call frequency. Cursor Bridge retains FIFO compatibility or submits independent bounded tasks to separate top-level Cursor Agents, tracks them by stable agent ID, and collects each result without using Cursor /multitask.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,7 +28,8 @@
     ],
     "defaultPrompt": [
       "Use Cursor Bridge to search this project with Cursor's semantic agent.",
-      "When cursor_do is available, delegate this planned bounded task, then query cursor_status and verify the real result; otherwise complete it directly.",
+      "Use cursor_policy and cursor_status to honor the effective session delegation policy; active is the recommended default, auto is cautious, and eager maximizes safe bounded parallelism.",
+      "When policy permits and cursor_do is available, proactively delegate a bounded task with clear purpose, scope, invariants, and acceptance checks, allow limited local investigation, then collect it through cursor_status and verify the real result.",
       "When cursor_do is available, submit independent non-overlapping tasks as separate top-level Cursor Agents and collect them by task ID; otherwise keep execution in the main agent."
     ],
     "websiteURL": "https://github.com/Vanyangyang/cursor-bridge"
