@@ -80,7 +80,11 @@ For dependent or path-overlapping work, change `execution` to `fifo` and submit 
 | `queued/submitting/running/collecting` | Keep the original task and continue polling by `task_id`. More than two minutes is not a failure. |
 | `completed` | Read the raw response, then inspect the real diff, allowed paths, and completion contract. |
 | `failed` | Read the explicit error and determine whether the Cursor Agent actually failed before deciding to rework. |
-| `needs_attention/orphaned` | The task may still be running or its result may not have been collected. Preserve path ownership, inspect Agent History by `agent_id`, and do not resubmit automatically. |
+| `needs_attention/orphaned` with bound `agent_id` | Preserve path ownership and explicitly call `cursor_task_control(action=reap)` for the same in-memory task. Do not resubmit automatically. |
+| FIFO or unbound orphan | A global reservation blocks all new delegation. Manually verify Cursor has stopped, then use explicitly acknowledged `abandon`; there is no safe `reap` target. |
+| `terminal_uncollected` | Agent History is stably terminal but the final response extraction failed. Keep the reservation and retry explicit `reap`; do not release on one DOM failure. |
+| `cancelled` | The exact Agent Stop action or an unsent queued cancellation was confirmed; the reservation is released. |
+| `abandoned` | The reservation was explicitly released without proof that the underlying Agent stopped. Treat the warning as live risk and inspect workspace changes before any overlapping write. |
 
 For an R6-style false negative, continue querying the original `task_id` when Agent History already contains a complete final response but automatic collection has not finished. Bridge should retry extraction against the original `agent_id`. Do not work around collection by requiring a longer reply, injecting a completion marker, or submitting the same task again.
 
@@ -101,3 +105,6 @@ Cursor's completion statement means only that delegated execution ended; it is n
 - Reject and report any result that modifies files outside `allowed_paths`.
 - Stop automatic integration when parallel tasks conflict and return the batch to primary-agent review.
 - If Agent History or the response DOM is temporarily unreadable, let Bridge wait and retry against the same `agent_id`. Enter `needs_attention` after persistent failure; do not incorrectly mark the task complete or create a duplicate Agent.
+- For a bound orphan, use `reap` before `cancel`. `cancel` requires the exact `expected_agent_id` and only releases after stable Stop evidence. `abandon` requires explicit confirmation, a reason, acknowledgement that the Agent may still write, and the exact `expected_agent_id` when one is bound.
+- `cursor_status` is a pure snapshot. Reconciliation happens only through explicit `cursor_task_control`.
+- Task records and reservations live only for the current Bridge MCP process. After restart, inspect Cursor Agent History and the workspace manually; persistent cross-process task leases are outside the current contract.

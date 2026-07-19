@@ -53,7 +53,7 @@ By default, Cursor indexes the MCP client's current working directory. Set `CURS
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 ```
 
-Codex reads `.agents/plugins/marketplace.json` and `.codex-plugin/plugin.json`, then registers `cursor_search`, `cursor_do`, `cursor_status`, `cursor_policy`, and `cursor_launch`. Start a new Codex task or restart Codex after installation so the tools and the `cursor-delegate` and `cursor-policy` skills enter the session.
+Codex reads `.agents/plugins/marketplace.json` and `.codex-plugin/plugin.json`, then registers `cursor_search`, `cursor_do`, `cursor_status`, `cursor_task_control`, `cursor_policy`, and `cursor_launch`. Start a new Codex task or restart Codex after installation so the tools and the `cursor-delegate` and `cursor-policy` skills enter the session.
 
 ### Option C: Run from source
 
@@ -85,11 +85,20 @@ At startup, the server automatically ensures that Cursor is running with CDP ena
 |---|---|
 | `cursor_search` | Ask a Cursor agent to locate code by natural-language intent and return a focused `path:line` list. Calls are serialized and typically take about 90 seconds, with observed runs varying from roughly 66 to 175 seconds. |
 | `cursor_do` | Delegate a bounded task. Use `execution=fifo` for compatible serial execution or `execution=parallel_agent` for an independent top-level Agent. Set `read_only=true` for parallel read-only work. Parallel write tasks require pairwise non-overlapping `allowed_paths`. The tool is hidden when `CURSOR_BRIDGE_DELEGATION=off`. |
-| `cursor_status` | Inspect CDP connectivity, FIFO work, and active parallel Agents. Pass `task_id` to retrieve the exact task state and raw response. It also reports the effective delegation policy. |
+| `cursor_status` | Read-only inspection of CDP connectivity, FIFO work, and active parallel Agents. Pass `task_id` to retrieve the exact in-memory task state and any already-collected response. It never switches Agents, collects, stops, or reattaches work. |
+| `cursor_task_control` | Recover or terminate one exact in-memory task without resubmitting it. `reap` explicitly rechecks and collects a bound Agent, `cancel` targets that Agent's exact Stop control, and explicitly acknowledged `abandon` releases an unconfirmed orphan while reporting that it may still write. |
 | `cursor_policy` | Set or inspect how readily the primary agent hands work to Cursor. The public choices are `manual`, `auto`, `active`, and `eager`; changes persist across MCP server restarts by default, and the effective guidance is included in the live tool descriptions Codex sees. |
 | `cursor_launch` | Ensure Cursor is running with a CDP debugging port. It returns `already`, `launched`, `running-no-debug`, `port-not-cursor`, `no-exe`, or `timeout`. |
 
 Use `cursor_do` with `background=true` and `new_chat=true` by default. Save its `task_id`, then collect it with `cursor_status(task_id)`. `submitting`, `running`, and `collecting` are normal in-progress states; exceeding two minutes is not itself a failure. Cursor Bridge does not require a unique completion marker or a minimum response length.
+
+`cursor_status` is deliberately side-effect free. For a parallel orphan that still has its original `agentId`, call `cursor_task_control(action="reap")`: a generating Agent is reattached, and a stable terminal Agent is collected. If the terminal response DOM is temporarily unavailable, the reservation remains held as `terminal_uncollected` so a later `reap` can retry. Use `cancel` with the exact published `expected_agent_id` (a cancellation latched during `submitting` may not have a published ID yet); Bridge releases the reservation only after the exact composer Stop button was clicked and Agent History reached a stable terminal state.
+
+Cursor may expose either the input-area `Stop generation` control or, while a foreground shell/tool call is active, the tool-card `Stop command` control. Bridge accepts only one visible, enabled control inside the composer whose ID matches the selected Agent and whose status is still `generating`; it never searches for a broad global Stop button. A confirmed cancellation reports `status=cancelled`, `underlyingStopConfirmed=true`, `terminalEvidence=targeted_stop:<agentId>`, and releases the reservation.
+
+A FIFO or unbound orphan has no identity that Bridge can safely target. It therefore holds a global reservation and blocks every new delegation until the user verifies the Cursor UI manually and explicitly uses `abandon`. Bridge never falls back to a broad `Stop`, `Cancel`, or workbench control selector.
+
+Task records and reservations are currently process-local. A `task_id` is recoverable only while the same Cursor Bridge MCP server process is alive; restarting Codex or the MCP server loses that in-memory record even though the underlying Cursor Agent may still be running. After a restart, inspect Cursor Agent History and workspace changes manually before any overlapping write. Persistent cross-process task leases are not implemented yet. Delegation policy persistence is separate and is still supported as documented below.
 
 ## Choose how readily Cursor joins the work
 
@@ -155,6 +164,20 @@ When delegation is disabled, the `cursor-delegate` skill must complete work in t
 - Use `parallel_agent` only for independent tasks with non-overlapping write paths; use `fifo` otherwise.
 - Always collect by `task_id`. Parallel tasks also bind to an Agents Window identity such as `local:<UUID>`; do not infer task identity from the currently visible chat.
 - Allow Cursor to perform limited local investigation inside a clearly defined task envelope. The primary agent does not need to pre-solve every implementation detail before delegating.
+
+## Development verification
+
+Run the source regression suite and rebuild the installed runtime before publishing changes:
+
+```bash
+node --check server.mjs
+npm test
+npm run build
+node --check dist/cursor-bridge.mjs
+git diff --check
+```
+
+The cancellation regression suite executes the injected selector against mock React adapter/composer surfaces for both `Stop generation` and `Stop command`. A live end-to-end check should additionally create a disposable read-only `parallel_agent`, wait for its exact `agentId`, cancel it through `cursor_task_control`, and verify that no reservation or blocking task remains.
 
 ## Repository layout
 
