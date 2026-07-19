@@ -51,7 +51,7 @@ claude plugin install cursor-bridge@vanyangyang
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 ```
 
-安装后新建 Codex 任务或重启 Codex，使 `cursor_search`、`cursor_do`、`cursor_status`、`cursor_policy`、`cursor_launch` 与 `cursor-delegate`、`cursor-policy` skill 进入会话。
+安装后新建 Codex 任务或重启 Codex，使 `cursor_search`、`cursor_do`、`cursor_status`、`cursor_task_control`、`cursor_policy`、`cursor_launch` 与 `cursor-delegate`、`cursor-policy` skill 进入会话。
 
 ### 从源码运行
 
@@ -82,11 +82,20 @@ server 启动时会自动确保 Cursor 带 CDP 运行。设置 `CURSOR_BRIDGE_NO
 |---|---|
 | `cursor_search` | 使用自然语言意图让 Cursor agent 定位代码，并返回精炼的 `path:行号` 清单。调用串行，常见耗时约 90 秒。 |
 | `cursor_do` | 委托有边界的任务。`execution=fifo` 保持串行兼容；`execution=parallel_agent` 提交独立顶层 Agent。并行写任务必须提供互不重叠的 `allowed_paths`。 |
-| `cursor_status` | 检查 CDP、队列与并行 Agent；按 `task_id` 精确收回任务，并回显当前生效策略。 |
+| `cursor_status` | 只读检查 CDP、队列与并行 Agent；按 `task_id` 返回内存中的精确状态和已经收回的回复，但不会切换 Agent、回收、停止或重挂任务。 |
+| `cursor_task_control` | 不重发任务，按同一进程内的原 `task_id` 恢复或终止：`reap` 显式重查并收回已绑定 Agent，`cancel` 定向停止精确 Agent，`abandon` 只在明确承担风险后释放孤儿占用。 |
 | `cursor_policy` | 设置或查询主 Agent 多主动地把工作交给 Cursor。公开选项为 `manual`、`auto`、`active`、`eager`；默认跨 MCP server 重启持久化，并把当前 guidance 注入 Codex 可见的实时工具描述。 |
 | `cursor_launch` | 确保 Cursor 带 CDP 调试口运行；必要时自动拉起。 |
 
 `cursor_do` 默认使用 `background=true`、`new_chat=true`。保存返回的 `task_id`，再用 `cursor_status(task_id)` 收回。`submitting`、`running`、`collecting` 都是正常进行态；超过两分钟本身不代表失败。Bridge 不需要唯一终止标记或最低回复长度。
+
+`cursor_status` 刻意保持纯只读。并行孤儿仍有原 `agentId` 时，显式调用 `cursor_task_control(action="reap")`：仍在生成就重挂监控，稳定终态就收回回复。若终态回复 DOM 暂时不可用，任务保持 `terminal_uncollected` 和原占用，允许之后再次 `reap`，不会因一次提取失败误释放。`cancel` 必须携带已经公开的精确 `expected_agent_id`（在 `submitting` 阶段锁存取消时可能尚未公开 ID）；只有同一 composer 的精确 Stop 按钮确实被点击、且 Agent History 达到稳定终态后才释放占用。
+
+Cursor 可能显示输入区的 `Stop generation`，也可能在前台 shell/工具调用期间只显示工具卡片上的 `Stop command`。Bridge 只接受位于目标 composer 内、可见且启用的唯一控件，并要求 composer ID 与当前选中 Agent 一致、状态仍为 `generating`；它不会在全局模糊搜索 Stop。取消确认后会报告 `status=cancelled`、`underlyingStopConfirmed=true`、`terminalEvidence=targeted_stop:<agentId>`，并释放任务占用。
+
+FIFO 或未绑定孤儿没有可安全定向的身份，因此持有全局占用并阻断全部新委托。必须先在 Cursor UI 人工确认，再显式 `abandon`；Bridge 不会退回模糊的 `Stop`、`Cancel` 或工作台控件选择器。
+
+当前任务记录与占用只存在于 Bridge 进程内：只有同一 MCP server 进程仍存活时，原 `task_id` 才能恢复。重启 Codex 或 MCP server 后，内存记录会丢失，但底层 Cursor Agent 仍可能运行；此时必须人工检查 Agent History 与工作区改动，再开始任何重叠写入。跨进程持久任务租约尚未实现。下文的委托策略持久化是另一套机制，仍然有效。
 
 ## 选择 Cursor 参与工作的程度
 
@@ -148,6 +157,20 @@ codex
 - 只有互不依赖且写入路径不重叠的任务才使用 `parallel_agent`，否则使用 `fifo`。
 - 始终按 `task_id` 收回；不要根据当前可见对话猜测任务身份。
 - 允许 Cursor 在明确任务信封内做有限调查，不要求主 Agent 在委托前逐行预解实现。
+
+## 开发验证
+
+发布改动前，在源码仓库运行完整回归并重建插件实际加载的打包产物：
+
+```bash
+node --check server.mjs
+npm test
+npm run build
+node --check dist/cursor-bridge.mjs
+git diff --check
+```
+
+取消回归测试会在模拟 React adapter/composer 表面上真实执行注入选择器，同时覆盖 `Stop generation` 与 `Stop command`。现场端到端验证还应创建一次性只读 `parallel_agent`，等待精确 `agentId`，通过 `cursor_task_control` 取消，并确认不再保留占用或阻塞任务。
 
 ## 文件结构
 
