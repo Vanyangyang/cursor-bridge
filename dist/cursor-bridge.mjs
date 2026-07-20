@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve3.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve3(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3648,7 +3648,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve3(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3906,7 +3906,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve: resolve3,
       resolveComponent,
       equal,
       serialize,
@@ -9141,9 +9141,9 @@ var require_websocket = __commonJS({
     var EventEmitter = __require("events");
     var https = __require("https");
     var http3 = __require("http");
-    var net = __require("net");
+    var net2 = __require("net");
     var tls = __require("tls");
-    var { randomBytes, createHash } = __require("crypto");
+    var { randomBytes, createHash: createHash2 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -9682,7 +9682,7 @@ var require_websocket = __commonJS({
       }
       const defaultPort = isSecure ? 443 : 80;
       const key = randomBytes(16).toString("base64");
-      const request = isSecure ? https.request : http3.request;
+      const request2 = isSecure ? https.request : http3.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
       opts.createConnection = opts.createConnection || (isSecure ? tlsConnect : netConnect);
@@ -9759,12 +9759,12 @@ var require_websocket = __commonJS({
         if (opts.auth && !options.headers.authorization) {
           options.headers.authorization = "Basic " + Buffer.from(opts.auth).toString("base64");
         }
-        req = websocket._req = request(opts);
+        req = websocket._req = request2(opts);
         if (websocket._redirects) {
           websocket.emit("redirect", websocket.url, req);
         }
       } else {
-        req = websocket._req = request(opts);
+        req = websocket._req = request2(opts);
       }
       if (opts.timeout) {
         req.on("timeout", () => {
@@ -9811,7 +9811,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash("sha1").update(key + GUID).digest("base64");
+        const digest = createHash2("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -9885,12 +9885,12 @@ var require_websocket = __commonJS({
     }
     function netConnect(options) {
       options.path = options.socketPath;
-      return net.connect(options);
+      return net2.connect(options);
     }
     function tlsConnect(options) {
       options.path = void 0;
       if (!options.servername && options.servername !== "") {
-        options.servername = net.isIP(options.host) ? "" : options.host;
+        options.servername = net2.isIP(options.host) ? "" : options.host;
       }
       return tls.connect(options);
     }
@@ -10180,7 +10180,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http3 = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash } = __require("crypto");
+    var { createHash: createHash2 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -10487,7 +10487,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash("sha1").update(key + GUID).digest("base64");
+        const digest = createHash2("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -10574,17 +10574,12 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// launch-cursor.mjs
-var launch_cursor_exports = {};
-__export(launch_cursor_exports, {
-  ensureCursorRunning: () => ensureCursorRunning
-});
+// cursor-ensure-core.mjs
 import { spawn, execSync } from "child_process";
 import { existsSync } from "fs";
-import { pathToFileURL } from "url";
 import http from "http";
 function looksLikePluginRuntimePath(candidate) {
-  const p = candidate.replace(/\//g, "\\").toLowerCase();
+  const p = String(candidate || "").replace(/\//g, "\\").toLowerCase();
   return p.includes("\\.codex\\.tmp\\marketplaces\\") || p.includes("\\.codex\\plugins\\cache\\") || p.includes("\\.claude\\plugins\\cache\\") || p.includes("\\appdata\\local\\npm-cache\\_npx\\");
 }
 function resolveProjectPath() {
@@ -10636,48 +10631,53 @@ function findCursorExe() {
   return null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve2(res.statusCode === 200);
+      resolve3(res.statusCode === 200);
     });
-    req.on("error", () => resolve2(false));
+    req.on("error", () => resolve3(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve2(false);
+      resolve3(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve2(false);
-          resolve2(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve3(false);
+          resolve3(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve2(false);
+          resolve3(false);
         }
       });
     });
-    req.on("error", () => resolve2(false));
+    req.on("error", () => resolve3(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve2(false);
+      resolve3(false);
     });
   });
 }
 function cursorRunning() {
   try {
-    if (IS_WIN) return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', { encoding: "utf8", windowsHide: true }));
+    if (IS_WIN) {
+      return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', {
+        encoding: "utf8",
+        windowsHide: true
+      }));
+    }
     if (IS_MAC) {
       execSync("pgrep -f 'Cursor.app/Contents/MacOS/Cursor'", { stdio: "ignore" });
       return true;
@@ -10695,11 +10695,18 @@ async function waitForCdp(maxMs = 3e4, stepMs = 1e3) {
   }
   return false;
 }
-async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
+async function ensureCursorRunningLocal({ waitMs = 3e4 } = {}) {
   if (await cdpUp()) {
     const isCursor = await cdpIsCursor();
-    if (isCursor) return { ok: true, status: "already", port: CDP_PORT, message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\u3002` };
-    return { ok: false, status: "port-not-cursor", port: CDP_PORT, message: `CDP ${CDP_PORT} \u88AB\u3010\u975E Cursor\u3011\u7684 IDE \u5360\u7528\u3002\u6362\u7AEF\u53E3\u6216\u6392\u67E5\u3002` };
+    if (isCursor) {
+      return { ok: true, status: "already", port: CDP_PORT, message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\u3002` };
+    }
+    return {
+      ok: false,
+      status: "port-not-cursor",
+      port: CDP_PORT,
+      message: `CDP ${CDP_PORT} \u88AB\u3010\u975E Cursor\u3011\u7684 IDE \u5360\u7528\u3002\u6362\u7AEF\u53E3\u6216\u6392\u67E5\u3002`
+    };
   }
   if (cursorRunning()) {
     return {
@@ -10710,23 +10717,44 @@ async function ensureCursorRunning({ waitMs = 3e4 } = {}) {
     };
   }
   const exe = findCursorExe();
-  if (!exe) return { ok: false, status: "no-exe", port: CDP_PORT, message: `\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\uFF08Windows\uFF1A\u6CE8\u518C\u8868/\u9ED8\u8BA4\u4F4D\u7F6E\uFF1BmacOS\uFF1A/Applications/Cursor.app \u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u5B8C\u6574\u8DEF\u5F84\u3002` };
+  if (!exe) {
+    return {
+      ok: false,
+      status: "no-exe",
+      port: CDP_PORT,
+      message: "\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\uFF08Windows\uFF1A\u6CE8\u518C\u8868/\u9ED8\u8BA4\u4F4D\u7F6E\uFF1BmacOS\uFF1A/Applications/Cursor.app \u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u5B8C\u6574\u8DEF\u5F84\u3002"
+    };
+  }
+  const projectPath = resolveProjectPath();
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
-  if (PROJECT_PATH && existsSync(PROJECT_PATH)) args.push(PROJECT_PATH);
+  if (projectPath && existsSync(projectPath)) args.push(projectPath);
   const child = spawn(exe, args, { detached: true, stdio: "ignore", windowsHide: false });
   child.unref();
   const up = await waitForCdp(waitMs);
-  if (!up) return { ok: false, status: "timeout", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002` };
-  const target = PROJECT_PATH ? `\u6253\u5F00 ${PROJECT_PATH}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
-  return { ok: true, status: "launched", exe, port: CDP_PORT, message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002` };
+  if (!up) {
+    return {
+      ok: false,
+      status: "timeout",
+      exe,
+      port: CDP_PORT,
+      message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002`
+    };
+  }
+  const target = projectPath ? `\u6253\u5F00 ${projectPath}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
+  return {
+    ok: true,
+    status: "launched",
+    exe,
+    port: CDP_PORT,
+    message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
+  };
 }
-var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_PATH, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES, isMain;
-var init_launch_cursor = __esm({
-  "launch-cursor.mjs"() {
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES;
+var init_cursor_ensure_core = __esm({
+  "cursor-ensure-core.mjs"() {
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
     CDP_HOST = "127.0.0.1";
-    PROJECT_PATH = resolveProjectPath();
     IS_WIN = process.platform === "win32";
     IS_MAC = process.platform === "darwin";
     WIN_FALLBACKS = [
@@ -10737,9 +10765,524 @@ var init_launch_cursor = __esm({
       "/Applications/Cursor.app/Contents/MacOS/Cursor",
       `${process.env.HOME || ""}/Applications/Cursor.app/Contents/MacOS/Cursor`
     ];
+  }
+});
+
+// lifecycle-paths.mjs
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+function defaultLifecycleDir() {
+  if (process.env.CURSOR_BRIDGE_LIFECYCLE_DIR) return process.env.CURSOR_BRIDGE_LIFECYCLE_DIR;
+  if (process.platform === "win32") {
+    const root2 = process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
+    return join(root2, "cursor-bridge", "lifecycle");
+  }
+  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join(homedir(), ".local", "state");
+  return join(root, "cursor-bridge", "lifecycle");
+}
+function ensureLifecycleDir(dir = defaultLifecycleDir()) {
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function lifecycleEndpointTag(dir) {
+  return createHash("sha256").update(String(dir), "utf8").digest("hex").slice(0, 24);
+}
+function supervisorSockPath(dir = defaultLifecycleDir()) {
+  if (process.env.CURSOR_BRIDGE_SUPERVISOR_SOCK) return process.env.CURSOR_BRIDGE_SUPERVISOR_SOCK;
+  if (process.platform === "win32") {
+    return `\\\\.\\pipe\\cursor-bridge-lifecycle-${lifecycleEndpointTag(dir)}`;
+  }
+  return join(dir, "supervisor.sock");
+}
+function supervisorPidPath(dir = defaultLifecycleDir()) {
+  return join(dir, "supervisor.pid");
+}
+function supervisorLockPath(dir = defaultLifecycleDir()) {
+  return join(dir, "supervisor.lock");
+}
+var init_lifecycle_paths = __esm({
+  "lifecycle-paths.mjs"() {
+  }
+});
+
+// win-job-breakaway.mjs
+import { spawn as spawn2, execFileSync } from "node:child_process";
+import { existsSync as existsSync2 } from "node:fs";
+function quoteCmdArg(value) {
+  const s = String(value);
+  if (s.length === 0) return '""';
+  if (!/[\s"]/u.test(s)) return s;
+  let out = '"';
+  let numBackslashes = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    const ch = s[i];
+    if (ch === "\\") {
+      numBackslashes += 1;
+      continue;
+    }
+    if (ch === '"') {
+      out += "\\".repeat(numBackslashes * 2 + 1);
+      out += '"';
+      numBackslashes = 0;
+      continue;
+    }
+    out += "\\".repeat(numBackslashes);
+    out += ch;
+    numBackslashes = 0;
+  }
+  out += "\\".repeat(numBackslashes * 2);
+  out += '"';
+  return out;
+}
+function buildCommandLine(file, args = []) {
+  return [file, ...args].map(quoteCmdArg).join(" ");
+}
+function quotePowerShellSingle(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+function buildHiddenWmiCreateScript(commandLine, cwd) {
+  return `
+$ErrorActionPreference = 'Stop'
+$cmd = ${quotePowerShellSingle(commandLine)}
+$cwd = ${quotePowerShellSingle(cwd)}
+$startup = New-CimInstance -ClassName Win32_ProcessStartup -Namespace 'root/cimv2' -ClientOnly -Property @{ CreateFlags = [uint32]0x00000008; ShowWindow = [uint16]0 }
+$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $cwd; ProcessStartupInformation = $startup }
+if ($null -eq $r -or $r.ReturnValue -ne 0) { throw "Win32_Process.Create failed: $($r.ReturnValue)" }
+Write-Output $r.ProcessId
+`.trim();
+}
+function whichNode() {
+  if (process.env.CURSOR_BRIDGE_NODE_EXE && existsSync2(process.env.CURSOR_BRIDGE_NODE_EXE)) {
+    return process.env.CURSOR_BRIDGE_NODE_EXE;
+  }
+  return process.execPath;
+}
+function allowUnsafeCmdStart(env = process.env) {
+  return env.CURSOR_BRIDGE_UNSAFE_CMD_START === "1" || env.CURSOR_BRIDGE_ALLOW_UNSAFE_JOB_BREAKAWAY === "1";
+}
+function spawnOutsideJob(file, args = [], options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const env = options.env || process.env;
+  const commandLine = buildCommandLine(file, args);
+  if (process.platform !== "win32") {
+    const child = spawn2(file, args, {
+      cwd,
+      env,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    child.unref();
+    return { ok: true, method: "detached-spawn", pid: child.pid, commandLine };
+  }
+  try {
+    if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL === "1") {
+      throw new Error("forced WMI failure for tests");
+    }
+    const ps = buildHiddenWmiCreateScript(commandLine, cwd);
+    const out = execFileSync("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      ps
+    ], {
+      encoding: "utf8",
+      windowsHide: true,
+      env,
+      timeout: 15e3
+    }).trim();
+    const pid = Number(String(out).trim().split(/\r?\n/).pop());
+    if (!Number.isFinite(pid) || pid <= 0) {
+      throw new Error(`unexpected WMI pid output: ${out}`);
+    }
+    return { ok: true, method: "wmi-win32-process-create", pid, commandLine };
+  } catch (wmiError) {
+    const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
+    if (!allowUnsafeCmdStart(env)) {
+      return {
+        ok: false,
+        method: "failed",
+        commandLine,
+        error: `WMI Win32_Process.Create failed: ${wmiMsg}. cmd.exe start fallback is disabled by default; set CURSOR_BRIDGE_UNSAFE_CMD_START=1 only for degraded/unsafe debug use.`
+      };
+    }
+    try {
+      const boot = spawn2("cmd.exe", ["/c", "start", "", "/b", file, ...args], {
+        cwd,
+        env,
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true
+      });
+      boot.unref();
+      return {
+        ok: true,
+        method: "cmd-start-trampoline",
+        pid: boot.pid,
+        commandLine,
+        degraded: true,
+        unsafe: true,
+        warning: `unsafe cmd-start fallback after WMI failure: ${wmiMsg}`
+      };
+    } catch (startError) {
+      return {
+        ok: false,
+        method: "failed",
+        commandLine,
+        degraded: true,
+        unsafe: true,
+        error: `WMI failed (${wmiMsg}); unsafe cmd-start also failed: ${startError instanceof Error ? startError.message : startError}`
+      };
+    }
+  }
+}
+function spawnNodeOutsideJob(scriptPath, scriptArgs = [], options = {}) {
+  const node = whichNode();
+  const env = { ...options.env || process.env };
+  if (!env.PATH && process.env.Path) env.PATH = process.env.Path;
+  return spawnOutsideJob(node, [scriptPath, ...scriptArgs], { ...options, env });
+}
+var init_win_job_breakaway = __esm({
+  "win-job-breakaway.mjs"() {
+  }
+});
+
+// cursor-lifecycle-client.mjs
+import net from "node:net";
+import { existsSync as existsSync3, readFileSync, unlinkSync, writeFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join as join2, resolve } from "node:path";
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+function resolveSupervisorScript() {
+  if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync3(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
+    return resolve(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+  }
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [];
+  if (typeof process.argv[1] === "string") {
+    const entryDir = dirname(resolve(process.argv[1]));
+    candidates.push(join2(entryDir, "cursor-lifecycle-supervisor.mjs"));
+  }
+  candidates.push(
+    join2(here, "cursor-lifecycle-supervisor.mjs"),
+    join2(here, "dist", "cursor-lifecycle-supervisor.mjs")
+  );
+  for (const c of candidates) {
+    if (existsSync3(c)) return c;
+  }
+  return join2(here, "cursor-lifecycle-supervisor.mjs");
+}
+function isProcessAlive(pid) {
+  if (!pid || !Number.isFinite(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function readPidFile(pidPath) {
+  try {
+    const n = Number(String(readFileSync(pidPath, "utf8")).trim());
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+function connectSupervisor(sock, timeoutMs = 8e3) {
+  return new Promise((resolvePromise, reject) => {
+    const socket = net.connect(sock);
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try {
+        socket.destroy();
+      } catch {
+      }
+      reject(new Error(`supervisor connect timeout (${timeoutMs}ms) sock=${sock}`));
+    }, timeoutMs);
+    socket.once("connect", () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolvePromise(socket);
+    });
+    socket.once("error", (error2) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error2);
+    });
+  });
+}
+function request(socket, payload, timeoutMs = 12e4) {
+  return new Promise((resolvePromise, reject) => {
+    let buffer = "";
+    let settled = false;
+    const id = payload.id || `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const message = { ...payload, id };
+    const cleanup = () => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+      clearTimeout(timer);
+    };
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const onData = (chunk) => {
+      buffer += chunk;
+      let idx;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        let msg;
+        try {
+          msg = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (msg.id !== id) continue;
+        finish(resolvePromise, msg);
+        return;
+      }
+    };
+    const onError = (error2) => finish(reject, error2);
+    const onClose = () => finish(reject, new Error("supervisor socket closed before response"));
+    const timer = setTimeout(() => finish(reject, new Error(`supervisor request timeout id=${id}`)), timeoutMs);
+    socket.on("data", onData);
+    socket.on("error", onError);
+    socket.on("close", onClose);
+    socket.write(`${JSON.stringify(message)}
+`);
+  });
+}
+async function tryConnect(sock) {
+  try {
+    return await connectSupervisor(sock, 1500);
+  } catch {
+    return null;
+  }
+}
+function tryUnlink(path) {
+  try {
+    if (path && existsSync3(path)) unlinkSync(path);
+  } catch {
+  }
+}
+function writeBootEnv(dir, extra = {}) {
+  const bootPath = join2(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const payload = { ...extra };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
+      payload[key] = value;
+    }
+  }
+  const cleaned = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (v != null && v !== "") cleaned[k] = String(v);
+  }
+  writeFileSync(bootPath, `${JSON.stringify(cleaned, null, 2)}
+`, { encoding: "utf8" });
+  return bootPath;
+}
+async function ensureSupervisorConnected(options = {}) {
+  const dir = ensureLifecycleDir(options.dir || defaultLifecycleDir());
+  const sock = options.sock || supervisorSockPath(dir);
+  const pidPath = options.pidPath || supervisorPidPath(dir);
+  const lockPath = options.lockPath || supervisorLockPath(dir);
+  const createWaitMs = Number(options.createWaitMs || DEFAULT_CREATE_WAIT_MS);
+  let socket = await tryConnect(sock);
+  if (socket) {
+    const pid = readPidFile(pidPath);
+    return {
+      socket,
+      sock,
+      dir,
+      supervisorPid: pid,
+      reusedSupervisor: true,
+      createdSupervisor: false,
+      spawnMethod: null
+    };
+  }
+  const stalePid = readPidFile(pidPath);
+  if (stalePid && !isProcessAlive(stalePid)) {
+    tryUnlink(pidPath);
+    tryUnlink(lockPath);
+    if (process.platform !== "win32") {
+      tryUnlink(sock);
+    }
+  }
+  const script = options.supervisorScript || resolveSupervisorScript();
+  if (!existsSync3(script)) {
+    throw new Error(`lifecycle supervisor script missing: ${script}`);
+  }
+  const bootEnvPath = writeBootEnv(dir, options.bootEnv || {});
+  try {
+    const scriptArgs = [
+      "--lifecycle-supervisor",
+      `--lifecycle-dir=${dir}`,
+      `--sock=${sock}`,
+      `--boot-env=${bootEnvPath}`
+    ];
+    if (process.env.CURSOR_BRIDGE_ENSURE_MODULE) {
+      scriptArgs.push(`--ensure-module=${process.env.CURSOR_BRIDGE_ENSURE_MODULE}`);
+    }
+    if (process.env.CURSOR_BRIDGE_SUPERVISOR_IDLE_MS) {
+      scriptArgs.push(`--idle-ms=${process.env.CURSOR_BRIDGE_SUPERVISOR_IDLE_MS}`);
+    }
+    const childEnv = {
+      ...process.env,
+      ...options.env || {},
+      CURSOR_BRIDGE_ROLE: "supervisor",
+      CURSOR_BRIDGE_LIFECYCLE_DIR: dir,
+      CURSOR_BRIDGE_SUPERVISOR_SOCK: sock
+    };
+    const spawned = spawnNodeOutsideJob(script, scriptArgs, {
+      cwd: options.cwd || dirname(script),
+      env: childEnv
+    });
+    if (!spawned.ok) {
+      throw new Error(`failed to spawn lifecycle supervisor: ${spawned.error || spawned.method}`);
+    }
+    const deadline = Date.now() + createWaitMs;
+    while (Date.now() < deadline) {
+      socket = await tryConnect(sock);
+      if (socket) {
+        const pid = readPidFile(pidPath) || spawned.pid;
+        return {
+          socket,
+          sock,
+          dir,
+          supervisorPid: pid,
+          reusedSupervisor: false,
+          createdSupervisor: true,
+          spawnMethod: spawned.method,
+          spawnPid: spawned.pid,
+          degraded: !!spawned.degraded,
+          unsafe: !!spawned.unsafe
+        };
+      }
+      await sleep(100);
+    }
+    throw new Error(`spawned supervisor (${spawned.method} pid=${spawned.pid}) but IPC not ready within ${createWaitMs}ms sock=${sock}`);
+  } finally {
+    tryUnlink(bootEnvPath);
+  }
+}
+async function ensureCursorViaSupervisor(options = {}) {
+  const adapterPid = process.pid;
+  const reason = options.reason || "ensure";
+  const conn = await ensureSupervisorConnected(options);
+  try {
+    const waitMs = Number(options.waitMs || 3e4);
+    const response = await request(conn.socket, {
+      type: "ensure",
+      waitMs,
+      reason,
+      adapterPid
+    }, Math.max(waitMs + 15e3, 6e4));
+    if (response.type === "error") {
+      return {
+        ok: false,
+        status: "supervisor-error",
+        message: response.error || "supervisor error",
+        adapterPid,
+        supervisorPid: conn.supervisorPid,
+        reusedSupervisor: conn.reusedSupervisor,
+        createdSupervisor: conn.createdSupervisor,
+        launchReason: "supervisor-error",
+        spawnMethod: conn.spawnMethod
+      };
+    }
+    return {
+      ok: !!response.ok,
+      status: response.status,
+      message: response.message,
+      port: response.port,
+      exe: response.exe,
+      adapterPid,
+      supervisorPid: response.supervisorPid || conn.supervisorPid,
+      reusedSupervisor: conn.reusedSupervisor,
+      createdSupervisor: conn.createdSupervisor,
+      launchReason: conn.createdSupervisor ? response.status === "launched" ? "created-supervisor-and-spawned-cursor" : "created-supervisor" : response.launchReason || (response.status === "launched" ? "reused-supervisor-spawned-cursor" : "reused-supervisor"),
+      spawnMethod: conn.spawnMethod,
+      ensureCount: response.ensureCount
+    };
+  } finally {
+    try {
+      conn.socket.end();
+    } catch {
+    }
+    try {
+      conn.socket.destroy();
+    } catch {
+    }
+  }
+}
+var DEFAULT_CREATE_WAIT_MS;
+var init_cursor_lifecycle_client = __esm({
+  "cursor-lifecycle-client.mjs"() {
+    init_lifecycle_paths();
+    init_win_job_breakaway();
+    DEFAULT_CREATE_WAIT_MS = 2e4;
+  }
+});
+
+// launch-cursor.mjs
+var launch_cursor_exports = {};
+__export(launch_cursor_exports, {
+  CDP_HOST: () => CDP_HOST,
+  CDP_ORIGIN: () => CDP_ORIGIN,
+  CDP_PORT: () => CDP_PORT,
+  cdpIsCursor: () => cdpIsCursor,
+  cdpUp: () => cdpUp,
+  cursorRunning: () => cursorRunning,
+  ensureCursorRunning: () => ensureCursorRunning,
+  ensureCursorRunningLocal: () => ensureCursorRunningLocal,
+  findCursorExe: () => findCursorExe,
+  looksLikePluginRuntimePath: () => looksLikePluginRuntimePath,
+  resolveProjectPath: () => resolveProjectPath,
+  waitForCdp: () => waitForCdp
+});
+import { pathToFileURL } from "url";
+async function ensureCursorRunning(options = {}) {
+  if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === "1" || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === "1") {
+    const local = await ensureCursorRunningLocal(options);
+    return {
+      ...local,
+      adapterPid: process.pid,
+      supervisorPid: null,
+      reusedSupervisor: false,
+      createdSupervisor: false,
+      launchReason: local.status === "launched" ? "inline-spawned-cursor" : `inline-${local.status}`
+    };
+  }
+  return ensureCursorViaSupervisor({
+    ...options,
+    reason: options.reason || "ensureCursorRunning"
+  });
+}
+var isMain;
+var init_launch_cursor = __esm({
+  "launch-cursor.mjs"() {
+    init_cursor_ensure_core();
+    init_cursor_lifecycle_client();
+    init_cursor_ensure_core();
     isMain = import.meta.url === pathToFileURL(process.argv[1] || "").href && import.meta.url.endsWith("launch-cursor.mjs");
     if (isMain) {
-      ensureCursorRunning().then((r) => {
+      ensureCursorRunning({ reason: "cli" }).then((r) => {
         console.log(JSON.stringify(r));
         process.exit(r.ok ? 0 : 1);
       }).catch((e) => {
@@ -17603,8 +18146,8 @@ var Protocol = class {
     this._taskStore = _options?.taskStore;
     this._taskMessageQueue = _options?.taskMessageQueue;
     if (this._taskStore) {
-      this.setRequestHandler(GetTaskRequestSchema, async (request, extra) => {
-        const task = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
+      this.setRequestHandler(GetTaskRequestSchema, async (request2, extra) => {
+        const task = await this._taskStore.getTask(request2.params.taskId, extra.sessionId);
         if (!task) {
           throw new McpError(ErrorCode.InvalidParams, "Failed to retrieve task: Task not found");
         }
@@ -17612,9 +18155,9 @@ var Protocol = class {
           ...task
         };
       });
-      this.setRequestHandler(GetTaskPayloadRequestSchema, async (request, extra) => {
+      this.setRequestHandler(GetTaskPayloadRequestSchema, async (request2, extra) => {
         const handleTaskResult = async () => {
-          const taskId = request.params.taskId;
+          const taskId = request2.params.taskId;
           if (this._taskMessageQueue) {
             let queuedMessage;
             while (queuedMessage = await this._taskMessageQueue.dequeue(taskId, extra.sessionId)) {
@@ -17665,9 +18208,9 @@ var Protocol = class {
         };
         return await handleTaskResult();
       });
-      this.setRequestHandler(ListTasksRequestSchema, async (request, extra) => {
+      this.setRequestHandler(ListTasksRequestSchema, async (request2, extra) => {
         try {
-          const { tasks, nextCursor } = await this._taskStore.listTasks(request.params?.cursor, extra.sessionId);
+          const { tasks, nextCursor } = await this._taskStore.listTasks(request2.params?.cursor, extra.sessionId);
           return {
             tasks,
             nextCursor,
@@ -17677,20 +18220,20 @@ var Protocol = class {
           throw new McpError(ErrorCode.InvalidParams, `Failed to list tasks: ${error2 instanceof Error ? error2.message : String(error2)}`);
         }
       });
-      this.setRequestHandler(CancelTaskRequestSchema, async (request, extra) => {
+      this.setRequestHandler(CancelTaskRequestSchema, async (request2, extra) => {
         try {
-          const task = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
+          const task = await this._taskStore.getTask(request2.params.taskId, extra.sessionId);
           if (!task) {
-            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${request.params.taskId}`);
+            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${request2.params.taskId}`);
           }
           if (isTerminal(task.status)) {
             throw new McpError(ErrorCode.InvalidParams, `Cannot cancel task in terminal status: ${task.status}`);
           }
-          await this._taskStore.updateTaskStatus(request.params.taskId, "cancelled", "Client cancelled task execution.", extra.sessionId);
-          this._clearTaskQueue(request.params.taskId);
-          const cancelledTask = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
+          await this._taskStore.updateTaskStatus(request2.params.taskId, "cancelled", "Client cancelled task execution.", extra.sessionId);
+          this._clearTaskQueue(request2.params.taskId);
+          const cancelledTask = await this._taskStore.getTask(request2.params.taskId, extra.sessionId);
           if (!cancelledTask) {
-            throw new McpError(ErrorCode.InvalidParams, `Task not found after cancellation: ${request.params.taskId}`);
+            throw new McpError(ErrorCode.InvalidParams, `Task not found after cancellation: ${request2.params.taskId}`);
           }
           return {
             _meta: {},
@@ -17811,14 +18354,14 @@ var Protocol = class {
     }
     Promise.resolve().then(() => handler(notification)).catch((error2) => this._onerror(new Error(`Uncaught error in notification handler: ${error2}`)));
   }
-  _onrequest(request, extra) {
-    const handler = this._requestHandlers.get(request.method) ?? this.fallbackRequestHandler;
+  _onrequest(request2, extra) {
+    const handler = this._requestHandlers.get(request2.method) ?? this.fallbackRequestHandler;
     const capturedTransport = this._transport;
-    const relatedTaskId = request.params?._meta?.[RELATED_TASK_META_KEY]?.taskId;
+    const relatedTaskId = request2.params?._meta?.[RELATED_TASK_META_KEY]?.taskId;
     if (handler === void 0) {
       const errorResponse = {
         jsonrpc: "2.0",
-        id: request.id,
+        id: request2.id,
         error: {
           code: ErrorCode.MethodNotFound,
           message: "Method not found"
@@ -17836,17 +18379,17 @@ var Protocol = class {
       return;
     }
     const abortController = new AbortController();
-    this._requestHandlerAbortControllers.set(request.id, abortController);
-    const taskCreationParams = isTaskAugmentedRequestParams(request.params) ? request.params.task : void 0;
-    const taskStore = this._taskStore ? this.requestTaskStore(request, capturedTransport?.sessionId) : void 0;
+    this._requestHandlerAbortControllers.set(request2.id, abortController);
+    const taskCreationParams = isTaskAugmentedRequestParams(request2.params) ? request2.params.task : void 0;
+    const taskStore = this._taskStore ? this.requestTaskStore(request2, capturedTransport?.sessionId) : void 0;
     const fullExtra = {
       signal: abortController.signal,
       sessionId: capturedTransport?.sessionId,
-      _meta: request.params?._meta,
+      _meta: request2.params?._meta,
       sendNotification: async (notification) => {
         if (abortController.signal.aborted)
           return;
-        const notificationOptions = { relatedRequestId: request.id };
+        const notificationOptions = { relatedRequestId: request2.id };
         if (relatedTaskId) {
           notificationOptions.relatedTask = { taskId: relatedTaskId };
         }
@@ -17856,7 +18399,7 @@ var Protocol = class {
         if (abortController.signal.aborted) {
           throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
         }
-        const requestOptions = { ...options, relatedRequestId: request.id };
+        const requestOptions = { ...options, relatedRequestId: request2.id };
         if (relatedTaskId && !requestOptions.relatedTask) {
           requestOptions.relatedTask = { taskId: relatedTaskId };
         }
@@ -17867,7 +18410,7 @@ var Protocol = class {
         return await this.request(r, resultSchema, requestOptions);
       },
       authInfo: extra?.authInfo,
-      requestId: request.id,
+      requestId: request2.id,
       requestInfo: extra?.requestInfo,
       taskId: relatedTaskId,
       taskStore,
@@ -17877,16 +18420,16 @@ var Protocol = class {
     };
     Promise.resolve().then(() => {
       if (taskCreationParams) {
-        this.assertTaskHandlerCapability(request.method);
+        this.assertTaskHandlerCapability(request2.method);
       }
-    }).then(() => handler(request, fullExtra)).then(async (result) => {
+    }).then(() => handler(request2, fullExtra)).then(async (result) => {
       if (abortController.signal.aborted) {
         return;
       }
       const response = {
         result,
         jsonrpc: "2.0",
-        id: request.id
+        id: request2.id
       };
       if (relatedTaskId && this._taskMessageQueue) {
         await this._enqueueTaskMessage(relatedTaskId, {
@@ -17903,7 +18446,7 @@ var Protocol = class {
       }
       const errorResponse = {
         jsonrpc: "2.0",
-        id: request.id,
+        id: request2.id,
         error: {
           code: Number.isSafeInteger(error2["code"]) ? error2["code"] : ErrorCode.InternalError,
           message: error2.message ?? "Internal error",
@@ -17920,8 +18463,8 @@ var Protocol = class {
         await capturedTransport?.send(errorResponse);
       }
     }).catch((error2) => this._onerror(new Error(`Failed to send response: ${error2}`))).finally(() => {
-      if (this._requestHandlerAbortControllers.get(request.id) === abortController) {
-        this._requestHandlerAbortControllers.delete(request.id);
+      if (this._requestHandlerAbortControllers.get(request2.id) === abortController) {
+        this._requestHandlerAbortControllers.delete(request2.id);
       }
     });
   }
@@ -18025,11 +18568,11 @@ var Protocol = class {
    *
    * @experimental Use `client.experimental.tasks.requestStream()` to access this method.
    */
-  async *requestStream(request, resultSchema, options) {
+  async *requestStream(request2, resultSchema, options) {
     const { task } = options ?? {};
     if (!task) {
       try {
-        const result = await this.request(request, resultSchema, options);
+        const result = await this.request(request2, resultSchema, options);
         yield { type: "result", result };
       } catch (error2) {
         yield {
@@ -18041,7 +18584,7 @@ var Protocol = class {
     }
     let taskId;
     try {
-      const createResult = await this.request(request, CreateTaskResultSchema, options);
+      const createResult = await this.request(request2, CreateTaskResultSchema, options);
       if (createResult.task) {
         taskId = createResult.task.taskId;
         yield { type: "taskCreated", task: createResult.task };
@@ -18074,7 +18617,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -18089,9 +18632,9 @@ var Protocol = class {
    *
    * Do not use this method to emit notifications! Use notification() instead.
    */
-  request(request, resultSchema, options) {
+  request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -18101,9 +18644,9 @@ var Protocol = class {
       }
       if (this._options?.enforceStrictCapabilities === true) {
         try {
-          this.assertCapabilityForMethod(request.method);
+          this.assertCapabilityForMethod(request2.method);
           if (task) {
-            this.assertTaskCapability(request.method);
+            this.assertTaskCapability(request2.method);
           }
         } catch (e) {
           earlyReject(e);
@@ -18113,16 +18656,16 @@ var Protocol = class {
       options?.signal?.throwIfAborted();
       const messageId = this._requestMessageId++;
       const jsonrpcRequest = {
-        ...request,
+        ...request2,
         jsonrpc: "2.0",
         id: messageId
       };
       if (options?.onprogress) {
         this._progressHandlers.set(messageId, options.onprogress);
         jsonrpcRequest.params = {
-          ...request.params,
+          ...request2.params,
           _meta: {
-            ...request.params?._meta || {},
+            ...request2.params?._meta || {},
             progressToken: messageId
           }
         };
@@ -18169,7 +18712,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve3(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -18326,8 +18869,8 @@ var Protocol = class {
   setRequestHandler(requestSchema, handler) {
     const method = getMethodLiteral(requestSchema);
     this.assertRequestHandlerCapability(method);
-    this._requestHandlers.set(method, (request, extra) => {
-      const parsed = parseWithCompat(requestSchema, request);
+    this._requestHandlers.set(method, (request2, extra) => {
+      const parsed = parseWithCompat(requestSchema, request2);
       return Promise.resolve(handler(parsed, extra));
     });
   }
@@ -18430,31 +18973,31 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve3, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
       }, { once: true });
     });
   }
-  requestTaskStore(request, sessionId) {
+  requestTaskStore(request2, sessionId) {
     const taskStore = this._taskStore;
     if (!taskStore) {
       throw new Error("No task store configured");
     }
     return {
       createTask: async (taskParams) => {
-        if (!request) {
+        if (!request2) {
           throw new Error("No request provided");
         }
-        return await taskStore.createTask(taskParams, request.id, {
-          method: request.method,
-          params: request.params
+        return await taskStore.createTask(taskParams, request2.id, {
+          method: request2.method,
+          params: request2.params
         }, sessionId);
       },
       getTask: async (taskId) => {
@@ -18615,8 +19158,8 @@ var ExperimentalServerTasks = class {
    *
    * @experimental
    */
-  requestStream(request, resultSchema, options) {
-    return this._server.requestStream(request, resultSchema, options);
+  requestStream(request2, resultSchema, options) {
+    return this._server.requestStream(request2, resultSchema, options);
   }
   /**
    * Sends a sampling request and returns an AsyncGenerator that yields response messages.
@@ -18861,12 +19404,12 @@ var Server = class extends Protocol {
     this._capabilities = options?.capabilities ?? {};
     this._instructions = options?.instructions;
     this._jsonSchemaValidator = options?.jsonSchemaValidator ?? new AjvJsonSchemaValidator();
-    this.setRequestHandler(InitializeRequestSchema, (request) => this._oninitialize(request));
+    this.setRequestHandler(InitializeRequestSchema, (request2) => this._oninitialize(request2));
     this.setNotificationHandler(InitializedNotificationSchema, () => this.oninitialized?.());
     if (this._capabilities.logging) {
-      this.setRequestHandler(SetLevelRequestSchema, async (request, extra) => {
+      this.setRequestHandler(SetLevelRequestSchema, async (request2, extra) => {
         const transportSessionId = extra.sessionId || extra.requestInfo?.headers["mcp-session-id"] || void 0;
-        const { level } = request.params;
+        const { level } = request2.params;
         const parseResult = LoggingLevelSchema.safeParse(level);
         if (parseResult.success) {
           this._loggingLevels.set(transportSessionId, parseResult.data);
@@ -18925,14 +19468,14 @@ var Server = class extends Protocol {
     }
     const method = methodValue;
     if (method === "tools/call") {
-      const wrappedHandler = async (request, extra) => {
-        const validatedRequest = safeParse2(CallToolRequestSchema, request);
+      const wrappedHandler = async (request2, extra) => {
+        const validatedRequest = safeParse2(CallToolRequestSchema, request2);
         if (!validatedRequest.success) {
           const errorMessage = validatedRequest.error instanceof Error ? validatedRequest.error.message : String(validatedRequest.error);
           throw new McpError(ErrorCode.InvalidParams, `Invalid tools/call request: ${errorMessage}`);
         }
         const { params } = validatedRequest.data;
-        const result = await Promise.resolve(handler(request, extra));
+        const result = await Promise.resolve(handler(request2, extra));
         if (params.task) {
           const taskValidationResult = safeParse2(CreateTaskResultSchema, result);
           if (!taskValidationResult.success) {
@@ -19063,10 +19606,10 @@ var Server = class extends Protocol {
     }
     assertToolsCallTaskCapability(this._capabilities.tasks?.requests, method, "Server");
   }
-  async _oninitialize(request) {
-    const requestedVersion = request.params.protocolVersion;
-    this._clientCapabilities = request.params.capabilities;
-    this._clientVersion = request.params.clientInfo;
+  async _oninitialize(request2) {
+    const requestedVersion = request2.params.protocolVersion;
+    this._clientCapabilities = request2.params.capabilities;
+    this._clientVersion = request2.params.clientInfo;
     const protocolVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion) ? requestedVersion : LATEST_PROTOCOL_VERSION;
     return {
       protocolVersion,
@@ -19305,21 +19848,21 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve2();
+        resolve3();
       } else {
-        this._stdout.once("drain", resolve2);
+        this._stdout.once("drain", resolve3);
       }
     });
   }
 };
 
 // server.mjs
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, renameSync, rmSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { basename, dirname as dirname2, join as join3, resolve as resolve2 } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -19350,9 +19893,9 @@ var DELEGATION_POLICY_GUIDANCE = Object.freeze({
 });
 function resolveDelegationPolicyFile(value = process.env.CURSOR_BRIDGE_POLICY_FILE) {
   const configured = String(value || "").trim();
-  if (configured) return resolve(configured);
-  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  return join(configRoot, "cursor-bridge", "policy.json");
+  if (configured) return resolve2(configured);
+  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join3(homedir2(), ".config");
+  return join3(configRoot, "cursor-bridge", "policy.json");
 }
 var DELEGATION_POLICY_FILE = resolveDelegationPolicyFile();
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = "active") {
@@ -19368,7 +19911,7 @@ var DELEGATION_POLICY_DEFAULT = normalizeDelegationPolicy(
 function readPersistedDelegationPolicy(filePath = DELEGATION_POLICY_FILE) {
   if (!filePath) return null;
   try {
-    const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+    const parsed = JSON.parse(readFileSync2(filePath, "utf8"));
     const candidate = typeof parsed === "string" ? parsed : parsed && parsed.policy;
     const normalized = normalizeDelegationPolicy(candidate, "");
     return DELEGATION_POLICIES.includes(normalized) ? normalized : null;
@@ -19384,11 +19927,11 @@ function writePersistedDelegationPolicy(filePath, policy) {
   if (!DELEGATION_POLICIES.includes(normalized)) {
     throw new Error(`unsupported delegation policy: ${policy}`);
   }
-  const target = resolve(filePath);
-  mkdirSync(dirname(target), { recursive: true });
-  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
+  const target = resolve2(filePath);
+  mkdirSync2(dirname2(target), { recursive: true });
+  const temporary = join3(dirname2(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
   try {
-    writeFileSync(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}
+    writeFileSync2(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}
 `, {
       encoding: "utf8",
       mode: 384
@@ -19404,13 +19947,13 @@ var SEARCH_PREFIX = "\u53EA\u505A\u4EE3\u7801\u68C0\u7D22\u5B9A\u4F4D\uFF1A\u521
 var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve2(JSON.parse(d));
+          resolve3(JSON.parse(d));
         } catch {
           reject(new Error("CDP \u975E JSON \u54CD\u5E94"));
         }
@@ -19490,7 +20033,7 @@ function makeClient(wsUrl) {
     }
   } };
 }
-var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function evalJS(c, expr) {
   const r = await c.send("Runtime.evaluate", { expression: expr, returnByValue: true, includeCommandLineAPI: true });
   if (r.exceptionDetails) throw new Error("\u9875\u9762\u5F02\u5E38: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
@@ -19654,7 +20197,7 @@ function classifyParallelTerminalIcon(icon) {
 var CursorBridge = class {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    this.policyFile = options.policyFile === null ? null : resolve(options.policyFile || DELEGATION_POLICY_FILE);
+    this.policyFile = options.policyFile === null ? null : resolve2(options.policyFile || DELEGATION_POLICY_FILE);
     this.delegationPolicyDefault = DELEGATION_POLICY_DEFAULT;
     const persistedPolicy = options.delegationPolicy === void 0 ? readPersistedDelegationPolicy(this.policyFile) : null;
     const requestedPolicy = options.delegationPolicy !== void 0 ? options.delegationPolicy : persistedPolicy || this.delegationPolicyDefault;
@@ -19810,8 +20353,8 @@ var CursorBridge = class {
     const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve2, reject) => {
-      resolvePromise = resolve2;
+    const promise = new Promise((resolve3, reject) => {
+      resolvePromise = resolve3;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -19962,13 +20505,26 @@ var CursorBridge = class {
     this._healing = (async () => {
       try {
         const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-        const rr = await ensureCursorRunning2();
-        if (rr.status === "already") return;
-        if (rr.status === "port-not-cursor") {
-          console.error("\u26A0\uFE0F " + rr.message);
+        const rr = await ensureCursorRunning2({ reason: "adapter-heal" });
+        this._lastLifecycle = {
+          adapterPid: rr.adapterPid ?? process.pid,
+          supervisorPid: rr.supervisorPid ?? null,
+          reusedSupervisor: !!rr.reusedSupervisor,
+          createdSupervisor: !!rr.createdSupervisor,
+          launchReason: rr.launchReason || rr.status,
+          status: rr.status,
+          spawnMethod: rr.spawnMethod || null
+        };
+        const life = "adapterPid=" + this._lastLifecycle.adapterPid + " supervisorPid=" + this._lastLifecycle.supervisorPid + " reused=" + this._lastLifecycle.reusedSupervisor + " reason=" + this._lastLifecycle.launchReason;
+        if (rr.status === "already") {
+          console.error("\u{1FA9F} cursor ensure already: " + life);
           return;
         }
-        console.error("\u{1FA9F} cursor \u81EA\u6108\u62C9\u8D77\uFF1A" + (rr.message || rr.status));
+        if (rr.status === "port-not-cursor") {
+          console.error("\u26A0\uFE0F " + rr.message + " | " + life);
+          return;
+        }
+        console.error("\u{1FA9F} cursor \u81EA\u6108\u62C9\u8D77\uFF1A" + (rr.message || rr.status) + " | " + life);
       } catch (e) {
         console.error("\u26A0\uFE0F cursor \u81EA\u6108\u5931\u8D25\uFF08\u964D\u7EA7\uFF0C\u6309\u9700\u624B\u52A8\u542F\u52A8\uFF09\uFF1A", e.message);
       } finally {
@@ -20087,7 +20643,7 @@ var CursorBridge = class {
       this._throwIfCancelledBeforeSend(options);
       const filled = await evalJS(c, exprFill(prompt));
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
-      await sleep(450);
+      await sleep2(450);
       this._throwIfCancelledBeforeSend(options);
       let baseline = { messageCount: 0 };
       try {
@@ -20120,7 +20676,7 @@ var CursorBridge = class {
     let vis = await evalJS(c, EXPR_VISIBLE);
     if (!vis) {
       await chord(c, 2, "L", "KeyL", 76);
-      await sleep(1300);
+      await sleep2(1300);
       vis = await evalJS(c, EXPR_VISIBLE);
     }
     if (!vis) throw new Error("\u65E0\u6CD5\u6253\u5F00 Cursor chat \u9762\u677F\uFF08.aislash-editor-input \u4E0D\u53EF\u89C1\uFF09\u3002Cursor \u662F\u5426\u767B\u5F55\u4E14\u7A97\u53E3\u6B63\u5E38\uFF1F");
@@ -20139,7 +20695,7 @@ var CursorBridge = class {
       const modifiers = replaceCurrent ? 1 : 0;
       await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, modifiers });
       await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, modifiers });
-      await sleep(1100);
+      await sleep2(1100);
       return true;
     } catch {
       return false;
@@ -20152,14 +20708,14 @@ var CursorBridge = class {
     const { x, y } = JSON.parse(pos);
     await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
     await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
-    await sleep(450);
+    await sleep2(450);
     return !!await evalJS(c, EXPR_HISTORY_OPEN);
   }
   async _closeHistory(c) {
     try {
       if (await evalJS(c, EXPR_HISTORY_OPEN)) {
         await chord(c, 0, "Escape", "Escape", 27);
-        await sleep(180);
+        await sleep2(180);
       }
     } catch {
     }
@@ -20199,7 +20755,7 @@ var CursorBridge = class {
           agent = selectNewAgentEntry(before, await this._readAgentEntries(c));
         } catch {
         }
-        if (!agent) await sleep(350);
+        if (!agent) await sleep2(350);
       }
       if (agent) {
         job.agentId = agent.id;
@@ -20210,7 +20766,7 @@ var CursorBridge = class {
       this._throwIfCancelledBeforeSend(job);
       const filled = await evalJS(c, exprFill(job.prompt));
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("parallel_agent \u586B\u5165\u4EFB\u52A1\u5931\u8D25");
-      await sleep(350);
+      await sleep2(350);
       this._throwIfCancelledBeforeSend(job);
       job.sendState = "dispatching";
       sent = true;
@@ -20218,7 +20774,7 @@ var CursorBridge = class {
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
       for (let i = 0; i < 12 && !agent; i++) {
-        await sleep(350);
+        await sleep2(350);
         try {
           agent = selectNewAgentEntry(before, await this._readAgentEntries(c));
         } catch {
@@ -20283,7 +20839,7 @@ var CursorBridge = class {
     let lastCollectionError = "";
     while (Date.now() - started < job.timeoutMs) {
       if (!this._monitorOwns(job, generation)) return;
-      await sleep(1400);
+      await sleep2(1400);
       if (!this._monitorOwns(job, generation)) return;
       let entry;
       try {
@@ -20361,7 +20917,7 @@ var CursorBridge = class {
           });
           if (outcome === "completed" || outcome === "stale") return;
           completedStable = 0;
-          await sleep(1200);
+          await sleep2(1200);
           continue;
         }
       } else {
@@ -20378,7 +20934,7 @@ var CursorBridge = class {
       const entries = await this._readAgentEntries(c);
       const target = entries.find((e) => e.id === agentId);
       if (target && target.isSelected) return true;
-      await sleep(250);
+      await sleep2(250);
     }
     throw new Error(`\u6253\u5F00 ${agentId} \u540E\u672A\u786E\u8BA4\u5176\u6210\u4E3A\u5F53\u524D\u9009\u4E2D Agent`);
   }
@@ -20416,7 +20972,7 @@ var CursorBridge = class {
             break;
           }
         }
-        await sleep(300);
+        await sleep2(300);
       }
       if (!answer) throw new Error(`\u5DF2\u6253\u5F00 ${job.agentId}\uFF0C\u4F46\u672A\u627E\u5230\u52A9\u624B\u6700\u7EC8\u56DE\u590D`);
       if (previousSelectedId && previousSelectedId !== job.agentId) {
@@ -20473,7 +21029,7 @@ var CursorBridge = class {
     let second;
     try {
       first = await this._readParallelEntry(job);
-      await sleep(300);
+      await sleep2(300);
       second = await this._readParallelEntry(job);
     } catch (error2) {
       job.lastRecoveryAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -20595,7 +21151,7 @@ var CursorBridge = class {
         let lastSignature = "";
         let finalTarget = null;
         for (let i = 0; i < 24; i++) {
-          await sleep(250);
+          await sleep2(250);
           try {
             const afterEntries = await this._readAgentEntries(c);
             finalTarget = afterEntries.find((entry) => entry.id === job.agentId) || null;
@@ -20800,7 +21356,7 @@ var CursorBridge = class {
       try {
         if (await this._ensureHistoryOpen(c)) {
           await evalJS(c, exprOpenAgent(agentId));
-          await sleep(450);
+          await sleep2(450);
         }
       } finally {
         await this._closeHistory(c);
@@ -20813,7 +21369,7 @@ var CursorBridge = class {
     const INTERVAL = 1e3;
     let sawStop = false;
     let lastReplyKey = "", stableReply = 0;
-    await sleep(1200);
+    await sleep2(1200);
     while (Date.now() - start < timeoutMs) {
       if (job && job.cancelRequested) {
         const e = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
@@ -20829,7 +21385,7 @@ var CursorBridge = class {
       }
       if (s.stop > 0) sawStop = true;
       if (sawStop && s.stop === 0 && s.replyLength > 0) {
-        await sleep(800);
+        await sleep2(800);
         const ans2 = await evalJS(c, EXPR_EXTRACT);
         if (ans2) return ans2;
       }
@@ -20846,7 +21402,7 @@ var CursorBridge = class {
           lastReplyKey = key;
         }
       }
-      await sleep(INTERVAL);
+      await sleep2(INTERVAL);
     }
     let finalSnap = { messageCount: 0 };
     try {
@@ -20930,7 +21486,16 @@ var CursorBridge = class {
       blockedQueuedCount: this.activeParallel.size > 0 ? this.queue.filter((job) => globalBlocked || job.effectiveExecution !== "parallel_agent").length : 0,
       activeParallel: [...this.activeParallel.values()].map((job) => this._taskView(job)),
       recentTasks: [...this.tasks.values()].slice(-10).map((job) => this._taskView(job)),
-      cdpPort: CDP_PORT2
+      cdpPort: CDP_PORT2,
+      lifecycle: this._lastLifecycle || {
+        adapterPid: process.pid,
+        supervisorPid: null,
+        reusedSupervisor: null,
+        createdSupervisor: null,
+        launchReason: null,
+        status: null,
+        spawnMethod: null
+      }
     };
     try {
       const ver = await httpJson("/json/version");
@@ -21028,14 +21593,14 @@ function buildToolDefinitions(bridgeInstance) {
 }
 var bridge = new CursorBridge();
 var server = new Server(
-  { name: "cursor-bridge", version: "2.2.2" },
+  { name: "cursor-bridge", version: "2.2.3" },
   { capabilities: { tools: { listChanged: true } } }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: buildToolDefinitions(bridge)
 }));
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+server.setRequestHandler(CallToolRequestSchema, async (request2) => {
+  const { name, arguments: args } = request2.params;
   try {
     if (name === "cursor_search") {
       const result = await bridge.search(String(args && args.query || ""));
@@ -21080,7 +21645,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "cursor_launch") {
       const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-      const r = await ensureCursorRunning2();
+      const r = await ensureCursorRunning2({ reason: "cursor_launch" });
+      bridge._lastLifecycle = {
+        adapterPid: r.adapterPid ?? process.pid,
+        supervisorPid: r.supervisorPid ?? null,
+        reusedSupervisor: !!r.reusedSupervisor,
+        createdSupervisor: !!r.createdSupervisor,
+        launchReason: r.launchReason || r.status,
+        status: r.status,
+        spawnMethod: r.spawnMethod || null
+      };
       return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
     throw new Error(`\u672A\u77E5\u5DE5\u5177: ${name}`);
@@ -21096,8 +21670,19 @@ async function main() {
     (async () => {
       try {
         const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-        const r = await ensureCursorRunning2();
-        console.error("\u{1FA9F} \u542F\u52A8\u5373\u786E\u4FDD Cursor\uFF1A" + (r.message || r.status));
+        const r = await ensureCursorRunning2({ reason: "adapter-startup" });
+        bridge._lastLifecycle = {
+          adapterPid: r.adapterPid ?? process.pid,
+          supervisorPid: r.supervisorPid ?? null,
+          reusedSupervisor: !!r.reusedSupervisor,
+          createdSupervisor: !!r.createdSupervisor,
+          launchReason: r.launchReason || r.status,
+          status: r.status,
+          spawnMethod: r.spawnMethod || null
+        };
+        console.error(
+          "\u{1FA9F} \u542F\u52A8\u5373\u786E\u4FDD Cursor\uFF1A" + (r.message || r.status) + " | adapterPid=" + bridge._lastLifecycle.adapterPid + " supervisorPid=" + bridge._lastLifecycle.supervisorPid + " reused=" + bridge._lastLifecycle.reusedSupervisor + " reason=" + bridge._lastLifecycle.launchReason
+        );
       } catch (e) {
         console.error("\u26A0\uFE0F \u542F\u52A8\u5373\u62C9\u8D77 Cursor \u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u6309\u9700\u518D\u62C9\uFF09\uFF1A", e.message);
       }
