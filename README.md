@@ -1,25 +1,22 @@
 # cursor-bridge
 
-> **Compatibility:** Cursor 3.0's redesigned UI is not supported yet.
+[![Version](https://img.shields.io/github/package-json/v/Vanyangyang/cursor-bridge?style=flat-square&logo=github&label=version)](https://github.com/Vanyangyang/cursor-bridge/tags)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
+[![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square&logo=opensourceinitiative&logoColor=white)](./LICENSE)
 
 An MCP server that lets **Codex and Claude Code use Cursor agents for semantic search and bounded delegated execution**. It reuses Cursor's project index, keeps exploratory work out of the primary agent's context, and drives Cursor directly through CDP—no console injection, callback channel, or `/multitask` dependency.
+
+> **Compatibility:** Cursor 3.0's redesigned UI is not supported yet.
 
 ## Architecture
 
 ```text
-Codex / Claude Code
-   |  (one logical plugin; each conversation/context may spawn its own stdio MCP adapter)
-   v
-cursor-bridge adapter (stdio MCP)  --IPC-->  user-level Cursor lifecycle supervisor (singleton)
-                                               |
-                                               +-- ensures / recovers Cursor with CDP :9223
-                                               v
-                                            Cursor renderer  <-- CDP Runtime.evaluate + Input -- adapters
+Codex / Claude Code -> stdio MCP adapter(s) -> shared lifecycle supervisor -> Cursor (CDP :9223)
 ```
 
-- Each MCP context may start its own adapter, but all adapters share one user-level lifecycle supervisor.
-- The supervisor starts and recovers Cursor with CDP `:9223`; on Windows it runs outside the Codex Job Object. Disconnecting an adapter does not close Cursor.
-- GUI input is serialized. FIFO tasks use the active chat; `parallel_agent` tasks use independent top-level Agents identified by `agentId`.
+- Each MCP context may start an adapter, but all adapters share one user-level supervisor. On Windows, it runs outside the Codex Job lifecycle, so closing a session does not close Cursor.
+- GUI input is serialized: FIFO uses the active chat; `parallel_agent` uses independent top-level Agents.
 
 > [!WARNING]
 > Cursor is an agent, not a technical sandbox. Search prompts can require a concise `path:line` list and prohibit edits, but these remain prompt-level constraints. Do not treat Cursor Bridge as filesystem isolation.
@@ -33,7 +30,7 @@ cursor-bridge adapter (stdio MCP)  --IPC-->  user-level Cursor lifecycle supervi
 
 This repository supports Claude Code and the Codex marketplace.
 
-### Option A: Claude Code plugin
+### Claude Code
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
@@ -42,7 +39,7 @@ claude plugin install cursor-bridge@vanyangyang
 
 Restart Claude Code or run `/reload-plugins`. The MCP server and runtime dependencies are bundled and registered automatically.
 
-### Option B: Codex marketplace
+### Codex
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
@@ -50,7 +47,8 @@ codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 
 Start a new Codex task or restart Codex after installation so the tools and skills enter the session.
 
-### Option C: Run from source
+<details>
+<summary><strong>Run from source</strong></summary>
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git
@@ -69,7 +67,9 @@ npm install
 }
 ```
 
-Adapters ask the supervisor to ensure Cursor is ready. Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. Use `CURSOR_BRIDGE_INLINE_ENSURE=1` only for debugging; it bypasses the supervisor and is unsafe under Windows Job lifecycle. On Linux, set `CURSOR_EXE` when auto-detection is unavailable.
+Adapters ask the supervisor to ensure Cursor is ready. Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `CURSOR_EXE` when auto-detection is unavailable.
+
+</details>
 
 ## MCP tools
 
@@ -118,41 +118,23 @@ Persistent is the default scope; use `scope: "session"` for a temporary override
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor remote-debugging port. |
 | `CURSOR_BRIDGE_TIMEOUT` | `180000` | Per-query timeout in milliseconds. |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable automatic Cursor launch at server startup. |
-| `CURSOR_BRIDGE_INLINE_ENSURE` / `CURSOR_BRIDGE_NO_SUPERVISOR` | unset | Set to `1` to bypass the singleton supervisor and ensure Cursor inside the adapter process (legacy / debug only; unsafe under Windows Job lifecycle). |
-| `CURSOR_BRIDGE_LIFECYCLE_DIR` | platform user state | Override the supervisor state directory (pid/lock/boot-env). Default: `%LOCALAPPDATA%\\cursor-bridge\\lifecycle` on Windows. |
-| `CURSOR_BRIDGE_SUPERVISOR_SOCK` | derived | Override the supervisor IPC endpoint (Named Pipe on Windows, Unix socket elsewhere). |
-| `CURSOR_BRIDGE_DELEGATION` | `on` | Administrator-level compatibility switch. Set it to `off` only when the host must disable and hide `cursor_do` entirely; this is not a normal user policy. Other tools remain available. Restart the MCP server, Codex, or Claude Code after changing it. |
 | `CURSOR_BRIDGE_POLICY` | `active` | Bootstrap user-facing mode used only when no persisted choice exists. The legacy value `on` maps to `active`; a persistent `cursor_policy` choice takes precedence on later starts. |
-| `CURSOR_BRIDGE_POLICY_FILE` | platform user config | Override the durable policy file path. The default is `%APPDATA%\cursor-bridge\policy.json` on Windows and the XDG user config directory elsewhere. |
-| `CURSOR_PROJECT_PATH` | auto-detected | Project root for Cursor to open and index. If unset while running from a plugin cache, the launcher omits the path and lets Cursor restore its previous workspace. |
+| `CURSOR_PROJECT_PATH` | auto-detected | Project root for Cursor to open and index. |
 | `CURSOR_EXE` | auto-detected | Explicit path to `Cursor.exe` when automatic detection fails. |
 
-## Development verification
+<details>
+<summary><strong>Advanced and troubleshooting variables</strong></summary>
 
-Before publishing:
+| Variable | Default | Description |
+|---|---|---|
+| `CURSOR_BRIDGE_INLINE_ENSURE` / `CURSOR_BRIDGE_NO_SUPERVISOR` | unset | Bypass the singleton supervisor (legacy/debug only; unsafe under Windows Job lifecycle). |
+| `CURSOR_BRIDGE_LIFECYCLE_DIR` | platform user state | Override the supervisor state directory. Windows default: `%LOCALAPPDATA%\\cursor-bridge\\lifecycle`. |
+| `CURSOR_BRIDGE_SUPERVISOR_SOCK` | derived | Override the supervisor IPC endpoint. |
+| `CURSOR_BRIDGE_DELEGATION` | `on` | Administrator switch that disables and hides `cursor_do` when set to `off`; restart the MCP server or client after changing it. |
+| `CURSOR_BRIDGE_POLICY_FILE` | platform user config | Override the durable policy file path. |
 
-```bash
-node --check server.mjs
-npm test
-npm run build
-node --check dist/cursor-bridge.mjs
-node --check dist/cursor-lifecycle-supervisor.mjs
-git diff --check
-```
+</details>
 
-`npm run build` emits the adapter and lifecycle-supervisor bundles; plugin installs must ship both.
+## Development
 
-## Repository layout
-
-```text
-.claude-plugin/       # Claude Code manifest and marketplace
-.agents/plugins/      # Codex marketplace
-.codex-plugin/        # Codex plugin manifest
-dist/                 # Bundled adapter and lifecycle supervisor
-server.mjs            # MCP tools and scheduling
-launch-cursor.mjs     # Cursor/CDP launcher
-skills/               # Delegation and policy guidance
-test/                 # Regression suite
-```
-
-Installed plugins execute `dist/cursor-bridge.mjs`. See [RELEASING.md](./RELEASING.md) for the release process.
+Run `npm test` and `npm run build` before submitting changes. See [RELEASING.md](./RELEASING.md) for the release checklist.
