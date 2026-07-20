@@ -695,10 +695,23 @@ class CursorBridge {
     this._healing = (async () => {
       try {
         const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-        const rr = await ensureCursorRunning();
-        if (rr.status === 'already') return;                                  // 已就绪且确认是 Cursor
-        if (rr.status === 'port-not-cursor') { console.error('⚠️ ' + rr.message); return; }  // 不强连错 IDE，让 _run 自然报错
-        console.error('🪟 cursor 自愈拉起：' + (rr.message || rr.status));
+        const rr = await ensureCursorRunning({ reason: 'adapter-heal' });
+        this._lastLifecycle = {
+          adapterPid: rr.adapterPid ?? process.pid,
+          supervisorPid: rr.supervisorPid ?? null,
+          reusedSupervisor: !!rr.reusedSupervisor,
+          createdSupervisor: !!rr.createdSupervisor,
+          launchReason: rr.launchReason || rr.status,
+          status: rr.status,
+          spawnMethod: rr.spawnMethod || null,
+        };
+        const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
+        if (rr.status === 'already') {
+          console.error('🪟 cursor ensure already: ' + life);
+          return;
+        }
+        if (rr.status === 'port-not-cursor') { console.error('⚠️ ' + rr.message + ' | ' + life); return; }
+        console.error('🪟 cursor 自愈拉起：' + (rr.message || rr.status) + ' | ' + life);
       } catch (e) { console.error('⚠️ cursor 自愈失败（降级，按需手动启动）：', e.message); }
       finally { this._healing = null; }
     })();
@@ -1692,6 +1705,15 @@ class CursorBridge {
       activeParallel: [...this.activeParallel.values()].map((job) => this._taskView(job)),
       recentTasks: [...this.tasks.values()].slice(-10).map((job) => this._taskView(job)),
       cdpPort: CDP_PORT,
+      lifecycle: this._lastLifecycle || {
+        adapterPid: process.pid,
+        supervisorPid: null,
+        reusedSupervisor: null,
+        createdSupervisor: null,
+        launchReason: null,
+        status: null,
+        spawnMethod: null,
+      },
     };
     try {
       const ver = await httpJson('/json/version');
@@ -1818,7 +1840,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '2.2.2' },
+  { name: 'cursor-bridge', version: '2.2.3' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -1874,7 +1896,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === 'cursor_launch') {
       const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-      const r = await ensureCursorRunning();
+      const r = await ensureCursorRunning({ reason: 'cursor_launch' });
+      bridge._lastLifecycle = {
+        adapterPid: r.adapterPid ?? process.pid,
+        supervisorPid: r.supervisorPid ?? null,
+        reusedSupervisor: !!r.reusedSupervisor,
+        createdSupervisor: !!r.createdSupervisor,
+        launchReason: r.launchReason || r.status,
+        status: r.status,
+        spawnMethod: r.spawnMethod || null,
+      };
       return { content: [{ type: 'text', text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
     throw new Error(`未知工具: ${name}`);
@@ -1889,12 +1920,28 @@ async function main() {
   console.error('✅ MCP 已连接。');
   // 启动即确保 Cursor 带 CDP 在跑（fire-and-forget，失败不阻塞 MCP；首次 cursor_search 仍会自愈拉起）。
   // 关掉：设 env CURSOR_BRIDGE_NO_AUTOLAUNCH=1。Cursor 已在跑但没带 flag 时不强杀（返回 running-no-debug 指引）。
+  // Cursor lifecycle is owned by the user-level singleton supervisor (job-breakaway on Windows).
   if (process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH !== '1') {
     (async () => {
       try {
         const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-        const r = await ensureCursorRunning();
-        console.error('🪟 启动即确保 Cursor：' + (r.message || r.status));
+        const r = await ensureCursorRunning({ reason: 'adapter-startup' });
+        bridge._lastLifecycle = {
+          adapterPid: r.adapterPid ?? process.pid,
+          supervisorPid: r.supervisorPid ?? null,
+          reusedSupervisor: !!r.reusedSupervisor,
+          createdSupervisor: !!r.createdSupervisor,
+          launchReason: r.launchReason || r.status,
+          status: r.status,
+          spawnMethod: r.spawnMethod || null,
+        };
+        console.error(
+          '🪟 启动即确保 Cursor：' + (r.message || r.status)
+          + ' | adapterPid=' + bridge._lastLifecycle.adapterPid
+          + ' supervisorPid=' + bridge._lastLifecycle.supervisorPid
+          + ' reused=' + bridge._lastLifecycle.reusedSupervisor
+          + ' reason=' + bridge._lastLifecycle.launchReason,
+        );
       } catch (e) { console.error('⚠️ 启动即拉起 Cursor 失败（忽略，按需再拉）：', e.message); }
     })();
   }
