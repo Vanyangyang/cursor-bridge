@@ -129,12 +129,64 @@ function httpJson(path) {
     req.setTimeout(4000, () => req.destroy(new Error(`Cursor 调试口 ${CDP_PORT} 无响应——Cursor 是否带 --remote-debugging-port=${CDP_PORT} 启动？`)));
   });
 }
-async function findPage() {
+function scoreCursorPageCandidate(candidate, purpose = 'fifo') {
+  const capability = candidate && (candidate.capabilities || candidate);
+  if (!capability) return Number.NEGATIVE_INFINITY;
+  let score = capability.hasWritableInput ? 1000 : -1000;
+  if (purpose === 'parallel_agent') {
+    if (capability.agentAdapterKind === 'agents_v2') score += 600;
+    else if (capability.agentAdapterKind === 'legacy') score += 350;
+    else score -= 500;
+  }
+  if (capability.uiFlavor === 'agents_v2') score += 180;
+  else if (capability.uiFlavor === 'legacy') score += 90;
+  if (capability.hasComposer) score += 60;
+  if (capability.visible) score += 35;
+  if (capability.focused) score += 20;
+  if (/workbench/i.test(String(candidate && candidate.url || ''))) score += 15;
+  return score;
+}
+
+function selectCursorPageCandidate(candidates, options = {}) {
+  const pages = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+  if (options.targetId) {
+    const exact = pages.find((page) => page.id === options.targetId);
+    if (!exact) throw new Error(`Cursor CDP target 已消失：${options.targetId}`);
+    return exact;
+  }
+  const purpose = options.purpose || 'fifo';
+  return pages
+    .map((page, index) => ({ page, index, score: scoreCursorPageCandidate(page, purpose) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.page || null;
+}
+
+async function inspectPageTarget(page) {
+  const c = makeClient(page.webSocketDebuggerUrl);
+  try {
+    await Promise.race([
+      c.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 连接超时')), 5000)),
+    ]);
+    const raw = await evalJS(c, EXPR_PAGE_CAPABILITIES);
+    return { ...page, capabilities: JSON.parse(raw || '{}') };
+  } catch (error) {
+    return { ...page, capabilities: null, probeError: error.message };
+  } finally {
+    c.close();
+  }
+}
+
+async function findPage(options = {}) {
   const list = await httpJson('/json/list');
   const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-  const p = pages.find((t) => /workbench/i.test(t.url || '')) || pages[0];
-  if (!p) throw new Error('未找到 Cursor workbench page target');
-  return p;
+  if (!pages.length) throw new Error('未找到 Cursor workbench page target');
+  if (options.targetId) return selectCursorPageCandidate(pages, options);
+  const inspected = await Promise.all(pages.map(inspectPageTarget));
+  const usable = inspected.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
+  return selectCursorPageCandidate(
+    usable.length ? usable : inspected.filter((page) => /workbench/i.test(page.url || '') || page.capabilities),
+    options,
+  ) || pages[0];
 }
 function makeClient(wsUrl) {
   const ws = new WebSocket(wsUrl, { origin: ORIGIN });
@@ -171,10 +223,19 @@ async function chord(c, modifiers, key, code, vk) {
 }
 
 // ---------- 注入页面的探测/操作表达式 ----------
-const EXPR_VISIBLE = `(function(){const i=document.querySelector('.aislash-editor-input');return !!(i&&i.offsetParent!==null);})()`;
+const CURSOR_INPUT_SELECTOR = [
+  '[contenteditable="true"].ui-prompt-input-editor__input',
+  '.tiptap.ProseMirror[contenteditable="true"]',
+  '.aislash-editor-input',
+].join(',');
+const INPUT_PICKER_BODY = `
+  const pickInput=()=>[...document.querySelectorAll(${JSON.stringify(CURSOR_INPUT_SELECTOR)})]
+    .filter(e=>e.offsetParent!==null&&!e.disabled&&e.getAttribute('aria-disabled')!=='true'&&e.getAttribute('contenteditable')!=='false')
+    .sort((a,b)=>(b.classList&&b.classList.contains('ui-prompt-input-editor__input')?1:0)-(a.classList&&a.classList.contains('ui-prompt-input-editor__input')?1:0))[0]||null;`;
+const EXPR_VISIBLE = `(function(){${INPUT_PICKER_BODY}return !!pickInput();})()`;
 function exprFill(text) {
   const js = JSON.stringify(text);
-  return `(function(){const inp=document.querySelector('.aislash-editor-input');if(!inp||inp.offsetParent===null)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});inp.dispatchEvent(new Event('input',{bubbles:true}));return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
+  return `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});try{inp.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:${js}}));}catch(e){inp.dispatchEvent(new Event('input',{bubbles:true}));}return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
 }
 // 生成中/完成信号：stop 钮数量 + 当前会话中最后一个真实消息 markdown。
 // 排除模型选择器里的 markdown，避免短回复被 "Cursor Grok ..." 等模型标签盖过。
@@ -204,7 +265,7 @@ function exprClickSelectedAgentStop(agentId) {
     ${REACT_ADAPTER_BODY}
     const adapter=a;
     if(!adapter)return JSON.stringify({clicked:false,state:'adapter_unavailable'});
-    const entries=adapter.props.entries;
+    const entries=adapter.entries();
     const selectedEntries=entries.filter(e=>e&&e.isSelected);
     const selected=selectedEntries.length===1?selectedEntries[0]:null;
     if(!selected||selected.id!==${expected}){
@@ -232,16 +293,47 @@ function exprClickSelectedAgentStop(agentId) {
     return JSON.stringify({clicked:true,state:'clicked',selectedId:selected.id,composerId:composer.dataset.composerId,control:generationButtons.length?'stop_generation':'stop_command'});
   })()`;
 }
-// "New Agent" 新对话钮中心坐标（aria-label 含 New Agent/New Chat）；返回 JSON 坐标或空串。
-const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>e.offsetParent!==null&&/New Agent|New Chat/i.test(e.getAttribute('aria-label')||''));if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+// "New Agent" 新对话钮中心坐标。新版 Cursor Agents 只有可见文本，旧版主要依赖 aria-label。
+const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
 const EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
 const EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
-// Cursor 3.7 的 Agent History 菜单由 React 提供 entries + onOpenEntry(id)。
-// 内部接口集中封装在这里；探测失败时只允许在发送前降级 FIFO，绝不重复提交已发送任务。
+// 旧版 Agent History 提供 entries + onOpenEntry(id)；新版 Cursor Agents 的侧栏提供
+// section.headers + onSelectAgent(header)。两套不稳定 React 内部接口只在此处归一化。
 const REACT_ADAPTER_BODY = `
-  const findAdapter=()=>{
+  const readScalar=value=>value&&typeof value==='object'&&Object.prototype.hasOwnProperty.call(value,'value')?value.value:value;
+  const normalizeTimestamp=(value,index)=>{
+    const raw=readScalar(value);
+    let timestamp=raw instanceof Date?raw.getTime():Number(raw);
+    if(!Number.isFinite(timestamp))timestamp=Date.parse(String(raw||''));
+    return Number.isFinite(timestamp)?timestamp:index;
+  };
+  const normalizeLegacy=(e,index)=>({
+    id:String(e&&e.id||''),label:String(e&&e.label||''),searchText:String(e&&e.searchText||''),
+    timestamp:normalizeTimestamp(e&&e.timestamp,index),isSelected:!!(e&&e.isSelected),
+    showSpinner:!!(e&&e.showSpinner),
+    icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
+  });
+  const normalizeV2=(header,selectedId,index)=>{
+    const rawId=String(readScalar(header&&header.id)||'').replace(/^local:/,'');
+    const status=String(readScalar(header&&header.status)||'').toLowerCase();
+    const label=String(readScalar(header&&header.name)||readScalar(header&&header.subtitle)||'');
+    const searchText=[label,readScalar(header&&header.subtitle),readScalar(header&&header.location),readScalar(header&&header.source)].filter(Boolean).join(' ');
+    let icon=status;
+    if(/in_progress|running|generating/.test(status))icon='loading';
+    else if(status==='done'||status==='completed')icon='check-circled';
+    else if(/needs_attention/.test(status))icon='needs-attention';
+    else if(/failed|error/.test(status))icon='warning';
+    else if(/cancel/.test(status))icon='circle-slash';
+    return {
+      id:rawId?'local:'+rawId:'',label,searchText,
+      timestamp:normalizeTimestamp(readScalar(header&&header.lastUpdatedAt)||readScalar(header&&header.createdAt),index),
+      isSelected:!!rawId&&(String(selectedId||'')===rawId||String(selectedId||'')==='local:'+rawId),
+      showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft'
+    };
+  };
+  const findLegacyAdapter=()=>{
     const label=[...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);
     if(!label)return null;
     const nodes=[]; let n=label;
@@ -253,37 +345,101 @@ const REACT_ADAPTER_BODY = `
         let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
         for(let j=0;f&&j<36;j++,f=f.return){
           for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
-            if(p&&Array.isArray(p.entries)&&typeof p.onOpenEntry==='function')return {props:p};
+            if(p&&Array.isArray(p.entries)&&typeof p.onOpenEntry==='function')return p;
           }
         }
       }
     }
     return null;
   };
+  const findV2Props=()=>{
+    const found=[]; const seen=new Set();
+    for(const root of document.querySelectorAll('.glass-sidebar-agent-list-container')){
+      const nodes=[]; let n=root;
+      for(let i=0;n&&i<24;i++,n=n.parentElement)nodes.push(n);
+      for(const node of nodes){
+        for(const key of Object.keys(node)){
+          if(!key.startsWith('__reactFiber$')&&!key.startsWith('__reactProps$'))continue;
+          const seed=node[key];
+          let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
+          for(let j=0;f&&j<80;j++,f=f.return){
+            for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
+              if(p&&p.section&&Array.isArray(p.section.headers)&&typeof p.onSelectAgent==='function'&&!seen.has(p)){
+                seen.add(p);found.push(p);
+              }
+            }
+          }
+        }
+      }
+    }
+    return found;
+  };
+  const findAdapter=()=>{
+    const v2=findV2Props();
+    if(v2.length){
+      return {
+        kind:'agents_v2',
+        entries:()=>{
+          const entries=[];const seen=new Set();let index=0;
+          for(const p of v2){
+            const selectedId=readScalar(p.selectedAgentId);
+            for(const header of p.section.headers){
+              const entry=normalizeV2(header,selectedId,index++);
+              if(entry.id&&!seen.has(entry.id)){seen.add(entry.id);entries.push(entry);}
+            }
+          }
+          return entries;
+        },
+        open:id=>{
+          const raw=String(id||'').replace(/^local:/,'');
+          for(const p of v2){
+            const header=p.section.headers.find(h=>String(readScalar(h&&h.id)||'')===raw);
+            if(header){p.onSelectAgent(header);return true;}
+          }
+          return false;
+        }
+      };
+    }
+    const legacy=findLegacyAdapter();
+    if(!legacy)return null;
+    return {
+      kind:'legacy',
+      entries:()=>legacy.entries.map(normalizeLegacy).filter(e=>e.id),
+      open:id=>{
+        const value=String(id||'');
+        if(!legacy.entries.some(e=>String(e&&e.id||'')===value))return false;
+        legacy.onOpenEntry(value);return true;
+      }
+    };
+  };
   const a=findAdapter();`;
+
+const EXPR_AGENT_ADAPTER_READY = `(function(){${REACT_ADAPTER_BODY}return !!a;})()`;
+const EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
+  const input=pickInput();
+  const hasV2Sidebar=!!document.querySelector('.glass-sidebar-agent-list-container');
+  const hasLegacyInput=!!document.querySelector('.aislash-editor-input');
+  const hasLegacyHistory=!!document.querySelector('.compact-agent-history-react-menu-label')||
+    [...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].some(e=>/Show Chat History|Chat History|Agent History/i.test((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')));
+  const uiFlavor=hasV2Sidebar||(input&&input.classList&&input.classList.contains('ui-prompt-input-editor__input'))?'agents_v2':hasLegacyInput?'legacy':'unknown';
+  return JSON.stringify({
+    hasWritableInput:!!input,uiFlavor,
+    agentAdapterKind:hasV2Sidebar?'agents_v2':hasLegacyHistory?'legacy':'none',
+    hasComposer:!!document.querySelector('.composer-bar[data-composer-id]'),
+    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus()
+  });
+})()`;
 
 const EXPR_HISTORY_ENTRIES = `(function(){${REACT_ADAPTER_BODY}
   if(!a)return JSON.stringify({ok:false,error:'REACT_ADAPTER_UNAVAILABLE'});
-  const entries=a.props.entries.map((e,index)=>{
-    const raw=e.timestamp;
-    let timestamp=raw instanceof Date?raw.getTime():Number(raw);
-    if(!Number.isFinite(timestamp))timestamp=Date.parse(String(raw||''));
-    if(!Number.isFinite(timestamp))timestamp=index;
-    return {
-      id:String(e.id||''),label:String(e.label||''),searchText:String(e.searchText||''),timestamp,
-      isSelected:!!e.isSelected,showSpinner:!!e.showSpinner,
-      icon:String(typeof e.icon==='string'?e.icon:(e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
-    };
-  }).filter(e=>e.id);
-  return JSON.stringify({ok:true,entries});
+  return JSON.stringify({ok:true,kind:a.kind,entries:a.entries()});
 })()`;
 
 function exprOpenAgent(agentId) {
   const id = JSON.stringify(String(agentId));
   return `(function(){${REACT_ADAPTER_BODY}
     if(!a)return 'REACT_ADAPTER_UNAVAILABLE';
-    const e=a.props.entries.find(x=>String(x.id||'')===${id}); if(!e)return 'AGENT_NOT_FOUND';
-    a.props.onOpenEntry(${id}); return 'OPENED';
+    return a.open(${id})?'OPENED':'AGENT_NOT_FOUND';
   })()`;
 }
 
@@ -339,6 +495,7 @@ function updateStableEntryObservation(lastSignature, stableCount, entry) {
 function classifyParallelTerminalIcon(icon) {
   const value = String(icon || '');
   if (/circle-slash|cancel/i.test(value)) return 'cancelled';
+  if (/needs[-_]attention/i.test(value)) return 'needs_attention';
   if (/error|failed|warning/i.test(value)) return 'failed';
   if (/check-circled|check/i.test(value)) return 'completed';
   return 'unknown';
@@ -377,6 +534,7 @@ class CursorBridge {
     this.currentJob = null;
     this._uiTail = Promise.resolve();
     this.parallelRestoreAgentId = null;
+    this.parallelRestoreTargetId = null;
   }
 
   _syncDelegationState() {
@@ -554,6 +712,8 @@ class CursorBridge {
       sentAt: null,
       agentId: null,
       agentLabel: null,
+      targetId: null,
+      targetUiFlavor: null,
       fallbackReason: null,
       result: null,
       error: null,
@@ -755,6 +915,7 @@ class CursorBridge {
               job.reservationScope = job.readOnly ? 'agent' : 'paths';
               if (!this.parallelRestoreAgentId && submitted.previousSelectedId) {
                 this.parallelRestoreAgentId = submitted.previousSelectedId;
+                this.parallelRestoreTargetId = job.targetId;
               }
               this.activeParallel.set(job.id, job);
               if (job.cancelRequested) {
@@ -816,7 +977,9 @@ class CursorBridge {
   }
 
   async _run(prompt, options = {}) {
-    const page = await findPage();
+    const page = await findPage({ targetId: options.targetId, purpose: 'fifo' });
+    options.targetId = page.id;
+    options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
     await c.ready;
     try {
@@ -864,7 +1027,7 @@ class CursorBridge {
       await sleep(1300);
       vis = await evalJS(c, EXPR_VISIBLE);
     }
-    if (!vis) throw new Error('无法打开 Cursor chat 面板（.aislash-editor-input 不可见）。Cursor 是否登录且窗口正常？');
+    if (!vis) throw new Error('无法打开 Cursor chat/agent 输入面板。Cursor 是否登录且窗口正常？');
   }
 
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
@@ -888,6 +1051,7 @@ class CursorBridge {
   }
 
   async _ensureHistoryOpen(c) {
+    if (await evalJS(c, EXPR_AGENT_ADAPTER_READY)) return true;
     if (await evalJS(c, EXPR_HISTORY_OPEN)) return true;
     const pos = await evalJS(c, EXPR_FIND_HISTORY);
     if (!pos) return false;
@@ -895,7 +1059,7 @@ class CursorBridge {
     await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
     await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
     await sleep(450);
-    return !!(await evalJS(c, EXPR_HISTORY_OPEN));
+    return !!(await evalJS(c, EXPR_AGENT_ADAPTER_READY));
   }
 
   async _closeHistory(c) {
@@ -908,7 +1072,7 @@ class CursorBridge {
   }
 
   async _readAgentEntries(c, keepOpen = false) {
-    if (!(await this._ensureHistoryOpen(c))) throw new Error('Agent History 菜单不可用');
+    if (!(await this._ensureHistoryOpen(c))) throw new Error('Cursor Agent 列表适配器不可用');
     try {
       const snapshot = JSON.parse(await evalJS(c, EXPR_HISTORY_ENTRIES));
       if (!snapshot.ok) throw new Error(snapshot.error || 'Agent History React adapter 不可用');
@@ -919,7 +1083,9 @@ class CursorBridge {
   }
 
   async _submitParallelAgent(job) {
-    const page = await findPage();
+    const page = await findPage({ purpose: 'parallel_agent' });
+    job.targetId = page.id;
+    job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
     await c.ready;
     let sent = false;
@@ -987,7 +1153,7 @@ class CursorBridge {
 
   async _readParallelEntry(job) {
     return this._withUiLock(async () => {
-      const page = await findPage();
+      const page = await findPage({ targetId: job.targetId, purpose: 'parallel_agent' });
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
       try {
@@ -1058,12 +1224,15 @@ class CursorBridge {
         continue;
       }
       const terminalClass = classifyParallelTerminalIcon(entry.icon);
-      if (terminalClass === 'failed' || terminalClass === 'cancelled') {
+      if (terminalClass === 'failed' || terminalClass === 'cancelled' || terminalClass === 'needs_attention') {
         const stableError = updateStableEntryObservation(lastTerminalErrorSignature, terminalErrorStable, entry);
         terminalErrorStable = stableError.count;
         lastTerminalErrorSignature = stableError.signature;
         completedStable = 0;
         if (terminalErrorStable >= 2) {
+          if (terminalClass === 'needs_attention') {
+            throw new Error(`Cursor Agent ${job.agentId} 正在等待用户处理`);
+          }
           if (terminalClass === 'cancelled') {
             await this._withJobLock(job, async () => {
               if (!this._monitorOwns(job, generation)) return;
@@ -1135,7 +1304,7 @@ class CursorBridge {
   }
 
   async _collectParallelAgent(job) {
-    const page = await findPage();
+    const page = await findPage({ targetId: job.targetId, purpose: 'parallel_agent' });
     const c = makeClient(page.webSocketDebuggerUrl);
     await c.ready;
     let previousSelectedId = null;
@@ -1320,7 +1489,7 @@ class CursorBridge {
   async _stopParallelAgent(job) {
     if (!job.agentId) return { confirmed: false, state: 'unbound_agent' };
     return this._withUiLock(async () => {
-      const page = await findPage();
+      const page = await findPage({ targetId: job.targetId, purpose: 'parallel_agent' });
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
       let previousSelectedId = null;
@@ -1559,9 +1728,11 @@ class CursorBridge {
     if (!this.parallelRestoreAgentId || this.busy || this.activeParallel.size > 0 ||
         this.queue.some((job) => job.execution === 'parallel_agent')) return;
     const agentId = this.parallelRestoreAgentId;
+    const targetId = this.parallelRestoreTargetId;
     this.parallelRestoreAgentId = null;
+    this.parallelRestoreTargetId = null;
     this._withUiLock(async () => {
-      const page = await findPage();
+      const page = await findPage({ targetId, purpose: 'parallel_agent' });
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
       try {
@@ -1638,6 +1809,8 @@ class CursorBridge {
       submittedPolicy: job.submittedPolicy,
       agentId: job.agentId,
       agentLabel: job.agentLabel,
+      targetId: job.targetId,
+      targetUiFlavor: job.targetUiFlavor,
       fallbackReason: job.fallbackReason,
       createdAt: job.createdAt,
       startedAt: job.startedAt,
@@ -1840,7 +2013,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '2.2.3' },
+  { name: 'cursor-bridge', version: '2.2.4' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -1962,7 +2135,15 @@ export {
   normalizeDelegationMode,
   normalizeDelegationPolicy,
   pathsOverlap,
+  scoreCursorPageCandidate,
+  selectCursorPageCandidate,
   selectNewAgentEntry,
+  EXPR_VISIBLE,
+  EXPR_FIND_NEWAGENT,
+  EXPR_PAGE_CAPABILITIES,
+  EXPR_HISTORY_ENTRIES,
+  exprFill,
+  exprOpenAgent,
   exprClickSelectedAgentStop,
   isTargetedStopConfirmed,
   updateStableEntryObservation,

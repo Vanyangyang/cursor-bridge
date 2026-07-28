@@ -15,12 +15,102 @@ import {
   normalizeDelegationMode,
   normalizeDelegationPolicy,
   pathsOverlap,
+  scoreCursorPageCandidate,
+  selectCursorPageCandidate,
   selectNewAgentEntry,
+  EXPR_VISIBLE,
+  EXPR_FIND_NEWAGENT,
+  EXPR_PAGE_CAPABILITIES,
+  EXPR_HISTORY_ENTRIES,
+  exprFill,
+  exprOpenAgent,
   exprClickSelectedAgentStop,
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,
 } from '../server.mjs';
+
+test('page capability scoring prefers Cursor Agents and pins an existing target', () => {
+  const legacy = {
+    id: 'legacy',
+    url: 'cursor://workbench/workbench.html',
+    capabilities: {
+      hasWritableInput: true,
+      uiFlavor: 'legacy',
+      agentAdapterKind: 'legacy',
+      hasComposer: true,
+      visible: true,
+      focused: true,
+    },
+  };
+  const agentsV2 = {
+    id: 'agents-v2',
+    url: 'cursor://workbench/workbench.html',
+    capabilities: {
+      hasWritableInput: true,
+      uiFlavor: 'agents_v2',
+      agentAdapterKind: 'agents_v2',
+      hasComposer: true,
+      visible: false,
+      focused: false,
+    },
+  };
+
+  assert.ok(scoreCursorPageCandidate(agentsV2, 'parallel_agent') > scoreCursorPageCandidate(legacy, 'parallel_agent'));
+  assert.equal(selectCursorPageCandidate([legacy, agentsV2], { purpose: 'parallel_agent' }).id, 'agents-v2');
+  assert.equal(selectCursorPageCandidate([legacy, agentsV2], { targetId: 'legacy' }).id, 'legacy');
+  assert.throws(
+    () => selectCursorPageCandidate([legacy, agentsV2], { targetId: 'missing' }),
+    /target 已消失/,
+  );
+});
+
+test('input and New Agent expressions cover legacy and Cursor Agents UI contracts', () => {
+  assert.match(EXPR_VISIBLE, /ui-prompt-input-editor__input/);
+  assert.match(EXPR_VISIBLE, /tiptap\.ProseMirror/);
+  assert.match(EXPR_VISIBLE, /aislash-editor-input/);
+  assert.match(exprFill('hello'), /InputEvent/);
+  assert.match(EXPR_FIND_NEWAGENT, /innerText/);
+  assert.match(EXPR_FIND_NEWAGENT, /glass-sidebar-agent-menu-btn/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /glass-sidebar-agent-list-container/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /agentAdapterKind/);
+});
+
+test('Cursor Agents v2 React adapter normalizes headers and opens by header identity', () => {
+  const selected = [];
+  const headers = [
+    { id: 'agent-a', name: 'Alpha', status: 'in_progress', lastUpdatedAt: 100 },
+    { id: 'agent-b', name: 'Beta', status: 'done', lastUpdatedAt: 200 },
+  ];
+  const root = {
+    parentElement: null,
+    '__reactProps$test': {
+      section: { headers },
+      selectedAgentId: { value: 'agent-a' },
+      onSelectAgent(header) { selected.push(header); },
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.glass-sidebar-agent-list-container') return [root];
+      if (selector === '.compact-agent-history-react-menu-label') return [];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.kind, 'agents_v2');
+  assert.deepEqual(
+    snapshot.entries.map((entry) => [entry.id, entry.isSelected, entry.showSpinner, entry.icon]),
+    [
+      ['local:agent-a', true, true, 'loading'],
+      ['local:agent-b', false, false, 'check-circled'],
+    ],
+  );
+  assert.equal(Function('document', `return ${exprOpenAgent('local:agent-b')};`)(document), 'OPENED');
+  assert.equal(selected[0], headers[1]);
+});
 
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
@@ -565,6 +655,7 @@ test('targeted Stop expression accepts the exact foreground command stop control
 });
 
 test('parallel failure icons require two identical stable observations', () => {
+  assert.equal(classifyParallelTerminalIcon('needs-attention'), 'needs_attention');
   const entry = { id: 'local:agent', showSpinner: false, icon: 'warning' };
   const first = updateStableEntryObservation('', 0, entry);
   assert.equal(first.count, 1);
