@@ -1,6 +1,6 @@
 {
   "name": "cursor-mcp-bridge",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "MCP server that lets a primary coding agent ask Cursor to find code or complete clearly bounded work over CDP.",
   "type": "module",
   "main": "server.mjs",

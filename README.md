@@ -7,7 +7,7 @@
 
 An MCP server that lets **Codex and Claude Code use Cursor agents for semantic search and bounded delegated execution**. It reuses Cursor's project index, keeps exploratory work out of the primary agent's context, and drives Cursor directly through CDP—no console injection, callback channel, or `/multitask` dependency.
 
-> **Compatibility:** Cursor 3.0's redesigned UI is not supported yet.
+> **Compatibility:** Supports both the legacy workbench and the redesigned Cursor Agents UI (live-verified with Cursor 3.7.42 on Windows). When CDP exposes both, the bridge selects the most capable target and pins each submitted task to that editor window.
 
 ## Architecture
 

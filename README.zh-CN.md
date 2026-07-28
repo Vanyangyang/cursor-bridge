@@ -7,7 +7,7 @@
 
 让 **Codex / Claude Code 使用 Cursor agent 做语义检索与边界明确的委托执行**。它复用 Cursor 项目索引，把探索过程留在 Cursor 上下文中，并通过 CDP 直驱——无 console 注入、无回连通道，也不依赖 `/multitask`。
 
-> **兼容性说明：** 暂时不支持 Cursor 3.0 新版 UI。
+> **兼容性说明：** 同时支持旧版 workbench 与新版 Cursor Agents UI（已在 Windows Cursor 3.7.42 实机验证）。当 CDP 同时暴露两者时，Bridge 会选择能力更完整的目标，并将已提交任务固定到该编辑器窗口。
 
 ## 架构
 

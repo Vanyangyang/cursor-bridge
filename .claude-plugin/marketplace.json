@@ -9,7 +9,7 @@
       "name": "cursor-bridge",
       "source": ".",
       "description": "Ask Cursor to find code or complete bounded tasks, choose how readily it should help, and safely track FIFO or independent Agent work. Cursor must run with --remote-debugging-port=9223.",
-      "version": "2.2.3",
+      "version": "2.2.4",
       "author": {
         "name": "Vanyangyang"
       }
