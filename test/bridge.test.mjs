@@ -22,12 +22,15 @@ import {
   EXPR_FIND_NEWAGENT,
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
+  EXPR_PROVIDER_ERROR,
   exprFill,
   exprOpenAgent,
   exprClickSelectedAgentStop,
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,
+  providerErrorSignature,
+  createProviderError,
 } from '../server.mjs';
 
 test('page capability scoring prefers Cursor Agents and pins an existing target', () => {
@@ -78,15 +81,29 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
 
 test('Cursor Agents v2 React adapter normalizes headers and opens by header identity', () => {
   const selected = [];
+  class ReactiveValue {
+    constructor(value) { this._value = value; }
+    get value() { return this._value; }
+  }
   const headers = [
-    { id: 'agent-a', name: 'Alpha', status: 'in_progress', lastUpdatedAt: 100 },
-    { id: 'agent-b', name: 'Beta', status: 'done', lastUpdatedAt: 200 },
+    {
+      id: new ReactiveValue('agent-a'),
+      name: new ReactiveValue('Alpha'),
+      status: new ReactiveValue('in_progress'),
+      lastUpdatedAt: new ReactiveValue(100),
+    },
+    {
+      id: new ReactiveValue('agent-b'),
+      name: new ReactiveValue('Beta'),
+      status: new ReactiveValue('done'),
+      lastUpdatedAt: new ReactiveValue(200),
+    },
   ];
   const root = {
     parentElement: null,
     '__reactProps$test': {
       section: { headers },
-      selectedAgentId: { value: 'agent-a' },
+      selectedAgentId: new ReactiveValue('agent-a'),
       onSelectAgent(header) { selected.push(header); },
     },
   };
@@ -102,14 +119,63 @@ test('Cursor Agents v2 React adapter normalizes headers and opens by header iden
   assert.equal(snapshot.ok, true);
   assert.equal(snapshot.kind, 'agents_v2');
   assert.deepEqual(
-    snapshot.entries.map((entry) => [entry.id, entry.isSelected, entry.showSpinner, entry.icon]),
+    snapshot.entries.map((entry) => [
+      entry.id,
+      entry.label,
+      entry.timestamp,
+      entry.isSelected,
+      entry.showSpinner,
+      entry.icon,
+    ]),
     [
-      ['local:agent-a', true, true, 'loading'],
-      ['local:agent-b', false, false, 'check-circled'],
+      ['local:agent-a', 'Alpha', 100, true, true, 'loading'],
+      ['local:agent-b', 'Beta', 200, false, false, 'check-circled'],
     ],
   );
   assert.equal(Function('document', `return ${exprOpenAgent('local:agent-b')};`)(document), 'OPENED');
   assert.equal(selected[0], headers[1]);
+});
+
+test('provider error tray expression extracts terminal evidence without clicking controls', () => {
+  const titleNode = { innerText: 'LLM provider error' };
+  const buttons = [
+    { innerText: 'Copy ID' },
+    { innerText: 'Try again' },
+  ];
+  const tray = {
+    innerText: [
+      'LLM provider error',
+      'Connection error. Request ID: 0238f19d-7066-41c8-8ea9-6d5c69ccdc8d',
+      'Copy ID',
+      'Try again',
+    ].join('\n'),
+    querySelector(selector) {
+      return selector === '.ui-tray-header__title' ? titleNode : null;
+    },
+    querySelectorAll(selector) {
+      return selector === 'button' ? buttons : [];
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      return selector === '.ui-tray.ui-notification-tray[data-visible="true"]' ? [tray] : [];
+    },
+  };
+
+  const result = JSON.parse(Function('document', `return ${EXPR_PROVIDER_ERROR};`)(document));
+  assert.equal(result.found, true);
+  assert.equal(result.title, 'LLM provider error');
+  assert.equal(result.message, 'Connection error. Request ID: 0238f19d-7066-41c8-8ea9-6d5c69ccdc8d');
+  assert.equal(result.requestId, '0238f19d-7066-41c8-8ea9-6d5c69ccdc8d');
+  assert.equal(result.retryAvailable, true);
+  assert.equal(providerErrorSignature(result), result.signature);
+  assert.doesNotMatch(EXPR_PROVIDER_ERROR, /\.click\(/);
+
+  const error = createProviderError(result);
+  assert.equal(error.sent, true);
+  assert.equal(error.confirmedTerminal, true);
+  assert.equal(error.providerError.requestId, result.requestId);
+  assert.match(error.terminalEvidence, /provider_error_tray:0238f19d/);
 });
 
 class OfflineBridge extends CursorBridge {
@@ -209,6 +275,25 @@ class SentFifoFailureBridge extends CursorBridge {
     const error = new Error('post-send response unavailable');
     error.sent = true;
     throw error;
+  }
+  _maybeRestoreParallelOrigin() {}
+}
+
+class ConfirmedFifoFailureBridge extends CursorBridge {
+  constructor() {
+    super({ policyFile: null, delegationPolicy: 'active' });
+  }
+
+  async _ensureCursor() {}
+  async _run() {
+    throw createProviderError({
+      found: true,
+      title: 'LLM provider error',
+      message: 'Connection error. Request ID: confirmed-request-id',
+      requestId: 'confirmed-request-id',
+      retryAvailable: true,
+      signature: 'LLM provider error|Connection error|confirmed-request-id',
+    });
   }
   _maybeRestoreParallelOrigin() {}
 }
@@ -956,6 +1041,20 @@ test('FIFO failure after possible send becomes a global orphan instead of releas
   assert.equal(job.phase, 'orphaned');
   assert.equal(job.reservationScope, 'global');
   assert.equal(bridge.activeParallel.has(job.id), true);
+});
+
+test('confirmed provider tray failure is terminal and releases the reservation', async () => {
+  const bridge = new ConfirmedFifoFailureBridge();
+  const view = await bridge.doTask('触发 provider error');
+  const job = bridge.tasks.get(view.taskId);
+  await job.controlTail;
+  assert.equal(job.status, 'failed');
+  assert.equal(job.phase, 'failed');
+  assert.equal(job.providerError.requestId, 'confirmed-request-id');
+  assert.match(job.terminalEvidence, /provider_error_tray:confirmed-request-id/);
+  assert.equal(job.reservationScope, null);
+  assert.equal(bridge.activeParallel.has(job.id), false);
+  assert.equal(bridge._taskView(job).reservationHeld, false);
 });
 
 test('task identity is process-local and is not claimed recoverable after bridge reconstruction', async () => {

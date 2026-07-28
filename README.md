@@ -86,6 +86,7 @@ Adapters ask the supervisor to ensure Cursor is ready. Set `CURSOR_BRIDGE_NO_AUT
 
 - Submit `cursor_do` with `background=true` and `new_chat=true`, save `task_id`, then collect with `cursor_status(task_id)`.
 - `submitting`, `running`, and `collecting` are normal; longer than two minutes is not itself a failure. `cursor_status` never mutates a task.
+- A newly displayed `LLM provider error` tray is a confirmed failed terminal state. Bridge records its message and Request ID, releases the reservation, and never clicks `Try again` or dismisses the tray automatically.
 - Use `reap` only for a bound orphan, and `cancel` only with the exact published `agentId`. Bridge never clicks a broad global Stop control.
 - FIFO or unbound orphans block new delegation until the user verifies Cursor manually and explicitly accepts `abandon` risk.
 - Task records are process-local. After restarting Codex/MCP, inspect Agent History and workspace changes before overlapping work.
