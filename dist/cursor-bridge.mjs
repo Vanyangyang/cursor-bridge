@@ -20119,6 +20119,26 @@ var EXPR_EXTRACT = `(function(){
   const texts=md.map(m=>(m.innerText||'').trim()).filter(Boolean);
   return texts[texts.length-1]||'';
 })()`;
+var EXPR_PROVIDER_ERROR = `(function(){
+  const trays=[...document.querySelectorAll('.ui-tray.ui-notification-tray[data-visible="true"]')];
+  const tray=trays.find(node=>{
+    const titleNode=node.querySelector('.ui-tray-header__title');
+    const title=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'').trim();
+    return /^LLM provider error$/i.test(title);
+  });
+  if(!tray)return JSON.stringify({found:false});
+  const titleNode=tray.querySelector('.ui-tray-header__title');
+  const title=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'LLM provider error').trim();
+  const lines=String(tray.innerText||tray.textContent||'').split(/\\r?\\n/)
+    .map(line=>line.trim()).filter(Boolean);
+  const message=lines.find(line=>line!==title&&!/^(Copy ID|Try again)$/i.test(line))||'';
+  const match=message.match(/Request ID:\\s*([^\\s]+)/i);
+  const requestId=match?match[1]:null;
+  const retryAvailable=[...tray.querySelectorAll('button')].some(button=>
+    /^Try again$/i.test(String(button.innerText||button.textContent||'').trim()));
+  const signature=[title,message,requestId||''].join('|');
+  return JSON.stringify({found:true,title,message,requestId,retryAvailable,signature});
+})()`;
 function exprClickSelectedAgentStop(agentId) {
   const expected = JSON.stringify(String(agentId));
   return `(function(){
@@ -20157,7 +20177,7 @@ var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('but
 var EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
 var EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 var REACT_ADAPTER_BODY = `
-  const readScalar=value=>value&&typeof value==='object'&&Object.prototype.hasOwnProperty.call(value,'value')?value.value:value;
+  const readScalar=value=>value&&typeof value==='object'&&'value' in value?value.value:value;
   const normalizeTimestamp=(value,index)=>{
     const raw=readScalar(value);
     let timestamp=raw instanceof Date?raw.getTime():Number(raw);
@@ -20344,6 +20364,27 @@ function classifyParallelTerminalIcon(icon) {
   if (/error|failed|warning/i.test(value)) return "failed";
   if (/check-circled|check/i.test(value)) return "completed";
   return "unknown";
+}
+function providerErrorSignature(info) {
+  if (!info || info.found !== true) return "";
+  return String(info.signature || [info.title, info.message, info.requestId].filter(Boolean).join("|"));
+}
+function createProviderError(info) {
+  const providerError = {
+    found: true,
+    title: String(info && info.title || "LLM provider error"),
+    message: String(info && info.message || ""),
+    requestId: info && info.requestId ? String(info.requestId) : null,
+    retryAvailable: !!(info && info.retryAvailable),
+    signature: providerErrorSignature(info)
+  };
+  const detail = providerError.message || (providerError.requestId ? `Request ID: ${providerError.requestId}` : "");
+  const error2 = new Error([providerError.title, detail].filter(Boolean).join(": "));
+  error2.sent = true;
+  error2.confirmedTerminal = true;
+  error2.terminalEvidence = `provider_error_tray:${providerError.requestId || providerError.signature || "visible"}`;
+  error2.providerError = providerError;
+  return error2;
 }
 var CursorBridge = class {
   constructor(options = {}) {
@@ -20546,6 +20587,7 @@ var CursorBridge = class {
       monitorPromise: null,
       resultUnavailable: false,
       terminalEvidence: null,
+      providerError: null,
       sendState: "not_sent",
       reservationScope: null,
       controlTail: Promise.resolve(),
@@ -20578,11 +20620,14 @@ var CursorBridge = class {
     if (isTerminalTask(job)) return;
     const e = error2 instanceof Error ? error2 : new Error(String(error2));
     job.error = e.message;
+    if (e.providerError) job.providerError = e.providerError;
+    if (e.terminalEvidence) job.terminalEvidence = e.terminalEvidence;
     job.status = "failed";
     job.phase = "failed";
     job.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
     job.recoveryState = null;
     job.cancelRequested = false;
+    job.reservationScope = null;
     if (!job.settled) {
       job.settled = true;
       job.reject(e);
@@ -20765,6 +20810,9 @@ var CursorBridge = class {
               this._orphanParallelJob(job, new Error("\u5DF2\u8BF7\u6C42\u53D6\u6D88\uFF0C\u4F46\u65E0\u6CD5\u786E\u8BA4 Cursor \u5DF2\u505C\u6B62\uFF1B\u5360\u7528\u7EE7\u7EED\u4FDD\u7559"));
               job.recoveryState = "cancel_unconfirmed";
             }
+          } else if (error2 && error2.confirmedTerminal) {
+            this.activeParallel.delete(job.id);
+            this._failJob(job, error2);
           } else if (error2 && error2.sent) {
             job.error = `\u53D1\u9001\u72B6\u6001\u4E0D\u786E\u5B9A\uFF0C\u7EE7\u7EED\u6309 agentId \u76D1\u63A7\uFF1A${error2.message}`;
             if (job.agentId) {
@@ -20807,12 +20855,19 @@ var CursorBridge = class {
         baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
       } catch {
       }
+      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
       options.sendState = "dispatching";
       try {
         await chord(c, 0, "Enter", "Enter", 13);
         options.sendState = "sent";
         options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
-        return await this._waitComplete(c, options.timeoutMs || QUERY_TIMEOUT, baseline.messageCount || 0, options);
+        return await this._waitComplete(
+          c,
+          options.timeoutMs || QUERY_TIMEOUT,
+          baseline.messageCount || 0,
+          options,
+          providerErrorBaseline
+        );
       } catch (error2) {
         error2.sent = true;
         throw error2;
@@ -20888,6 +20943,21 @@ var CursorBridge = class {
       if (!keepOpen) await this._closeHistory(c);
     }
   }
+  async _readProviderError(c) {
+    const raw = await evalJS(c, EXPR_PROVIDER_ERROR);
+    try {
+      return JSON.parse(raw || '{"found":false}');
+    } catch {
+      return { found: false };
+    }
+  }
+  async _throwIfNewProviderError(c, baselineSignature = "") {
+    const providerError = await this._readProviderError(c);
+    if (!providerError || providerError.found !== true) return;
+    const signature = providerErrorSignature(providerError);
+    if (baselineSignature && signature === baselineSignature) return;
+    throw createProviderError(providerError);
+  }
   async _submitParallelAgent(job) {
     const page = await findPage({ purpose: "parallel_agent" });
     job.targetId = page.id;
@@ -20928,15 +20998,19 @@ var CursorBridge = class {
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("parallel_agent \u586B\u5165\u4EFB\u52A1\u5931\u8D25");
       await sleep2(350);
       this._throwIfCancelledBeforeSend(job);
+      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
       job.sendState = "dispatching";
       sent = true;
       await chord(c, 0, "Enter", "Enter", 13);
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
-      for (let i = 0; i < 12 && !agent; i++) {
+      agent = null;
+      for (let i = 0; i < 24 && !agent; i++) {
         await sleep2(350);
+        await this._throwIfNewProviderError(c, providerErrorBaseline);
         try {
-          agent = selectNewAgentEntry(before, await this._readAgentEntries(c));
+          const candidate = selectNewAgentEntry(before, await this._readAgentEntries(c));
+          if (candidate && (candidate.showSpinner || classifyParallelTerminalIcon(candidate.icon) !== "unknown")) agent = candidate;
         } catch {
         }
       }
@@ -21529,13 +21603,14 @@ var CursorBridge = class {
       }
     }).catch((e) => console.error("\u26A0\uFE0F \u6062\u590D\u539F Cursor Agent \u5931\u8D25\uFF1A" + e.message));
   }
-  async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0, job = null) {
+  async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0, job = null, providerErrorBaseline = "") {
     const start = Date.now();
     const INTERVAL = 1e3;
     let sawStop = false;
     let lastReplyKey = "", stableReply = 0;
     await sleep2(1200);
     while (Date.now() - start < timeoutMs) {
+      await this._throwIfNewProviderError(c, providerErrorBaseline);
       if (job && job.cancelRequested) {
         const e = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
         e.cancelled = true;
@@ -21609,6 +21684,7 @@ var CursorBridge = class {
       monitorGeneration: job.monitorGeneration,
       resultUnavailable: job.resultUnavailable,
       terminalEvidence: job.terminalEvidence,
+      providerError: job.providerError,
       sendState: job.sendState,
       reservationScope: job.reservationScope,
       reservationHeld: this.activeParallel.has(job.id),
@@ -21871,9 +21947,11 @@ export {
   EXPR_FIND_NEWAGENT,
   EXPR_HISTORY_ENTRIES,
   EXPR_PAGE_CAPABILITIES,
+  EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
   bridge,
   classifyParallelTerminalIcon,
+  createProviderError,
   exprClickSelectedAgentStop,
   exprFill,
   exprOpenAgent,
@@ -21882,6 +21960,7 @@ export {
   normalizeDelegationMode,
   normalizeDelegationPolicy,
   pathsOverlap,
+  providerErrorSignature,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
   selectNewAgentEntry,

@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "description": "Let Codex ask Cursor to find code or take on clearly bounded work, with four simple involvement levels and safe independent Agent tracking.",
   "author": {
     "name": "Vanyangyang"

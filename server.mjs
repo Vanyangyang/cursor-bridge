@@ -255,6 +255,28 @@ const EXPR_EXTRACT = `(function(){
   const texts=md.map(m=>(m.innerText||'').trim()).filter(Boolean);
   return texts[texts.length-1]||'';
 })()`;
+// Cursor Agents 新界面的 provider 失败会显示为全局 notification tray，并可能立即移除刚创建的
+// draft Agent。只读取可见错误及 Request ID；绝不自动点击 Try again 或 Dismiss。
+const EXPR_PROVIDER_ERROR = `(function(){
+  const trays=[...document.querySelectorAll('.ui-tray.ui-notification-tray[data-visible="true"]')];
+  const tray=trays.find(node=>{
+    const titleNode=node.querySelector('.ui-tray-header__title');
+    const title=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'').trim();
+    return /^LLM provider error$/i.test(title);
+  });
+  if(!tray)return JSON.stringify({found:false});
+  const titleNode=tray.querySelector('.ui-tray-header__title');
+  const title=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'LLM provider error').trim();
+  const lines=String(tray.innerText||tray.textContent||'').split(/\\r?\\n/)
+    .map(line=>line.trim()).filter(Boolean);
+  const message=lines.find(line=>line!==title&&!/^(Copy ID|Try again)$/i.test(line))||'';
+  const match=message.match(/Request ID:\\s*([^\\s]+)/i);
+  const requestId=match?match[1]:null;
+  const retryAvailable=[...tray.querySelectorAll('button')].some(button=>
+    /^Try again$/i.test(String(button.innerText||button.textContent||'').trim()));
+  const signature=[title,message,requestId||''].join('|');
+  return JSON.stringify({found:true,title,message,requestId,retryAvailable,signature});
+})()`;
 // 原子地验证当前选中 agentId，并只点击当前 composer 内唯一的停止控件。
 // Cursor 既可能显示输入区的 “Stop generation”，也可能在前台工具调用期间只显示
 // 与该 composer 绑定的 “Stop command”；两者都必须保持精确选择器与唯一性门禁。
@@ -302,7 +324,7 @@ const EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('bu
 // 旧版 Agent History 提供 entries + onOpenEntry(id)；新版 Cursor Agents 的侧栏提供
 // section.headers + onSelectAgent(header)。两套不稳定 React 内部接口只在此处归一化。
 const REACT_ADAPTER_BODY = `
-  const readScalar=value=>value&&typeof value==='object'&&Object.prototype.hasOwnProperty.call(value,'value')?value.value:value;
+  const readScalar=value=>value&&typeof value==='object'&&'value' in value?value.value:value;
   const normalizeTimestamp=(value,index)=>{
     const raw=readScalar(value);
     let timestamp=raw instanceof Date?raw.getTime():Number(raw);
@@ -499,6 +521,29 @@ function classifyParallelTerminalIcon(icon) {
   if (/error|failed|warning/i.test(value)) return 'failed';
   if (/check-circled|check/i.test(value)) return 'completed';
   return 'unknown';
+}
+
+function providerErrorSignature(info) {
+  if (!info || info.found !== true) return '';
+  return String(info.signature || [info.title, info.message, info.requestId].filter(Boolean).join('|'));
+}
+
+function createProviderError(info) {
+  const providerError = {
+    found: true,
+    title: String(info && info.title || 'LLM provider error'),
+    message: String(info && info.message || ''),
+    requestId: info && info.requestId ? String(info.requestId) : null,
+    retryAvailable: !!(info && info.retryAvailable),
+    signature: providerErrorSignature(info),
+  };
+  const detail = providerError.message || (providerError.requestId ? `Request ID: ${providerError.requestId}` : '');
+  const error = new Error([providerError.title, detail].filter(Boolean).join(': '));
+  error.sent = true;
+  error.confirmedTerminal = true;
+  error.terminalEvidence = `provider_error_tray:${providerError.requestId || providerError.signature || 'visible'}`;
+  error.providerError = providerError;
+  return error;
 }
 
 class CursorBridge {
@@ -728,6 +773,7 @@ class CursorBridge {
       monitorPromise: null,
       resultUnavailable: false,
       terminalEvidence: null,
+      providerError: null,
       sendState: 'not_sent',
       reservationScope: null,
       controlTail: Promise.resolve(),
@@ -762,11 +808,14 @@ class CursorBridge {
     if (isTerminalTask(job)) return;
     const e = error instanceof Error ? error : new Error(String(error));
     job.error = e.message;
+    if (e.providerError) job.providerError = e.providerError;
+    if (e.terminalEvidence) job.terminalEvidence = e.terminalEvidence;
     job.status = 'failed';
     job.phase = 'failed';
     job.finishedAt = new Date().toISOString();
     job.recoveryState = null;
     job.cancelRequested = false;
+    job.reservationScope = null;
     if (!job.settled) {
       job.settled = true;
       job.reject(e);
@@ -953,6 +1002,9 @@ class CursorBridge {
               this._orphanParallelJob(job, new Error('已请求取消，但无法确认 Cursor 已停止；占用继续保留'));
               job.recoveryState = 'cancel_unconfirmed';
             }
+          } else if (error && error.confirmedTerminal) {
+            this.activeParallel.delete(job.id);
+            this._failJob(job, error);
           } else if (error && error.sent) {
             job.error = `发送状态不确定，继续按 agentId 监控：${error.message}`;
             if (job.agentId) {
@@ -995,6 +1047,7 @@ class CursorBridge {
       this._throwIfCancelledBeforeSend(options);
       let baseline = { messageCount: 0 };
       try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
+      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
       // 3) Enter 发送
       options.sendState = 'dispatching';
       try {
@@ -1002,7 +1055,13 @@ class CursorBridge {
         options.sendState = 'sent';
         options.sentAt = options.sentAt || new Date().toISOString();
         // 4) 等完成（stop 钮 >0 出现过 → 归 0）
-        return await this._waitComplete(c, options.timeoutMs || QUERY_TIMEOUT, baseline.messageCount || 0, options);
+        return await this._waitComplete(
+          c,
+          options.timeoutMs || QUERY_TIMEOUT,
+          baseline.messageCount || 0,
+          options,
+          providerErrorBaseline,
+        );
       } catch (error) {
         // Enter 派发开始后无法证明消息未发送；任何后续异常都必须保守保留全局占用。
         error.sent = true;
@@ -1082,6 +1141,23 @@ class CursorBridge {
     }
   }
 
+  async _readProviderError(c) {
+    const raw = await evalJS(c, EXPR_PROVIDER_ERROR);
+    try {
+      return JSON.parse(raw || '{"found":false}');
+    } catch {
+      return { found: false };
+    }
+  }
+
+  async _throwIfNewProviderError(c, baselineSignature = '') {
+    const providerError = await this._readProviderError(c);
+    if (!providerError || providerError.found !== true) return;
+    const signature = providerErrorSignature(providerError);
+    if (baselineSignature && signature === baselineSignature) return;
+    throw createProviderError(providerError);
+  }
+
   async _submitParallelAgent(job) {
     const page = await findPage({ purpose: 'parallel_agent' });
     job.targetId = page.id;
@@ -1122,6 +1198,7 @@ class CursorBridge {
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('parallel_agent 填入任务失败');
       await sleep(350);
       this._throwIfCancelledBeforeSend(job);
+      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
       job.sendState = 'dispatching';
       sent = true;
       await chord(c, 0, 'Enter', 'Enter', 13);
@@ -1129,10 +1206,19 @@ class CursorBridge {
       job.sentAt = new Date().toISOString();
 
       // Cursor 3.7 可能只在首次消息发送后才把 composer 登记进 Agent History。
-      // 发送后仍只按 before/after ID 差分绑定；若失败则进入 needs_attention，绝不重发或释放路径。
-      for (let i = 0; i < 12 && !agent; i++) {
+      // 新版还会先登记 draft；只有进入 running/terminal 状态才算发送确认。若同时出现新的
+      // provider error tray，则这是明确失败终态，释放占用但不自动重试。
+      agent = null;
+      for (let i = 0; i < 24 && !agent; i++) {
         await sleep(350);
-        try { agent = selectNewAgentEntry(before, await this._readAgentEntries(c)); } catch {}
+        await this._throwIfNewProviderError(c, providerErrorBaseline);
+        try {
+          const candidate = selectNewAgentEntry(before, await this._readAgentEntries(c));
+          if (candidate && (
+            candidate.showSpinner
+            || classifyParallelTerminalIcon(candidate.icon) !== 'unknown'
+          )) agent = candidate;
+        } catch {}
       }
       if (!agent) {
         const e = new Error('任务可能已发送，但无法从 Agent History 捕获唯一 agentId；已保留占用，禁止自动重发');
@@ -1747,13 +1833,14 @@ class CursorBridge {
     }).catch((e) => console.error('⚠️ 恢复原 Cursor Agent 失败：' + e.message));
   }
 
-  async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0, job = null) {
+  async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0, job = null, providerErrorBaseline = '') {
     const start = Date.now();
     const INTERVAL = 1000;
     let sawStop = false;        // 观察到生成中（stop 钮出现过）
     let lastReplyKey = '', stableReply = 0;
     await sleep(1200);          // 给发送后 stop 钮起来留时间
     while (Date.now() - start < timeoutMs) {
+      await this._throwIfNewProviderError(c, providerErrorBaseline);
       if (job && job.cancelRequested) {
         // FIFO 没有稳定 agentId；禁止用宽泛 Stop/Cancel 选择器猜测性点击其他会话或工作台控件。
         const e = new Error(job.cancelReason || '任务已取消');
@@ -1827,6 +1914,7 @@ class CursorBridge {
       monitorGeneration: job.monitorGeneration,
       resultUnavailable: job.resultUnavailable,
       terminalEvidence: job.terminalEvidence,
+      providerError: job.providerError,
       sendState: job.sendState,
       reservationScope: job.reservationScope,
       reservationHeld: this.activeParallel.has(job.id),
@@ -2142,10 +2230,13 @@ export {
   EXPR_FIND_NEWAGENT,
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
+  EXPR_PROVIDER_ERROR,
   exprFill,
   exprOpenAgent,
   exprClickSelectedAgentStop,
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,
+  providerErrorSignature,
+  createProviderError,
 };

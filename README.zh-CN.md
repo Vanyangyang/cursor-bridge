@@ -86,6 +86,7 @@ adapter 会请求 supervisor 确保 Cursor 可用。`CURSOR_BRIDGE_NO_AUTOLAUNCH
 
 - 提交 `cursor_do` 时使用 `background=true`、`new_chat=true`；保存 `task_id`，再用 `cursor_status(task_id)` 收回。
 - `submitting`、`running`、`collecting` 都是正常进行态；超过两分钟本身不代表失败。`cursor_status` 不修改任务。
+- 新出现的 `LLM provider error` 托盘是已确认失败终态；Bridge 会记录正文和 Request ID、释放占用，但不会自动点击 `Try again` 或关闭弹窗。
 - `reap` 只用于已绑定孤儿，`cancel` 必须使用精确 `agentId`；Bridge 不会点击模糊的全局 Stop。
 - FIFO 或未绑定孤儿会阻塞新委托，直到用户人工确认 Cursor 状态并显式承担 `abandon` 风险。
 - 任务记录只存在于当前 Bridge 进程；重启后开始重叠工作前，先检查 Agent History 与工作区。
