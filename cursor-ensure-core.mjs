@@ -7,6 +7,12 @@
 import { spawn, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import http from 'http';
+import {
+  findCursorPidByPort,
+  normalizeCursorRuntimeMode,
+  setCursorWindowPresentation,
+  startMinimalWindowGuard,
+} from './cursor-runtime.mjs';
 
 export const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 export const CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
@@ -130,11 +136,24 @@ export async function waitForCdp(maxMs = 30000, stepMs = 1000) {
  * Ensure Cursor is listening with CDP. Idempotent. Never kills a running Cursor.
  * status: 'already' | 'launched' | 'running-no-debug' | 'port-not-cursor' | 'no-exe' | 'timeout'
  */
-export async function ensureCursorRunningLocal({ waitMs = 30000 } = {}) {
+export async function ensureCursorRunningLocal({ waitMs = 30000, runtimeMode = 'normal' } = {}) {
+  const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
   if (await cdpUp()) {
     const isCursor = await cdpIsCursor();
     if (isCursor) {
-      return { ok: true, status: 'already', port: CDP_PORT, message: `CDP ${CDP_PORT} 已响应且是 Cursor。` };
+      const cursorPid = findCursorPidByPort(CDP_PORT);
+      const presentation = effectiveRuntimeMode === 'minimal'
+        ? setCursorWindowPresentation({ action: 'hide', port: CDP_PORT, pid: cursorPid })
+        : null;
+      return {
+        ok: true,
+        status: 'already',
+        port: CDP_PORT,
+        cursorPid,
+        runtimeMode: effectiveRuntimeMode,
+        presentation,
+        message: `CDP ${CDP_PORT} 已响应且是 Cursor。`,
+      };
     }
     return {
       ok: false,
@@ -163,9 +182,23 @@ export async function ensureCursorRunningLocal({ waitMs = 30000 } = {}) {
 
   const projectPath = resolveProjectPath();
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
+  if (effectiveRuntimeMode === 'minimal') {
+    args.push(
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows',
+    );
+  }
   if (projectPath && existsSync(projectPath)) args.push(projectPath);
-  const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: false });
+  const child = spawn(exe, args, {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: effectiveRuntimeMode === 'minimal',
+  });
   child.unref();
+  const windowGuard = effectiveRuntimeMode === 'minimal'
+    ? startMinimalWindowGuard(child.pid)
+    : null;
 
   const up = await waitForCdp(waitMs);
   if (!up) {
@@ -174,15 +207,25 @@ export async function ensureCursorRunningLocal({ waitMs = 30000 } = {}) {
       status: 'timeout',
       exe,
       port: CDP_PORT,
+      cursorPid: child.pid || null,
+      runtimeMode: effectiveRuntimeMode,
+      windowGuard,
       message: `已启动 Cursor（${exe}），但 ${waitMs}ms 内 CDP ${CDP_PORT} 未就绪，稍后重试。`,
     };
   }
   const target = projectPath ? `打开 ${projectPath}` : '恢复上次工作区';
+  const presentation = effectiveRuntimeMode === 'minimal'
+    ? setCursorWindowPresentation({ action: 'hide', port: CDP_PORT, pid: child.pid })
+    : null;
   return {
     ok: true,
     status: 'launched',
     exe,
     port: CDP_PORT,
+    cursorPid: child.pid || null,
+    runtimeMode: effectiveRuntimeMode,
+    presentation,
+    windowGuard,
     message: `已启动 Cursor（${exe}，${target}），CDP ${CDP_PORT} 就绪。`,
   };
 }

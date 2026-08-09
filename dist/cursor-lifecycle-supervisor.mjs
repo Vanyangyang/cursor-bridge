@@ -9,6 +9,169 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// cursor-runtime.mjs
+import { execFileSync, spawn } from "node:child_process";
+function normalizeCursorRuntimeMode(value, fallback = "normal") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return CURSOR_RUNTIME_MODES.includes(normalized) ? normalized : fallback;
+}
+function parseNetstatListeningPid(output, port) {
+  const expectedPort = Number(port);
+  if (!Number.isInteger(expectedPort) || expectedPort <= 0) return null;
+  for (const line of String(output || "").split(/\r?\n/)) {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length < 5 || String(columns[0]).toUpperCase() !== "TCP") continue;
+    const local = columns[1] || "";
+    const state = String(columns[3] || "").toUpperCase();
+    const pid = Number(columns[4]);
+    const portMatch = local.match(/:(\d+)$/);
+    if (state === "LISTENING" && portMatch && Number(portMatch[1]) === expectedPort && Number.isInteger(pid) && pid > 0) {
+      return pid;
+    }
+  }
+  return null;
+}
+function findCursorPidByPort(port, options = {}) {
+  if ((options.platform || process.platform) !== "win32") return null;
+  const run = options.execFileSyncImpl || execFileSync;
+  try {
+    const output = run("netstat.exe", ["-ano", "-p", "tcp"], {
+      encoding: "utf8",
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    return parseNetstatListeningPid(output, port);
+  } catch {
+    return null;
+  }
+}
+function powershellWindowScript(options) {
+  const targetPid = Number(options.pid);
+  const loop = options.loop === true;
+  const show = options.action === "show" ? "$true" : "$false";
+  const iterations = Number(options.iterations || 1);
+  const intervalMs = Number(options.intervalMs || 100);
+  const apply = loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { [void][CursorBridgeWindowControl]::Apply(${targetPid}, $false); Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
+  return `$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+${WINDOW_CONTROL_TYPE}
+'@
+${apply}`;
+}
+function encodePowerShell(script) {
+  return Buffer.from(String(script), "utf16le").toString("base64");
+}
+function setCursorWindowPresentation(options = {}) {
+  const platform = options.platform || process.platform;
+  const action = String(options.action || "").trim().toLowerCase();
+  if (!["hide", "show"].includes(action)) throw new Error(`unsupported Cursor window action: ${options.action}`);
+  if (platform !== "win32") {
+    return { supported: false, applied: false, action, reason: `window control is not implemented for ${platform}` };
+  }
+  const port = Number(options.port || 9223);
+  const pid = Number(options.pid || findCursorPidByPort(port, options));
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return { supported: true, applied: false, action, port, reason: `no listening Cursor PID found on CDP ${port}` };
+  }
+  const run = options.execFileSyncImpl || execFileSync;
+  try {
+    const script = powershellWindowScript({ pid, action });
+    const output = run("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-EncodedCommand",
+      encodePowerShell(script)
+    ], {
+      encoding: "utf8",
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: Number(options.timeoutMs || 15e3)
+    });
+    const changedWindows = Number(String(output || "").trim() || 0);
+    return { supported: true, applied: true, action, port, pid, changedWindows };
+  } catch (error) {
+    return {
+      supported: true,
+      applied: false,
+      action,
+      port,
+      pid,
+      reason: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+function startMinimalWindowGuard(pid, options = {}) {
+  if ((options.platform || process.platform) !== "win32") return { started: false, reason: "unsupported-platform" };
+  const targetPid = Number(pid);
+  if (!Number.isInteger(targetPid) || targetPid <= 0) return { started: false, reason: "invalid-pid" };
+  const intervalMs = Math.max(50, Math.min(1e3, Number(options.intervalMs || 100)));
+  const durationMs = Math.max(intervalMs, Math.min(12e4, Number(options.durationMs || 45e3)));
+  const iterations = Math.ceil(durationMs / intervalMs);
+  const spawnImpl = options.spawnImpl || spawn;
+  try {
+    const script = powershellWindowScript({
+      pid: targetPid,
+      loop: true,
+      iterations,
+      intervalMs
+    });
+    const child = spawnImpl("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-EncodedCommand",
+      encodePowerShell(script)
+    ], { detached: true, stdio: "ignore", windowsHide: true });
+    if (child && typeof child.unref === "function") child.unref();
+    return { started: true, pid: child && child.pid || null, targetPid, durationMs, intervalMs };
+  } catch (error) {
+    return { started: false, targetPid, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+var CURSOR_RUNTIME_MODES, WINDOW_CONTROL_TYPE;
+var init_cursor_runtime = __esm({
+  "cursor-runtime.mjs"() {
+    CURSOR_RUNTIME_MODES = Object.freeze(["normal", "minimal"]);
+    WINDOW_CONTROL_TYPE = String.raw`
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class CursorBridgeWindowControl {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
+  [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+
+  public static int Apply(int expectedProcessId, bool show) {
+    int changed = 0;
+    EnumWindows((hWnd, lParam) => {
+      uint processId;
+      GetWindowThreadProcessId(hWnd, out processId);
+      if (processId != (uint)expectedProcessId || GetWindowTextLengthW(hWnd) <= 0) return true;
+      StringBuilder className = new StringBuilder(256);
+      GetClassNameW(hWnd, className, className.Capacity);
+      if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
+      bool visible = IsWindowVisible(hWnd);
+      if (show && !visible) { if (ShowWindowAsync(hWnd, 9)) changed++; }
+      if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
+      return true;
+    }, IntPtr.Zero);
+    return changed;
+  }
+}
+`;
+  }
+});
+
 // cursor-ensure-core.mjs
 var cursor_ensure_core_exports = {};
 __export(cursor_ensure_core_exports, {
@@ -24,7 +187,7 @@ __export(cursor_ensure_core_exports, {
   resolveProjectPath: () => resolveProjectPath,
   waitForCdp: () => waitForCdp
 });
-import { spawn, execSync } from "child_process";
+import { spawn as spawn2, execSync } from "child_process";
 import { existsSync } from "fs";
 import http from "http";
 function looksLikePluginRuntimePath(candidate) {
@@ -144,11 +307,22 @@ async function waitForCdp(maxMs = 3e4, stepMs = 1e3) {
   }
   return false;
 }
-async function ensureCursorRunningLocal({ waitMs = 3e4 } = {}) {
+async function ensureCursorRunningLocal({ waitMs = 3e4, runtimeMode = "normal" } = {}) {
+  const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
   if (await cdpUp()) {
     const isCursor = await cdpIsCursor();
     if (isCursor) {
-      return { ok: true, status: "already", port: CDP_PORT, message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\u3002` };
+      const cursorPid = findCursorPidByPort(CDP_PORT);
+      const presentation2 = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid }) : null;
+      return {
+        ok: true,
+        status: "already",
+        port: CDP_PORT,
+        cursorPid,
+        runtimeMode: effectiveRuntimeMode,
+        presentation: presentation2,
+        message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\u3002`
+      };
     }
     return {
       ok: false,
@@ -176,9 +350,21 @@ async function ensureCursorRunningLocal({ waitMs = 3e4 } = {}) {
   }
   const projectPath = resolveProjectPath();
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
+  if (effectiveRuntimeMode === "minimal") {
+    args.push(
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows"
+    );
+  }
   if (projectPath && existsSync(projectPath)) args.push(projectPath);
-  const child = spawn(exe, args, { detached: true, stdio: "ignore", windowsHide: false });
+  const child = spawn2(exe, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: effectiveRuntimeMode === "minimal"
+  });
   child.unref();
+  const windowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child.pid) : null;
   const up = await waitForCdp(waitMs);
   if (!up) {
     return {
@@ -186,21 +372,30 @@ async function ensureCursorRunningLocal({ waitMs = 3e4 } = {}) {
       status: "timeout",
       exe,
       port: CDP_PORT,
+      cursorPid: child.pid || null,
+      runtimeMode: effectiveRuntimeMode,
+      windowGuard,
       message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002`
     };
   }
   const target = projectPath ? `\u6253\u5F00 ${projectPath}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
+  const presentation = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: child.pid }) : null;
   return {
     ok: true,
     status: "launched",
     exe,
     port: CDP_PORT,
+    cursorPid: child.pid || null,
+    runtimeMode: effectiveRuntimeMode,
+    presentation,
+    windowGuard,
     message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
   };
 }
 var CDP_PORT, CDP_ORIGIN, CDP_HOST, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
+    init_cursor_runtime();
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
     CDP_HOST = "127.0.0.1";
@@ -442,13 +637,14 @@ async function startSupervisor(options = {}) {
     ensureInflight = (async () => {
       ensureCount += 1;
       const waitMs = Number(request.waitMs || 3e4);
-      const result = await ensureLocal({ waitMs });
+      const result = await ensureLocal({ waitMs, runtimeMode: request.runtimeMode || "normal" });
       lastEnsure = {
         ...result,
         ensureCount,
         at: (/* @__PURE__ */ new Date()).toISOString(),
         requestReason: request.reason || null,
-        requestAdapterPid: request.adapterPid || null
+        requestAdapterPid: request.adapterPid || null,
+        requestRuntimeMode: request.runtimeMode || "normal"
       };
       writeSupervisorDiag(logPath, "ensure-result", {
         ok: !!result.ok,

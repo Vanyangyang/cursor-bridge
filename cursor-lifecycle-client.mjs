@@ -277,6 +277,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
       waitMs,
       reason,
       adapterPid,
+      runtimeMode: options.runtimeMode || null,
     }, Math.max(waitMs + 15000, 60000));
 
     if (response.type === 'error') {
@@ -299,6 +300,10 @@ export async function ensureCursorViaSupervisor(options = {}) {
       message: response.message,
       port: response.port,
       exe: response.exe,
+      cursorPid: response.cursorPid || null,
+      runtimeMode: response.runtimeMode || options.runtimeMode || null,
+      presentation: response.presentation || null,
+      windowGuard: response.windowGuard || null,
       adapterPid,
       supervisorPid: response.supervisorPid || conn.supervisorPid,
       reusedSupervisor: conn.reusedSupervisor,

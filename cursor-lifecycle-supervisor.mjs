@@ -222,13 +222,14 @@ export async function startSupervisor(options = {}) {
     ensureInflight = (async () => {
       ensureCount += 1;
       const waitMs = Number(request.waitMs || 30000);
-      const result = await ensureLocal({ waitMs });
+      const result = await ensureLocal({ waitMs, runtimeMode: request.runtimeMode || 'normal' });
       lastEnsure = {
         ...result,
         ensureCount,
         at: new Date().toISOString(),
         requestReason: request.reason || null,
         requestAdapterPid: request.adapterPid || null,
+        requestRuntimeMode: request.runtimeMode || 'normal',
       };
       writeSupervisorDiag(logPath, 'ensure-result', {
         ok: !!result.ok,

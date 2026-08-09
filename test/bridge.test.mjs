@@ -11,6 +11,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import {
   CursorBridge,
   DELEGATION_POLICIES,
+  CURSOR_RUNTIME_MODES,
+  buildSearchPrompt,
+  buildToolDefinitions,
+  normalizeCceSearchResult,
   normalizeAllowedPath,
   normalizeDelegationMode,
   normalizeDelegationPolicy,
@@ -183,7 +187,7 @@ class OfflineBridge extends CursorBridge {
     const defaultPolicy = Object.prototype.hasOwnProperty.call(options, 'delegationPolicy')
       ? {}
       : { delegationPolicy: 'active' };
-    super({ policyFile: null, ...defaultPolicy, ...options });
+    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', ...defaultPolicy, ...options });
   }
 
   async _ensureCursor() {}
@@ -226,7 +230,7 @@ class TaskControlBridge extends OfflineBridge {
 
 class DeferredSubmitBridge extends CursorBridge {
   constructor() {
-    super({ policyFile: null, delegationPolicy: 'active' });
+    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
     this.stopCalls = 0;
     this.monitorStarts = 0;
     this.submitStarted = new Promise((resolve) => { this._markSubmitStarted = resolve; });
@@ -267,7 +271,7 @@ class MonitorGenerationBridge extends OfflineBridge {
 
 class SentFifoFailureBridge extends CursorBridge {
   constructor() {
-    super({ policyFile: null, delegationPolicy: 'active' });
+    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
   }
 
   async _ensureCursor() {}
@@ -281,7 +285,7 @@ class SentFifoFailureBridge extends CursorBridge {
 
 class ConfirmedFifoFailureBridge extends CursorBridge {
   constructor() {
-    super({ policyFile: null, delegationPolicy: 'active' });
+    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
   }
 
   async _ensureCursor() {}
@@ -300,7 +304,7 @@ class ConfirmedFifoFailureBridge extends CursorBridge {
 
 class CancellableFifoBridge extends CursorBridge {
   constructor({ fallback = false } = {}) {
-    super({ policyFile: null, delegationPolicy: 'active' });
+    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
     this.fallback = fallback;
     this.runStarted = new Promise((resolve) => { this._markRunStarted = resolve; });
   }
@@ -429,6 +433,64 @@ test('persistent policy survives bridge reconstruction while session overrides r
   assert.equal(restartedAgain.delegationPolicy, 'auto');
 });
 
+test('minimal runtime is persistent, defers startup, and remains separate from delegation policy', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-runtime-view-'));
+  const runtimeFile = join(directory, 'runtime.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const first = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
+  first.applyRuntimePresentation = async (action) => ({ supported: true, applied: false, action, reason: 'offline-test' });
+  const enabled = await first.setRuntimeMode('minimal');
+  assert.deepEqual(CURSOR_RUNTIME_MODES, ['normal', 'minimal']);
+  assert.equal(enabled.runtimeMode, 'minimal');
+  assert.equal(enabled.startupBehavior, 'deferred_until_cursor_search_or_cursor_do');
+  assert.equal(enabled.modeStored, true);
+  assert.equal(enabled.presentation.action, 'hide');
+  assert.equal(first.delegationPolicy, 'active');
+
+  const restarted = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
+  assert.equal(restarted.runtimeMode, 'minimal');
+  assert.equal(restarted.runtimeModeSource, 'persistent');
+  assert.equal(restarted.runtimeModeView().persistsAcrossRestart, true);
+});
+
+test('CCE search prompt requires evidence, records gaps, and refuses path guessing', () => {
+  const prompt = buildSearchPrompt('谁负责计算最终伤害？', {
+    scope: ['Assets/Scripts/Battle'],
+    maxResults: 7,
+  });
+  assert.match(prompt, /Cursor Context Engine（CCE）/);
+  assert.match(prompt, /必须先检索再回答/);
+  assert.match(prompt, /禁止根据框架惯例猜路径/);
+  assert.match(prompt, /NOT_FOUND/);
+  assert.match(prompt, /Assets\/Scripts\/Battle/);
+  assert.match(prompt, /最多返回 7 个/);
+  assert.match(prompt, /workspace-relative-path/);
+  assert.match(prompt, /confidence: <high\|medium\|low>/);
+});
+
+test('CCE result normalization removes conversational preamble without inventing evidence', () => {
+  const raw = '先解释一段。\n\nCCE_SEARCH_RESULT intent: locate owner\nevidence:\n- a.js:1-2 | fn | owner | exact\ngaps: none\nconfidence: high';
+  const normalized = normalizeCceSearchResult(raw);
+  assert.equal(normalized.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
+  assert.doesNotMatch(normalized, /先解释/);
+  assert.equal(normalizeCceSearchResult('legacy result'), 'legacy result');
+});
+
+test('CCE tool description states real capabilities and explicit limits', () => {
+  const bridge = new OfflineBridge();
+  const tools = buildToolDefinitions(bridge);
+  const search = tools.find((tool) => tool.name === 'cursor_search');
+  const runtime = tools.find((tool) => tool.name === 'cursor_runtime');
+  assert.match(search.description, /Cursor Context Engine \(CCE\)/);
+  assert.match(search.description, /semantic retrieval/);
+  assert.match(search.description, /exact grep alone/);
+  assert.match(search.description, /NOT_FOUND/);
+  assert.match(search.description, /not a filesystem sandbox/);
+  assert.deepEqual(search.inputSchema.properties.max_results.maximum, 30);
+  assert.deepEqual(runtime.inputSchema.properties.mode.enum, ['normal', 'minimal']);
+  assert.match(runtime.description, /UI suppression, not a headless reimplementation/);
+});
+
 test('invalid persisted policy falls back to the bootstrap policy', (t) => {
   const policyFile = createTempPolicyFile(t);
   writeFileSync(policyFile, JSON.stringify({ version: 1, policy: 'off' }));
@@ -471,6 +533,11 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_task_control'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_runtime'), true);
+    const search = listed.tools.find((tool) => tool.name === 'cursor_search');
+    assert.match(search.description, /Cursor Context Engine \(CCE\)/);
+    assert.ok(search.inputSchema.properties.scope);
+    assert.ok(search.inputSchema.properties.max_results);
     const taskControl = listed.tools.find((tool) => tool.name === 'cursor_task_control');
     assert.deepEqual(taskControl.inputSchema.properties.action.enum, ['reap', 'cancel', 'abandon']);
     const missingTask = await client.callTool({

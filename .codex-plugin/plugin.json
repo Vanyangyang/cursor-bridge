@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "2.2.5",
-  "description": "Let Codex ask Cursor to find code or take on clearly bounded work, with four simple involvement levels and safe independent Agent tracking.",
+  "version": "2.3.0",
+  "description": "Use Cursor as a verifiable context engine or bounded worker, including a UI-suppressed minimal runtime.",
   "author": {
     "name": "Vanyangyang"
   },
@@ -19,15 +19,16 @@
   },
   "interface": {
     "displayName": "Cursor Bridge",
-    "shortDescription": "Let Cursor help with bounded work, from manual to eager.",
-    "longDescription": "Use Cursor's own agent to find code or complete a clearly bounded task while Codex keeps control of decisions and final review. Choose manual, auto, active, or eager to say how readily Cursor should join the work. Tasks can use the compatible FIFO queue or separate top-level Cursor Agents with stable IDs and non-overlapping write paths.",
+    "shortDescription": "Verifiable Cursor Context Engine search and bounded work.",
+    "longDescription": "Use Cursor's indexed Agent as a Cursor Context Engine that returns path:line evidence instead of guessed locations, or hand it a clearly bounded task while Codex keeps final control. Minimal runtime keeps cursor_search and cursor_do available while hiding the Windows Cursor UI. Tasks can use FIFO or separate top-level Cursor Agents with stable IDs and non-overlapping write paths.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [
       "Interactive"
     ],
     "defaultPrompt": [
-      "Use Cursor Bridge to search this project with Cursor's semantic agent.",
+      "Use cursor_search as a Cursor Context Engine for intent-based lookup with verifiable path:line evidence; prefer local exact search for obvious literals.",
+      "Use cursor_runtime when the user wants normal or UI-suppressed minimal Cursor operation.",
       "Use cursor_policy to follow the user's preferred level of Cursor involvement. Active is the recommended default for regular teamwork.",
       "When a useful bounded handoff exists, give Cursor a clear goal, scope, boundaries, and acceptance checks. Collect the task with cursor_status, inspect the real changes, and keep final approval in Codex.",
       "Run independent tasks as separate top-level Cursor Agents only when their write paths do not overlap. Keep the work in Codex when it requires product judgment, shared-path ownership, or final verification."

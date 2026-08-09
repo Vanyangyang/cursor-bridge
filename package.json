@@ -1,7 +1,7 @@
 {
   "name": "cursor-mcp-bridge",
-  "version": "2.2.5",
-  "description": "MCP server that lets a primary coding agent ask Cursor to find code or complete clearly bounded work over CDP.",
+  "version": "2.3.0",
+  "description": "Verifiable Cursor Context Engine search and bounded Cursor execution over CDP, with a UI-suppressed minimal runtime.",
   "type": "module",
   "main": "server.mjs",
   "engines": {
@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node server.mjs",
     "build": "node build.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:live-minimal": "node test/live-minimal-smoke.mjs"
   },
   "keywords": [
     "mcp",
