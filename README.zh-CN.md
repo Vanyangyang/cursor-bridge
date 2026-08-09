@@ -5,18 +5,31 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square&logo=opensourceinitiative&logoColor=white)](./LICENSE)
 
-让 **Codex / Claude Code 使用 Cursor agent 做语义检索与边界明确的委托执行**。它复用 Cursor 项目索引，把探索过程留在 Cursor 上下文中，并通过 CDP 直驱——无 console 注入、无回连通道，也不依赖 `/multitask`。
+让 **Codex / Claude Code 把 Cursor 当作可核验的 Cursor Context Engine（CCE）与边界明确的执行器**。它复用 Cursor 项目索引，把检索与探索过程留在 Cursor 上下文中，并通过 CDP 直驱——无 console 注入、无回连通道，也不依赖 `/multitask`。
 
 > **兼容性说明：** 同时支持旧版 workbench 与新版 Cursor Agents UI（已在 Windows Cursor 3.7.42 实机验证）。当 CDP 同时暴露两者时，Bridge 会选择能力更完整的目标，并将已提交任务固定到该编辑器窗口。
 
 ## 架构
 
 ```text
-Codex / Claude Code -> stdio MCP adapter(s) -> shared lifecycle supervisor -> Cursor (CDP :9223)
+Codex / Claude Code -> CCE MCP adapter(s) -> shared lifecycle supervisor -> Cursor Agent / Index (CDP :9223)
 ```
 
 - 每个 MCP 上下文可启动独立 adapter，但所有 adapter 共用一个用户级 supervisor。Windows 上它会脱离 Codex Job 生命周期，因此会话关闭不会带走 Cursor。
 - GUI 输入串行：FIFO 使用当前对话，`parallel_agent` 使用独立顶层 Agent。
+
+## Cursor Context Engine：实际能力，不靠猜
+
+`cursor_search` 不是给 `grep` 换一个昂贵名字，也不承诺神秘的“零幻觉”。它让 Cursor Agent 在自己已经索引的工作区里，按需组合语义检索、精确文本搜索、符号/引用追踪和少量源码核对，再返回主 Agent 可以打开验证的证据锚点。
+
+| CCE 会做什么 | CCE 不会宣称什么 |
+|---|---|
+| 从“谁拥有这段行为”“数据如何跨模块流动”这类意图开始定位。 | 不会根据框架惯例猜 `service/`、`firmware/` 等路径。 |
+| 返回工作区相对 `path:start-end`、符号/锚点、相关原因和匹配类型。 | 不把语义相似当作已经证明的调用关系。 |
+| 没有证据时返回 `NOT_FOUND`，并说明实际搜索过的词、符号或范围。 | 不把“没有搜到”包装成“代码不存在”。 |
+| 把大部分探索留在 Cursor 上下文，再由主 Agent读取真实文件完成判断。 | 不声称完全不消耗主上下文，也不替代最终源码核验。 |
+
+明显的字面量或已知符号优先使用本地 `rg`；概念定位、未知命名、跨文件所有权和多跳关系才是 CCE 的强项。`cursor_search` 的只读性是强提示合同，不是文件系统沙箱。
 
 > [!WARNING]
 > Cursor 是 agent，不是技术沙箱。只读与禁止修改属于 prompt 约束，不能当作文件系统隔离。
@@ -80,6 +93,7 @@ adapter 会请求 supervisor 确保 Cursor 可用。`CURSOR_BRIDGE_NO_AUTOLAUNCH
 | `cursor_status` | 只读查看连接、队列、占用和任务状态。 |
 | `cursor_task_control` | 对单个任务执行 `reap`、定向 `cancel` 或明确承担风险的 `abandon`。 |
 | `cursor_policy` | 查看或设置 `manual`、`auto`、`active`、`eager`，默认持久化。 |
+| `cursor_runtime` | 查看或设置 `normal` / `minimal`；极简模式保持 CCE 可用但隐藏 Windows Cursor UI。 |
 | `cursor_launch` | 确保 Cursor 带 CDP 运行并返回生命周期诊断。 |
 
 ### 任务与恢复
@@ -90,6 +104,19 @@ adapter 会请求 supervisor 确保 Cursor 可用。`CURSOR_BRIDGE_NO_AUTOLAUNCH
 - `reap` 只用于已绑定孤儿，`cancel` 必须使用精确 `agentId`；Bridge 不会点击模糊的全局 Stop。
 - FIFO 或未绑定孤儿会阻塞新委托，直到用户人工确认 Cursor 状态并显式承担 `abandon` 风险。
 - 任务记录只存在于当前 Bridge 进程；重启后开始重叠工作前，先检查 Agent History 与工作区。
+
+### 极简模式
+
+```text
+cursor_runtime({mode: "minimal"})
+```
+
+极简模式会持久化，并把 Cursor 启动延迟到首次 `cursor_search` / `cursor_do`。Windows 上 Bridge 会隐藏提供 CDP 的 Cursor 顶层窗口，同时保留真实 Cursor 进程、项目索引、Agent DOM 与任务队列；它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
+
+- `cursor_runtime({action: "show"})`：临时显示窗口，用于登录、升级或人工排障，不改变已保存模式。
+- `cursor_runtime({action: "hide"})`：立即再次隐藏。
+- `cursor_runtime({mode: "normal"})`：恢复普通可见运行方式。
+- 非 Windows 平台当前只保存模式并明确报告窗口控制不支持，不伪装成已经隐藏。
 
 ## 选择 Cursor 参与工作的程度
 
@@ -115,8 +142,10 @@ cursor_policy({mode: "active"})
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口。 |
-| `CURSOR_BRIDGE_TIMEOUT` | `180000` | 单次查询超时，单位毫秒。 |
+| `CURSOR_BRIDGE_TIMEOUT` | `300000` | 单次查询超时，单位毫秒。 |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | 未设置 | 设为 `1` 关闭启动时自动拉起 Cursor。 |
+| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | 没有持久化选择时的初始运行方式：`normal` 或 `minimal`。 |
+| `CURSOR_BRIDGE_RUNTIME_FILE` | 平台用户配置目录 | 覆盖极简/普通模式的持久化文件路径。 |
 | `CURSOR_BRIDGE_POLICY` | `active` | 仅在没有持久化选择时使用的初始档位。旧值 `on` 映射为 `active`；后续启动优先采用持久化的 `cursor_policy` 选择。 |
 | `CURSOR_PROJECT_PATH` | 自动判断 | Cursor 打开与建索引的项目根。 |
 | `CURSOR_EXE` | 自动探测 | 自动探测失败时显式指定 `Cursor.exe`。 |

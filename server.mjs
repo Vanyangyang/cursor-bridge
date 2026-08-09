@@ -28,10 +28,18 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocket } from 'ws';
 import http from 'http';
 import { pathToFileURL } from 'url';
+import {
+  CURSOR_RUNTIME_MODES,
+  normalizeCursorRuntimeMode,
+  readPersistedCursorRuntimeMode,
+  resolveCursorRuntimeFile,
+  setCursorWindowPresentation,
+  writePersistedCursorRuntimeMode,
+} from './cursor-runtime.mjs';
 
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
-const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 180000);
+const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
 
 function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
   return String(value || 'on').trim().toLowerCase() === 'off' ? 'off' : 'on';
@@ -105,10 +113,45 @@ function writePersistedDelegationPolicy(filePath, policy) {
   return target;
 }
 
-// 只读检索 prompt：Cursor agent 当精准定位器用，约束操作类型（不读正文/不改码/不长篇），由 CC 拿清单后自己读真文件。
-const SEARCH_PREFIX =
-  '只做代码检索定位：列出与下面意图相关的文件路径 + 行号范围（形如 Assets/Scripts/X.cs:120-180），' +
-  '逐行列出即可。不要读取文件正文、不要修改任何代码、不要展开长篇解释。\n\n意图：';
+// Cursor Context Engine (CCE) search contract: use Cursor's own indexed/code-navigation
+// context, but return evidence anchors that the primary agent can verify in the real files.
+function buildSearchPrompt(query, options = {}) {
+  const scope = Array.isArray(options.scope)
+    ? options.scope.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const requestedMaxResults = Number(options.maxResults || 12);
+  const maxResults = Number.isFinite(requestedMaxResults)
+    ? Math.max(1, Math.min(30, Math.trunc(requestedMaxResults)))
+    : 12;
+  const scopeText = scope.length
+    ? `\n检索范围优先限制为：\n${scope.map((value) => `- ${value}`).join('\n')}`
+    : '\n检索范围：当前 Cursor 已打开并完成索引的整个工作区。';
+  return [
+    '你现在是 Cursor Context Engine（CCE）的只读代码定位器。',
+    '必须先检索再回答：按需要组合 Cursor 代码库语义检索、精确文本搜索、符号/引用追踪与少量源码上下文核对。',
+    '禁止根据框架惯例猜路径；没有证据时明确写 NOT_FOUND，并列出实际搜索过的词、符号或范围。',
+    '不得修改、创建或删除文件，不得执行改变工作区状态的命令。只读取足以确认定位的上下文。',
+    `最多返回 ${maxResults} 个高相关结果，按证据强度排序。`,
+    scopeText,
+    '',
+    '输出格式：',
+    'CCE_SEARCH_RESULT',
+    'intent: <一句话复述检索意图>',
+    'evidence:',
+    '- <workspace-relative-path>:<start>-<end> | <symbol 或锚点> | <为何与意图相关> | <semantic|exact|reference>',
+    'gaps: <没有确认的部分；没有则写 none>',
+    'confidence: <high|medium|low>（只评价定位证据，不评价代码正确性）',
+    '',
+    `检索意图：${String(query || '').trim()}`,
+  ].join('\n');
+}
+
+function normalizeCceSearchResult(value) {
+  const text = String(value || '').trim();
+  const marker = text.indexOf('CCE_SEARCH_RESULT');
+  if (marker < 0) return text;
+  return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, 'CCE_SEARCH_RESULT\n');
+}
 
 const DO_DEFAULT_CONTRACT =
   '\n\n完成要求：在当前 Cursor 已打开的工作区内直接完成任务；不要推送远端。' +
@@ -570,6 +613,30 @@ class CursorBridge {
     this.delegationPolicyScope = persistedPolicy ? 'persistent' : 'session';
     this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
+    this.runtimeFile = options.runtimeFile === null
+      ? null
+      : resolve(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeModeDefault = normalizeCursorRuntimeMode(
+      options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
+      'normal',
+    );
+    const persistedRuntimeMode = options.runtimeMode === undefined
+      ? readPersistedCursorRuntimeMode(this.runtimeFile)
+      : null;
+    const requestedRuntimeMode = options.runtimeMode !== undefined
+      ? options.runtimeMode
+      : persistedRuntimeMode || this.runtimeModeDefault;
+    this.persistedRuntimeMode = persistedRuntimeMode;
+    this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
+    this.runtimeModeSource = options.runtimeMode !== undefined
+      ? 'constructor'
+      : persistedRuntimeMode
+        ? 'persistent'
+        : process.env.CURSOR_BRIDGE_RUNTIME_MODE
+          ? 'environment'
+          : 'default';
+    this.runtimeModeScope = persistedRuntimeMode ? 'persistent' : 'session';
+    this._lastPresentation = null;
     this.busy = false;
     this.queue = [];
     this._healing = null;
@@ -635,19 +702,75 @@ class CursorBridge {
     return { previousPolicy, ...this.delegationPolicyView() };
   }
 
-  async search(query) {
+  runtimeModeView() {
+    const restartMode = this.persistedRuntimeMode || this.runtimeModeDefault;
+    const modeStored = this.runtimeModeScope === 'persistent'
+      && this.persistedRuntimeMode === this.runtimeMode;
+    return {
+      runtimeMode: this.runtimeMode,
+      runtimeModeSource: this.runtimeModeSource,
+      runtimeModeScope: this.runtimeModeScope,
+      runtimeModeDefault: this.runtimeModeDefault,
+      persistedRuntimeMode: this.persistedRuntimeMode,
+      runtimeFile: this.runtimeFile,
+      modeStored,
+      persistsAcrossRestart: this.runtimeMode === restartMode,
+      restartMode,
+      availableRuntimeModes: [...CURSOR_RUNTIME_MODES],
+      platformWindowControl: process.platform === 'win32' ? 'supported' : 'unsupported',
+      startupBehavior: this.runtimeMode === 'minimal'
+        ? 'deferred_until_cursor_search_or_cursor_do'
+        : 'normal_autolaunch_unless_disabled',
+      lastPresentation: this._lastPresentation,
+    };
+  }
+
+  async applyRuntimePresentation(action) {
+    const normalizedAction = String(action || '').trim().toLowerCase();
+    if (!['hide', 'show'].includes(normalizedAction)) {
+      throw new Error('cursor_runtime action supports hide or show');
+    }
+    const result = setCursorWindowPresentation({
+      action: normalizedAction,
+      port: CDP_PORT,
+    });
+    this._lastPresentation = { ...result, at: new Date().toISOString() };
+    return this._lastPresentation;
+  }
+
+  async setRuntimeMode(value, scope = 'persistent') {
+    const normalizedScope = String(scope || 'persistent').trim().toLowerCase();
+    if (!['persistent', 'session'].includes(normalizedScope)) {
+      throw new Error('cursor_runtime supports scope=persistent or scope=session');
+    }
+    const normalized = normalizeCursorRuntimeMode(value, '');
+    if (!CURSOR_RUNTIME_MODES.includes(normalized)) throw new Error(`unsupported Cursor runtime mode: ${value}`);
+    if (normalizedScope === 'persistent') writePersistedCursorRuntimeMode(this.runtimeFile, normalized);
+    const previousMode = this.runtimeMode;
+    this.runtimeMode = normalized;
+    this.runtimeModeSource = normalizedScope === 'persistent' ? 'persistent' : 'runtime';
+    this.runtimeModeScope = normalizedScope;
+    if (normalizedScope === 'persistent') this.persistedRuntimeMode = normalized;
+    const presentation = await this.applyRuntimePresentation(normalized === 'minimal' ? 'hide' : 'show');
+    return { previousMode, ...this.runtimeModeView(), presentation };
+  }
+
+  async search(query, options = {}) {
+    const text = String(query || '').trim();
+    if (!text) throw new Error('query 不能为空');
+    if (text.length > 20000) throw new Error('query 过长（最大 20000 字符）');
     if (this._hasGlobalReservation()) {
       throw new Error('存在 Stop 未确认的全局 Cursor 占用；请先处理 cursor_status 中的 blockingTaskIds');
     }
     await this._ensureCursor();
-    const job = this._enqueue('search', SEARCH_PREFIX + query, {
+    const job = this._enqueue('search', buildSearchPrompt(text, options), {
       timeoutMs: QUERY_TIMEOUT,
       newChat: true,
       execution: 'fifo',
       readOnly: true,
       allowedPaths: [],
     });
-    return job.promise;
+    return normalizeCceSearchResult(await job.promise);
   }
 
   async doTask(prompt, options = {}) {
@@ -904,7 +1027,7 @@ class CursorBridge {
     this._healing = (async () => {
       try {
         const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-        const rr = await ensureCursorRunning({ reason: 'adapter-heal' });
+        const rr = await ensureCursorRunning({ reason: 'adapter-heal', runtimeMode: this.runtimeMode });
         this._lastLifecycle = {
           adapterPid: rr.adapterPid ?? process.pid,
           supervisorPid: rr.supervisorPid ?? null,
@@ -913,7 +1036,15 @@ class CursorBridge {
           launchReason: rr.launchReason || rr.status,
           status: rr.status,
           spawnMethod: rr.spawnMethod || null,
+          cursorPid: rr.cursorPid || null,
+          runtimeMode: rr.runtimeMode || this.runtimeMode,
+          presentation: rr.presentation || null,
         };
+        if (this.runtimeMode === 'minimal') {
+          this._lastPresentation = rr.presentation
+            ? { ...rr.presentation, at: new Date().toISOString() }
+            : await this.applyRuntimePresentation('hide');
+        }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
         if (rr.status === 'already') {
           console.error('🪟 cursor ensure already: ' + life);
@@ -1945,14 +2076,15 @@ class CursorBridge {
   async status(taskId = '') {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.delegationPolicyView() };
-      return { found: true, ...this.delegationPolicyView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.delegationPolicyView(), ...this.runtimeModeView() };
+      return { found: true, ...this.delegationPolicyView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
     const common = {
       ...this.delegationPolicyView(),
+      ...this.runtimeModeView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
       parallelRunning,
@@ -1974,6 +2106,9 @@ class CursorBridge {
         launchReason: null,
         status: null,
         spawnMethod: null,
+        cursorPid: null,
+        runtimeMode: this.runtimeMode,
+        presentation: null,
       },
     };
     try {
@@ -2003,13 +2138,17 @@ function buildToolDefinitions(bridgeInstance) {
       name: 'cursor_search',
       description:
         `${policyContext} ` +
-        'Ask Cursor to find where something lives in the current project using its semantic search and grep tools. ' +
-        'Use this when ordinary text search is not enough. A search usually takes around 90 seconds and runs one at a time, so keep other work moving while it runs. ' +
-        'Cursor is prompted to return a short path-and-line list without editing files, but this is a behavioral instruction rather than a security sandbox.',
+        'Use the Cursor Context Engine (CCE) to locate code from intent rather than guessed paths. ' +
+        'CCE drives Cursor Agent over the indexed workspace and asks it to combine semantic retrieval, exact search, symbol/reference tracing, and enough source inspection to return verifiable workspace-relative path:line evidence. ' +
+        'Use it for concepts, behavior ownership, cross-file flows, implementations whose names are unknown, or when exact grep alone cannot establish the relationship. ' +
+        'Do not use it as a slower replacement for an obvious literal search. Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. ' +
+        'Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.',
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Describe what you want to find, for example: "Where is battle damage calculated?"' },
+          query: { type: 'string', description: 'Describe the behavior, concept, symbol relationship, or ownership boundary to locate. Do not guess a directory in place of stating intent.' },
+          scope: { type: 'array', items: { type: 'string' }, description: 'Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace.' },
+          max_results: { type: 'integer', minimum: 1, maximum: 30, default: 12, description: 'Maximum number of evidence anchors requested from CCE.' },
         },
         required: ['query'],
       },
@@ -2085,8 +2224,23 @@ function buildToolDefinitions(bridgeInstance) {
       },
     },
     {
+      name: 'cursor_runtime',
+      description:
+        'Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, but Bridge defers startup until cursor_search or cursor_do and hides the Windows Cursor window. ' +
+        'normal keeps the historical visible/autolaunch behavior. This is UI suppression, not a headless reimplementation. ' +
+        'Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: [...CURSOR_RUNTIME_MODES], description: 'normal shows Cursor; minimal keeps the Cursor-powered CCE running with its Windows UI hidden.' },
+          scope: { type: 'string', enum: ['persistent', 'session'], default: 'persistent', description: 'persistent survives MCP restarts; session is a temporary override.' },
+          action: { type: 'string', enum: ['show', 'hide'], description: 'Immediately show or hide the Cursor instance serving the configured CDP port without changing the runtime mode.' },
+        },
+      },
+    },
+    {
       name: 'cursor_status',
-      description: `${policyContext} Read-only snapshot of Cursor connectivity, queued/running work, reservations, and current delegation policy. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.`,
+      description: `${policyContext} Read-only snapshot of Cursor connectivity, queued/running work, reservations, delegation policy, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.`,
       inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: 'A task ID returned by cursor_do. Omit it for an overall status view.' } } },
     },
     {
@@ -2101,7 +2255,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '2.2.4' },
+  { name: 'cursor-bridge', version: '2.3.0' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -2113,7 +2267,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   try {
     if (name === 'cursor_search') {
-      const result = await bridge.search(String((args && args.query) || ''));
+      const result = await bridge.search(String((args && args.query) || ''), {
+        scope: args && args.scope,
+        maxResults: args && args.max_results,
+      });
       return { content: [{ type: 'text', text: String(result) }] };
     }
     if (name === 'cursor_do') {
@@ -2152,12 +2309,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
+    if (name === 'cursor_runtime') {
+      const mode = args && args.mode;
+      const action = args && args.action;
+      let result = mode === undefined
+        ? bridge.runtimeModeView()
+        : await bridge.setRuntimeMode(mode, (args && args.scope) || 'persistent');
+      if (action !== undefined) {
+        result = { ...result, presentation: await bridge.applyRuntimePresentation(action) };
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === 'cursor_status') {
       return { content: [{ type: 'text', text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
     }
     if (name === 'cursor_launch') {
       const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-      const r = await ensureCursorRunning({ reason: 'cursor_launch' });
+      const r = await ensureCursorRunning({ reason: 'cursor_launch', runtimeMode: bridge.runtimeMode });
       bridge._lastLifecycle = {
         adapterPid: r.adapterPid ?? process.pid,
         supervisorPid: r.supervisorPid ?? null,
@@ -2166,7 +2334,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         launchReason: r.launchReason || r.status,
         status: r.status,
         spawnMethod: r.spawnMethod || null,
+        cursorPid: r.cursorPid || null,
+        runtimeMode: r.runtimeMode || bridge.runtimeMode,
+        presentation: r.presentation || null,
       };
+      if (bridge.runtimeMode === 'minimal') {
+        bridge._lastPresentation = r.presentation
+          ? { ...r.presentation, at: new Date().toISOString() }
+          : await bridge.applyRuntimePresentation('hide');
+      }
       return { content: [{ type: 'text', text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
     throw new Error(`未知工具: ${name}`);
@@ -2179,14 +2355,14 @@ async function main() {
   console.error('🚀 启动 cursor-bridge（CDP 直驱 :' + CDP_PORT + '）...');
   await server.connect(new StdioServerTransport());
   console.error('✅ MCP 已连接。');
-  // 启动即确保 Cursor 带 CDP 在跑（fire-and-forget，失败不阻塞 MCP；首次 cursor_search 仍会自愈拉起）。
-  // 关掉：设 env CURSOR_BRIDGE_NO_AUTOLAUNCH=1。Cursor 已在跑但没带 flag 时不强杀（返回 running-no-debug 指引）。
+  // normal 模式启动即确保 Cursor 带 CDP 在跑；minimal 模式始终延迟到首次 cursor_search/cursor_do，避免 MCP 启动时出现 UI。
+  // 也可设 CURSOR_BRIDGE_NO_AUTOLAUNCH=1 关闭 normal 模式的自动拉起。
   // Cursor lifecycle is owned by the user-level singleton supervisor (job-breakaway on Windows).
-  if (process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH !== '1') {
+  if (process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH !== '1' && bridge.runtimeMode !== 'minimal') {
     (async () => {
       try {
         const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-        const r = await ensureCursorRunning({ reason: 'adapter-startup' });
+        const r = await ensureCursorRunning({ reason: 'adapter-startup', runtimeMode: bridge.runtimeMode });
         bridge._lastLifecycle = {
           adapterPid: r.adapterPid ?? process.pid,
           supervisorPid: r.supervisorPid ?? null,
@@ -2195,6 +2371,9 @@ async function main() {
           launchReason: r.launchReason || r.status,
           status: r.status,
           spawnMethod: r.spawnMethod || null,
+          cursorPid: r.cursorPid || null,
+          runtimeMode: r.runtimeMode || bridge.runtimeMode,
+          presentation: r.presentation || null,
         };
         console.error(
           '🪟 启动即确保 Cursor：' + (r.message || r.status)
@@ -2222,6 +2401,11 @@ export {
   normalizeAllowedPath,
   normalizeDelegationMode,
   normalizeDelegationPolicy,
+  CURSOR_RUNTIME_MODES,
+  normalizeCursorRuntimeMode,
+  buildSearchPrompt,
+  normalizeCceSearchResult,
+  buildToolDefinitions,
   pathsOverlap,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
