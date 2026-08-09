@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" role="img" aria-labelledby="title desc">
+  <title id="title">Cursor Bridge star history</title>
+  <desc id="desc">Cumulative GitHub stars from July 2025 through August 2026, ending at 13 stars.</desc>
+  <style>
+    :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --grid: #d8dee4; --line: #1f883d; --dot: #2da44e; --fill: #dafbe1; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #f0f6fc; --muted: #8b949e; --grid: #30363d; --line: #3fb950; --dot: #56d364; --fill: #12261e; } }
+    text { font-family: "Comic Sans MS", "Comic Sans", cursive; fill: var(--fg); }
+    .muted { fill: var(--muted); }
+    .grid { stroke: var(--grid); stroke-width: 1; stroke-dasharray: 5 7; }
+  </style>
+  <defs>
+    <filter id="sketch" x="-3%" y="-3%" width="106%" height="106%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="7" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.25" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--fill)" stop-opacity="0.85" />
+      <stop offset="1" stop-color="var(--fill)" stop-opacity="0.18" />
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="500" rx="18" fill="var(--bg)" />
+  <text x="62" y="48" font-size="27" font-weight="700">Cursor Bridge — Star History</text>
+  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">13 stars</text>
+
+  <g aria-hidden="true">
+    <line x1="80" y1="410" x2="850" y2="410" class="grid" />
+    <line x1="80" y1="300" x2="850" y2="300" class="grid" />
+    <line x1="80" y1="190" x2="850" y2="190" class="grid" />
+    <line x1="80" y1="80" x2="850" y2="80" class="grid" />
+    <line x1="80" y1="80" x2="80" y2="410" stroke="var(--fg)" stroke-width="2" />
+    <line x1="80" y1="410" x2="850" y2="410" stroke="var(--fg)" stroke-width="2" />
+    <text x="61" y="416" text-anchor="end" font-size="15" class="muted">0</text>
+    <text x="61" y="306" text-anchor="end" font-size="15" class="muted">5</text>
+    <text x="61" y="196" text-anchor="end" font-size="15" class="muted">10</text>
+    <text x="61" y="86" text-anchor="end" font-size="15" class="muted">15</text>
+    <text x="80" y="440" font-size="15" class="muted">Jul 2025</text>
+    <text x="467" y="440" text-anchor="middle" font-size="15" class="muted">Jan 2026</text>
+    <text x="850" y="440" text-anchor="end" font-size="15" class="muted">Aug 2026</text>
+  </g>
+
+  <path d="M80 410 H92 V388 H114 V366 H118 V344 H120 V300 H128 V278 H146 V256 H467 V234 H796 V168 H840 V146 H842 V124 H850 V410 H80 Z" fill="url(#area)" />
+  <path d="M80 410 H92 V388 H114 V366 H118 V344 H120 V300 H128 V278 H146 V256 H467 V234 H796 V168 H840 V146 H842 V124 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
+
+  <g fill="var(--dot)" stroke="var(--bg)" stroke-width="2">
+    <circle cx="92" cy="388" r="5" />
+    <circle cx="114" cy="366" r="5" />
+    <circle cx="118" cy="344" r="5" />
+    <circle cx="120" cy="300" r="5" />
+    <circle cx="128" cy="278" r="5" />
+    <circle cx="146" cy="256" r="5" />
+    <circle cx="467" cy="234" r="5" />
+    <circle cx="796" cy="168" r="5" />
+    <circle cx="840" cy="146" r="5" />
+    <circle cx="842" cy="124" r="6" />
+  </g>
+
+  <g transform="translate(814 91)" fill="none" stroke="var(--dot)" stroke-width="2.3" stroke-linejoin="round">
+    <path d="M0 -12 L3.6 -3.7 L12 -3.7 L5.2 1.4 L7.8 10 L0 5 L-7.8 10 L-5.2 1.4 L-12 -3.7 L-3.6 -3.7 Z" />
+  </g>
+  <text x="830" y="96" font-size="15" class="muted">13</text>
+  <text x="80" y="476" font-size="13" class="muted">Source: GitHub Stargazers API · generated 2026-08-10</text>
+</svg>
