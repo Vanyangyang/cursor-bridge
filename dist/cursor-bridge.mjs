@@ -20186,30 +20186,58 @@ function writePersistedDelegationPolicy(filePath, policy) {
   }
   return target;
 }
-function buildSearchPrompt(query, options = {}) {
+function searchPromptOptions(options = {}) {
   const scope = Array.isArray(options.scope) ? options.scope.map((value) => String(value || "").trim()).filter(Boolean) : [];
   const requestedMaxResults = Number(options.maxResults || 12);
   const maxResults = Number.isFinite(requestedMaxResults) ? Math.max(1, Math.min(30, Math.trunc(requestedMaxResults))) : 12;
   const scopeText = scope.length ? `
 \u68C0\u7D22\u8303\u56F4\u4F18\u5148\u9650\u5236\u4E3A\uFF1A
 ${scope.map((value) => `- ${value}`).join("\n")}` : "\n\u68C0\u7D22\u8303\u56F4\uFF1A\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u5E76\u5B8C\u6210\u7D22\u5F15\u7684\u6574\u4E2A\u5DE5\u4F5C\u533A\u3002";
+  return { maxResults, scopeText };
+}
+function searchResultContract(maxResults) {
   return [
-    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\u7684\u53EA\u8BFB\u4EE3\u7801\u5B9A\u4F4D\u5668\u3002",
-    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\uFF1A\u6309\u9700\u8981\u7EC4\u5408 Cursor \u4EE3\u7801\u5E93\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\u4E0E\u5C11\u91CF\u6E90\u7801\u4E0A\u4E0B\u6587\u6838\u5BF9\u3002",
-    "\u7981\u6B62\u6839\u636E\u6846\u67B6\u60EF\u4F8B\u731C\u8DEF\u5F84\uFF1B\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u6216\u8303\u56F4\u3002",
-    "\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002\u53EA\u8BFB\u53D6\u8DB3\u4EE5\u786E\u8BA4\u5B9A\u4F4D\u7684\u4E0A\u4E0B\u6587\u3002",
     `\u6700\u591A\u8FD4\u56DE ${maxResults} \u4E2A\u9AD8\u76F8\u5173\u7ED3\u679C\uFF0C\u6309\u8BC1\u636E\u5F3A\u5EA6\u6392\u5E8F\u3002`,
-    scopeText,
     "",
-    "\u8F93\u51FA\u683C\u5F0F\uFF1A",
+    "\u8F93\u51FA\u683C\u5F0F\uFF08\u4FDD\u6301\u7D27\u51D1\uFF0C\u4E0D\u8981\u8FFD\u52A0\u957F\u7BC7\u89E3\u91CA\uFF09\uFF1A",
     "CCE_SEARCH_RESULT",
     "intent: <\u4E00\u53E5\u8BDD\u590D\u8FF0\u68C0\u7D22\u610F\u56FE>",
     "evidence:",
-    "- <workspace-relative-path>:<start>-<end> | <symbol \u6216\u951A\u70B9> | <\u4E3A\u4F55\u4E0E\u610F\u56FE\u76F8\u5173> | <semantic|exact|reference>",
+    "- <workspace-relative-path>:<start>-<end> | <symbol \u6216\u951A\u70B9> | <\u76F8\u5173\u6027\u6216\u5DF2\u6838\u9A8C\u5173\u7CFB> | <semantic|exact|reference|source-read>",
     "gaps: <\u6CA1\u6709\u786E\u8BA4\u7684\u90E8\u5206\uFF1B\u6CA1\u6709\u5219\u5199 none>",
-    "confidence: <high|medium|low>\uFF08\u53EA\u8BC4\u4EF7\u5B9A\u4F4D\u8BC1\u636E\uFF0C\u4E0D\u8BC4\u4EF7\u4EE3\u7801\u6B63\u786E\u6027\uFF09",
+    "confidence: <high|medium|low>\uFF08\u53EA\u8BC4\u4EF7\u5B9A\u4F4D\u8BC1\u636E\uFF0C\u4E0D\u8BC4\u4EF7\u4EE3\u7801\u6B63\u786E\u6027\uFF09"
+  ];
+}
+function buildSearchPrompt(query, options = {}) {
+  const { maxResults, scopeText } = searchPromptOptions(options);
+  return [
+    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\u7684\u5E73\u8861\u578B\u53EA\u8BFB\u4EE3\u7801\u5B9A\u4F4D\u5668\u3002",
+    "\u76EE\u6807\u662F\u9AD8\u7CBE\u5EA6\u5B9A\u4F4D\uFF0C\u4E0D\u662F\u5B8C\u6574\u67B6\u6784\u8C03\u67E5\u3001\u5B9E\u73B0\u65B9\u6848\u8BBE\u8BA1\u6216\u5168\u4ED3\u5E93\u7EFC\u8FF0\u3002",
+    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\uFF1A\u7EC4\u5408 Cursor \u7D22\u5F15\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\uFF0C\u5E76\u53EA\u8BFB\u53D6\u5C11\u91CF\u76F4\u63A5\u76F8\u5173\u6E90\u7801\u6765\u6838\u5BF9\u8BC1\u636E\u3002",
+    "\u4F18\u5148\u7CBE\u5EA6\uFF1B\u7981\u6B62\u5BBD\u6CDB\u904D\u5386\u4ED3\u5E93\uFF0C\u7981\u6B62\u542F\u52A8 Explore/\u5B50\u4EE3\u7406\uFF0C\u7981\u6B62\u6839\u636E\u6846\u67B6\u60EF\u4F8B\u731C\u8DEF\u5F84\u3002\u6BCF\u6761\u7ED3\u8BBA\u90FD\u5FC5\u987B\u7531\u5B9E\u9645\u641C\u7D22\u6216\u8BFB\u53D6\u8BC1\u636E\u652F\u6491\u3002",
+    "\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002\u53EA\u8BFB\u53D6\u8DB3\u4EE5\u786E\u8BA4\u5B9A\u4F4D\u7684\u4E0A\u4E0B\u6587\u3002",
+    "\u82E5\u95EE\u9898\u9700\u8981\u591A\u8DF3\u8C03\u7528\u94FE\u3001\u6570\u636E\u6D41\u3001\u8DE8\u6A21\u5757\u6838\u9A8C\u6216\u5927\u8303\u56F4\u8BFB\u53D6\uFF0C\u4E0D\u8981\u81EA\u52A8\u6269\u5927\u8C03\u67E5\uFF1B\u5728 gaps \u4E2D\u5199 deep_search_recommended: <\u539F\u56E0>\u3002",
+    "\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5728 gaps \u4E2D\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u6216\u8303\u56F4\u3002",
+    scopeText,
+    ...searchResultContract(maxResults),
     "",
     `\u68C0\u7D22\u610F\u56FE\uFF1A${String(query || "").trim()}`
+  ].join("\n");
+}
+function buildDeepSearchPrompt(query, options = {}) {
+  const { maxResults, scopeText } = searchPromptOptions(options);
+  return [
+    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\u7684\u6DF1\u5EA6\u53EA\u8BFB\u4ED3\u5E93\u4E0A\u4E0B\u6587\u8C03\u67E5\u5668\u3002",
+    "\u76EE\u6807\u662F\u4E3A\u5F53\u524D\u610F\u56FE\u627E\u9F50\u201C\u6700\u5C0F\u5145\u5206\u4EE3\u7801\u4E0A\u4E0B\u6587\u201D\uFF0C\u5E76\u7528\u771F\u5B9E\u8DE8\u6587\u4EF6\u8BC1\u636E\u6838\u9A8C\u5173\u7CFB\uFF1B\u4E0D\u662F\u751F\u6210\u5B9E\u73B0\u8BA1\u5212\u3001\u5927\u7247\u4EE3\u7801\u6216\u957F\u7BC7\u67B6\u6784\u8BF4\u660E\u3002",
+    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\uFF1A\u7EC4\u5408 Cursor \u5DF2\u7D22\u5F15\u9879\u76EE\u7684\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\u548C\u5B9A\u5411\u6E90\u7801\u8BFB\u53D6\u3002\u53EA\u6709\u786E\u6709\u5FC5\u8981\u4E14\u5F53\u524D\u80FD\u529B\u53EF\u7528\u65F6\uFF0C\u624D\u4F7F\u7528 Explore/\u5B50\u4EE3\u7406\u8865\u8DB3\u8DE8\u6587\u4EF6\u9A8C\u8BC1\u3002",
+    "\u9002\u5408\u6838\u9A8C\u4E1A\u52A1\u903B\u8F91\u3001\u8C03\u7528\u94FE\u3001\u6570\u636E\u6D41\u3001route\u2192service\u2192storage\u3001producer\u2192queue\u2192consumer\u3001config\u2192registration\u2192implementation\u3001interface\u2192implementation\uFF0C\u4EE5\u53CA\u8DE8\u6A21\u5757/\u5B50\u7CFB\u7EDF\u5173\u7CFB\u6216\u5B9E\u73B0\u524D\u4E0A\u4E0B\u6587\u3002",
+    "\u6BCF\u6761\u5173\u7CFB\u5FC5\u987B\u7531\u5B9E\u9645\u641C\u7D22\u6216\u6E90\u7801\u8BFB\u53D6\u8BC1\u636E\u652F\u6491\uFF1B\u8BED\u4E49\u76F8\u4F3C\u4E0D\u80FD\u5192\u5145\u5DF2\u8BC1\u660E\u8C03\u7528\u8FB9\u3002\u8FBE\u5230\u6700\u5C0F\u5145\u5206\u4E0A\u4E0B\u6587\u540E\u7ACB\u5373\u505C\u6B62\uFF0C\u4E0D\u505A\u65E0\u5173\u5168\u4ED3\u5E93\u6F2B\u6E38\u3002",
+    "\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002",
+    "\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5728 gaps \u4E2D\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u3001\u5F15\u7528\u6216\u8303\u56F4\u3002",
+    scopeText,
+    ...searchResultContract(maxResults),
+    "",
+    `\u6DF1\u5EA6\u68C0\u7D22\u610F\u56FE\uFF1A${String(query || "").trim()}`
   ].join("\n");
 }
 function normalizeCceSearchResult(value) {
@@ -20217,6 +20245,15 @@ function normalizeCceSearchResult(value) {
   const marker = text.indexOf("CCE_SEARCH_RESULT");
   if (marker < 0) return text;
   return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, "CCE_SEARCH_RESULT\n");
+}
+function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, baselineCount = 0 } = {}) {
+  if (!String(answer || "").trim()) return false;
+  if (!snapshot || typeof snapshot !== "object") return false;
+  const stopCount = Number(snapshot.stop);
+  if (!Number.isFinite(stopCount) || stopCount > 0) return false;
+  const hasAssistantEvidence = Number(snapshot.replyLength || 0) > 0 || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
+  const hasCompletionEvidence = sawStop || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
+  return hasAssistantEvidence && hasCompletionEvidence;
 }
 var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
 var CDP_HOST2 = "127.0.0.1";
@@ -20792,6 +20829,12 @@ var CursorBridge = class {
     return { previousMode, ...this.runtimeModeView(), presentation };
   }
   async search(query, options = {}) {
+    return this._searchWithPrompt("search", query, options, buildSearchPrompt);
+  }
+  async searchDeep(query, options = {}) {
+    return this._searchWithPrompt("search_deep", query, options, buildDeepSearchPrompt);
+  }
+  async _searchWithPrompt(kind, query, options, promptBuilder) {
     const text = String(query || "").trim();
     if (!text) throw new Error("query \u4E0D\u80FD\u4E3A\u7A7A");
     if (text.length > 2e4) throw new Error("query \u8FC7\u957F\uFF08\u6700\u5927 20000 \u5B57\u7B26\uFF09");
@@ -20799,7 +20842,7 @@ var CursorBridge = class {
       throw new Error("\u5B58\u5728 Stop \u672A\u786E\u8BA4\u7684\u5168\u5C40 Cursor \u5360\u7528\uFF1B\u8BF7\u5148\u5904\u7406 cursor_status \u4E2D\u7684 blockingTaskIds");
     }
     await this._ensureCursor();
-    const job = this._enqueue("search", buildSearchPrompt(text, options), {
+    const job = this._enqueue(kind, promptBuilder(text, options), {
       timeoutMs: QUERY_TIMEOUT,
       newChat: true,
       execution: "fifo",
@@ -21986,14 +22029,20 @@ var CursorBridge = class {
       }
       await sleep2(INTERVAL);
     }
-    let finalSnap = { messageCount: 0 };
+    let finalSnap = null;
     try {
       finalSnap = JSON.parse(await evalJS(c, EXPR_SNAP));
     } catch {
     }
     const ans = await evalJS(c, EXPR_EXTRACT);
-    if (ans && (sawStop || finalSnap.messageCount >= baselineCount + 2)) return ans;
-    throw new Error(`Cursor \u4EFB\u52A1\u8D85\u65F6 (${timeoutMs}ms) \u672A\u4EA7\u751F\u53EF\u786E\u8BA4\u7684\u52A9\u624B\u56DE\u590D`);
+    if (isConfirmedCompletedReply({
+      answer: ans,
+      snapshot: finalSnap,
+      sawStop,
+      baselineCount
+    })) return ans;
+    const taskHint = job && job.id ? `\uFF1Btask_id=${job.id}\uFF0C\u8BF7\u7528 cursor_status(task_id) \u68C0\u67E5\u5E76\u6309\u6062\u590D\u6D41\u7A0B\u5904\u7406` : "";
+    throw new Error(`Cursor \u4EFB\u52A1\u8D85\u65F6 (${timeoutMs}ms)\uFF0C\u5C1A\u672A\u786E\u8BA4\u751F\u6210\u5DF2\u505C\u6B62\u5E76\u4EA7\u751F\u5B8C\u6574\u52A9\u624B\u56DE\u590D${taskHint}`);
   }
   _taskView(job, includeResult = false) {
     const view = {
@@ -22100,21 +22149,29 @@ function delegationPolicyToolContext(bridgeInstance) {
   const restartText = view.policyStored ? "This choice is persisted and will remain after the MCP server restarts." : view.persistsAcrossRestart ? `A restart currently resolves to the same ${view.restartPolicy} policy.` : `This temporary session override resets to ${view.restartPolicy} after restart.`;
   return `Current effective Cursor participation policy: ${view.policy}. ${view.guidance} ${restartText} A direct user opt-out always wins.`;
 }
+function buildSearchInputSchema() {
+  return {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory." },
+      scope: { type: "array", items: { type: "string" }, description: "Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace." },
+      max_results: { type: "integer", minimum: 1, maximum: 30, default: 12, description: "Maximum number of evidence anchors requested from CCE." }
+    },
+    required: ["query"]
+  };
+}
 function buildToolDefinitions(bridgeInstance) {
   const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
     {
       name: "cursor_search",
-      description: `${policyContext} Use the Cursor Context Engine (CCE) to locate code from intent rather than guessed paths. CCE drives Cursor Agent over the indexed workspace and asks it to combine semantic retrieval, exact search, symbol/reference tracing, and enough source inspection to return verifiable workspace-relative path:line evidence. Use it for concepts, behavior ownership, cross-file flows, implementations whose names are unknown, or when exact grep alone cannot establish the relationship. Do not use it as a slower replacement for an obvious literal search. Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.`,
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Describe the behavior, concept, symbol relationship, or ownership boundary to locate. Do not guess a directory in place of stating intent." },
-          scope: { type: "array", items: { type: "string" }, description: "Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace." },
-          max_results: { type: "integer", minimum: 1, maximum: 30, default: 12, description: "Maximum number of evidence anchors requested from CCE." }
-        },
-        required: ["query"]
-      }
+      description: `${policyContext} Balanced read-only Cursor Context Engine (CCE) locator for intent-based code discovery. It combines Cursor indexed semantic retrieval with exact search, symbol/reference tracing, and small targeted source checks, returning compact verifiable workspace-relative path:line evidence. Use caller-side Grep for an obvious literal or known exact symbol. Use cursor_search_deep for call chains, data flows, cross-module/subsystem or architecture relationships, or when this tool reports deep_search_recommended. Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.`,
+      inputSchema: buildSearchInputSchema()
+    },
+    {
+      name: "cursor_search_deep",
+      description: `${policyContext} Heavier read-only CCE repository-context investigation over Cursor's indexed project plus targeted cross-file exploration. Use it when the question requires a verified call chain, data flow, route-to-storage path, producer/consumer relationship, config-to-implementation path, interface implementations, cross-module/subsystem ownership, architecture context, or when cursor_search says deeper evidence is required. It stops at the minimum sufficient code context and returns the same compact path:line evidence contract; it does not produce an implementation plan or modify the workspace. Do not default to running both search modes: choose this directly when the investigation shape is already deep. Read-only behavior is a strong prompt contract, not a filesystem sandbox.`,
+      inputSchema: buildSearchInputSchema()
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
@@ -22196,7 +22253,7 @@ function buildToolDefinitions(bridgeInstance) {
 }
 var bridge = new CursorBridge();
 var server = new Server(
-  { name: "cursor-bridge", version: "2.3.0" },
+  { name: "cursor-bridge", version: "3.0.0" },
   { capabilities: { tools: { listChanged: true } } }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -22207,6 +22264,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
   try {
     if (name === "cursor_search") {
       const result = await bridge.search(String(args && args.query || ""), {
+        scope: args && args.scope,
+        maxResults: args && args.max_results
+      });
+      return { content: [{ type: "text", text: String(result) }] };
+    }
+    if (name === "cursor_search_deep") {
+      const result = await bridge.searchDeep(String(args && args.query || ""), {
         scope: args && args.scope,
         maxResults: args && args.max_results
       });
@@ -22332,6 +22396,7 @@ export {
   EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
   bridge,
+  buildDeepSearchPrompt,
   buildSearchPrompt,
   buildToolDefinitions,
   classifyParallelTerminalIcon,
@@ -22339,6 +22404,7 @@ export {
   exprClickSelectedAgentStop,
   exprFill,
   exprOpenAgent,
+  isConfirmedCompletedReply,
   isTargetedStopConfirmed,
   normalizeAllowedPath,
   normalizeCceSearchResult,

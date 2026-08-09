@@ -1,6 +1,6 @@
 {
   "name": "vanyangyang",
-  "description": "Vanyangyang's Claude Code plugins, including Cursor Bridge for evidence-backed CCE search and clearly bounded Cursor handoffs.",
+  "description": "Vanyangyang's developer tools, including Cursor Bridge for evidence-backed CCE search and bounded Cursor Agent execution.",
   "owner": {
     "name": "Vanyangyang"
   },
@@ -8,8 +8,8 @@
     {
       "name": "cursor-bridge",
       "source": ".",
-      "description": "Use Cursor as a verifiable context engine or bounded worker, with normal or UI-suppressed minimal runtime. Cursor must run with --remote-debugging-port=9223.",
-      "version": "2.3.0",
+      "description": "Use balanced or deep Cursor Context Engine search and bounded Cursor Agent execution, with normal or UI-suppressed minimal runtime. Cursor must run with --remote-debugging-port=9223.",
+      "version": "3.0.0",
       "author": {
         "name": "Vanyangyang"
       }
