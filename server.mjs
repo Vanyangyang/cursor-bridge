@@ -113,9 +113,9 @@ function writePersistedDelegationPolicy(filePath, policy) {
   return target;
 }
 
-// Cursor Context Engine (CCE) search contract: use Cursor's own indexed/code-navigation
-// context, but return evidence anchors that the primary agent can verify in the real files.
-function buildSearchPrompt(query, options = {}) {
+// Cursor Context Engine (CCE) search contracts: use Cursor's indexed/code-navigation
+// context, but return compact evidence anchors that the primary agent can verify.
+function searchPromptOptions(options = {}) {
   const scope = Array.isArray(options.scope)
     ? options.scope.map((value) => String(value || '').trim()).filter(Boolean)
     : [];
@@ -126,23 +126,54 @@ function buildSearchPrompt(query, options = {}) {
   const scopeText = scope.length
     ? `\n检索范围优先限制为：\n${scope.map((value) => `- ${value}`).join('\n')}`
     : '\n检索范围：当前 Cursor 已打开并完成索引的整个工作区。';
+  return { maxResults, scopeText };
+}
+
+function searchResultContract(maxResults) {
   return [
-    '你现在是 Cursor Context Engine（CCE）的只读代码定位器。',
-    '必须先检索再回答：按需要组合 Cursor 代码库语义检索、精确文本搜索、符号/引用追踪与少量源码上下文核对。',
-    '禁止根据框架惯例猜路径；没有证据时明确写 NOT_FOUND，并列出实际搜索过的词、符号或范围。',
-    '不得修改、创建或删除文件，不得执行改变工作区状态的命令。只读取足以确认定位的上下文。',
     `最多返回 ${maxResults} 个高相关结果，按证据强度排序。`,
-    scopeText,
     '',
-    '输出格式：',
+    '输出格式（保持紧凑，不要追加长篇解释）：',
     'CCE_SEARCH_RESULT',
     'intent: <一句话复述检索意图>',
     'evidence:',
-    '- <workspace-relative-path>:<start>-<end> | <symbol 或锚点> | <为何与意图相关> | <semantic|exact|reference>',
+    '- <workspace-relative-path>:<start>-<end> | <symbol 或锚点> | <相关性或已核验关系> | <semantic|exact|reference|source-read>',
     'gaps: <没有确认的部分；没有则写 none>',
     'confidence: <high|medium|low>（只评价定位证据，不评价代码正确性）',
+  ];
+}
+
+function buildSearchPrompt(query, options = {}) {
+  const { maxResults, scopeText } = searchPromptOptions(options);
+  return [
+    '你现在是 Cursor Context Engine（CCE）的平衡型只读代码定位器。',
+    '目标是高精度定位，不是完整架构调查、实现方案设计或全仓库综述。',
+    '必须先检索再回答：组合 Cursor 索引语义检索、精确文本搜索、符号/引用追踪，并只读取少量直接相关源码来核对证据。',
+    '优先精度；禁止宽泛遍历仓库，禁止启动 Explore/子代理，禁止根据框架惯例猜路径。每条结论都必须由实际搜索或读取证据支撑。',
+    '不得修改、创建或删除文件，不得执行改变工作区状态的命令。只读取足以确认定位的上下文。',
+    '若问题需要多跳调用链、数据流、跨模块核验或大范围读取，不要自动扩大调查；在 gaps 中写 deep_search_recommended: <原因>。',
+    '没有证据时明确写 NOT_FOUND，并在 gaps 中列出实际搜索过的词、符号或范围。',
+    scopeText,
+    ...searchResultContract(maxResults),
     '',
     `检索意图：${String(query || '').trim()}`,
+  ].join('\n');
+}
+
+function buildDeepSearchPrompt(query, options = {}) {
+  const { maxResults, scopeText } = searchPromptOptions(options);
+  return [
+    '你现在是 Cursor Context Engine（CCE）的深度只读仓库上下文调查器。',
+    '目标是为当前意图找齐“最小充分代码上下文”，并用真实跨文件证据核验关系；不是生成实现计划、大片代码或长篇架构说明。',
+    '必须先检索再回答：组合 Cursor 已索引项目的语义检索、精确文本搜索、符号/引用追踪和定向源码读取。只有确有必要且当前能力可用时，才使用 Explore/子代理补足跨文件验证。',
+    '适合核验业务逻辑、调用链、数据流、route→service→storage、producer→queue→consumer、config→registration→implementation、interface→implementation，以及跨模块/子系统关系或实现前上下文。',
+    '每条关系必须由实际搜索或源码读取证据支撑；语义相似不能冒充已证明调用边。达到最小充分上下文后立即停止，不做无关全仓库漫游。',
+    '不得修改、创建或删除文件，不得执行改变工作区状态的命令。',
+    '没有证据时明确写 NOT_FOUND，并在 gaps 中列出实际搜索过的词、符号、引用或范围。',
+    scopeText,
+    ...searchResultContract(maxResults),
+    '',
+    `深度检索意图：${String(query || '').trim()}`,
   ].join('\n');
 }
 
@@ -151,6 +182,18 @@ function normalizeCceSearchResult(value) {
   const marker = text.indexOf('CCE_SEARCH_RESULT');
   if (marker < 0) return text;
   return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, 'CCE_SEARCH_RESULT\n');
+}
+
+function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, baselineCount = 0 } = {}) {
+  if (!String(answer || '').trim()) return false;
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  const stopCount = Number(snapshot.stop);
+  if (!Number.isFinite(stopCount) || stopCount > 0) return false;
+  const hasAssistantEvidence = Number(snapshot.replyLength || 0) > 0
+    || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
+  const hasCompletionEvidence = sawStop
+    || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
+  return hasAssistantEvidence && hasCompletionEvidence;
 }
 
 const DO_DEFAULT_CONTRACT =
@@ -756,6 +799,14 @@ class CursorBridge {
   }
 
   async search(query, options = {}) {
+    return this._searchWithPrompt('search', query, options, buildSearchPrompt);
+  }
+
+  async searchDeep(query, options = {}) {
+    return this._searchWithPrompt('search_deep', query, options, buildDeepSearchPrompt);
+  }
+
+  async _searchWithPrompt(kind, query, options, promptBuilder) {
     const text = String(query || '').trim();
     if (!text) throw new Error('query 不能为空');
     if (text.length > 20000) throw new Error('query 过长（最大 20000 字符）');
@@ -763,7 +814,7 @@ class CursorBridge {
       throw new Error('存在 Stop 未确认的全局 Cursor 占用；请先处理 cursor_status 中的 blockingTaskIds');
     }
     await this._ensureCursor();
-    const job = this._enqueue('search', buildSearchPrompt(text, options), {
+    const job = this._enqueue(kind, promptBuilder(text, options), {
       timeoutMs: QUERY_TIMEOUT,
       newChat: true,
       execution: 'fifo',
@@ -2006,12 +2057,20 @@ class CursorBridge {
       }
       await sleep(INTERVAL);
     }
-    // 超时只接受已观察到生成，或消息数明确增加到助手回复；避免把用户 prompt 当结果。
-    let finalSnap = { messageCount: 0 };
+    // 超时边界仍需确认当前已停止生成。仅有半截 Markdown、曾见过 Stop 或消息数增长都不够。
+    let finalSnap = null;
     try { finalSnap = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
     const ans = await evalJS(c, EXPR_EXTRACT);
-    if (ans && (sawStop || finalSnap.messageCount >= baselineCount + 2)) return ans;
-    throw new Error(`Cursor 任务超时 (${timeoutMs}ms) 未产生可确认的助手回复`);
+    if (isConfirmedCompletedReply({
+      answer: ans,
+      snapshot: finalSnap,
+      sawStop,
+      baselineCount,
+    })) return ans;
+    const taskHint = job && job.id
+      ? `；task_id=${job.id}，请用 cursor_status(task_id) 检查并按恢复流程处理`
+      : '';
+    throw new Error(`Cursor 任务超时 (${timeoutMs}ms)，尚未确认生成已停止并产生完整助手回复${taskHint}`);
   }
 
   _taskView(job, includeResult = false) {
@@ -2131,6 +2190,18 @@ function delegationPolicyToolContext(bridgeInstance) {
   return `Current effective Cursor participation policy: ${view.policy}. ${view.guidance} ${restartText} A direct user opt-out always wins.`;
 }
 
+function buildSearchInputSchema() {
+  return {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory.' },
+      scope: { type: 'array', items: { type: 'string' }, description: 'Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace.' },
+      max_results: { type: 'integer', minimum: 1, maximum: 30, default: 12, description: 'Maximum number of evidence anchors requested from CCE.' },
+    },
+    required: ['query'],
+  };
+}
+
 function buildToolDefinitions(bridgeInstance) {
   const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
@@ -2138,20 +2209,21 @@ function buildToolDefinitions(bridgeInstance) {
       name: 'cursor_search',
       description:
         `${policyContext} ` +
-        'Use the Cursor Context Engine (CCE) to locate code from intent rather than guessed paths. ' +
-        'CCE drives Cursor Agent over the indexed workspace and asks it to combine semantic retrieval, exact search, symbol/reference tracing, and enough source inspection to return verifiable workspace-relative path:line evidence. ' +
-        'Use it for concepts, behavior ownership, cross-file flows, implementations whose names are unknown, or when exact grep alone cannot establish the relationship. ' +
-        'Do not use it as a slower replacement for an obvious literal search. Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. ' +
+        'Balanced read-only Cursor Context Engine (CCE) locator for intent-based code discovery. It combines Cursor indexed semantic retrieval with exact search, symbol/reference tracing, and small targeted source checks, returning compact verifiable workspace-relative path:line evidence. ' +
+        'Use caller-side Grep for an obvious literal or known exact symbol. Use cursor_search_deep for call chains, data flows, cross-module/subsystem or architecture relationships, or when this tool reports deep_search_recommended. ' +
+        'Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. ' +
         'Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Describe the behavior, concept, symbol relationship, or ownership boundary to locate. Do not guess a directory in place of stating intent.' },
-          scope: { type: 'array', items: { type: 'string' }, description: 'Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace.' },
-          max_results: { type: 'integer', minimum: 1, maximum: 30, default: 12, description: 'Maximum number of evidence anchors requested from CCE.' },
-        },
-        required: ['query'],
-      },
+      inputSchema: buildSearchInputSchema(),
+    },
+    {
+      name: 'cursor_search_deep',
+      description:
+        `${policyContext} ` +
+        'Heavier read-only CCE repository-context investigation over Cursor\'s indexed project plus targeted cross-file exploration. ' +
+        'Use it when the question requires a verified call chain, data flow, route-to-storage path, producer/consumer relationship, config-to-implementation path, interface implementations, cross-module/subsystem ownership, architecture context, or when cursor_search says deeper evidence is required. ' +
+        'It stops at the minimum sufficient code context and returns the same compact path:line evidence contract; it does not produce an implementation plan or modify the workspace. ' +
+        'Do not default to running both search modes: choose this directly when the investigation shape is already deep. Read-only behavior is a strong prompt contract, not a filesystem sandbox.',
+      inputSchema: buildSearchInputSchema(),
     },
     bridgeInstance.environmentDelegationMode !== 'off' ? {
       name: 'cursor_do',
@@ -2255,7 +2327,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '2.3.0' },
+  { name: 'cursor-bridge', version: '3.0.0' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -2268,6 +2340,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     if (name === 'cursor_search') {
       const result = await bridge.search(String((args && args.query) || ''), {
+        scope: args && args.scope,
+        maxResults: args && args.max_results,
+      });
+      return { content: [{ type: 'text', text: String(result) }] };
+    }
+    if (name === 'cursor_search_deep') {
+      const result = await bridge.searchDeep(String((args && args.query) || ''), {
         scope: args && args.scope,
         maxResults: args && args.max_results,
       });
@@ -2404,7 +2483,9 @@ export {
   CURSOR_RUNTIME_MODES,
   normalizeCursorRuntimeMode,
   buildSearchPrompt,
+  buildDeepSearchPrompt,
   normalizeCceSearchResult,
+  isConfirmedCompletedReply,
   buildToolDefinitions,
   pathsOverlap,
   scoreCursorPageCandidate,

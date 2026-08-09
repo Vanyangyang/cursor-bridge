@@ -39,6 +39,12 @@ python /path/to/plugin-creator/scripts/validate_plugin.py .
 git add -A && git commit -m "release: vX.Y.Z"
 claude plugin tag .        # Create the cursor-bridge--vX.Y.Z tag.
 git push && git push --tags
+
+# 5. Publish a GitHub Release from the verified tag and release notes.
+gh release create cursor-bridge--vX.Y.Z \
+  --title "Cursor Bridge vX.Y.Z" \
+  --notes-file /path/to/release-notes.md \
+  --verify-tag
 ```
 
 ## Important notes

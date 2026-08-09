@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "2.3.0",
-  "description": "Use Cursor as a verifiable context engine or bounded worker, including a UI-suppressed minimal runtime.",
+  "version": "3.0.0",
+  "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution, including a UI-suppressed minimal runtime.",
   "author": {
     "name": "Vanyangyang"
   },

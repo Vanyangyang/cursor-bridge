@@ -12,8 +12,10 @@ import {
   CursorBridge,
   DELEGATION_POLICIES,
   CURSOR_RUNTIME_MODES,
+  buildDeepSearchPrompt,
   buildSearchPrompt,
   buildToolDefinitions,
+  isConfirmedCompletedReply,
   normalizeCceSearchResult,
   normalizeAllowedPath,
   normalizeDelegationMode,
@@ -192,6 +194,25 @@ class OfflineBridge extends CursorBridge {
 
   async _ensureCursor() {}
   _drain() {}
+}
+
+class SearchProbeBridge extends OfflineBridge {
+  constructor() {
+    super();
+    this.ensureCalls = 0;
+    this.searchJobs = [];
+  }
+
+  async _ensureCursor() {
+    this.ensureCalls++;
+  }
+
+  _enqueue(kind, prompt, options) {
+    this.searchJobs.push({ kind, prompt, options });
+    return {
+      promise: Promise.resolve('preamble\nCCE_SEARCH_RESULT intent: probe\nevidence:\n- server.mjs:1-2 | probe | evidence | exact\ngaps: none\nconfidence: high'),
+    };
+  }
 }
 
 class TaskControlBridge extends OfflineBridge {
@@ -453,19 +474,53 @@ test('minimal runtime is persistent, defers startup, and remains separate from d
   assert.equal(restarted.runtimeModeView().persistsAcrossRestart, true);
 });
 
-test('CCE search prompt requires evidence, records gaps, and refuses path guessing', () => {
+test('balanced CCE search prompt is a precise locator with an explicit deep-search boundary', () => {
   const prompt = buildSearchPrompt('谁负责计算最终伤害？', {
     scope: ['Assets/Scripts/Battle'],
     maxResults: 7,
   });
   assert.match(prompt, /Cursor Context Engine（CCE）/);
   assert.match(prompt, /必须先检索再回答/);
+  assert.match(prompt, /不是完整架构调查/);
+  assert.match(prompt, /禁止启动 Explore\/子代理/);
   assert.match(prompt, /禁止根据框架惯例猜路径/);
+  assert.match(prompt, /deep_search_recommended/);
   assert.match(prompt, /NOT_FOUND/);
   assert.match(prompt, /Assets\/Scripts\/Battle/);
   assert.match(prompt, /最多返回 7 个/);
   assert.match(prompt, /workspace-relative-path/);
   assert.match(prompt, /confidence: <high\|medium\|low>/);
+});
+
+test('deep CCE prompt requires minimum sufficient cross-file evidence and remains read-only', () => {
+  const prompt = buildDeepSearchPrompt('核验 route 到 storage 的完整数据流', {
+    scope: ['src'],
+    maxResults: 9,
+  });
+  assert.match(prompt, /深度只读仓库上下文调查器/);
+  assert.match(prompt, /最小充分代码上下文/);
+  assert.match(prompt, /真实跨文件证据/);
+  assert.match(prompt, /route→service→storage/);
+  assert.match(prompt, /只有确有必要.*Explore\/子代理/);
+  assert.match(prompt, /不得修改、创建或删除文件/);
+  assert.match(prompt, /最多返回 9 个/);
+  assert.match(prompt, /CCE_SEARCH_RESULT/);
+});
+
+test('balanced and deep search reuse readiness, FIFO, read-only options, and result normalization', async () => {
+  const bridge = new SearchProbeBridge();
+  const balanced = await bridge.search('locate owner', { scope: ['src'], maxResults: 4 });
+  const deep = await bridge.searchDeep('trace caller to storage', { scope: ['src'], maxResults: 6 });
+  assert.equal(bridge.ensureCalls, 2);
+  assert.deepEqual(bridge.searchJobs.map((job) => job.kind), ['search', 'search_deep']);
+  for (const job of bridge.searchJobs) {
+    assert.equal(job.options.execution, 'fifo');
+    assert.equal(job.options.readOnly, true);
+    assert.deepEqual(job.options.allowedPaths, []);
+    assert.equal(job.options.newChat, true);
+  }
+  assert.equal(balanced.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
+  assert.equal(deep.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
 });
 
 test('CCE result normalization removes conversational preamble without inventing evidence', () => {
@@ -480,15 +535,48 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   const bridge = new OfflineBridge();
   const tools = buildToolDefinitions(bridge);
   const search = tools.find((tool) => tool.name === 'cursor_search');
+  const deep = tools.find((tool) => tool.name === 'cursor_search_deep');
   const runtime = tools.find((tool) => tool.name === 'cursor_runtime');
   assert.match(search.description, /Cursor Context Engine \(CCE\)/);
   assert.match(search.description, /semantic retrieval/);
-  assert.match(search.description, /exact grep alone/);
+  assert.match(search.description, /caller-side Grep/);
+  assert.match(search.description, /cursor_search_deep/);
   assert.match(search.description, /NOT_FOUND/);
   assert.match(search.description, /not a filesystem sandbox/);
+  assert.match(deep.description, /call chain/);
+  assert.match(deep.description, /minimum sufficient code context/);
+  assert.match(deep.description, /does not produce an implementation plan/);
   assert.deepEqual(search.inputSchema.properties.max_results.maximum, 30);
+  assert.deepEqual(deep.inputSchema, search.inputSchema);
   assert.deepEqual(runtime.inputSchema.properties.mode.enum, ['normal', 'minimal']);
   assert.match(runtime.description, /UI suppression, not a headless reimplementation/);
+});
+
+test('timeout completion rejects a generating partial reply and accepts confirmed stopped evidence', () => {
+  assert.equal(isConfirmedCompletedReply({
+    answer: 'reply with unknown final state',
+    snapshot: null,
+    sawStop: true,
+    baselineCount: 10,
+  }), false);
+  assert.equal(isConfirmedCompletedReply({
+    answer: 'partial markdown',
+    snapshot: { stop: 1, messageCount: 12, replyLength: 16 },
+    sawStop: true,
+    baselineCount: 10,
+  }), false);
+  assert.equal(isConfirmedCompletedReply({
+    answer: 'complete reply',
+    snapshot: { stop: 0, messageCount: 12, replyLength: 14 },
+    sawStop: true,
+    baselineCount: 10,
+  }), true);
+  assert.equal(isConfirmedCompletedReply({
+    answer: 'stable reply without sampled stop',
+    snapshot: { stop: 0, messageCount: 12, replyLength: 33 },
+    sawStop: false,
+    baselineCount: 10,
+  }), true);
 });
 
 test('invalid persisted policy falls back to the bootstrap policy', (t) => {
@@ -531,6 +619,7 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     const listed = await client.listTools();
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_do'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search_deep'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_task_control'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_runtime'), true);

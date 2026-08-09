@@ -1,7 +1,7 @@
 {
   "name": "cursor-mcp-bridge",
-  "version": "2.3.0",
-  "description": "Verifiable Cursor Context Engine search and bounded Cursor execution over CDP, with a UI-suppressed minimal runtime.",
+  "version": "3.0.0",
+  "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution over CDP.",
   "type": "module",
   "main": "server.mjs",
   "engines": {
