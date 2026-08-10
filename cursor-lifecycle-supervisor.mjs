@@ -207,6 +207,14 @@ export async function startSupervisor(options = {}) {
 
   const scheduleIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
+    if (lastEnsure && lastEnsure.ok && lastEnsure.runtimeMode === 'minimal') {
+      writeSupervisorDiag(logPath, 'idle-suppressed', {
+        reason: 'minimal-runtime-owns-window-guard',
+        clients: clients.size,
+        ensureCount,
+      });
+      return;
+    }
     if (!(idleMs > 0)) return;
     idleTimer = setTimeout(() => {
       if (clients.size > 0 || shuttingDown) return;
@@ -222,7 +230,11 @@ export async function startSupervisor(options = {}) {
     ensureInflight = (async () => {
       ensureCount += 1;
       const waitMs = Number(request.waitMs || 30000);
-      const result = await ensureLocal({ waitMs, runtimeMode: request.runtimeMode || 'normal' });
+      const result = await ensureLocal({
+        waitMs,
+        runtimeMode: request.runtimeMode || 'normal',
+        projectPath: Object.hasOwn(request, 'projectPath') ? request.projectPath : null,
+      });
       lastEnsure = {
         ...result,
         ensureCount,
@@ -230,6 +242,7 @@ export async function startSupervisor(options = {}) {
         requestReason: request.reason || null,
         requestAdapterPid: request.adapterPid || null,
         requestRuntimeMode: request.runtimeMode || 'normal',
+        requestProjectPath: request.projectPath || null,
       };
       writeSupervisorDiag(logPath, 'ensure-result', {
         ok: !!result.ok,

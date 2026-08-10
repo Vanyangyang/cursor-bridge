@@ -10,7 +10,7 @@ const argv = process.argv.slice(2);
 const keepHidden = argv.includes('--keep-hidden');
 const persist = argv.includes('--persist');
 const query = argv.filter((value) => !['--keep-hidden', '--persist'].includes(value)).join(' ').trim()
-  || 'Locate the implementation that registers the cursor_search MCP tool. Return the defining function and tool schema evidence.';
+  || 'Locate the implementation that registers the cursor_context_engine MCP tool. Return the defining function and tool schema evidence.';
 
 const bridge = new CursorBridge({
   policyFile: null,
@@ -26,7 +26,7 @@ try {
     ? await bridge.setRuntimeMode('minimal', 'persistent')
     : await bridge.applyRuntimePresentation('hide');
   console.log(JSON.stringify({ phase: 'hidden', presentation: hidden }));
-  result = await bridge.search(query, { maxResults: 8 });
+  result = await bridge.contextEngine(query);
   console.log(JSON.stringify({ phase: 'search_completed', result }));
 } catch (caught) {
   error = caught instanceof Error ? caught.message : String(caught);

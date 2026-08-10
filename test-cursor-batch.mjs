@@ -15,7 +15,7 @@ const queries = [
   for (const q of queries) {
     const t0 = Date.now();
     try {
-      const r = await bridge.search(q);
+      const r = await bridge.contextEngine(q);
       out.push({ q, sec: ((Date.now() - t0) / 1000).toFixed(1), len: r.length, result: r });
       console.log('[batch] ✓ ' + q + ' ' + ((Date.now() - t0) / 1000).toFixed(1) + 's len=' + r.length);
     } catch (e) {

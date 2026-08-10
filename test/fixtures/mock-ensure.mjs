@@ -25,18 +25,23 @@ function writeCount(n) {
   writeFileSync(path, `${n}\n`, { encoding: 'utf8' });
 }
 
-export async function ensureCursorRunningLocal({ waitMs = 30 } = {}) {
+export async function ensureCursorRunningLocal({ waitMs = 30, runtimeMode = 'normal', projectPath = null } = {}) {
   const delay = Math.max(20, Math.min(200, Number(process.env.CURSOR_BRIDGE_TEST_ENSURE_DELAY_MS || 80)));
   const before = readCount();
   // Artificial overlap window for concurrent clients.
   await new Promise((r) => setTimeout(r, delay));
   const n = readCount() + 1;
   writeCount(n);
+  if (process.env.CURSOR_BRIDGE_TEST_REQUEST) {
+    writeFileSync(process.env.CURSOR_BRIDGE_TEST_REQUEST, `${JSON.stringify({ waitMs, runtimeMode, projectPath })}\n`, { encoding: 'utf8' });
+  }
   void waitMs;
   return {
     ok: true,
     status: before === 0 ? 'launched' : 'already',
     port: Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223),
     message: `mock-ensure#${n}`,
+    runtimeMode,
+    projectPath,
   };
 }

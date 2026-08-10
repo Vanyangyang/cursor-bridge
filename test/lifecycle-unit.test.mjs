@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
@@ -27,10 +27,60 @@ import {
   ensureSupervisorConnected,
   pingSupervisor,
 } from '../cursor-lifecycle-client.mjs';
+import {
+  normalizeCodexThreadCwd,
+  resolveCodexThreadProjectPath,
+  resolveProjectPath,
+  selectNewCdpTarget,
+  targetTitleMatchesProject,
+} from '../cursor-ensure-core.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(ROOT);
 const MOCK_ENSURE = join(REPO, 'test', 'fixtures', 'mock-ensure.mjs');
+
+test('new Cursor CDP targets bind a newly opened project without relying on generic window titles', () => {
+  const before = new Set(['existing-target']);
+  assert.equal(selectNewCdpTarget(before, [
+    { id: 'existing-target', title: 'Cursor Agents' },
+    { id: 'vesperix-target', title: 'Cursor Agents' },
+  ]).id, 'vesperix-target');
+  assert.equal(selectNewCdpTarget(before, [
+    { id: 'generic-new', title: 'Cursor Agents' },
+    { id: 'vesperix-target', title: 'VESPERIX - Cursor' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'vesperix-target');
+  assert.equal(selectNewCdpTarget(before, [{ id: 'existing-target' }]), null);
+});
+
+test('existing Editor targets can recover a project binding while generic Agents titles cannot', () => {
+  assert.equal(targetTitleMatchesProject('VESPERIX - Cursor', 'G:\\u2dProject\\u6project\\VESPERIX'), true);
+  assert.equal(targetTitleMatchesProject('Cursor Agents', 'G:\\u2dProject\\u6project\\VESPERIX'), false);
+  assert.equal(targetTitleMatchesProject('game - Cursor', 'G:\\game.code-workspace'), true);
+});
+
+test('Codex thread cwd escapes plugin-cache cwd without exposing a workspace tool parameter', (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-thread-project-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const extended = `\\\\?\\${project}`;
+  assert.equal(normalizeCodexThreadCwd(extended), project);
+  assert.equal(resolveProjectPath('', {
+    cwd: 'C:\\Users\\test\\.codex\\plugins\\cache\\cursor-bridge',
+    threadProjectPath: extended,
+  }), resolve(project));
+  assert.equal(resolveCodexThreadProjectPath({
+    threadId: 'thread-test',
+    useCache: false,
+    lookupThreadCwd: () => extended,
+  }), resolve(project));
+});
+
+test('Codex thread lookup degrades cleanly when node:sqlite is unavailable', () => {
+  assert.equal(resolveCodexThreadProjectPath({
+    threadId: 'thread-node18',
+    useCache: false,
+    requireImpl: () => { throw new Error('node:sqlite unavailable'); },
+  }), null);
+});
 
 function makeDir() {
   return mkdtempSync(join(tmpdir(), 'cb-unit-'));
@@ -280,6 +330,7 @@ test('writeSupervisorDiag records start/listen-like events without secrets and r
       ensureCount: 1,
     });
     writeSupervisorDiag(logPath, 'idle', { reason: 'idle-1', clients: 0 });
+    writeSupervisorDiag(logPath, 'idle-suppressed', { reason: 'minimal-runtime-owns-window-guard', clients: 0 });
     writeSupervisorDiag(logPath, 'cleanup', { reason: 'shutdown', code: 0 });
 
     const body = readFileSync(logPath, 'utf8');
@@ -287,6 +338,7 @@ test('writeSupervisorDiag records start/listen-like events without secrets and r
     assert.match(body, /"event":"listen"/);
     assert.match(body, /"event":"ensure-result"/);
     assert.match(body, /"event":"idle"/);
+    assert.match(body, /"event":"idle-suppressed"/);
     assert.match(body, /"event":"cleanup"/);
     assert.match(body, /"supervisorPid":/);
     assert.match(body, /"adapterPid":123/);

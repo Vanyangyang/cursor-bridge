@@ -10,7 +10,7 @@
  * Usage: node launch-cursor.mjs   （或被 server 自愈钩子 import { ensureCursorRunning }）
  */
 import { pathToFileURL } from 'url';
-import { ensureCursorRunningLocal, CDP_PORT } from './cursor-ensure-core.mjs';
+import { ensureCursorRunningLocal, resolveProjectPath, CDP_PORT } from './cursor-ensure-core.mjs';
 import { ensureCursorViaSupervisor } from './cursor-lifecycle-client.mjs';
 
 export {
@@ -33,8 +33,12 @@ export {
  * adapterPid, supervisorPid, reusedSupervisor, createdSupervisor, launchReason.
  */
 export async function ensureCursorRunning(options = {}) {
+  const projectPath = Object.hasOwn(options, 'projectPath')
+    ? options.projectPath
+    : resolveProjectPath();
+  const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === '1' || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === '1') {
-    const local = await ensureCursorRunningLocal(options);
+    const local = await ensureCursorRunningLocal(ensureOptions);
     return {
       ...local,
       adapterPid: process.pid,
@@ -45,7 +49,7 @@ export async function ensureCursorRunning(options = {}) {
     };
   }
   return ensureCursorViaSupervisor({
-    ...options,
+    ...ensureOptions,
     reason: options.reason || 'ensureCursorRunning',
   });
 }

@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve4.call(this, root, ref);
+      let _sch = resolve5.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve4(root, ref) {
+    function resolve5(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3648,7 +3648,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve4(baseURI, relativeURI, options) {
+    function resolve5(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3906,7 +3906,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve4,
+      resolve: resolve5,
       resolveComponent,
       equal,
       serialize,
@@ -10579,6 +10579,13 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+function shouldAutoLaunchCursor(value = process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH) {
+  return String(value || "").trim() !== "1";
+}
+function cursorStartupBehavior(mode, noAutolaunch = process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH) {
+  if (!shouldAutoLaunchCursor(noAutolaunch)) return "manual_launch_only";
+  return normalizeCursorRuntimeMode(mode) === "minimal" ? "hidden_prewarm_on_adapter_start" : "normal_autolaunch";
+}
 function normalizeCursorRuntimeMode(value, fallback = "normal") {
   const normalized = String(value || "").trim().toLowerCase();
   return CURSOR_RUNTIME_MODES.includes(normalized) ? normalized : fallback;
@@ -10655,10 +10662,31 @@ function findCursorPidByPort(port, options = {}) {
 function powershellWindowScript(options) {
   const targetPid = Number(options.pid);
   const loop = options.loop === true;
+  const lifetime = options.lifetime === true;
   const show = options.action === "show" ? "$true" : "$false";
   const iterations = Number(options.iterations || 1);
   const intervalMs = Number(options.intervalMs || 100);
-  const apply = loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { [void][CursorBridgeWindowControl]::Apply(${targetPid}, $false); Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
+  const showFlagPath = String(options.showFlagPath || "").replace(/'/g, "''");
+  const hideIfAllowed = `if (-not (Test-Path -LiteralPath '${showFlagPath}')) { [void][CursorBridgeWindowControl]::Apply(${targetPid}, $false) }`;
+  const mutexName = `Local\\CursorBridgeMinimalGuard-${targetPid}`;
+  const lifetimeLoop = [
+    "$createdNew = $false",
+    `$guardMutex = [System.Threading.Mutex]::new($true, '${mutexName}', [ref]$createdNew)`,
+    "if (-not $createdNew) { $guardMutex.Dispose(); exit 0 }",
+    "try {",
+    "  while ($true) {",
+    `    $target = Get-Process -Id ${targetPid} -ErrorAction SilentlyContinue`,
+    "    if ($null -eq $target -or $target.ProcessName -ine 'Cursor') { break }",
+    `    ${hideIfAllowed}`,
+    `    Start-Sleep -Milliseconds ${intervalMs}`,
+    "  }",
+    "} finally {",
+    "  try { $guardMutex.ReleaseMutex() } catch {}",
+    "  $guardMutex.Dispose()",
+    `  Remove-Item -LiteralPath '${showFlagPath}' -Force -ErrorAction SilentlyContinue`,
+    "}"
+  ].join("\n");
+  const apply = lifetime ? lifetimeLoop : loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { ${hideIfAllowed}; Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
   return `$ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 ${WINDOW_CONTROL_TYPE}
@@ -10680,6 +10708,25 @@ function setCursorWindowPresentation(options = {}) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return { supported: true, applied: false, action, port, reason: `no listening Cursor PID found on CDP ${port}` };
   }
+  const showFlagPath = resolve(options.showFlagPath || join(dirname(resolveCursorRuntimeFile()), `show-${pid}.flag`));
+  try {
+    if (action === "show") {
+      mkdirSync(dirname(showFlagPath), { recursive: true });
+      writeFileSync(showFlagPath, `${pid}
+`, { encoding: "utf8", mode: 384 });
+    } else {
+      rmSync(showFlagPath, { force: true });
+    }
+  } catch (error2) {
+    return {
+      supported: true,
+      applied: false,
+      action,
+      port,
+      pid,
+      reason: `failed to update minimal-window override: ${error2 instanceof Error ? error2.message : String(error2)}`
+    };
+  }
   const run = options.execFileSyncImpl || execFileSync;
   try {
     const script = powershellWindowScript({ pid, action });
@@ -10698,8 +10745,9 @@ function setCursorWindowPresentation(options = {}) {
       timeout: Number(options.timeoutMs || 15e3)
     });
     const changedWindows = Number(String(output || "").trim() || 0);
-    return { supported: true, applied: true, action, port, pid, changedWindows };
+    return { supported: true, applied: true, action, port, pid, changedWindows, showFlagPath };
   } catch (error2) {
+    if (action === "show") rmSync(showFlagPath, { force: true });
     return {
       supported: true,
       applied: false,
@@ -10715,15 +10763,19 @@ function startMinimalWindowGuard(pid, options = {}) {
   const targetPid = Number(pid);
   if (!Number.isInteger(targetPid) || targetPid <= 0) return { started: false, reason: "invalid-pid" };
   const intervalMs = Math.max(50, Math.min(1e3, Number(options.intervalMs || 100)));
-  const durationMs = Math.max(intervalMs, Math.min(12e4, Number(options.durationMs || 45e3)));
-  const iterations = Math.ceil(durationMs / intervalMs);
+  const lifetime = options.durationMs == null;
+  const durationMs = lifetime ? null : Math.max(intervalMs, Math.min(12e4, Number(options.durationMs)));
+  const iterations = lifetime ? null : Math.ceil(durationMs / intervalMs);
+  const showFlagPath = resolve(options.showFlagPath || join(dirname(resolveCursorRuntimeFile()), `show-${targetPid}.flag`));
   const spawnImpl = options.spawnImpl || spawn;
   try {
     const script = powershellWindowScript({
       pid: targetPid,
-      loop: true,
+      loop: !lifetime,
+      lifetime,
       iterations,
-      intervalMs
+      intervalMs,
+      showFlagPath
     });
     const child = spawnImpl("powershell.exe", [
       "-NoLogo",
@@ -10733,9 +10785,18 @@ function startMinimalWindowGuard(pid, options = {}) {
       "Bypass",
       "-EncodedCommand",
       encodePowerShell(script)
-    ], { detached: true, stdio: "ignore", windowsHide: true });
-    if (child && typeof child.unref === "function") child.unref();
-    return { started: true, pid: child && child.pid || null, targetPid, durationMs, intervalMs };
+    ], { detached: !lifetime, stdio: "ignore", windowsHide: true });
+    if (!lifetime && child && typeof child.unref === "function") child.unref();
+    return {
+      started: true,
+      pid: child && child.pid || null,
+      targetPid,
+      lifetime,
+      retainedBySupervisor: lifetime,
+      durationMs,
+      intervalMs,
+      showFlagPath
+    };
   } catch (error2) {
     return { started: false, targetPid, reason: error2 instanceof Error ? error2.message : String(error2) };
   }
@@ -10757,6 +10818,8 @@ public static class CursorBridgeWindowControl {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(IntPtr hWnd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
+  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 
   public static int Apply(int expectedProcessId, bool show) {
     int changed = 0;
@@ -10768,7 +10831,12 @@ public static class CursorBridgeWindowControl {
       GetClassNameW(hWnd, className, className.Capacity);
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
-      if (show && !visible) { if (ShowWindowAsync(hWnd, 9)) changed++; }
+      if (show) {
+        bool restored = ShowWindowAsync(hWnd, 9);
+        bool redrawn = RedrawWindow(hWnd, IntPtr.Zero, IntPtr.Zero, 0x00000585);
+        SetForegroundWindow(hWnd);
+        if (restored || redrawn) changed++;
+      }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
       return true;
     }, IntPtr.Zero);
@@ -10782,17 +10850,57 @@ public static class CursorBridgeWindowControl {
 // cursor-ensure-core.mjs
 import { spawn as spawn2, execSync } from "child_process";
 import { existsSync } from "fs";
+import { createRequire as createNodeRequire } from "node:module";
+import { homedir as homedir2 } from "node:os";
+import { basename as basename2, extname, join as join2, resolve as resolve2 } from "node:path";
 import http from "http";
 function looksLikePluginRuntimePath(candidate) {
   const p = String(candidate || "").replace(/\//g, "\\").toLowerCase();
   return p.includes("\\.codex\\.tmp\\marketplaces\\") || p.includes("\\.codex\\plugins\\cache\\") || p.includes("\\.claude\\plugins\\cache\\") || p.includes("\\appdata\\local\\npm-cache\\_npx\\");
 }
-function resolveProjectPath() {
-  const explicit = process.env.CURSOR_PROJECT_PATH;
-  if (explicit) return explicit;
-  const cwd = process.cwd();
+function normalizeCodexThreadCwd(value) {
+  const raw = String(value || "").trim();
+  if (/^\\\\\?\\UNC\\/i.test(raw)) return `\\\\${raw.slice(8)}`;
+  if (/^\\\\\?\\[a-zA-Z]:\\/.test(raw)) return raw.slice(4);
+  return raw;
+}
+function resolveCodexThreadProjectPath(options = {}) {
+  const threadId = String(options.threadId ?? process.env.CODEX_THREAD_ID ?? "").trim();
+  if (!threadId) return null;
+  if (CODEX_THREAD_PROJECTS.has(threadId) && options.useCache !== false) {
+    return CODEX_THREAD_PROJECTS.get(threadId);
+  }
+  let database = null;
+  try {
+    const lookupThreadCwd = options.lookupThreadCwd || ((id) => {
+      const { DatabaseSync } = (options.requireImpl || loadModule)("node:sqlite");
+      const databasePath = options.databasePath || join2(homedir2(), ".codex", "state_5.sqlite");
+      database = new DatabaseSync(databasePath, { readOnly: true });
+      return database.prepare("SELECT cwd FROM threads WHERE id = ?").get(id)?.cwd || null;
+    });
+    const candidate = normalizeCodexThreadCwd(lookupThreadCwd(threadId));
+    const existsImpl = options.existsImpl || existsSync;
+    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve2(candidate) : null;
+    if (options.useCache !== false) CODEX_THREAD_PROJECTS.set(threadId, resolved);
+    return resolved;
+  } catch {
+    if (options.useCache !== false) CODEX_THREAD_PROJECTS.set(threadId, null);
+    return null;
+  } finally {
+    try {
+      database?.close();
+    } catch {
+    }
+  }
+}
+function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {}) {
+  const explicit = String(value || "").trim();
+  if (explicit) return resolve2(explicit);
+  const threadProjectPath = options.threadProjectPath === void 0 ? resolveCodexThreadProjectPath(options) : options.threadProjectPath;
+  if (threadProjectPath) return resolve2(normalizeCodexThreadCwd(threadProjectPath));
+  const cwd = options.cwd ?? process.cwd();
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
-  return cwd;
+  return resolve2(cwd);
 }
 function cursorFromRegistry() {
   const queries = [
@@ -10836,42 +10944,42 @@ function findCursorExe() {
   return null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve4) => {
+  return new Promise((resolve5) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve4(res.statusCode === 200);
+      resolve5(res.statusCode === 200);
     });
-    req.on("error", () => resolve4(false));
+    req.on("error", () => resolve5(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve4(false);
+      resolve5(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve4) => {
+  return new Promise((resolve5) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve4(false);
-          resolve4(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve5(false);
+          resolve5(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve4(false);
+          resolve5(false);
         }
       });
     });
-    req.on("error", () => resolve4(false));
+    req.on("error", () => resolve5(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve4(false);
+      resolve5(false);
     });
   });
 }
@@ -10900,21 +11008,86 @@ async function waitForCdp(maxMs = 3e4, stepMs = 1e3) {
   }
   return false;
 }
-async function ensureCursorRunningLocal({ waitMs = 3e4, runtimeMode = "normal" } = {}) {
+async function ensureCursorRunningLocal(options = {}) {
+  const waitMs = Number(options.waitMs || 3e4);
+  const runtimeMode = options.runtimeMode || "normal";
   const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve2(String(options.projectPath)) : null : resolveProjectPath();
   if (await cdpUp()) {
     const isCursor = await cdpIsCursor();
     if (isCursor) {
-      const cursorPid = findCursorPidByPort(CDP_PORT);
-      const presentation2 = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid }) : null;
+      const cursorPid2 = findCursorPidByPort(CDP_PORT);
+      const windowGuard2 = effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
+      const presentation2 = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : null;
+      const currentTargets = await listCdpPageTargets();
+      const projectKey = normalizeProjectKey(projectPath);
+      let targetId2 = projectKey ? PROJECT_TARGETS.get(projectKey) || null : currentTargets[0] && currentTargets[0].id || null;
+      let workspaceAction = projectPath ? "reused-project-target" : "reused-last-workspace";
+      if (targetId2 && !currentTargets.some((target2) => target2.id === targetId2)) {
+        PROJECT_TARGETS.delete(projectKey);
+        targetId2 = null;
+      }
+      if (projectPath && !targetId2) {
+        const existingTarget = currentTargets.find((target2) => targetTitleMatchesProject(target2.title, projectPath));
+        if (existingTarget) {
+          targetId2 = existingTarget.id;
+          PROJECT_TARGETS.set(projectKey, targetId2);
+          workspaceAction = "recovered-project-target";
+        }
+      }
+      if (projectPath && existsSync(projectPath) && !targetId2) {
+        const exe2 = findCursorExe();
+        if (!exe2) {
+          return {
+            ok: false,
+            status: "workspace-not-ready",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            message: `Cursor \u5DF2\u8FDE\u63A5\uFF0C\u4F46\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u672A\u6253\u5F00\uFF0C\u4E14\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\u7528\u4E8E\u6253\u5F00\u65B0\u7A97\u53E3\u3002`
+          };
+        }
+        const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
+        const opener = spawn2(exe2, ["--new-window", projectPath], {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: effectiveRuntimeMode === "minimal"
+        });
+        opener.unref();
+        workspaceAction = "opened-new-window";
+        const openedTarget2 = await waitForNewCdpTarget(beforeTargetIds, 12e3, projectPath);
+        if (!openedTarget2) {
+          return {
+            ok: false,
+            status: "workspace-not-ready",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            workspaceAction,
+            message: `Cursor \u5DF2\u8FDE\u63A5\uFF0C\u4F46\u672A\u6355\u83B7\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u65B0\u5EFA\u7684 CDP target\uFF1BCCE \u5DF2\u505C\u6B62\uFF0C\u907F\u514D\u5728\u9519\u8BEF\u7D22\u5F15\u4E2D\u68C0\u7D22\u3002`
+          };
+        }
+        targetId2 = openedTarget2.id;
+        PROJECT_TARGETS.set(projectKey, targetId2);
+      }
       return {
         ok: true,
         status: "already",
         port: CDP_PORT,
-        cursorPid,
+        cursorPid: cursorPid2,
         runtimeMode: effectiveRuntimeMode,
+        projectPath,
         presentation: presentation2,
-        message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\u3002`
+        windowGuard: windowGuard2,
+        targetId: targetId2,
+        workspaceAction,
+        message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u76EE\u6807\u5DE5\u4F5C\u533A\u5DF2\u7ED1\u5B9A\u5230 CDP target ${targetId2 || "default"}\u3002`
       };
     }
     return {
@@ -10929,7 +11102,7 @@ async function ensureCursorRunningLocal({ waitMs = 3e4, runtimeMode = "normal" }
       ok: false,
       status: "running-no-debug",
       port: CDP_PORT,
-      message: `Cursor \u6B63\u5728\u8FD0\u884C\u4F46\u6CA1\u5E26 --remote-debugging-port=${CDP_PORT}\uFF08\u5355\u5B9E\u4F8B\u9501\u4F1A\u5FFD\u7565 flag\uFF09\u3002\u8BF7\u5148\u5F7B\u5E95\u9000\u51FA Cursor\uFF08Windows\uFF1A\u5168\u90E8\u7A97\u53E3+\u6258\u76D8\uFF1BmacOS\uFF1ACmd+Q\uFF09\uFF0Ccursor-bridge \u4F1A\u5728\u4E0B\u6B21\u8C03\u7528\u65F6\u81EA\u52A8\u5E26 flag \u62C9\u8D77\uFF1B\u6216\u624B\u52A8\u5E26 flag \u91CD\u542F\u3002\u6CE8\u610F\uFF1A\u4E0D\u4E3B\u52A8 kill \u4EE5\u514D\u4E22\u672A\u4FDD\u5B58\u5185\u5BB9\u3002`
+      message: `Cursor \u6B63\u5728\u8FD0\u884C\u4F46\u6CA1\u5E26 --remote-debugging-port=${CDP_PORT}\uFF08\u53EF\u80FD\u7531 Codex\u3001\u8D44\u6E90\u7BA1\u7406\u5668\u6216\u5176\u4ED6\u542F\u52A8\u5668\u5148\u6253\u5F00\uFF1B\u5355\u5B9E\u4F8B\u9501\u4F1A\u5FFD\u7565\u540E\u7EED flag\uFF09\u3002\u8BF7\u5148\u5B89\u5168\u9000\u51FA\u8FD9\u4E00\u6B21 Cursor\uFF0Ccursor-bridge \u4F1A\u5728\u4E0B\u6B21\u542F\u52A8\u65F6\u9884\u70ED\u5E26 CDP \u7684\u5B9E\u4F8B\u5E76\u6301\u7EED\u9690\u85CF\u7A97\u53E3\u3002\u6CE8\u610F\uFF1A\u4E0D\u4E3B\u52A8 kill \u4EE5\u514D\u4E22\u672A\u4FDD\u5B58\u5185\u5BB9\u3002`
     };
   }
   const exe = findCursorExe();
@@ -10941,7 +11114,6 @@ async function ensureCursorRunningLocal({ waitMs = 3e4, runtimeMode = "normal" }
       message: "\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\uFF08Windows\uFF1A\u6CE8\u518C\u8868/\u9ED8\u8BA4\u4F4D\u7F6E\uFF1BmacOS\uFF1A/Applications/Cursor.app \u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u5B8C\u6574\u8DEF\u5F84\u3002"
     };
   }
-  const projectPath = resolveProjectPath();
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
   if (effectiveRuntimeMode === "minimal") {
     args.push(
@@ -10957,7 +11129,7 @@ async function ensureCursorRunningLocal({ waitMs = 3e4, runtimeMode = "normal" }
     windowsHide: effectiveRuntimeMode === "minimal"
   });
   child.unref();
-  const windowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child.pid) : null;
+  const startupWindowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child.pid) : null;
   const up = await waitForCdp(waitMs);
   if (!up) {
     return {
@@ -10967,31 +11139,108 @@ async function ensureCursorRunningLocal({ waitMs = 3e4, runtimeMode = "normal" }
       port: CDP_PORT,
       cursorPid: child.pid || null,
       runtimeMode: effectiveRuntimeMode,
-      windowGuard,
+      projectPath,
+      windowGuard: startupWindowGuard,
       message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002`
     };
   }
+  const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
+  const openedTarget = await waitForNewCdpTarget(/* @__PURE__ */ new Set(), 12e3, projectPath);
+  const targetId = openedTarget && openedTarget.id || null;
+  if (projectPath && !targetId) {
+    return {
+      ok: false,
+      status: "workspace-not-ready",
+      exe,
+      port: CDP_PORT,
+      cursorPid,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      windowGuard: startupWindowGuard,
+      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46\u672A\u6355\u83B7\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u7684 CDP target\uFF1BCCE \u5DF2\u505C\u6B62\uFF0C\u907F\u514D\u5728\u9519\u8BEF\u7D22\u5F15\u4E2D\u68C0\u7D22\u3002`
+    };
+  }
+  if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
+  const windowGuard = effectiveRuntimeMode === "minimal" && cursorPid ? startMinimalWindowGuard(cursorPid) : null;
   const target = projectPath ? `\u6253\u5F00 ${projectPath}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
-  const presentation = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: child.pid }) : null;
+  const presentation = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid }) : null;
   return {
     ok: true,
     status: "launched",
     exe,
     port: CDP_PORT,
-    cursorPid: child.pid || null,
+    cursorPid,
     runtimeMode: effectiveRuntimeMode,
+    projectPath,
     presentation,
     windowGuard,
+    startupWindowGuard,
+    targetId,
+    workspaceAction: projectPath ? "launched-project" : "launched-last-workspace",
     message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
   };
 }
-var CDP_PORT, CDP_ORIGIN, CDP_HOST, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES;
+function normalizeProjectKey(projectPath) {
+  return projectPath ? resolve2(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
+}
+function targetTitleMatchesProject(title, projectPath) {
+  const name = basename2(String(projectPath || "")).trim().toLowerCase();
+  if (!name) return false;
+  const extension2 = extname(name);
+  const candidates = [...new Set([name, extension2 ? name.slice(0, -extension2.length) : name].filter(Boolean))];
+  const normalizedTitle = String(title || "").trim().toLowerCase();
+  return candidates.some((candidate) => normalizedTitle === candidate || normalizedTitle.startsWith(candidate + " - ") || normalizedTitle.includes(" - " + candidate + " - "));
+}
+async function listCdpPageTargets(timeoutMs = 1500) {
+  return new Promise((done) => {
+    const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
+        try {
+          const targets = JSON.parse(data);
+          done(Array.isArray(targets) ? targets.filter((target) => target && target.type === "page" && target.id) : []);
+        } catch {
+          done([]);
+        }
+      });
+    });
+    req.on("error", () => done([]));
+    req.setTimeout(timeoutMs, () => {
+      try {
+        req.destroy();
+      } catch {
+      }
+      done([]);
+    });
+  });
+}
+function selectNewCdpTarget(beforeTargetIds, targets, projectPath = "") {
+  const before = beforeTargetIds instanceof Set ? beforeTargetIds : new Set(beforeTargetIds || []);
+  const fresh = (targets || []).filter((target) => target && target.id && !before.has(target.id));
+  return fresh.find((target) => targetTitleMatchesProject(target.title, projectPath)) || fresh[0] || null;
+}
+async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = "") {
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    const target = selectNewCdpTarget(beforeTargetIds, await listCdpPageTargets(), projectPath);
+    if (target) return target;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+  }
+  return null;
+}
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
     init_cursor_runtime();
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
     CDP_HOST = "127.0.0.1";
+    PROJECT_TARGETS = /* @__PURE__ */ new Map();
+    CODEX_THREAD_PROJECTS = /* @__PURE__ */ new Map();
+    loadModule = createNodeRequire(import.meta.url);
     IS_WIN = process.platform === "win32";
     IS_MAC = process.platform === "darwin";
     WIN_FALLBACKS = [
@@ -11007,17 +11256,17 @@ var init_cursor_ensure_core = __esm({
 
 // lifecycle-paths.mjs
 import { createHash } from "node:crypto";
-import { homedir as homedir2 } from "node:os";
-import { join as join2 } from "node:path";
+import { homedir as homedir3 } from "node:os";
+import { join as join3 } from "node:path";
 import { mkdirSync as mkdirSync2 } from "node:fs";
 function defaultLifecycleDir() {
   if (process.env.CURSOR_BRIDGE_LIFECYCLE_DIR) return process.env.CURSOR_BRIDGE_LIFECYCLE_DIR;
   if (process.platform === "win32") {
-    const root2 = process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local");
-    return join2(root2, "cursor-bridge", "lifecycle");
+    const root2 = process.env.LOCALAPPDATA || join3(homedir3(), "AppData", "Local");
+    return join3(root2, "cursor-bridge", "lifecycle");
   }
-  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join2(homedir2(), ".local", "state");
-  return join2(root, "cursor-bridge", "lifecycle");
+  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join3(homedir3(), ".local", "state");
+  return join3(root, "cursor-bridge", "lifecycle");
 }
 function ensureLifecycleDir(dir = defaultLifecycleDir()) {
   mkdirSync2(dir, { recursive: true });
@@ -11031,13 +11280,13 @@ function supervisorSockPath(dir = defaultLifecycleDir()) {
   if (process.platform === "win32") {
     return `\\\\.\\pipe\\cursor-bridge-lifecycle-${lifecycleEndpointTag(dir)}`;
   }
-  return join2(dir, "supervisor.sock");
+  return join3(dir, "supervisor.sock");
 }
 function supervisorPidPath(dir = defaultLifecycleDir()) {
-  return join2(dir, "supervisor.pid");
+  return join3(dir, "supervisor.pid");
 }
 function supervisorLockPath(dir = defaultLifecycleDir()) {
-  return join2(dir, "supervisor.lock");
+  return join3(dir, "supervisor.lock");
 }
 var init_lifecycle_paths = __esm({
   "lifecycle-paths.mjs"() {
@@ -11192,28 +11441,28 @@ var init_win_job_breakaway = __esm({
 import net from "node:net";
 import { existsSync as existsSync3, readFileSync as readFileSync2, unlinkSync, writeFileSync as writeFileSync2, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname as dirname2, join as join3, resolve as resolve2 } from "node:path";
+import { dirname as dirname2, join as join4, resolve as resolve3 } from "node:path";
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 function resolveSupervisorScript() {
   if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync3(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
-    return resolve2(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+    return resolve3(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
   const here = dirname2(fileURLToPath(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
-    const entryDir = dirname2(resolve2(process.argv[1]));
-    candidates.push(join3(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    const entryDir = dirname2(resolve3(process.argv[1]));
+    candidates.push(join4(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join3(here, "cursor-lifecycle-supervisor.mjs"),
-    join3(here, "dist", "cursor-lifecycle-supervisor.mjs")
+    join4(here, "cursor-lifecycle-supervisor.mjs"),
+    join4(here, "dist", "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
     if (existsSync3(c)) return c;
   }
-  return join3(here, "cursor-lifecycle-supervisor.mjs");
+  return join4(here, "cursor-lifecycle-supervisor.mjs");
 }
 function isProcessAlive(pid) {
   if (!pid || !Number.isFinite(pid)) return false;
@@ -11319,7 +11568,7 @@ function tryUnlink(path) {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join3(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join4(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -11429,7 +11678,8 @@ async function ensureCursorViaSupervisor(options = {}) {
       waitMs,
       reason,
       adapterPid,
-      runtimeMode: options.runtimeMode || null
+      runtimeMode: options.runtimeMode || null,
+      projectPath: Object.hasOwn(options, "projectPath") ? options.projectPath : null
     }, Math.max(waitMs + 15e3, 6e4));
     if (response.type === "error") {
       return {
@@ -11452,8 +11702,12 @@ async function ensureCursorViaSupervisor(options = {}) {
       exe: response.exe,
       cursorPid: response.cursorPid || null,
       runtimeMode: response.runtimeMode || options.runtimeMode || null,
+      projectPath: response.projectPath || options.projectPath || null,
+      targetId: response.targetId || null,
+      workspaceAction: response.workspaceAction || null,
       presentation: response.presentation || null,
       windowGuard: response.windowGuard || null,
+      startupWindowGuard: response.startupWindowGuard || null,
       adapterPid,
       supervisorPid: response.supervisorPid || conn.supervisorPid,
       reusedSupervisor: conn.reusedSupervisor,
@@ -11500,8 +11754,10 @@ __export(launch_cursor_exports, {
 });
 import { pathToFileURL } from "url";
 async function ensureCursorRunning(options = {}) {
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath : resolveProjectPath();
+  const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === "1" || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === "1") {
-    const local = await ensureCursorRunningLocal(options);
+    const local = await ensureCursorRunningLocal(ensureOptions);
     return {
       ...local,
       adapterPid: process.pid,
@@ -11512,7 +11768,7 @@ async function ensureCursorRunning(options = {}) {
     };
   }
   return ensureCursorViaSupervisor({
-    ...options,
+    ...ensureOptions,
     reason: options.reason || "ensureCursorRunning"
   });
 }
@@ -18859,7 +19115,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+        await new Promise((resolve5) => setTimeout(resolve5, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -18876,7 +19132,7 @@ var Protocol = class {
    */
   request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -18954,7 +19210,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve4(parseResult.data);
+            resolve5(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -19215,12 +19471,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve4, interval);
+      const timeoutId = setTimeout(resolve5, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -20090,12 +20346,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve4) => {
+    return new Promise((resolve5) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve4();
+        resolve5();
       } else {
-        this._stdout.once("drain", resolve4);
+        this._stdout.once("drain", resolve5);
       }
     });
   }
@@ -20103,8 +20359,8 @@ var StdioServerTransport = class {
 
 // server.mjs
 import { mkdirSync as mkdirSync3, readFileSync as readFileSync3, renameSync as renameSync2, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import { basename as basename2, dirname as dirname3, join as join4, resolve as resolve3 } from "node:path";
+import { homedir as homedir4 } from "node:os";
+import { basename as basename3, dirname as dirname3, join as join5, resolve as resolve4 } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -20136,9 +20392,9 @@ var DELEGATION_POLICY_GUIDANCE = Object.freeze({
 });
 function resolveDelegationPolicyFile(value = process.env.CURSOR_BRIDGE_POLICY_FILE) {
   const configured = String(value || "").trim();
-  if (configured) return resolve3(configured);
-  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join4(homedir3(), ".config");
-  return join4(configRoot, "cursor-bridge", "policy.json");
+  if (configured) return resolve4(configured);
+  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join5(homedir4(), ".config");
+  return join5(configRoot, "cursor-bridge", "policy.json");
 }
 var DELEGATION_POLICY_FILE = resolveDelegationPolicyFile();
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = "active") {
@@ -20170,9 +20426,9 @@ function writePersistedDelegationPolicy(filePath, policy) {
   if (!DELEGATION_POLICIES.includes(normalized)) {
     throw new Error(`unsupported delegation policy: ${policy}`);
   }
-  const target = resolve3(filePath);
+  const target = resolve4(filePath);
   mkdirSync3(dirname3(target), { recursive: true });
-  const temporary = join4(dirname3(target), `.${basename2(target)}.${process.pid}.${Date.now()}.tmp`);
+  const temporary = join5(dirname3(target), `.${basename3(target)}.${process.pid}.${Date.now()}.tmp`);
   try {
     writeFileSync3(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}
 `, {
@@ -20186,65 +20442,40 @@ function writePersistedDelegationPolicy(filePath, policy) {
   }
   return target;
 }
-function searchPromptOptions(options = {}) {
-  const scope = Array.isArray(options.scope) ? options.scope.map((value) => String(value || "").trim()).filter(Boolean) : [];
-  const requestedMaxResults = Number(options.maxResults || 12);
-  const maxResults = Number.isFinite(requestedMaxResults) ? Math.max(1, Math.min(30, Math.trunc(requestedMaxResults))) : 12;
-  const scopeText = scope.length ? `
-\u68C0\u7D22\u8303\u56F4\u4F18\u5148\u9650\u5236\u4E3A\uFF1A
-${scope.map((value) => `- ${value}`).join("\n")}` : "\n\u68C0\u7D22\u8303\u56F4\uFF1A\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u5E76\u5B8C\u6210\u7D22\u5F15\u7684\u6574\u4E2A\u5DE5\u4F5C\u533A\u3002";
-  return { maxResults, scopeText };
-}
-function searchResultContract(maxResults) {
+function searchResultContract() {
   return [
-    `\u6700\u591A\u8FD4\u56DE ${maxResults} \u4E2A\u9AD8\u76F8\u5173\u7ED3\u679C\uFF0C\u6309\u8BC1\u636E\u5F3A\u5EA6\u6392\u5E8F\u3002`,
+    "\u53EA\u8FD4\u56DE\u652F\u6491\u7ED3\u8BBA\u6240\u9700\u7684\u6700\u5C0F\u5145\u5206\u8BC1\u636E\u96C6\uFF0C\u6309\u8BC1\u636E\u5F3A\u5EA6\u6392\u5E8F\uFF1B\u4E0D\u8981\u4E3A\u4E86\u51D1\u6570\u91CF\u5806\u780C\u76F8\u4F3C\u7ED3\u679C\u3002",
     "",
     "\u8F93\u51FA\u683C\u5F0F\uFF08\u4FDD\u6301\u7D27\u51D1\uFF0C\u4E0D\u8981\u8FFD\u52A0\u957F\u7BC7\u89E3\u91CA\uFF09\uFF1A",
     "CCE_SEARCH_RESULT",
     "intent: <\u4E00\u53E5\u8BDD\u590D\u8FF0\u68C0\u7D22\u610F\u56FE>",
+    "coverage: <focused|extended> | <\u4E3A\u4EC0\u4E48\u91C7\u7528\u8BE5\u68C0\u7D22\u529B\u5EA6\uFF1B\u662F\u5426\u6269\u5C55\u8FC7\u4F18\u5148\u8303\u56F4>",
     "evidence:",
     "- <workspace-relative-path>:<start>-<end> | <symbol \u6216\u951A\u70B9> | <\u76F8\u5173\u6027\u6216\u5DF2\u6838\u9A8C\u5173\u7CFB> | <semantic|exact|reference|source-read>",
     "gaps: <\u6CA1\u6709\u786E\u8BA4\u7684\u90E8\u5206\uFF1B\u6CA1\u6709\u5219\u5199 none>",
     "confidence: <high|medium|low>\uFF08\u53EA\u8BC4\u4EF7\u5B9A\u4F4D\u8BC1\u636E\uFF0C\u4E0D\u8BC4\u4EF7\u4EE3\u7801\u6B63\u786E\u6027\uFF09"
   ];
 }
-function buildSearchPrompt(query, options = {}) {
-  const { maxResults, scopeText } = searchPromptOptions(options);
+function buildContextEnginePrompt(query) {
   return [
-    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\u7684\u5E73\u8861\u578B\u53EA\u8BFB\u4EE3\u7801\u5B9A\u4F4D\u5668\u3002",
-    "\u76EE\u6807\u662F\u9AD8\u7CBE\u5EA6\u5B9A\u4F4D\uFF0C\u4E0D\u662F\u5B8C\u6574\u67B6\u6784\u8C03\u67E5\u3001\u5B9E\u73B0\u65B9\u6848\u8BBE\u8BA1\u6216\u5168\u4ED3\u5E93\u7EFC\u8FF0\u3002",
-    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\uFF1A\u7EC4\u5408 Cursor \u7D22\u5F15\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\uFF0C\u5E76\u53EA\u8BFB\u53D6\u5C11\u91CF\u76F4\u63A5\u76F8\u5173\u6E90\u7801\u6765\u6838\u5BF9\u8BC1\u636E\u3002",
-    "\u4F18\u5148\u7CBE\u5EA6\uFF1B\u7981\u6B62\u5BBD\u6CDB\u904D\u5386\u4ED3\u5E93\uFF0C\u7981\u6B62\u542F\u52A8 Explore/\u5B50\u4EE3\u7406\uFF0C\u7981\u6B62\u6839\u636E\u6846\u67B6\u60EF\u4F8B\u731C\u8DEF\u5F84\u3002\u6BCF\u6761\u7ED3\u8BBA\u90FD\u5FC5\u987B\u7531\u5B9E\u9645\u641C\u7D22\u6216\u8BFB\u53D6\u8BC1\u636E\u652F\u6491\u3002",
+    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\uFF1A\u4E00\u4E2A\u53EA\u8BFB\u3001\u8BC1\u636E\u9A71\u52A8\u7684\u9879\u76EE\u7406\u89E3\u5F15\u64CE\u3002",
+    "\u76EE\u6807\u662F\u628A\u81EA\u7136\u8BED\u8A00\u610F\u56FE\u89E3\u6790\u6210\u53EF\u6838\u9A8C\u7684\u771F\u5B9E\u4EE3\u7801\u4E0A\u4E0B\u6587\uFF0C\u800C\u4E0D\u662F\u731C\u6D4B\u4EE3\u7801\u4F4D\u7F6E\u3001\u590D\u8FF0\u6846\u67B6\u60EF\u4F8B\u6216\u751F\u6210\u5B9E\u73B0\u65B9\u6848\u3002",
+    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\u3002\u6839\u636E\u95EE\u9898\u5F62\u72B6\u548C\u68C0\u7D22\u4E2D\u53D1\u73B0\u7684\u5173\u7CFB\uFF0C\u81EA\u4E3B\u51B3\u5B9A\u68C0\u7D22\u529B\u5EA6\uFF1A\u7B80\u5355\u5B9A\u4F4D\u5FEB\u901F\u6536\u655B\uFF1B\u8C03\u7528\u94FE\u3001\u6570\u636E\u6D41\u3001\u6CE8\u518C\u5173\u7CFB\u6216\u8DE8\u6A21\u5757\u95EE\u9898\u7EE7\u7EED\u8FFD\u8E2A\u5230\u6700\u5C0F\u5145\u5206\u8BC1\u636E\u3002",
+    "\u81EA\u884C\u9009\u62E9 Cursor \u5F53\u524D\u53EF\u7528\u7684\u6700\u4F73\u80FD\u529B\uFF0C\u5305\u62EC\u9879\u76EE\u7D22\u5F15\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\u3001\u5B9A\u5411\u6E90\u7801\u8BFB\u53D6\uFF0C\u4EE5\u53CA\u786E\u6709\u6536\u76CA\u65F6\u7684 Explore/\u5B50\u4EE3\u7406\u3002\u8C03\u7528\u65B9\u53EA\u7EA6\u675F\u53EA\u8BFB\u3001\u8BC1\u636E\u548C\u505C\u6B62\u6761\u4EF6\uFF0C\u4E0D\u66FF Cursor \u7F16\u6392\u5185\u90E8 harness\u3002",
+    "\u6BCF\u6761\u5173\u7CFB\u90FD\u5FC5\u987B\u7531\u5B9E\u9645\u641C\u7D22\u3001\u5F15\u7528\u6216\u6E90\u7801\u8BFB\u53D6\u652F\u6491\uFF1B\u8BED\u4E49\u76F8\u4F3C\u4E0D\u80FD\u5192\u5145\u5DF2\u8BC1\u660E\u8C03\u7528\u8FB9\u3002\u8FBE\u5230\u6700\u5C0F\u5145\u5206\u4E0A\u4E0B\u6587\u540E\u7ACB\u5373\u505C\u6B62\uFF0C\u4E0D\u505A\u65E0\u5173\u5168\u4ED3\u5E93\u6F2B\u6E38\u3002",
     "\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002\u53EA\u8BFB\u53D6\u8DB3\u4EE5\u786E\u8BA4\u5B9A\u4F4D\u7684\u4E0A\u4E0B\u6587\u3002",
-    "\u82E5\u95EE\u9898\u9700\u8981\u591A\u8DF3\u8C03\u7528\u94FE\u3001\u6570\u636E\u6D41\u3001\u8DE8\u6A21\u5757\u6838\u9A8C\u6216\u5927\u8303\u56F4\u8BFB\u53D6\uFF0C\u4E0D\u8981\u81EA\u52A8\u6269\u5927\u8C03\u67E5\uFF1B\u5728 gaps \u4E2D\u5199 deep_search_recommended: <\u539F\u56E0>\u3002",
-    "\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5728 gaps \u4E2D\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u6216\u8303\u56F4\u3002",
-    scopeText,
-    ...searchResultContract(maxResults),
+    "\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5728 gaps \u4E2D\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u3001\u5F15\u7528\u6216\u8303\u56F4\uFF1B\u4E0D\u5F97\u8DF3\u8FC7\u641C\u7D22\u76F4\u63A5\u56DE\u7B54\u3002",
+    "\u68C0\u7D22\u8303\u56F4\u662F\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u5E76\u5B8C\u6210\u7D22\u5F15\u7684\u6574\u4E2A\u5DE5\u4F5C\u533A\u3002\u82E5\u610F\u56FE\u70B9\u540D\u4E86\u6A21\u5757\u6216\u8DEF\u5F84\uFF0C\u628A\u5B83\u89C6\u4E3A\u7EBF\u7D22\u800C\u975E\u786C\u8FB9\u754C\u3002",
+    ...searchResultContract(),
     "",
     `\u68C0\u7D22\u610F\u56FE\uFF1A${String(query || "").trim()}`
-  ].join("\n");
-}
-function buildDeepSearchPrompt(query, options = {}) {
-  const { maxResults, scopeText } = searchPromptOptions(options);
-  return [
-    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\u7684\u6DF1\u5EA6\u53EA\u8BFB\u4ED3\u5E93\u4E0A\u4E0B\u6587\u8C03\u67E5\u5668\u3002",
-    "\u76EE\u6807\u662F\u4E3A\u5F53\u524D\u610F\u56FE\u627E\u9F50\u201C\u6700\u5C0F\u5145\u5206\u4EE3\u7801\u4E0A\u4E0B\u6587\u201D\uFF0C\u5E76\u7528\u771F\u5B9E\u8DE8\u6587\u4EF6\u8BC1\u636E\u6838\u9A8C\u5173\u7CFB\uFF1B\u4E0D\u662F\u751F\u6210\u5B9E\u73B0\u8BA1\u5212\u3001\u5927\u7247\u4EE3\u7801\u6216\u957F\u7BC7\u67B6\u6784\u8BF4\u660E\u3002",
-    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\uFF1A\u7EC4\u5408 Cursor \u5DF2\u7D22\u5F15\u9879\u76EE\u7684\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\u548C\u5B9A\u5411\u6E90\u7801\u8BFB\u53D6\u3002\u53EA\u6709\u786E\u6709\u5FC5\u8981\u4E14\u5F53\u524D\u80FD\u529B\u53EF\u7528\u65F6\uFF0C\u624D\u4F7F\u7528 Explore/\u5B50\u4EE3\u7406\u8865\u8DB3\u8DE8\u6587\u4EF6\u9A8C\u8BC1\u3002",
-    "\u9002\u5408\u6838\u9A8C\u4E1A\u52A1\u903B\u8F91\u3001\u8C03\u7528\u94FE\u3001\u6570\u636E\u6D41\u3001route\u2192service\u2192storage\u3001producer\u2192queue\u2192consumer\u3001config\u2192registration\u2192implementation\u3001interface\u2192implementation\uFF0C\u4EE5\u53CA\u8DE8\u6A21\u5757/\u5B50\u7CFB\u7EDF\u5173\u7CFB\u6216\u5B9E\u73B0\u524D\u4E0A\u4E0B\u6587\u3002",
-    "\u6BCF\u6761\u5173\u7CFB\u5FC5\u987B\u7531\u5B9E\u9645\u641C\u7D22\u6216\u6E90\u7801\u8BFB\u53D6\u8BC1\u636E\u652F\u6491\uFF1B\u8BED\u4E49\u76F8\u4F3C\u4E0D\u80FD\u5192\u5145\u5DF2\u8BC1\u660E\u8C03\u7528\u8FB9\u3002\u8FBE\u5230\u6700\u5C0F\u5145\u5206\u4E0A\u4E0B\u6587\u540E\u7ACB\u5373\u505C\u6B62\uFF0C\u4E0D\u505A\u65E0\u5173\u5168\u4ED3\u5E93\u6F2B\u6E38\u3002",
-    "\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002",
-    "\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5728 gaps \u4E2D\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u3001\u5F15\u7528\u6216\u8303\u56F4\u3002",
-    scopeText,
-    ...searchResultContract(maxResults),
-    "",
-    `\u6DF1\u5EA6\u68C0\u7D22\u610F\u56FE\uFF1A${String(query || "").trim()}`
   ].join("\n");
 }
 function normalizeCceSearchResult(value) {
   const text = String(value || "").trim();
   const marker = text.indexOf("CCE_SEARCH_RESULT");
   if (marker < 0) return text;
-  return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, "CCE_SEARCH_RESULT\n");
+  return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, "CCE_SEARCH_RESULT\n").replace(/[^\S\r\n]+(?=(?:coverage|evidence|gaps|confidence):)/g, "\n");
 }
 function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, baselineCount = 0 } = {}) {
   if (!String(answer || "").trim()) return false;
@@ -20258,13 +20489,13 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
 var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve4(JSON.parse(d));
+          resolve5(JSON.parse(d));
         } catch {
           reject(new Error("CDP \u975E JSON \u54CD\u5E94"));
         }
@@ -20422,7 +20653,19 @@ var EXPR_SNAP = `(function(){
   const last=texts[texts.length-1]||'';
   let hash=0; for(let i=0;i<last.length;i++)hash=((hash<<5)-hash+last.charCodeAt(i))|0;
   const stop=[...document.querySelectorAll('[class*=codicon-stop],[class*=debug-stop],[aria-label*=Stop],[aria-label*=stop],[aria-label*=Cancel],[title*=Stop]')].filter(e=>e.offsetParent!==null).length;
-  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop});
+  ${INPUT_PICKER_BODY}
+  const input=pickInput();
+  const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
+  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length});
+})()`;
+var EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
+  const input=pickInput();if(!input)return 'NO_INPUT';
+  const composer=input.closest('.composer-bar')||input.parentElement;
+  if(!composer)return 'NO_COMPOSER';
+  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button[aria-label="Send"]')]
+    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar'));
+  if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
+  buttons[0].click();return 'CLICKED';
 })()`;
 var EXPR_EXTRACT = `(function(){
   const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
@@ -20611,7 +20854,7 @@ var EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
     hasWritableInput:!!input,uiFlavor,
     agentAdapterKind:hasV2Sidebar?'agents_v2':hasLegacyHistory?'legacy':'none',
     hasComposer:!!document.querySelector('.composer-bar[data-composer-id]'),
-    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus()
+    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus(),documentTitle:String(document.title||'')
   });
 })()`;
 var EXPR_HISTORY_ENTRIES = `(function(){${REACT_ADAPTER_BODY}
@@ -20700,7 +20943,7 @@ function createProviderError(info) {
 var CursorBridge = class {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    this.policyFile = options.policyFile === null ? null : resolve3(options.policyFile || DELEGATION_POLICY_FILE);
+    this.policyFile = options.policyFile === null ? null : resolve4(options.policyFile || DELEGATION_POLICY_FILE);
     this.delegationPolicyDefault = DELEGATION_POLICY_DEFAULT;
     const persistedPolicy = options.delegationPolicy === void 0 ? readPersistedDelegationPolicy(this.policyFile) : null;
     const requestedPolicy = options.delegationPolicy !== void 0 ? options.delegationPolicy : persistedPolicy || this.delegationPolicyDefault;
@@ -20709,10 +20952,10 @@ var CursorBridge = class {
     this.delegationPolicyScope = persistedPolicy ? "persistent" : "session";
     this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
-    this.runtimeFile = options.runtimeFile === null ? null : resolve3(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeFile = options.runtimeFile === null ? null : resolve4(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
-      "normal"
+      "minimal"
     );
     const persistedRuntimeMode = options.runtimeMode === void 0 ? readPersistedCursorRuntimeMode(this.runtimeFile) : null;
     const requestedRuntimeMode = options.runtimeMode !== void 0 ? options.runtimeMode : persistedRuntimeMode || this.runtimeModeDefault;
@@ -20796,7 +21039,7 @@ var CursorBridge = class {
       restartMode,
       availableRuntimeModes: [...CURSOR_RUNTIME_MODES],
       platformWindowControl: process.platform === "win32" ? "supported" : "unsupported",
-      startupBehavior: this.runtimeMode === "minimal" ? "deferred_until_cursor_search_or_cursor_do" : "normal_autolaunch_unless_disabled",
+      startupBehavior: cursorStartupBehavior(this.runtimeMode),
       lastPresentation: this._lastPresentation
     };
   }
@@ -20828,13 +21071,7 @@ var CursorBridge = class {
     const presentation = await this.applyRuntimePresentation(normalized === "minimal" ? "hide" : "show");
     return { previousMode, ...this.runtimeModeView(), presentation };
   }
-  async search(query, options = {}) {
-    return this._searchWithPrompt("search", query, options, buildSearchPrompt);
-  }
-  async searchDeep(query, options = {}) {
-    return this._searchWithPrompt("search_deep", query, options, buildDeepSearchPrompt);
-  }
-  async _searchWithPrompt(kind, query, options, promptBuilder) {
+  async contextEngine(query) {
     const text = String(query || "").trim();
     if (!text) throw new Error("query \u4E0D\u80FD\u4E3A\u7A7A");
     if (text.length > 2e4) throw new Error("query \u8FC7\u957F\uFF08\u6700\u5927 20000 \u5B57\u7B26\uFF09");
@@ -20842,7 +21079,7 @@ var CursorBridge = class {
       throw new Error("\u5B58\u5728 Stop \u672A\u786E\u8BA4\u7684\u5168\u5C40 Cursor \u5360\u7528\uFF1B\u8BF7\u5148\u5904\u7406 cursor_status \u4E2D\u7684 blockingTaskIds");
     }
     await this._ensureCursor();
-    const job = this._enqueue(kind, promptBuilder(text, options), {
+    const job = this._enqueue("context_engine", buildContextEnginePrompt(text), {
       timeoutMs: QUERY_TIMEOUT,
       newChat: true,
       execution: "fifo",
@@ -20850,6 +21087,13 @@ var CursorBridge = class {
       allowedPaths: []
     });
     return normalizeCceSearchResult(await job.promise);
+  }
+  // Unlisted compatibility aliases for clients that cached the pre-3.0 tool surface.
+  async search(query) {
+    return this.contextEngine(query);
+  }
+  async searchDeep(query) {
+    return this.contextEngine(query);
   }
   async doTask(prompt, options = {}) {
     if (!this.delegationEnabled) {
@@ -20925,8 +21169,8 @@ var CursorBridge = class {
     const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve4, reject) => {
-      resolvePromise = resolve4;
+    const promise = new Promise((resolve5, reject) => {
+      resolvePromise = resolve5;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -21094,12 +21338,16 @@ var CursorBridge = class {
           spawnMethod: rr.spawnMethod || null,
           cursorPid: rr.cursorPid || null,
           runtimeMode: rr.runtimeMode || this.runtimeMode,
+          projectPath: rr.projectPath || null,
+          targetId: rr.targetId || null,
+          workspaceAction: rr.workspaceAction || null,
           presentation: rr.presentation || null
         };
         if (this.runtimeMode === "minimal") {
           this._lastPresentation = rr.presentation ? { ...rr.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await this.applyRuntimePresentation("hide");
         }
         const life = "adapterPid=" + this._lastLifecycle.adapterPid + " supervisorPid=" + this._lastLifecycle.supervisorPid + " reused=" + this._lastLifecycle.reusedSupervisor + " reason=" + this._lastLifecycle.launchReason;
+        if (!rr.ok) throw new Error(rr.message || `Cursor lifecycle failed: ${rr.status}`);
         if (rr.status === "already") {
           console.error("\u{1FA9F} cursor ensure already: " + life);
           return;
@@ -21110,7 +21358,8 @@ var CursorBridge = class {
         }
         console.error("\u{1FA9F} cursor \u81EA\u6108\u62C9\u8D77\uFF1A" + (rr.message || rr.status) + " | " + life);
       } catch (e) {
-        console.error("\u26A0\uFE0F cursor \u81EA\u6108\u5931\u8D25\uFF08\u964D\u7EA7\uFF0C\u6309\u9700\u624B\u52A8\u542F\u52A8\uFF09\uFF1A", e.message);
+        console.error("\u26A0\uFE0F cursor \u81EA\u6108\u5931\u8D25\uFF08CCE/\u59D4\u6258\u5DF2\u4E2D\u6B62\uFF0C\u907F\u514D\u9A71\u52A8\u9519\u8BEF\u5DE5\u4F5C\u533A\uFF09\uFF1A", e.message);
+        throw e;
       } finally {
         this._healing = null;
       }
@@ -21221,7 +21470,7 @@ var CursorBridge = class {
     }
   }
   async _run(prompt, options = {}) {
-    const page = await findPage({ targetId: options.targetId, purpose: "fifo" });
+    const page = await findPage({ targetId: options.targetId || this._lastLifecycle && this._lastLifecycle.targetId, purpose: "fifo" });
     options.targetId = page.id;
     options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -21244,6 +21493,7 @@ var CursorBridge = class {
       options.sendState = "dispatching";
       try {
         await chord(c, 0, "Enter", "Enter", 13);
+        await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
         options.sendState = "sent";
         options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
         return await this._waitComplete(
@@ -21254,6 +21504,10 @@ var CursorBridge = class {
           providerErrorBaseline
         );
       } catch (error2) {
+        if (error2 && error2.confirmedNotSent) {
+          options.sendState = "not_sent";
+          throw error2;
+        }
         error2.sent = true;
         throw error2;
       }
@@ -21273,6 +21527,11 @@ var CursorBridge = class {
     let vis = await evalJS(c, EXPR_VISIBLE);
     if (!vis) {
       await chord(c, 2, "L", "KeyL", 76);
+      await sleep2(1300);
+      vis = await evalJS(c, EXPR_VISIBLE);
+    }
+    if (!vis) {
+      await chord(c, 2, "I", "KeyI", 73);
       await sleep2(1300);
       vis = await evalJS(c, EXPR_VISIBLE);
     }
@@ -21328,6 +21587,32 @@ var CursorBridge = class {
       if (!keepOpen) await this._closeHistory(c);
     }
   }
+  async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "") {
+    const accepted = async () => {
+      await this._throwIfNewProviderError(c, providerErrorBaseline);
+      let snap = {};
+      try {
+        snap = JSON.parse(await evalJS(c, EXPR_SNAP));
+      } catch {
+      }
+      const inputTextLength = Number(snap.inputTextLength);
+      return Number(snap.stop || 0) > 0 || Number(snap.messageCount || 0) > Number(baselineCount || 0) || Number.isFinite(inputTextLength) && inputTextLength === 0;
+    };
+    for (let i = 0; i < 6; i++) {
+      await sleep2(250);
+      if (await accepted()) return "enter";
+    }
+    const clicked = await evalJS(c, EXPR_CLICK_SEND);
+    if (clicked === "CLICKED") {
+      for (let i = 0; i < 20; i++) {
+        await sleep2(250);
+        if (await accepted()) return "button";
+      }
+    }
+    const error2 = new Error(`Cursor \u672A\u63A5\u53D7\u63D0\u4EA4\uFF08submit_not_accepted: ${clicked || "unknown"}\uFF09\uFF1B\u63D0\u793A\u4ECD\u5728\u8F93\u5165\u6846\u4E2D\uFF0C\u672A\u521B\u5EFA\u5B64\u513F\u4EFB\u52A1`);
+    error2.confirmedNotSent = true;
+    throw error2;
+  }
   async _readProviderError(c) {
     const raw = await evalJS(c, EXPR_PROVIDER_ERROR);
     try {
@@ -21344,7 +21629,7 @@ var CursorBridge = class {
     throw createProviderError(providerError);
   }
   async _submitParallelAgent(job) {
-    const page = await findPage({ purpose: "parallel_agent" });
+    const page = await findPage({ targetId: this._lastLifecycle && this._lastLifecycle.targetId, purpose: "parallel_agent" });
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -21384,9 +21669,15 @@ var CursorBridge = class {
       await sleep2(350);
       this._throwIfCancelledBeforeSend(job);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
+      let baseline = { messageCount: 0 };
+      try {
+        baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
+      } catch {
+      }
       job.sendState = "dispatching";
-      sent = true;
       await chord(c, 0, "Enter", "Enter", 13);
+      await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
+      sent = true;
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
       agent = null;
@@ -22153,9 +22444,7 @@ function buildSearchInputSchema() {
   return {
     type: "object",
     properties: {
-      query: { type: "string", description: "Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory." },
-      scope: { type: "array", items: { type: "string" }, description: "Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace." },
-      max_results: { type: "integer", minimum: 1, maximum: 30, default: 12, description: "Maximum number of evidence anchors requested from CCE." }
+      query: { type: "string", description: "Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory." }
     },
     required: ["query"]
   };
@@ -22164,13 +22453,8 @@ function buildToolDefinitions(bridgeInstance) {
   const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
     {
-      name: "cursor_search",
-      description: `${policyContext} Balanced read-only Cursor Context Engine (CCE) locator for intent-based code discovery. It combines Cursor indexed semantic retrieval with exact search, symbol/reference tracing, and small targeted source checks, returning compact verifiable workspace-relative path:line evidence. Use caller-side Grep for an obvious literal or known exact symbol. Use cursor_search_deep for call chains, data flows, cross-module/subsystem or architecture relationships, or when this tool reports deep_search_recommended. Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.`,
-      inputSchema: buildSearchInputSchema()
-    },
-    {
-      name: "cursor_search_deep",
-      description: `${policyContext} Heavier read-only CCE repository-context investigation over Cursor's indexed project plus targeted cross-file exploration. Use it when the question requires a verified call chain, data flow, route-to-storage path, producer/consumer relationship, config-to-implementation path, interface implementations, cross-module/subsystem ownership, architecture context, or when cursor_search says deeper evidence is required. It stops at the minimum sufficient code context and returns the same compact path:line evidence contract; it does not produce an implementation plan or modify the workspace. Do not default to running both search modes: choose this directly when the investigation shape is already deep. Read-only behavior is a strong prompt contract, not a filesystem sandbox.`,
+      name: "cursor_context_engine",
+      description: `${policyContext} Evidence-driven, read-only Cursor Context Engine (CCE) for understanding an indexed project from natural-language intent. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies only intent, not a harness recipe. It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.`,
       inputSchema: buildSearchInputSchema()
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
@@ -22229,7 +22513,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_runtime",
-      description: "Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, but Bridge defers startup until cursor_search or cursor_do and hides the Windows Cursor window. normal keeps the historical visible/autolaunch behavior. This is UI suppression, not a headless reimplementation. Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.",
+      description: "Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, while Bridge prewarms it hidden for cursor_context_engine or cursor_do. normal keeps the historical visible/autolaunch behavior. This is UI suppression, not a headless reimplementation. Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.",
       inputSchema: {
         type: "object",
         properties: {
@@ -22256,24 +22540,39 @@ var server = new Server(
   { name: "cursor-bridge", version: "3.0.0" },
   { capabilities: { tools: { listChanged: true } } }
 );
+async function ensureBridgeCursor(targetBridge, reason) {
+  const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
+  const r = await ensureCursorRunning2({ reason, runtimeMode: targetBridge.runtimeMode });
+  targetBridge._lastLifecycle = {
+    adapterPid: r.adapterPid ?? process.pid,
+    supervisorPid: r.supervisorPid ?? null,
+    reusedSupervisor: !!r.reusedSupervisor,
+    createdSupervisor: !!r.createdSupervisor,
+    launchReason: r.launchReason || r.status,
+    status: r.status,
+    spawnMethod: r.spawnMethod || null,
+    cursorPid: r.cursorPid || null,
+    runtimeMode: r.runtimeMode || targetBridge.runtimeMode,
+    projectPath: r.projectPath || null,
+    targetId: r.targetId || null,
+    workspaceAction: r.workspaceAction || null,
+    presentation: r.presentation || null,
+    windowGuard: r.windowGuard || null,
+    startupWindowGuard: r.startupWindowGuard || null
+  };
+  if (targetBridge.runtimeMode === "minimal") {
+    targetBridge._lastPresentation = r.presentation ? { ...r.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await targetBridge.applyRuntimePresentation("hide");
+  }
+  return r;
+}
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: buildToolDefinitions(bridge)
 }));
 server.setRequestHandler(CallToolRequestSchema, async (request2) => {
   const { name, arguments: args } = request2.params;
   try {
-    if (name === "cursor_search") {
-      const result = await bridge.search(String(args && args.query || ""), {
-        scope: args && args.scope,
-        maxResults: args && args.max_results
-      });
-      return { content: [{ type: "text", text: String(result) }] };
-    }
-    if (name === "cursor_search_deep") {
-      const result = await bridge.searchDeep(String(args && args.query || ""), {
-        scope: args && args.scope,
-        maxResults: args && args.max_results
-      });
+    if (name === "cursor_context_engine" || name === "cursor_search" || name === "cursor_search_deep") {
+      const result = await bridge.contextEngine(String(args && args.query || ""));
       return { content: [{ type: "text", text: String(result) }] };
     }
     if (name === "cursor_do") {
@@ -22314,6 +22613,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       const mode = args && args.mode;
       const action = args && args.action;
       let result = mode === void 0 ? bridge.runtimeModeView() : await bridge.setRuntimeMode(mode, args && args.scope || "persistent");
+      if (mode !== void 0 && shouldAutoLaunchCursor()) {
+        result = { ...result, prewarm: await ensureBridgeCursor(bridge, "runtime-mode-change") };
+      }
       if (action !== void 0) {
         result = { ...result, presentation: await bridge.applyRuntimePresentation(action) };
       }
@@ -22323,23 +22625,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       return { content: [{ type: "text", text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
     }
     if (name === "cursor_launch") {
-      const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-      const r = await ensureCursorRunning2({ reason: "cursor_launch", runtimeMode: bridge.runtimeMode });
-      bridge._lastLifecycle = {
-        adapterPid: r.adapterPid ?? process.pid,
-        supervisorPid: r.supervisorPid ?? null,
-        reusedSupervisor: !!r.reusedSupervisor,
-        createdSupervisor: !!r.createdSupervisor,
-        launchReason: r.launchReason || r.status,
-        status: r.status,
-        spawnMethod: r.spawnMethod || null,
-        cursorPid: r.cursorPid || null,
-        runtimeMode: r.runtimeMode || bridge.runtimeMode,
-        presentation: r.presentation || null
-      };
-      if (bridge.runtimeMode === "minimal") {
-        bridge._lastPresentation = r.presentation ? { ...r.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await bridge.applyRuntimePresentation("hide");
-      }
+      const r = await ensureBridgeCursor(bridge, "cursor_launch");
       return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
     throw new Error(`\u672A\u77E5\u5DE5\u5177: ${name}`);
@@ -22349,33 +22635,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
 });
 async function main() {
   console.error("\u{1F680} \u542F\u52A8 cursor-bridge\uFF08CDP \u76F4\u9A71 :" + CDP_PORT2 + "\uFF09...");
+  const startupEnsure = shouldAutoLaunchCursor() ? ensureBridgeCursor(bridge, "adapter-startup").then((r) => {
+    console.error(
+      "\u{1FA9F} \u542F\u52A8\u5373\u786E\u4FDD Cursor\uFF1A" + (r.message || r.status) + " | adapterPid=" + bridge._lastLifecycle.adapterPid + " supervisorPid=" + bridge._lastLifecycle.supervisorPid + " reused=" + bridge._lastLifecycle.reusedSupervisor + " reason=" + bridge._lastLifecycle.launchReason
+    );
+    return r;
+  }).catch((error2) => {
+    console.error("\u26A0\uFE0F \u542F\u52A8\u5373\u62C9\u8D77 Cursor \u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u6309\u9700\u518D\u62C9\uFF09\uFF1A", error2.message);
+    return null;
+  }) : Promise.resolve(null);
   await server.connect(new StdioServerTransport());
   console.error("\u2705 MCP \u5DF2\u8FDE\u63A5\u3002");
-  if (process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH !== "1" && bridge.runtimeMode !== "minimal") {
-    (async () => {
-      try {
-        const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-        const r = await ensureCursorRunning2({ reason: "adapter-startup", runtimeMode: bridge.runtimeMode });
-        bridge._lastLifecycle = {
-          adapterPid: r.adapterPid ?? process.pid,
-          supervisorPid: r.supervisorPid ?? null,
-          reusedSupervisor: !!r.reusedSupervisor,
-          createdSupervisor: !!r.createdSupervisor,
-          launchReason: r.launchReason || r.status,
-          status: r.status,
-          spawnMethod: r.spawnMethod || null,
-          cursorPid: r.cursorPid || null,
-          runtimeMode: r.runtimeMode || bridge.runtimeMode,
-          presentation: r.presentation || null
-        };
-        console.error(
-          "\u{1FA9F} \u542F\u52A8\u5373\u786E\u4FDD Cursor\uFF1A" + (r.message || r.status) + " | adapterPid=" + bridge._lastLifecycle.adapterPid + " supervisorPid=" + bridge._lastLifecycle.supervisorPid + " reused=" + bridge._lastLifecycle.reusedSupervisor + " reason=" + bridge._lastLifecycle.launchReason
-        );
-      } catch (e) {
-        console.error("\u26A0\uFE0F \u542F\u52A8\u5373\u62C9\u8D77 Cursor \u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u6309\u9700\u518D\u62C9\uFF09\uFF1A", e.message);
-      }
-    })();
-  }
+  void startupEnsure;
 }
 var isMain2 = import.meta.url === pathToFileURL2(process.argv[1] || "").href;
 if (isMain2) {
@@ -22390,17 +22661,18 @@ export {
   CURSOR_RUNTIME_MODES,
   CursorBridge,
   DELEGATION_POLICIES,
+  EXPR_CLICK_SEND,
   EXPR_FIND_NEWAGENT,
   EXPR_HISTORY_ENTRIES,
   EXPR_PAGE_CAPABILITIES,
   EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
   bridge,
-  buildDeepSearchPrompt,
-  buildSearchPrompt,
+  buildContextEnginePrompt,
   buildToolDefinitions,
   classifyParallelTerminalIcon,
   createProviderError,
+  cursorStartupBehavior,
   exprClickSelectedAgentStop,
   exprFill,
   exprOpenAgent,
@@ -22416,5 +22688,6 @@ export {
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
   selectNewAgentEntry,
+  shouldAutoLaunchCursor,
   updateStableEntryObservation
 };
