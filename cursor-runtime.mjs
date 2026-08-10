@@ -110,7 +110,6 @@ public static class CursorBridgeWindowControl {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
   [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
-  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 
   public static int Apply(int expectedProcessId, bool show) {
     int changed = 0;
@@ -123,9 +122,10 @@ public static class CursorBridgeWindowControl {
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
       if (show) {
-        bool restored = ShowWindowAsync(hWnd, 9);
+        // SW_SHOWNOACTIVATE: make Cursor available without taking keyboard focus
+        // from the editor/terminal that requested the runtime transition.
+        bool restored = ShowWindowAsync(hWnd, 4);
         bool redrawn = RedrawWindow(hWnd, IntPtr.Zero, IntPtr.Zero, 0x00000585);
-        SetForegroundWindow(hWnd);
         if (restored || redrawn) changed++;
       }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }

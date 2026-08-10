@@ -10819,7 +10819,6 @@ public static class CursorBridgeWindowControl {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
   [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
-  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 
   public static int Apply(int expectedProcessId, bool show) {
     int changed = 0;
@@ -10832,9 +10831,10 @@ public static class CursorBridgeWindowControl {
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
       if (show) {
-        bool restored = ShowWindowAsync(hWnd, 9);
+        // SW_SHOWNOACTIVATE: make Cursor available without taking keyboard focus
+        // from the editor/terminal that requested the runtime transition.
+        bool restored = ShowWindowAsync(hWnd, 4);
         bool redrawn = RedrawWindow(hWnd, IntPtr.Zero, IntPtr.Zero, 0x00000585);
-        SetForegroundWindow(hWnd);
         if (restored || redrawn) changed++;
       }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
@@ -11017,7 +11017,7 @@ var init_workspace_binding = __esm({
 });
 
 // cursor-ensure-core.mjs
-import { spawn as spawn2, execSync } from "child_process";
+import { spawn as spawn2, execFileSync as execFileSync2 } from "child_process";
 import { existsSync as existsSync2 } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
 import { homedir as homedir4 } from "node:os";
@@ -11074,19 +11074,25 @@ function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {
   return resolve3(cwd);
 }
 function cursorFromRegistry(options = {}) {
-  const execSyncImpl = options.execSyncImpl || execSync;
+  const execFileSyncImpl = options.execFileSyncImpl || execFileSync2;
+  const legacyExecSyncImpl = options.execSyncImpl;
   const existsImpl = options.existsImpl || existsSync2;
   const queries = [
-    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
-    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
-    'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
-    'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
-    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
-    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor" /v DisplayIcon'
+    ["HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe", "/ve"],
+    ["HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe", "/ve"],
+    ["HKCU\\Software\\Classes\\cursor\\shell\\open\\command", "/ve"],
+    ["HKLM\\Software\\Classes\\cursor\\shell\\open\\command", "/ve"],
+    ["HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)", "/v", "DisplayIcon"],
+    ["HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor", "/v", "DisplayIcon"]
   ];
-  for (const q of queries) {
+  for (const [key, ...valueArgs] of queries) {
     try {
-      const out = execSyncImpl(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      const runOptions = {
+        encoding: "utf8",
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"]
+      };
+      const out = legacyExecSyncImpl && !options.execFileSyncImpl ? legacyExecSyncImpl(`reg query "${key}" ${valueArgs.join(" ")}`, runOptions) : execFileSyncImpl("reg.exe", ["query", key, ...valueArgs], runOptions);
       const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
       if (m && existsImpl(m[1])) return m[1];
     } catch {
@@ -11124,7 +11130,11 @@ function findCursorExeDetails(options = {}) {
   const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
   if (override) return { path: override, source: "CURSOR_EXE", platform };
   if (platform === "win32") {
-    const fromReg = cursorFromRegistry({ execSyncImpl: options.execSyncImpl, existsImpl });
+    const fromReg = cursorFromRegistry({
+      execFileSyncImpl: options.execFileSyncImpl,
+      execSyncImpl: options.execSyncImpl,
+      existsImpl
+    });
     if (fromReg) return { path: fromReg, source: "windows_registry", platform };
     const localAppData = env.LOCALAPPDATA || join4(homedir4(), "AppData", "Local");
     const programFiles = env.ProgramFiles || env.PROGRAMFILES || "C:\\Program Files";
@@ -11201,16 +11211,19 @@ function cdpIsCursor(timeoutMs = 1500) {
     });
   });
 }
-function cursorRunning() {
+function cursorRunning(options = {}) {
+  const platform = options.platform || process.platform;
+  const run = options.execFileSyncImpl || execFileSync2;
   try {
-    if (IS_WIN) {
-      return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', {
+    if (platform === "win32") {
+      return /Cursor\.exe/i.test(run("tasklist.exe", ["/fi", "imagename eq Cursor.exe", "/nh"], {
         encoding: "utf8",
-        windowsHide: true
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"]
       }));
     }
-    if (IS_MAC) {
-      execSync("pgrep -f 'Cursor.app/Contents/MacOS/Cursor'", { stdio: "ignore" });
+    if (platform === "darwin") {
+      run("pgrep", ["-f", "Cursor.app/Contents/MacOS/Cursor"], { stdio: "ignore" });
       return true;
     }
     return false;
@@ -11488,7 +11501,7 @@ async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = 
   }
   return null;
 }
-var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, IS_WIN, IS_MAC;
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
     init_cursor_runtime();
@@ -11498,13 +11511,11 @@ var init_cursor_ensure_core = __esm({
     PROJECT_TARGETS = /* @__PURE__ */ new Map();
     CODEX_THREAD_PROJECTS = /* @__PURE__ */ new Map();
     loadModule = createNodeRequire(import.meta.url);
-    IS_WIN = process.platform === "win32";
-    IS_MAC = process.platform === "darwin";
   }
 });
 
 // win-job-breakaway.mjs
-import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
+import { spawn as spawn3, execFileSync as execFileSync3 } from "node:child_process";
 import { existsSync as existsSync3 } from "node:fs";
 function quoteCmdArg(value) {
   const s = String(value);
@@ -11555,9 +11566,6 @@ function whichNode() {
   }
   return process.execPath;
 }
-function allowUnsafeCmdStart(env = process.env) {
-  return env.CURSOR_BRIDGE_UNSAFE_CMD_START === "1" || env.CURSOR_BRIDGE_ALLOW_UNSAFE_JOB_BREAKAWAY === "1";
-}
 function spawnOutsideJob(file, args = [], options = {}) {
   const cwd = options.cwd || process.cwd();
   const env = options.env || process.env;
@@ -11578,7 +11586,7 @@ function spawnOutsideJob(file, args = [], options = {}) {
       throw new Error("forced WMI failure for tests");
     }
     const ps = buildHiddenWmiCreateScript(commandLine, cwd);
-    const out = execFileSync2("powershell.exe", [
+    const out = execFileSync3("powershell.exe", [
       "-NoProfile",
       "-NonInteractive",
       "-ExecutionPolicy",
@@ -11598,42 +11606,12 @@ function spawnOutsideJob(file, args = [], options = {}) {
     return { ok: true, method: "wmi-win32-process-create", pid, commandLine };
   } catch (wmiError) {
     const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
-    if (!allowUnsafeCmdStart(env)) {
-      return {
-        ok: false,
-        method: "failed",
-        commandLine,
-        error: `WMI Win32_Process.Create failed: ${wmiMsg}. cmd.exe start fallback is disabled by default; set CURSOR_BRIDGE_UNSAFE_CMD_START=1 only for degraded/unsafe debug use.`
-      };
-    }
-    try {
-      const boot = spawn3("cmd.exe", ["/c", "start", "", "/b", file, ...args], {
-        cwd,
-        env,
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true
-      });
-      boot.unref();
-      return {
-        ok: true,
-        method: "cmd-start-trampoline",
-        pid: boot.pid,
-        commandLine,
-        degraded: true,
-        unsafe: true,
-        warning: `unsafe cmd-start fallback after WMI failure: ${wmiMsg}`
-      };
-    } catch (startError) {
-      return {
-        ok: false,
-        method: "failed",
-        commandLine,
-        degraded: true,
-        unsafe: true,
-        error: `WMI failed (${wmiMsg}); unsafe cmd-start also failed: ${startError instanceof Error ? startError.message : startError}`
-      };
-    }
+    return {
+      ok: false,
+      method: "failed",
+      commandLine,
+      error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`
+    };
   }
 }
 function spawnNodeOutsideJob(scriptPath, scriptArgs = [], options = {}) {

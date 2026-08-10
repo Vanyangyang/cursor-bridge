@@ -4,7 +4,7 @@
  * Owned by the lifecycle supervisor on multi-adapter hosts; adapters should not
  * call this directly except via CURSOR_BRIDGE_INLINE_ENSURE=1 or tests.
  */
-import { spawn, execSync } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 import { createRequire as createNodeRequire } from 'node:module';
 import { homedir } from 'node:os';
@@ -84,28 +84,35 @@ export function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, opti
 }
 
 function cursorFromRegistry(options = {}) {
-  const execSyncImpl = options.execSyncImpl || execSync;
+  const execFileSyncImpl = options.execFileSyncImpl || execFileSync;
+  const legacyExecSyncImpl = options.execSyncImpl;
   const existsImpl = options.existsImpl || existsSync;
   const queries = [
-    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
-    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
-    'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
-    'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
-    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
-    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor" /v DisplayIcon',
+    ['HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe', '/ve'],
+    ['HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe', '/ve'],
+    ['HKCU\\Software\\Classes\\cursor\\shell\\open\\command', '/ve'],
+    ['HKLM\\Software\\Classes\\cursor\\shell\\open\\command', '/ve'],
+    ['HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)', '/v', 'DisplayIcon'],
+    ['HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor', '/v', 'DisplayIcon'],
   ];
-  for (const q of queries) {
+  for (const [key, ...valueArgs] of queries) {
     try {
-      const out = execSyncImpl(q, { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      const runOptions = {
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      };
+      // Preserve the old test/integration injection name without putting the
+      // production path back through a command shell.
+      const out = legacyExecSyncImpl && !options.execFileSyncImpl
+        ? legacyExecSyncImpl(`reg query "${key}" ${valueArgs.join(' ')}`, runOptions)
+        : execFileSyncImpl('reg.exe', ['query', key, ...valueArgs], runOptions);
       const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
       if (m && existsImpl(m[1])) return m[1];
     } catch {}
   }
   return null;
 }
-
-const IS_WIN = process.platform === 'win32';
-const IS_MAC = process.platform === 'darwin';
 
 export function normalizeCursorExeCandidate(value, options = {}) {
   const platform = options.platform || process.platform;
@@ -142,7 +149,11 @@ export function findCursorExeDetails(options = {}) {
   if (override) return { path: override, source: 'CURSOR_EXE', platform };
 
   if (platform === 'win32') {
-    const fromReg = cursorFromRegistry({ execSyncImpl: options.execSyncImpl, existsImpl });
+    const fromReg = cursorFromRegistry({
+      execFileSyncImpl: options.execFileSyncImpl,
+      execSyncImpl: options.execSyncImpl,
+      existsImpl,
+    });
     if (fromReg) return { path: fromReg, source: 'windows_registry', platform };
     const localAppData = env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
     const programFiles = env.ProgramFiles || env.PROGRAMFILES || 'C:\\Program Files';
@@ -208,16 +219,19 @@ export function cdpIsCursor(timeoutMs = 1500) {
   });
 }
 
-export function cursorRunning() {
+export function cursorRunning(options = {}) {
+  const platform = options.platform || process.platform;
+  const run = options.execFileSyncImpl || execFileSync;
   try {
-    if (IS_WIN) {
-      return /Cursor\.exe/i.test(execSync('tasklist /fi "imagename eq Cursor.exe" /nh', {
+    if (platform === 'win32') {
+      return /Cursor\.exe/i.test(run('tasklist.exe', ['/fi', 'imagename eq Cursor.exe', '/nh'], {
         encoding: 'utf8',
         windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
       }));
     }
-    if (IS_MAC) {
-      execSync("pgrep -f 'Cursor.app/Contents/MacOS/Cursor'", { stdio: 'ignore' });
+    if (platform === 'darwin') {
+      run('pgrep', ['-f', 'Cursor.app/Contents/MacOS/Cursor'], { stdio: 'ignore' });
       return true;
     }
     return false;
