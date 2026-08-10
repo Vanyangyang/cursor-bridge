@@ -26,6 +26,7 @@ import {
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
   exprCreateAgentForWorkspace,
+  exprInspectWorkspaceRepository,
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
@@ -109,6 +110,9 @@ test('Cursor Agents workspace expression creates a new Agent inside the exact re
   assert.equal(missing.ok, false);
   assert.equal(missing.state, 'repository_not_found');
   assert.deepEqual(missing.available, ['VESPERIX']);
+
+  const ready = JSON.parse(Function('document', `return ${exprInspectWorkspaceRepository('G:\\\\project\\\\VESPERIX')};`)(document));
+  assert.deepEqual(ready, { ok: true, state: 'repository_ready', workspace: 'vesperix' });
 });
 
 test('chat panel fallback includes the current Cursor Ctrl+I sidepanel shortcut', () => {

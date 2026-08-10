@@ -416,6 +416,19 @@ function exprCreateAgentForWorkspace(projectPath) {
   })()`;
 }
 
+function exprInspectWorkspaceRepository(projectPath) {
+  const workspaceLabel = JSON.stringify(basename(String(projectPath || '')).trim().toLowerCase());
+  return `(function(){
+    const wanted=${workspaceLabel};
+    const sections=[...document.querySelectorAll('section.glass-sidebar-workspace-section-root')];
+    const available=sections.map(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim()).filter(Boolean);
+    const matches=sections.filter(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim().toLowerCase()===wanted);
+    if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
+    if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
+    return JSON.stringify({ok:true,state:'repository_ready',workspace:wanted});
+  })()`;
+}
+
 const EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
 const EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
@@ -752,6 +765,32 @@ class CursorBridge {
       ...this.workspaceView(),
       lifecycle: this._lastLifecycle,
     };
+  }
+
+  async _findAgentsWorkspace(projectPath) {
+    if (!projectPath) return null;
+    let page;
+    try {
+      page = await findPage({ purpose: 'fifo', preferAgentsV2: true });
+    } catch {
+      return null;
+    }
+    if (!page || page.capabilities && page.capabilities.uiFlavor !== 'agents_v2') return null;
+    const c = makeClient(page.webSocketDebuggerUrl);
+    try {
+      await c.ready;
+      const repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || '{}');
+      if (!repository.ok) return null;
+      return {
+        targetId: page.id,
+        targetUiFlavor: 'agents_v2',
+        workspace: repository.workspace,
+      };
+    } catch {
+      return null;
+    } finally {
+      c.close();
+    }
   }
 
   _syncDelegationState() {
@@ -1155,13 +1194,29 @@ class CursorBridge {
           workspaceAction: rr.workspaceAction || null,
           presentation: rr.presentation || null,
         };
+        if (!rr.ok && rr.status === 'workspace-not-ready' && rr.projectPath) {
+          const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
+          if (agentsWorkspace) {
+            this._lastLifecycle.status = 'agents-workspace-ready';
+            this._lastLifecycle.launchReason = 'agents-repository-ready';
+            this._lastLifecycle.targetId = agentsWorkspace.targetId;
+            this._lastLifecycle.targetUiFlavor = agentsWorkspace.targetUiFlavor;
+            this._lastLifecycle.workspaceAction = 'reused-agents-repository';
+          }
+        }
         if (this.runtimeMode === 'minimal') {
           this._lastPresentation = rr.presentation
             ? { ...rr.presentation, at: new Date().toISOString() }
             : await this.applyRuntimePresentation('hide');
         }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
-        if (!rr.ok) throw new Error(rr.message || `Cursor lifecycle failed: ${rr.status}`);
+        if (!rr.ok && this._lastLifecycle.status !== 'agents-workspace-ready') {
+          throw new Error(rr.message || `Cursor lifecycle failed: ${rr.status}`);
+        }
+        if (this._lastLifecycle.status === 'agents-workspace-ready') {
+          console.error(`🪟 Cursor Agents repository ready: ${this._lastLifecycle.projectPath} -> ${this._lastLifecycle.targetId}`);
+          return;
+        }
         if (rr.status === 'already') {
           console.error('🪟 cursor ensure already: ' + life);
           return;
@@ -2632,6 +2687,7 @@ export {
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
   exprCreateAgentForWorkspace,
+  exprInspectWorkspaceRepository,
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
