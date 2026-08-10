@@ -1,0 +1,6 @@
+interface:
+  display_name: "CCE Routing"
+  short_description: "Route unfamiliar project questions to Cursor CCE"
+  default_prompt: "Use $cce-routing to locate and verify unfamiliar project behavior with Cursor CCE."
+policy:
+  allow_implicit_invocation: true

@@ -543,6 +543,8 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   const init = tools.find((tool) => tool.name === 'cursor_init');
   const runtime = tools.find((tool) => tool.name === 'cursor_runtime');
   assert.match(search.description, /Cursor Context Engine \(CCE\)/);
+  assert.match(search.description, /unknown implementation location/);
+  assert.match(search.description, /Skip it when the exact file or symbol is already known/);
   assert.match(search.description, /semantic retrieval/);
   assert.match(search.description, /autonomously chooses/);
   assert.match(search.description, /call chains/);
