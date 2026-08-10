@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
-一个让 **Codex / Claude Code 把 Cursor 当作可核验 Cursor Context Engine（CCE）与有边界执行器**的 MCP server。它复用 Cursor 项目索引与 Agent UI，把仓库检索过程留在 Cursor 上下文中，并通过 CDP 驱动真实 Cursor 应用——无 console 注入、无回连服务，也不依赖 `/multitask`。
+一个让 **Codex / Claude Code 把 Cursor 当作可核验 Cursor Context Engine（CCE）与有边界执行器**的 MCP server。它复用 Cursor 项目索引与 Agent UI，把仓库检索过程留在 Cursor 上下文中，并通过 CDP 驱动真实 Cursor 应用。
 
 > **兼容性：** 同时支持旧版 Cursor workbench 与 Cursor Agents v2 UI。Windows Cursor 3.7.42 属于实机验证集合；未来 Cursor UI 变化仍可能需要更新 adapter。
 
@@ -81,7 +81,8 @@ confidence: high
 ## 前提
 
 - Node.js 18+。
-- Cursor 已安装并登录；目标项目可由 `cursor_init` 与 lifecycle supervisor 自动打开、索引。
+- Cursor 已安装并登录；目标项目存在于本机，并且能够由 Cursor 正常打开。
+- 使用“初始化 CCE 工作区为……”建立持久绑定。项目索引由 Cursor 自己完成；`cursor_init` 与 lifecycle supervisor 不负责构建索引。
 - Cursor 使用 `--remote-debugging-port=9223`；受支持环境中 Bridge 可以自动管理该生命周期。
 - 只有 Windows 支持真实顶层窗口抑制。其他平台会保存运行模式，但明确报告窗口控制不支持。
 
@@ -161,13 +162,14 @@ npm run build
 cursor_runtime({mode: "minimal"})
 ```
 
-全新安装默认使用可见的 `normal` 模式。只有用户明确要求后才会开启极简模式，选择后会持久化。MCP adapter 启动时会在不显示 Cursor 界面的情况下预热 Cursor。Bridge 会先用启用 CDP 的实例占住 Cursor 默认单实例，避免编辑器或文件打开器抢先拉起不兼容实例。Windows 上由 PID 级窗口守卫持续隐藏顶层 Cursor 窗口，同时保留真实 Cursor 进程、项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
+极简模式是希望无感使用 Cursor Bridge 时的推荐选项，但它不会默认开启：全新安装仍使用可见的 `normal` 模式。目前只有 Windows 11 的顶层窗口抑制经过实机测试成功。用户明确开启后，选择会持久化；Bridge 会预热真实 Cursor 进程并隐藏其顶层窗口，同时保留项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
 
-> **开启极简模式前必须了解：**手动点击 Cursor 图标只会复用同一个受守卫的单实例进程，因此窗口会再次被隐藏。需要临时查看时，请让 CCE“显示 Cursor”；需要正常手动使用时，请让 CCE“切换到普通模式”。
+- **优点：** `cursor_context_engine` 与 `cursor_do` 可以持续在后台使用，不会让 Cursor 界面打断当前工作。
+- **代价：** 极简模式启用期间，手动打开 Cursor 只会复用受守卫的单实例，窗口会再次被隐藏。要恢复日常 Cursor 界面使用，必须先让 CCE **切换到普通模式**。
 
 如果 Bridge 启动前已经存在不带 CDP 的 Cursor，Bridge 仍不会强杀它，以免丢失未保存内容。只需安全退出该实例一次；下次 adapter 启动会预热隐藏的 CDP runtime，后续“用 Cursor 打开”也会安全复用它。
 
-- `cursor_runtime({action: "show"})`：临时显示 Cursor，用于登录、升级或诊断。
+- `cursor_runtime({action: "show"})`：临时显示 Cursor，用于登录、升级或诊断；日常交互使用仍应切换到普通模式。
 - `cursor_runtime({action: "hide"})`：再次隐藏，不改变已保存模式。
 - `cursor_runtime({mode: "normal"})`：恢复普通可见行为。
 
@@ -208,18 +210,6 @@ cursor_runtime({mode: "minimal"})
 高级 lifecycle 覆盖主要用于兼容诊断；Windows 上不建议绕过单例 supervisor。
 
 </details>
-
-## 开发
-
-```bash
-npm install
-npm run build
-npm test
-```
-
-安装后的插件直接执行 `dist/cursor-bridge.mjs`。修改运行源码后必须重新构建并提交 bundle。双 marketplace 发布流程见 [RELEASING.md](./RELEASING.md)，发布历史见 [CHANGELOG.md](./CHANGELOG.md)。
-
-报告 Cursor UI 兼容问题时，请附上 Cursor 版本、操作系统、目标 UI flavor，以及脱敏后的 lifecycle / task 证据。
 
 ## License
 
