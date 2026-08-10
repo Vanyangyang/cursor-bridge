@@ -1,0 +1,29 @@
+{
+  "description": "High-confidence Claude Code routing guard for Cursor Context Engine project-semantic questions.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/cce-routing.mjs"]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(mcp__plugin_context-mode_context-mode__ctx_(batch_execute|execute|execute_file|search)|mcp__context-mode__ctx_(batch_execute|execute|execute_file|search)|mcp__plugin_cursor-bridge_cursor-bridge__cursor_(context_engine|search|search_deep)|mcp__cursor-bridge__cursor_(context_engine|search|search_deep))$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/cce-routing.mjs"]
+          }
+        ]
+      }
+    ]
+  }
+}
