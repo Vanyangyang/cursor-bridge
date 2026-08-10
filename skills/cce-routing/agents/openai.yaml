@@ -2,5 +2,12 @@ interface:
   display_name: "CCE Routing"
   short_description: "Route unfamiliar project questions to Cursor CCE"
   default_prompt: "Use $cce-routing to locate and verify unfamiliar project behavior with Cursor CCE."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "cursor-bridge"
+      description: "Use Cursor CCE to find and verify project context"
+
 policy:
   allow_implicit_invocation: true

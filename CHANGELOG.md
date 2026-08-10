@@ -4,6 +4,17 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.1.0] - 2026-08-10
+
+### Added
+
+- Added one shared `cce-routing` Skill for Codex and Claude Code. It routes unknown implementation locations, behavior tracing, ownership, registrations, interfaces, data flow, and cross-module project understanding to `cursor_context_engine`, while keeping exact known-file work and non-project lookups on cheaper native paths.
+
+### Changed
+
+- The public CCE tool description now exposes explicit use and skip conditions before invocation, while continuing to let Cursor choose the internal investigation depth.
+- Codex `defaultPrompt` entries are now three short user-facing starters; automatic routing guidance lives in the versioned Skill instead of being presented as UI starter text.
+
 ## [5.0.1] - 2026-08-10
 
 ### Fixed
@@ -101,6 +112,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.1.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.1...cursor-bridge--v5.1.0
 [5.0.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.0...cursor-bridge--v5.0.1
 [5.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v4.0.0...cursor-bridge--v5.0.0
 [4.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.2.0...cursor-bridge--v4.0.0
