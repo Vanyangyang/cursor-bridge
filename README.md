@@ -58,6 +58,8 @@ Simple locations converge quickly. Call chains, data flows, registrations, inter
 
 The Bridge constrains read-only behavior, evidence quality, and stopping conditions. It does not pretend to micromanage Cursor's internal harness or force every question through the same search recipe.
 
+The installed plugin also includes a shared `cce-routing` Skill for Codex and Claude Code. It steers unfamiliar-project questions, unknown implementation locations, and cross-module relationship tracing toward CCE, while keeping known-file reads, tests, logs, builds, Git work, and external documentation on their cheaper native paths. This improves automatic selection without claiming that a model-controlled tool call is deterministic.
+
 ### Result contract
 
 ```text
