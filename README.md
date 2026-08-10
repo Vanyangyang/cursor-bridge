@@ -236,9 +236,11 @@ npm run build
 Advanced lifecycle overrides are compatibility controls. Bypassing the Windows singleton supervisor is not recommended.
 
 </details>
+
 ## 友情链接
 
 - [LINUX DO](https://linux.do) — 新的理想型社区
+
 ## License
 
 [MIT](./LICENSE)

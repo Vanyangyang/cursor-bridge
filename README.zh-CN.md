@@ -237,6 +237,10 @@ npm run build
 
 </details>
 
+## 友情链接
+
+- [LINUX DO](https://linux.do) — 新的理想型社区
+
 ## License
 
 [MIT](./LICENSE)
