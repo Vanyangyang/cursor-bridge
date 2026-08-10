@@ -15,10 +15,11 @@ test('cce-routing skill exposes shared implicit routing with explicit boundaries
   assert.match(skill, /cursor_context_engine/);
   assert.match(skill, /implementation location is unknown/);
   assert.match(skill, /callers and callees/);
-  assert.match(skill, /Do not use for a known exact file or symbol/);
+  assert.match(skill, /known exact file or symbol can answer the question through direct reading or exact search/);
   assert.match(skill, /Verify returned path:line evidence/);
   assert.doesNotMatch(skill, /TODO/);
   assert.match(metadata, /default_prompt: "Use \$cce-routing/);
+  assert.match(metadata, /value: "cursor-bridge"/);
   assert.match(metadata, /allow_implicit_invocation: true/);
 });
 
