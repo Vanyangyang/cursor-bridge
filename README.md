@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
-An MCP server that lets **Codex and Claude Code use Cursor as a verifiable Cursor Context Engine (CCE) and bounded execution worker**. It reuses Cursor's project index and Agent UI, keeps repository exploration in Cursor's context, and drives the real Cursor application through CDP—without console injection, callback services, or a `/multitask` dependency.
+An MCP server that lets **Codex and Claude Code use Cursor as a verifiable Cursor Context Engine (CCE) and bounded execution worker**. It reuses Cursor's project index and Agent UI, keeps repository exploration in Cursor's context, and drives the real Cursor application through CDP.
 
 > **Compatibility:** Supports both the legacy Cursor workbench and Cursor Agents v2 UI. Cursor 3.7.42 on Windows is part of the live-verified compatibility set. Future Cursor UI changes may require adapter updates.
 
@@ -81,7 +81,8 @@ confidence: high
 ## Requirements
 
 - Node.js 18 or later.
-- Cursor installed and signed in. The target project can be opened/indexed by `cursor_init` and the lifecycle supervisor.
+- Cursor installed and signed in. The target project must exist locally and open normally in Cursor.
+- Use “Initialize CCE workspace to …” to persistently bind that project. Cursor itself owns and completes project indexing; `cursor_init` and the lifecycle supervisor do not build the index.
 - Cursor running with `--remote-debugging-port=9223`; Bridge can manage this lifecycle automatically on supported setups.
 - Windows for actual top-level window suppression. Other platforms persist runtime mode but report window control as unsupported.
 
@@ -161,13 +162,14 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 cursor_runtime({mode: "minimal"})
 ```
 
-Fresh installations default to visible `normal` mode. Minimal mode is enabled only after the user explicitly asks for it, and the choice then persists. It prewarms Cursor as soon as the MCP adapter starts, without showing the Cursor interface. Bridge claims Cursor's default single-instance slot with CDP enabled before an editor/file opener can launch an incompatible instance. On Windows, a PID-scoped guard keeps top-level Cursor windows hidden while retaining the real Cursor process, project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
+Minimal mode is the recommended option for using Cursor Bridge without bringing Cursor into the foreground. It is opt-in: fresh installations remain in visible `normal` mode, and top-level window suppression has currently been successfully tested only on Windows 11. Once enabled, the choice persists. Bridge prewarms the real Cursor process and keeps its top-level windows hidden while retaining the project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
 
-> **Before enabling minimal mode:** manually clicking the Cursor icon will reuse the same guarded single-instance process, so its window will be hidden again. Ask CCE to **show Cursor** for a temporary reveal, or **switch CCE to normal mode** before using Cursor interactively.
+- **Advantage:** `cursor_context_engine` and `cursor_do` stay available in the background, so Cursor Bridge can be used without visible UI interruption.
+- **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and its window is hidden again. Ask CCE to **switch to normal mode** before returning to ordinary interactive Cursor use.
 
 If Cursor was already running without CDP before Bridge started, Bridge still refuses to kill it because unsaved work may exist. Exit that instance once; the next adapter start prewarms the hidden CDP runtime, and later **Open in Cursor** actions reuse it safely.
 
-- `cursor_runtime({action: "show"})` temporarily reveals Cursor for login, upgrades, or diagnostics.
+- `cursor_runtime({action: "show"})` temporarily reveals Cursor for login, upgrades, or diagnostics; it does not replace switching to normal mode for ordinary interactive use.
 - `cursor_runtime({action: "hide"})` hides it again without changing the stored mode.
 - `cursor_runtime({mode: "normal"})` restores ordinary visible behavior.
 
@@ -208,18 +210,6 @@ These are deployment and compatibility controls, not part of the normal CCE call
 Advanced lifecycle overrides are intended for compatibility diagnostics. Bypassing the singleton supervisor on Windows is not recommended.
 
 </details>
-
-## Development
-
-```bash
-npm install
-npm run build
-npm test
-```
-
-Installed plugins execute `dist/cursor-bridge.mjs`. Always rebuild and commit the bundle after changing runtime source. See [RELEASING.md](./RELEASING.md) for the dual-marketplace release process and [CHANGELOG.md](./CHANGELOG.md) for release history.
-
-For Cursor UI compatibility issues, include the Cursor version, operating system, target UI flavor, and sanitized lifecycle/task evidence.
 
 ## License
 
