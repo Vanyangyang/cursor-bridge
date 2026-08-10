@@ -237,9 +237,9 @@ Advanced lifecycle overrides are compatibility controls. Bypassing the Windows s
 
 </details>
 
-## 友情链接
+## Friends
 
-- [LINUX DO](https://linux.do) — 新的理想型社区
+- [LINUX DO](https://linux.do) — A new kind of ideal community.
 
 ## License
 
