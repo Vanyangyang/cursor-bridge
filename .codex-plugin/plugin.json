@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge",
-  "version": "4.0.0+codex.20260810094813",
+  "version": "5.0.0+codex.20260810115403",
   "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution, including a UI-suppressed minimal runtime.",
   "author": {
     "name": "Vanyangyang"
@@ -28,8 +28,8 @@
     ],
     "defaultPrompt": [
       "Use cursor_context_engine for intent-based project understanding. Give it the question once, let Cursor choose the necessary search depth, then verify returned path:line evidence in the real files.",
-      "When the user says 'Initialize CCE workspace to <path>' or the equivalent in another language, call cursor_init with that path. It persistently binds the current task and prevents CCE or delegation from falling into Cursor Home or a different repository.",
-      "Fresh installations use visible normal runtime. Enable minimal runtime only after the user explicitly asks and has been told that manually clicking Cursor will be hidden again; show Cursor temporarily or switch CCE back to normal mode to recover interactive use.",
+      "When the user says 'Initialize CCE workspace to <path>' or the equivalent in another language, call cursor_init with that path. Initialization saves and validates the workspace, finds Cursor, prepares the connection, and prevents CCE or delegation from falling into Cursor Home or a different repository. If Cursor was opened too early, relay the returned save-close-retry instruction without asking the user to configure a port.",
+      "Fresh installations use visible normal runtime. Enable minimal runtime only after the user explicitly asks and has been told that manually clicking Cursor will remain hidden until CCE is switched back to normal.",
       "When a useful bounded handoff exists, give Cursor a clear goal, scope, boundaries, and acceptance checks. Collect the task with cursor_status, inspect the real changes, and keep final approval in Codex.",
       "Run independent tasks as separate top-level Cursor Agents only when their write paths do not overlap. Keep the work in Codex when it requires product judgment, shared-path ownership, or final verification."
     ],

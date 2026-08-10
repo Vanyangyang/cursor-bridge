@@ -4,6 +4,25 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.0.0] - 2026-08-10
+
+### Removed
+
+- Removed public `cursor_launch`; initialization and every CCE/execution request already ensure Cursor automatically. The unlisted compatibility handler remains for clients that cached the old tool.
+- Reduced public `cursor_runtime` to one persistent `mode` parameter (`normal` or `minimal`). Temporary `show` / `hide` actions and session scope remain internal implementation details.
+- Removed public `new_chat` from `cursor_do`; FIFO now consistently presents itself as a first-in, first-out serial queue that starts bounded work in a clean chat.
+
+### Changed
+
+- `cursor_init` now represents complete CCE initialization rather than a raw binding step: it validates and persists the workspace, discovers Cursor, ensures the lifecycle connection, and verifies the correct project target.
+- An already-running Cursor without CCE access now returns a structured, child-friendly recovery result. The binding stays saved, Cursor is never force-closed, and the only required action is to save, exit Cursor once, and repeat the same initialization sentence.
+- Cursor executable overrides accept quoted Windows paths, Windows installation directories, macOS `.app` bundles, or direct executable paths. Standard Windows registry/install locations and standard macOS application locations remain automatic.
+- `cursor_init` now accepts only an absolute project directory or `.code-workspace` file, while still normalizing Windows extended paths, quoted paths, and macOS home-relative paths.
+
+### Fixed
+
+- Corrected README and tool wording for workspace/environment precedence, FIFO clean-chat behavior, minimal-mode recovery, and Cursor-owned project indexing.
+
 ## [4.0.0] - 2026-08-10
 
 ### Removed
@@ -74,6 +93,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v4.0.0...cursor-bridge--v5.0.0
 [4.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.2.0...cursor-bridge--v4.0.0
 [3.2.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.1.0...cursor-bridge--v3.2.0
 [3.1.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.0.0...cursor-bridge--v3.1.0
