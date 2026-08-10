@@ -16,11 +16,18 @@ test('cce-routing skill exposes shared implicit routing with explicit boundaries
   assert.match(skill, /implementation location is unknown/);
   assert.match(skill, /callers and callees/);
   assert.match(skill, /known exact file or symbol can answer the question through direct reading or exact search/);
+  assert.match(skill, /make CCE the first project-discovery surface/);
+  assert.match(skill, /generic context-mode, grep, or blind local exploration/);
   assert.match(skill, /Verify returned path:line evidence/);
   assert.doesNotMatch(skill, /TODO/);
   assert.match(metadata, /default_prompt: "Use \$cce-routing/);
   assert.match(metadata, /value: "cursor-bridge"/);
   assert.match(metadata, /allow_implicit_invocation: true/);
+});
+
+test('delegation guidance defers unknown project semantics to CCE routing', () => {
+  const delegation = readProjectFile('skills/cursor-delegate/SKILL.md');
+  assert.match(delegation, /follow `cce-routing` and try `cursor_context_engine` before generic local discovery/);
 });
 
 test('Codex starter prompts stay user-facing and within manifest limits', () => {

@@ -45,7 +45,7 @@ Keep the work in the primary agent when any of these are true:
 
 Before dispatch, make sure the purpose, invariants, allowed scope, and checkable outcome are reasonably clear. Cursor may resolve local implementation details inside that envelope; the primary agent does not need to prescribe every step.
 
-For project understanding, establish the cheapest deterministic local baseline first. Use Cursor for semantic candidates, a bounded second evidence surface, or the subsequent implementation. Do not submit the same exact lookup through multiple systems.
+For an exact known-file or known-symbol lookup, establish the cheapest deterministic local baseline first. For unknown ownership, behavior, call chains, data flow, registrations, or cross-module relationships, follow `cce-routing` and try `cursor_context_engine` before generic local discovery. Do not submit the same exact lookup through multiple systems.
 
 ## Choose the execution mode
 

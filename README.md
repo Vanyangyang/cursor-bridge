@@ -58,7 +58,9 @@ Simple locations converge quickly. Call chains, data flows, registrations, inter
 
 The Bridge constrains read-only behavior, evidence quality, and stopping conditions. It does not pretend to micromanage Cursor's internal harness or force every question through the same search recipe.
 
-The installed plugin also includes a shared `cce-routing` Skill for Codex and Claude Code. It steers unfamiliar-project questions, unknown implementation locations, and cross-module relationship tracing toward CCE, while keeping known-file reads, tests, logs, builds, Git work, and external documentation on their cheaper native paths. This improves automatic selection without claiming that a model-controlled tool call is deterministic.
+The installed plugin also includes a shared `cce-routing` Skill for Codex and Claude Code. It steers unfamiliar-project questions, unknown implementation locations, and cross-module relationship tracing toward CCE, while keeping known-file reads, tests, logs, builds, Git work, and external documentation on their cheaper native paths.
+
+Claude Code additionally receives a narrow routing guard for high-confidence ownership, call-chain, data-flow, registration, and load/runtime/save questions. The prompt hook asks Claude to try CCE first; if Claude still selects a competing context-mode collection tool, the guard denies at most two such calls and points it back to `cursor_context_engine`. The guard clears as soon as CCE is attempted and fails open after the bounded redirects. It does not intercept `Read`, `Grep`, `Glob`, `Bash`, `Agent`, editing, tests, logs, builds, Git work, external documentation, or an explicit Cursor opt-out. This materially improves automatic selection without claiming that a model-controlled tool call is mathematically guaranteed.
 
 ### Result contract
 

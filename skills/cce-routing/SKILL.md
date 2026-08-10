@@ -1,6 +1,6 @@
 ---
 name: cce-routing
-description: "Use Cursor Bridge's read-only cursor_context_engine for unfamiliar project understanding when the exact code location is unknown or the task requires tracing behavior, symbols, callers and callees, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Trigger for questions such as where something is implemented, what owns state, how a project flow works, or when local search would otherwise guess paths or repeat blind queries. Do not use when a known exact file or symbol can answer the question through direct reading or exact search, for content already loaded in context, trivial single-file edits, tests, logs, builds, Git work, external documentation, or when the user opts out of Cursor. Verify returned path:line evidence in the real files."
+description: "Use Cursor Bridge's read-only cursor_context_engine for unfamiliar project understanding when the exact code location is unknown or the task requires tracing behavior, symbols, callers and callees, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Trigger for questions such as where something is implemented, what owns state, how a project flow works, or when local search would otherwise guess paths or repeat blind queries; for these semantic questions, try CCE before generic context-mode or grep discovery. Do not use when a known exact file or symbol can answer the question through direct reading or exact search, for content already loaded in context, trivial single-file edits, tests, logs, builds, Git work, external documentation, or when the user opts out of Cursor. Verify returned path:line evidence in the real files."
 ---
 
 # CCE Routing
@@ -17,6 +17,8 @@ Call `cursor_context_engine` when one or more of these are true:
 - An unfamiliar indexed project needs semantic context before a safe edit or review can begin.
 
 Prefer one CCE investigation over starting an Explore subagent merely to locate or understand project code. Let Cursor choose focused or extended depth from what it discovers.
+
+When these semantic conditions match, make CCE the first project-discovery surface. Do not establish the answer through generic context-mode, grep, or blind local exploration before trying CCE. If Claude Code denies an initial context-mode collection call with a CCE routing message, call `cursor_context_engine` once instead of retrying another `ctx_*` tool. A failed, denied, unavailable, or `NOT_FOUND` CCE attempt releases this priority and allows a bounded local fallback.
 
 ## Keep deterministic work local
 
