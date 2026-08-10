@@ -33,3 +33,12 @@ test('Codex starter prompts stay user-facing and within manifest limits', () => 
     assert.ok(prompt.length <= 128, `starter prompt exceeds 128 characters: ${prompt.length}`);
   }
 });
+
+test('bilingual README documents plugin install and update commands', () => {
+  for (const readme of ['README.md', 'README.zh-CN.md']) {
+    const content = readProjectFile(readme);
+    assert.match(content, /codex plugin marketplace upgrade vanyangyang/);
+    assert.match(content, /codex plugin add cursor-bridge@vanyangyang/);
+    assert.match(content, /claude plugin update cursor-bridge@vanyangyang/);
+  }
+});

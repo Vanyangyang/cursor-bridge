@@ -92,20 +92,38 @@ confidence: high
 
 ### Codex
 
+首次安装：
+
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin add cursor-bridge@vanyangyang
 ```
 
-重启 Codex 并新建任务，使 MCP 工具和 skills 进入新会话。
+更新已有安装：
+
+```bash
+codex plugin marketplace upgrade vanyangyang
+codex plugin add cursor-bridge@vanyangyang
+```
+
+安装或更新后，重启 Codex 并新建任务，使新版 MCP 工具和 skills 进入新会话。
 
 ### Claude Code
+
+首次安装：
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
 ```
 
-重启 Claude Code 或执行 `/reload-plugins`。
+更新已有安装：
+
+```bash
+claude plugin update cursor-bridge@vanyangyang
+```
+
+安装或更新后，重启 Claude Code 或执行 `/reload-plugins`。
 
 ## 初始化 CCE
 
