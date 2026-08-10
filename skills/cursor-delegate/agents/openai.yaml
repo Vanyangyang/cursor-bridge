@@ -1,7 +1,7 @@
 interface:
   display_name: "Cursor Delegation"
   short_description: "Give Cursor a useful bounded task, then review what it did"
-  default_prompt: "Use $cursor-delegate to decide whether Cursor can take a useful, clearly bounded part of this work under the current mode. If it can, give Cursor a clear task, collect the result, inspect the real changes, and keep final approval with the primary agent."
+  default_prompt: "Use $cursor-delegate to decide whether Cursor can take a useful, clearly bounded part of this work. If it can, give Cursor a clear task, collect the result, inspect the real changes, and keep final approval with the primary agent."
 
 dependencies:
   tools:

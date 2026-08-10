@@ -108,23 +108,13 @@ claude plugin install cursor-bridge@vanyangyang
 
 每个 Codex 任务或 Claude Code 项目初始化一次即可。绑定保存在插件缓存之外，adapter / 插件重启后仍然有效；需要切换项目时再次 init 就会覆盖当前绑定。
 
-### Codex
-
-直接告诉 Codex：
+直接用自然语言告诉 Codex 或 Claude Code：
 
 ```text
-把 Cursor Bridge 工作区初始化为 C:\absolute\path\to\project
+初始化 CCE 工作区为 C:\absolute\path\to\project
 ```
 
-Codex 会调用单参数工具 `cursor_init({path})`。当前任务路径也会作为首次使用的安全自动回退，但显式初始化拥有最高优先级。
-
-### Claude Code
-
-```text
-/cursor-bridge:init C:\absolute\path\to\project
-```
-
-Claude Code 自己已经占用裸 `/init`，因此 Cursor Bridge 使用插件命名空间命令，避免覆盖宿主行为。两个宿主最终调用的是同一个持久化 `cursor_init({path})` 实现。
+宿主会把这句话映射到单参数工具 `cursor_init({path})`。Cursor Bridge 不再提供需要记忆、也可能与宿主冲突的 slash 命令。当前任务路径仍可作为首次使用的安全自动回退，但显式初始化拥有最高优先级。
 
 Cursor 使用旧 workbench、新 Agents Window，还是两者同时开启，仍由用户自己选择；Bridge 不会改写这项偏好。两者同时存在时，请求默认选择新的 Agents Window，并从已初始化仓库分组创建对话，而不是放进 `Home`。
 
@@ -162,7 +152,6 @@ npm run build
 | `cursor_do` | 提交有边界的 FIFO 或独立 `parallel_agent` 工作。 |
 | `cursor_status` | 只读查看连接、队列、占用、运行时和任务状态。 |
 | `cursor_task_control` | 对单个任务执行 `reap`、定向 `cancel` 或显式 `abandon`。 |
-| `cursor_policy` | 查看或设置 `manual`、`auto`、`active`、`eager`。 |
 | `cursor_runtime` | 查看或设置 `normal` / `minimal` Cursor 展示方式。 |
 | `cursor_launch` | 确保 Cursor 带 CDP 运行并返回生命周期诊断。 |
 
@@ -172,7 +161,9 @@ npm run build
 cursor_runtime({mode: "minimal"})
 ```
 
-全新安装默认使用极简模式，选择后也会持久化。MCP adapter 启动时会在不显示 Cursor 界面的情况下预热 Cursor。Bridge 会先用启用 CDP 的实例占住 Cursor 默认单实例，避免编辑器或文件打开器抢先拉起不兼容实例。Windows 上由 PID 级窗口守卫持续隐藏顶层 Cursor 窗口，同时保留真实 Cursor 进程、项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
+全新安装默认使用可见的 `normal` 模式。只有用户明确要求后才会开启极简模式，选择后会持久化。MCP adapter 启动时会在不显示 Cursor 界面的情况下预热 Cursor。Bridge 会先用启用 CDP 的实例占住 Cursor 默认单实例，避免编辑器或文件打开器抢先拉起不兼容实例。Windows 上由 PID 级窗口守卫持续隐藏顶层 Cursor 窗口，同时保留真实 Cursor 进程、项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
+
+> **开启极简模式前必须了解：**手动点击 Cursor 图标只会复用同一个受守卫的单实例进程，因此窗口会再次被隐藏。需要临时查看时，请让 CCE“显示 Cursor”；需要正常手动使用时，请让 CCE“切换到普通模式”。
 
 如果 Bridge 启动前已经存在不带 CDP 的 Cursor，Bridge 仍不会强杀它，以免丢失未保存内容。只需安全退出该实例一次；下次 adapter 启动会预热隐藏的 CDP runtime，后续“用 Cursor 打开”也会安全复用它。
 
@@ -197,19 +188,6 @@ cursor_runtime({mode: "minimal"})
 - FIFO 或未绑定孤儿会阻塞新委托，直到用户人工确认 Cursor 状态并显式承担 `abandon` 风险。
 - 任务记录只存在于当前进程；MCP 重启后，开始重叠工作前应检查 Agent History 和工作区变化。
 
-## Cursor 参与策略
-
-`cursor_policy` 是判断偏好，不是调用计数器或硬调度器。
-
-| 模式 | 行为 |
-|---|---|
-| `manual` | 等待用户明确要求。 |
-| `auto` | 仅在收益清晰时选择性使用。 |
-| `active` | 把 Cursor 当作常规有边界队友，推荐默认值。 |
-| `eager` | 使用每个安全、独立的机会。 |
-
-产品决策、重叠写入、独占 GUI 状态和最终验收始终由主 Agent 负责。
-
 <details>
 <summary><strong>高级环境覆盖</strong></summary>
 
@@ -220,10 +198,8 @@ cursor_runtime({mode: "minimal"})
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口。 |
 | `CURSOR_BRIDGE_TIMEOUT` | `300000` | 搜索完成超时，单位毫秒。 |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | 未设置 | 设为 `1` 可关闭 normal 与 minimal 模式的启动预热。 |
-| `CURSOR_BRIDGE_RUNTIME_MODE` | `minimal` | 没有持久化选择时的初始运行模式；设为 `normal` 可让首次启动显示 Cursor。 |
+| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | 没有持久化选择时的初始运行模式；只有明确需要首次静默运行时才设为 `minimal`。 |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | 用户配置目录 | 覆盖持久化运行模式文件。 |
-| `CURSOR_BRIDGE_POLICY` | `active` | 没有持久化选择时的初始参与策略。 |
-| `CURSOR_BRIDGE_POLICY_FILE` | 用户配置目录 | 覆盖持久化策略文件。 |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | 用户 lifecycle 目录 | 覆盖按宿主持久化的 `cursor_init` 绑定文件。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 设为 `off` 可禁用并隐藏 `cursor_do`。 |
 | `CURSOR_PROJECT_PATH` | 自动探测 | Cursor 应打开并索引的项目。 |

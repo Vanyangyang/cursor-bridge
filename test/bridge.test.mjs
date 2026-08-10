@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,6 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 import {
   CursorBridge,
-  DELEGATION_POLICIES,
   CURSOR_RUNTIME_MODES,
   buildContextEnginePrompt,
   buildToolDefinitions,
@@ -18,7 +17,6 @@ import {
   normalizeCceSearchResult,
   normalizeAllowedPath,
   normalizeDelegationMode,
-  normalizeDelegationPolicy,
   pathsOverlap,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
@@ -220,10 +218,7 @@ test('provider error tray expression extracts terminal evidence without clicking
 
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
-    const defaultPolicy = Object.prototype.hasOwnProperty.call(options, 'delegationPolicy')
-      ? {}
-      : { delegationPolicy: 'active' };
-    super({ policyFile: null, runtimeFile: null, workspaceFile: null, runtimeMode: 'normal', ...defaultPolicy, ...options });
+    super({ runtimeFile: null, workspaceFile: null, runtimeMode: 'normal', ...options });
   }
 
   async _ensureCursor() {}
@@ -285,7 +280,7 @@ class TaskControlBridge extends OfflineBridge {
 
 class DeferredSubmitBridge extends CursorBridge {
   constructor() {
-    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
+    super({ runtimeFile: null, runtimeMode: 'normal' });
     this.stopCalls = 0;
     this.monitorStarts = 0;
     this.submitStarted = new Promise((resolve) => { this._markSubmitStarted = resolve; });
@@ -326,7 +321,7 @@ class MonitorGenerationBridge extends OfflineBridge {
 
 class SentFifoFailureBridge extends CursorBridge {
   constructor() {
-    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
+    super({ runtimeFile: null, runtimeMode: 'normal' });
   }
 
   async _ensureCursor() {}
@@ -340,7 +335,7 @@ class SentFifoFailureBridge extends CursorBridge {
 
 class ConfirmedFifoFailureBridge extends CursorBridge {
   constructor() {
-    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
+    super({ runtimeFile: null, runtimeMode: 'normal' });
   }
 
   async _ensureCursor() {}
@@ -359,7 +354,7 @@ class ConfirmedFifoFailureBridge extends CursorBridge {
 
 class CancellableFifoBridge extends CursorBridge {
   constructor({ fallback = false } = {}) {
-    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', delegationPolicy: 'active' });
+    super({ runtimeFile: null, runtimeMode: 'normal' });
     this.fallback = fallback;
     this.runStarted = new Promise((resolve) => { this._markRunStarted = resolve; });
   }
@@ -391,12 +386,6 @@ function makeOrphan(bridge, view, options = {}) {
   return job;
 }
 
-function createTempPolicyFile(t) {
-  const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-policy-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  return join(directory, 'policy.json');
-}
-
 async function openBundledClient(serverPath, env, name) {
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -425,76 +414,13 @@ test('delegation mode recognizes only explicit off and otherwise stays enabled',
   assert.equal(normalizeDelegationMode(''), 'on');
 });
 
-test('delegation policy exposes four human-facing collaboration levels and maps legacy on to active', () => {
-  assert.deepEqual(DELEGATION_POLICIES, ['manual', 'auto', 'active', 'eager']);
-  assert.equal(normalizeDelegationPolicy('off'), 'active');
-  assert.equal(normalizeDelegationPolicy('off', ''), '');
-  assert.equal(normalizeDelegationPolicy(' MANUAL '), 'manual');
-  assert.equal(normalizeDelegationPolicy('auto'), 'auto');
-  assert.equal(normalizeDelegationPolicy('active'), 'active');
-  assert.equal(normalizeDelegationPolicy('eager'), 'eager');
-  assert.equal(normalizeDelegationPolicy('on'), 'active');
-  assert.equal(normalizeDelegationPolicy('unknown'), 'active');
-});
-
-test('session policy changes how readily Cursor should help without becoming an on-off switch', () => {
-  const bridge = new OfflineBridge({ delegationPolicy: 'active' });
-  assert.equal(bridge.delegationPolicyView().policy, 'active');
-  assert.equal(bridge.delegationEnabled, true);
-
-  const selective = bridge.setDelegationPolicy('manual', 'session');
-  assert.equal(selective.scope, 'session');
-  assert.equal(selective.previousPolicy, 'active');
-  assert.equal(selective.policySource, 'runtime');
-  assert.equal(selective.runningTasksUnchanged, true);
-  assert.equal(selective.delegationEnabled, true);
-  assert.match(selective.guidance, /waits until the user asks/);
-
-  const enabled = bridge.setDelegationPolicy('eager', 'session');
-  assert.equal(enabled.policy, 'eager');
-  assert.equal(enabled.delegationEnabled, true);
-  assert.match(enabled.guidance, /in parallel/);
-  assert.throws(() => bridge.setDelegationPolicy('frequency=3'), /unsupported delegation policy/);
-  assert.throws(() => bridge.setDelegationPolicy('active', 'workspace'), /scope=persistent or scope=session/);
-});
-
-test('persistent policy survives bridge reconstruction while session overrides remain temporary', (t) => {
-  const policyFile = createTempPolicyFile(t);
-  const first = new OfflineBridge({ delegationPolicy: undefined, policyFile });
-  const saved = first.setDelegationPolicy('manual');
-  assert.equal(saved.scope, 'persistent');
-  assert.equal(saved.policySource, 'persistent');
-  assert.equal(saved.policyStored, true);
-  assert.equal(saved.persistsAcrossRestart, true);
-  assert.equal(saved.restartPolicy, 'manual');
-  assert.equal(JSON.parse(readFileSync(policyFile, 'utf8')).policy, 'manual');
-
-  const restarted = new OfflineBridge({ delegationPolicy: undefined, policyFile });
-  assert.equal(restarted.delegationPolicy, 'manual');
-  assert.equal(restarted.delegationPolicyView().policySource, 'persistent');
-
-  const replaced = restarted.setDelegationPolicy('auto');
-  assert.equal(replaced.policy, 'auto');
-  assert.equal(JSON.parse(readFileSync(policyFile, 'utf8')).policy, 'auto');
-
-  const temporary = restarted.setDelegationPolicy('eager', 'session');
-  assert.equal(temporary.policy, 'eager');
-  assert.equal(temporary.scope, 'session');
-  assert.equal(temporary.policyStored, false);
-  assert.equal(temporary.persistsAcrossRestart, false);
-  assert.equal(temporary.restartPolicy, 'auto');
-
-  const restartedAgain = new OfflineBridge({ delegationPolicy: undefined, policyFile });
-  assert.equal(restartedAgain.delegationPolicy, 'auto');
-});
-
-test('minimal runtime is persistent, prewarms hidden, and remains separate from delegation policy', async (t) => {
+test('normal runtime is the fresh default and minimal remains an explicit persistent opt-in', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-runtime-view-'));
   const runtimeFile = join(directory, 'runtime.json');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const first = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
-  assert.equal(first.runtimeMode, 'minimal');
-  assert.equal(first.runtimeModeDefault, 'minimal');
+  assert.equal(first.runtimeMode, 'normal');
+  assert.equal(first.runtimeModeDefault, 'normal');
   assert.equal(first.runtimeModeSource, 'default');
   first.applyRuntimePresentation = async (action) => ({ supported: true, applied: false, action, reason: 'offline-test' });
   const enabled = await first.setRuntimeMode('minimal');
@@ -503,7 +429,8 @@ test('minimal runtime is persistent, prewarms hidden, and remains separate from 
   assert.equal(enabled.startupBehavior, 'hidden_prewarm_on_adapter_start');
   assert.equal(enabled.modeStored, true);
   assert.equal(enabled.presentation.action, 'hide');
-  assert.equal(first.delegationPolicy, 'active');
+  assert.match(enabled.minimalModeWarning, /Clicking the Cursor icon/i);
+  assert.match(enabled.recovery, /switch CCE to normal mode/i);
 
   const restarted = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
   assert.equal(restarted.runtimeMode, 'minimal');
@@ -604,37 +531,24 @@ test('timeout completion rejects a generating partial reply and accepts confirme
   }), true);
 });
 
-test('invalid persisted policy falls back to the bootstrap policy', (t) => {
-  const policyFile = createTempPolicyFile(t);
-  writeFileSync(policyFile, JSON.stringify({ version: 1, policy: 'off' }));
-  const bridge = new OfflineBridge({ delegationPolicy: undefined, policyFile });
-  assert.equal(bridge.delegationPolicy, 'active');
-  assert.notEqual(bridge.delegationPolicyView().policySource, 'persistent');
-});
-
 test('disabled delegation rejects cursor_do before Cursor access', async () => {
   const bridge = new OfflineBridge({ delegationMode: 'off' });
   assert.equal(bridge.delegationEnabled, false);
-  assert.equal(bridge.delegationPolicy, 'active');
   await assert.rejects(bridge.doTask('must not delegate'), /CURSOR_BRIDGE_DELEGATION=off/);
-  assert.throws(() => bridge.setDelegationPolicy('active'), /locks delegation off/);
   const missing = await bridge.status('cursor-missing');
   assert.equal(missing.delegationMode, 'off');
   assert.equal(missing.delegationEnabled, false);
-  assert.equal(missing.policy, 'active');
+  assert.equal(missing.environmentLockedOff, true);
 });
 
 test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (t) => {
   const serverPath = fileURLToPath(new URL('../dist/cursor-bridge.mjs', import.meta.url));
-  const policyFile = createTempPolicyFile(t);
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [serverPath],
     env: {
       ...process.env,
       CURSOR_BRIDGE_DELEGATION: 'off',
-      CURSOR_BRIDGE_POLICY: 'active',
-      CURSOR_BRIDGE_POLICY_FILE: policyFile,
       CURSOR_BRIDGE_NO_AUTOLAUNCH: '1',
     },
   });
@@ -648,7 +562,7 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search_deep'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_task_control'), true);
-    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_runtime'), true);
     const search = listed.tools.find((tool) => tool.name === 'cursor_context_engine');
     assert.match(search.description, /Cursor Context Engine \(CCE\)/);
@@ -661,10 +575,6 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
       arguments: { task_id: 'cursor-missing', action: 'reap' },
     });
     assert.equal(JSON.parse(missingTask.content[0].text).found, false);
-    const policy = await client.callTool({ name: 'cursor_policy', arguments: {} });
-    assert.equal(JSON.parse(policy.content[0].text).environmentLockedOff, true);
-    const blockedPolicy = await client.callTool({ name: 'cursor_policy', arguments: { mode: 'active' } });
-    assert.equal(blockedPolicy.isError, true);
     const blocked = await client.callTool({ name: 'cursor_do', arguments: { prompt: 'must not run' } });
     assert.equal(blocked.isError, true);
     assert.match(blocked.content[0].text, /CURSOR_BRIDGE_DELEGATION=off/);
@@ -673,73 +583,29 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
   }
 });
 
-test('bundled MCP persists policy across restart and exposes it in current tool guidance', async (t) => {
+test('bundled MCP exposes a fixed cursor_do contract without cursor_policy', async () => {
   const serverPath = fileURLToPath(new URL('../dist/cursor-bridge.mjs', import.meta.url));
-  const policyFile = createTempPolicyFile(t);
   const env = {
     ...process.env,
     CURSOR_BRIDGE_DELEGATION: 'on',
-    CURSOR_BRIDGE_POLICY: 'active',
-    CURSOR_BRIDGE_POLICY_FILE: policyFile,
     CURSOR_BRIDGE_NO_AUTOLAUNCH: '1',
   };
 
-  const first = await openBundledClient(serverPath, env, 'cursor-bridge-policy-first');
+  const first = await openBundledClient(serverPath, env, 'cursor-bridge-fixed-contract');
   try {
-    let listed = await first.listTools();
+    const listed = await first.listTools();
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_do'), true);
-    const initialDo = listed.tools.find((tool) => tool.name === 'cursor_do');
-    assert.match(initialDo.description, /Current effective Cursor participation policy: active/);
-    const policyTool = listed.tools.find((tool) => tool.name === 'cursor_policy');
-    assert.deepEqual(policyTool.inputSchema.properties.scope.enum, ['persistent', 'session']);
-    assert.equal(policyTool.inputSchema.properties.scope.default, 'persistent');
-
-    const selective = await first.callTool({ name: 'cursor_policy', arguments: { mode: 'manual' } });
-    const saved = JSON.parse(selective.content[0].text);
-    assert.equal(saved.policy, 'manual');
-    assert.equal(saved.scope, 'persistent');
-    assert.equal(saved.policyStored, true);
-    assert.equal(saved.persistsAcrossRestart, true);
-    listed = await first.listTools();
-    assert.match(listed.tools.find((tool) => tool.name === 'cursor_do').description, /Current effective Cursor participation policy: manual/);
-
-    const removedOff = await first.callTool({ name: 'cursor_policy', arguments: { mode: 'off' } });
-    assert.equal(removedOff.isError, true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), false);
+    const cursorDo = listed.tools.find((tool) => tool.name === 'cursor_do');
+    assert.match(cursorDo.description, /direct user opt-out always wins/i);
+    assert.doesNotMatch(cursorDo.description, /manual|auto|active|eager|participation policy/i);
+    const status = await first.callTool({ name: 'cursor_status', arguments: { task_id: 'cursor-missing' } });
+    const view = JSON.parse(status.content[0].text);
+    assert.equal(view.delegationMode, 'on');
+    assert.equal(view.delegationEnabled, true);
+    assert.equal(Object.hasOwn(view, 'policy'), false);
   } finally {
     await first.close();
-  }
-
-  assert.equal(existsSync(policyFile), true);
-  assert.equal(JSON.parse(readFileSync(policyFile, 'utf8')).policy, 'manual');
-
-  const second = await openBundledClient(serverPath, env, 'cursor-bridge-policy-second');
-  try {
-    const current = await second.callTool({ name: 'cursor_policy', arguments: {} });
-    const restored = JSON.parse(current.content[0].text);
-    assert.equal(restored.policy, 'manual');
-    assert.equal(restored.policySource, 'persistent');
-    assert.equal(restored.persistsAcrossRestart, true);
-    const listed = await second.listTools();
-    assert.match(listed.tools.find((tool) => tool.name === 'cursor_do').description, /Current effective Cursor participation policy: manual/);
-
-    const temporary = await second.callTool({
-      name: 'cursor_policy',
-      arguments: { mode: 'eager', scope: 'session' },
-    });
-    const sessionView = JSON.parse(temporary.content[0].text);
-    assert.equal(sessionView.policy, 'eager');
-    assert.equal(sessionView.scope, 'session');
-    assert.equal(sessionView.restartPolicy, 'manual');
-  } finally {
-    await second.close();
-  }
-
-  const third = await openBundledClient(serverPath, env, 'cursor-bridge-policy-third');
-  try {
-    const current = await third.callTool({ name: 'cursor_policy', arguments: {} });
-    assert.equal(JSON.parse(current.content[0].text).policy, 'manual');
-  } finally {
-    await third.close();
   }
 });
 
@@ -764,7 +630,7 @@ test('cursor_do defaults to FIFO and keeps background task identity', async () =
   assert.equal(view.status, 'queued');
   assert.equal(view.execution, 'fifo');
   assert.equal(view.effectiveExecution, 'fifo');
-  assert.equal(view.submittedPolicy, 'active');
+  assert.equal(Object.hasOwn(view, 'submittedPolicy'), false);
   assert.match(view.taskId, /^cursor-/);
 });
 

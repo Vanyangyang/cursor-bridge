@@ -13,8 +13,6 @@ const query = argv.filter((value) => !['--keep-hidden', '--persist'].includes(va
   || 'Locate the implementation that registers the cursor_context_engine MCP tool. Return the defining function and tool schema evidence.';
 
 const bridge = new CursorBridge({
-  policyFile: null,
-  delegationPolicy: 'manual',
   runtimeFile: persist ? undefined : null,
   runtimeMode: persist ? undefined : 'minimal',
 });

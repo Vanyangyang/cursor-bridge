@@ -108,23 +108,13 @@ Restart Claude Code or run `/reload-plugins`.
 
 Initialize once per Codex task or Claude Code project. The binding is stored outside the plugin cache and survives adapter/plugin restarts; run init again whenever you want to replace it.
 
-### Codex
-
-Ask Codex:
+Tell Codex or Claude Code in natural language:
 
 ```text
-Initialize Cursor Bridge workspace to C:\absolute\path\to\project
+Initialize CCE workspace to C:\absolute\path\to\project
 ```
 
-Codex calls the one-parameter `cursor_init({path})` tool. The current task path is also auto-detected as a safe first-use fallback, but explicit initialization is authoritative.
-
-### Claude Code
-
-```text
-/cursor-bridge:init C:\absolute\path\to\project
-```
-
-Claude Code already owns the bare `/init` command, so Cursor Bridge uses the plugin-namespaced form instead of shadowing host behavior. Both hosts ultimately call the same persistent `cursor_init({path})` implementation.
+The host maps that sentence to the one-parameter `cursor_init({path})` tool. There is no Cursor Bridge slash command to remember or collide with a host command. The current task path is also auto-detected as a safe first-use fallback, but explicit initialization is authoritative.
 
 You choose whether Cursor itself uses the legacy workbench, the new Agents Window, or both. Bridge does not rewrite that preference. If both are already open, requests prefer the new Agents Window and create the conversation inside the initialized repository rather than `Home`.
 
@@ -162,7 +152,6 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 | `cursor_do` | Submit bounded FIFO or independent `parallel_agent` work. |
 | `cursor_status` | Read-only connectivity, queue, reservation, runtime, and task snapshot. |
 | `cursor_task_control` | `reap`, targeted `cancel`, or explicitly acknowledged `abandon` for one task. |
-| `cursor_policy` | Inspect or set `manual`, `auto`, `active`, or `eager`. |
 | `cursor_runtime` | Inspect or set `normal` / `minimal` Cursor presentation. |
 | `cursor_launch` | Ensure Cursor is running with CDP and return lifecycle diagnostics. |
 
@@ -172,7 +161,9 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 cursor_runtime({mode: "minimal"})
 ```
 
-Minimal mode is the default for a fresh installation and persists once selected. It prewarms Cursor as soon as the MCP adapter starts, without showing the Cursor interface. Bridge claims Cursor's default single-instance slot with CDP enabled before an editor/file opener can launch an incompatible instance. On Windows, a PID-scoped guard keeps top-level Cursor windows hidden while retaining the real Cursor process, project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
+Fresh installations default to visible `normal` mode. Minimal mode is enabled only after the user explicitly asks for it, and the choice then persists. It prewarms Cursor as soon as the MCP adapter starts, without showing the Cursor interface. Bridge claims Cursor's default single-instance slot with CDP enabled before an editor/file opener can launch an incompatible instance. On Windows, a PID-scoped guard keeps top-level Cursor windows hidden while retaining the real Cursor process, project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
+
+> **Before enabling minimal mode:** manually clicking the Cursor icon will reuse the same guarded single-instance process, so its window will be hidden again. Ask CCE to **show Cursor** for a temporary reveal, or **switch CCE to normal mode** before using Cursor interactively.
 
 If Cursor was already running without CDP before Bridge started, Bridge still refuses to kill it because unsaved work may exist. Exit that instance once; the next adapter start prewarms the hidden CDP runtime, and later **Open in Cursor** actions reuse it safely.
 
@@ -197,19 +188,6 @@ The `show` path forces a native restore and redraw even when Windows already con
 - FIFO or unbound orphans block new delegation until the user verifies Cursor state and explicitly accepts `abandon` risk.
 - Task records are process-local. After an MCP restart, inspect Agent History and workspace changes before overlapping work.
 
-## Cursor participation policy
-
-`cursor_policy` is a judgment setting, not a call counter or hard scheduler.
-
-| Mode | Behavior |
-|---|---|
-| `manual` | Wait for an explicit user request. |
-| `auto` | Use Cursor selectively when the benefit is clear. |
-| `active` | Treat Cursor as a regular bounded teammate. Recommended default. |
-| `eager` | Use every safe, independent opportunity. |
-
-Product decisions, overlapping writes, exclusive GUI state, and final verification remain with the primary agent.
-
 <details>
 <summary><strong>Advanced environment overrides</strong></summary>
 
@@ -220,10 +198,8 @@ These are deployment and compatibility controls, not part of the normal CCE call
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor remote-debugging port. |
 | `CURSOR_BRIDGE_TIMEOUT` | `300000` | Search completion timeout in milliseconds. |
 | `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable startup prewarming in both normal and minimal modes. |
-| `CURSOR_BRIDGE_RUNTIME_MODE` | `minimal` | Bootstrap runtime mode when no persisted choice exists. Set `normal` for a visible first-run Cursor. |
+| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | Bootstrap runtime mode when no persisted choice exists. Set `minimal` only for an explicitly requested UI-suppressed first run. |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override the persistent runtime-mode file. |
-| `CURSOR_BRIDGE_POLICY` | `active` | Bootstrap participation policy when no persisted choice exists. |
-| `CURSOR_BRIDGE_POLICY_FILE` | user config directory | Override the persistent policy file. |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | user lifecycle directory | Override the per-host persistent `cursor_init` binding file. |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. |
 | `CURSOR_PROJECT_PATH` | auto-detected | Project Cursor should open and index. |
