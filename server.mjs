@@ -767,7 +767,26 @@ class CursorBridge {
     };
   }
 
+  _refreshPersistedRuntimeMode() {
+    if (!this.runtimeFile || this.runtimeModeScope === 'session' || this.runtimeModeScope === 'constructor') {
+      return false;
+    }
+    const persisted = readPersistedCursorRuntimeMode(this.runtimeFile);
+    if (!persisted) return false;
+    const changed = this.runtimeMode !== persisted
+      || this.runtimeModeSource !== 'persistent'
+      || this.runtimeModeScope !== 'persistent';
+    this.persistedRuntimeMode = persisted;
+    if (changed) {
+      this.runtimeMode = persisted;
+      this.runtimeModeSource = 'persistent';
+      this.runtimeModeScope = 'persistent';
+    }
+    return changed;
+  }
+
   runtimeModeView() {
+    this._refreshPersistedRuntimeMode();
     const restartMode = this.persistedRuntimeMode || this.runtimeModeDefault;
     const modeStored = this.runtimeModeScope === 'persistent'
       && this.persistedRuntimeMode === this.runtimeMode;
@@ -1099,6 +1118,7 @@ class CursorBridge {
   // 统一走 ensureCursorRunning 复用其【单一身份校验来源】（cdpUp + cdpIsCursor）——避免热路径裸 /json/version 检查
   // 绕过身份校验、在别的 IDE 占 9223 时驱动错应用（2026-06-08 review #6）。
   _ensureCursor() {
+    this._refreshPersistedRuntimeMode();
     if (this._healing) return this._healing;
     this._healing = (async () => {
       try {
@@ -2398,11 +2418,12 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.2.0' },
+  { name: 'cursor-bridge', version: '5.2.1' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
 async function ensureBridgeCursor(targetBridge, reason) {
+  targetBridge._refreshPersistedRuntimeMode();
   const { ensureCursorRunning } = await import('./launch-cursor.mjs');
   const r = await ensureCursorRunning({
     reason,

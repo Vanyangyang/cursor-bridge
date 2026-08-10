@@ -102,14 +102,44 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 public static class CursorBridgeWindowControl {
+  [StructLayout(LayoutKind.Sequential)]
+  private struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+  }
+
   private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
   [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hWnd);
+  [DllImport("user32.dll", EntryPoint = "IsWindowArranged")] private static extern bool IsWindowArranged(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(IntPtr hWnd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
   [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
+
+  private const uint SWP_NOSIZE = 0x0001;
+  private const uint SWP_NOMOVE = 0x0002;
+  private const uint SWP_NOZORDER = 0x0004;
+  private const uint SWP_NOACTIVATE = 0x0010;
+  private const uint SWP_SHOWWINDOW = 0x0040;
+  private const uint SWP_NOOWNERZORDER = 0x0200;
+  private const uint SWP_ASYNCWINDOWPOS = 0x4000;
+  private const uint SHOW_NO_ACTIVATE_FLAGS = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
+  private const uint COMPOSITOR_PULSE_FLAGS = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
+
+  private static bool IsArrangedSafely(IntPtr hWnd) {
+    try { return IsWindowArranged(hWnd); }
+    // Older Windows versions do not export IsWindowArranged. Treat unknown as
+    // arranged so the geometry pulse fails closed and cannot disturb placement.
+    catch (EntryPointNotFoundException) { return true; }
+  }
 
   public static int Apply(int expectedProcessId, bool show) {
     int changed = 0;
@@ -122,11 +152,29 @@ public static class CursorBridgeWindowControl {
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
       if (show) {
-        // SW_SHOWNOACTIVATE: make Cursor available without taking keyboard focus
-        // from the editor/terminal that requested the runtime transition.
-        bool restored = ShowWindowAsync(hWnd, 4);
+        // SWP_SHOWWINDOW + SWP_NOACTIVATE preserves minimized/maximized/arranged
+        // placement without taking keyboard focus from the requesting app.
+        bool restored = SetWindowPos(hWnd, IntPtr.Zero, 0, 0, 0, 0, SHOW_NO_ACTIVATE_FLAGS);
+        bool pulsed = false;
+        RECT rect;
+        // RedrawWindow alone does not invalidate Chromium's DirectComposition
+        // surface after a long SW_HIDE. A real one-pixel resize does, while the
+        // NOACTIVATE/NOZORDER flags preserve the caller's foreground window.
+        // Do not resize minimized, maximized, or snapped windows: their placement
+        // is user-owned and a native redraw remains the safe fallback.
+        if (!IsIconic(hWnd) && !IsZoomed(hWnd) && !IsArrangedSafely(hWnd)
+            && GetWindowRect(hWnd, out rect)) {
+          int width = rect.Right - rect.Left;
+          int height = rect.Bottom - rect.Top;
+          if (width > 1 && height > 1) {
+            bool expanded = SetWindowPos(hWnd, IntPtr.Zero, 0, 0, width + 1, height, COMPOSITOR_PULSE_FLAGS);
+            if (expanded) System.Threading.Thread.Sleep(80);
+            bool restoredSize = SetWindowPos(hWnd, IntPtr.Zero, 0, 0, width, height, COMPOSITOR_PULSE_FLAGS);
+            pulsed = expanded || restoredSize;
+          }
+        }
         bool redrawn = RedrawWindow(hWnd, IntPtr.Zero, IntPtr.Zero, 0x00000585);
-        if (restored || redrawn) changed++;
+        if (restored || pulsed || redrawn) changed++;
       }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
       return true;

@@ -9,7 +9,7 @@
       "name": "cursor-bridge",
       "source": ".",
       "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded Cursor Agent execution, with normal or UI-suppressed minimal runtime and legacy/Agents v2 UI adaptation.",
-      "version": "5.2.0",
+      "version": "5.2.1",
       "author": {
         "name": "Vanyangyang"
       }

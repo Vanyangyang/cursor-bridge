@@ -195,7 +195,7 @@ If Cursor was already open before CCE could establish its connection, initializa
 - `cursor_runtime({mode: "normal"})` restores ordinary visible behavior.
 - `cursor_runtime({mode: "minimal"})` keeps CCE available while continuously hiding Cursor windows.
 
-Switching back to `normal` forces a native restore and redraw even when Windows already considers the Electron window visible, preventing a populated Agents window from reopening as a white compositor surface.
+Switching back to `normal` forces a non-activating native show plus a placement-safe compositor refresh for ordinary windows. This wakes a populated Agents surface without deliberately taking keyboard focus; minimized, maximized, and snapped placement remains user-owned.
 
 ## Task execution and recovery
 

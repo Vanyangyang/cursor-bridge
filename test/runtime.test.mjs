@@ -91,8 +91,25 @@ test('window presentation passes an exact PID and action to PowerShell', () => {
   assert.match(script, /CursorBridgeWindowControl/);
   assert.match(script, /Chrome_WidgetWin_1/);
   assert.match(script, /RedrawWindow/);
+  assert.match(script, /SetWindowPos/);
+  assert.match(script, /GetWindowRect/);
+  assert.match(script, /IsIconic/);
+  assert.match(script, /IsZoomed/);
+  assert.match(script, /IsWindowArranged/);
+  assert.match(script, /catch \(EntryPointNotFoundException\) \{ return true; \}/);
+  assert.match(script, /SWP_NOACTIVATE/);
+  assert.match(script, /SWP_NOZORDER/);
+  assert.match(script, /SWP_NOOWNERZORDER/);
+  assert.match(script, /SWP_ASYNCWINDOWPOS/);
+  assert.match(script, /SHOW_NO_ACTIVATE_FLAGS/);
+  assert.match(script, /COMPOSITOR_PULSE_FLAGS/);
+  assert.match(script, /width \+ 1/);
+  assert.match(script, /Thread\.Sleep\(80\)/);
   assert.doesNotMatch(script, /SetForegroundWindow/);
-  assert.match(script, /ShowWindowAsync\(hWnd, 4\)/);
+  assert.doesNotMatch(script, /SetActiveWindow/);
+  assert.doesNotMatch(script, /BringWindowToTop/);
+  assert.doesNotMatch(script, /ShowWindowAsync\(hWnd, 4\)/);
+  assert.doesNotMatch(script, /ShowWindowAsync\(hWnd, 9\)/);
   assert.match(script, /Apply\(12345, \$false\)/);
 });
 
@@ -100,7 +117,11 @@ test('window presentation show override pauses and resumes the PID guard', (t) =
   const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-show-'));
   const showFlagPath = join(directory, 'show-12345.flag');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const execFileSyncImpl = () => '1';
+  const scripts = [];
+  const execFileSyncImpl = (_command, args) => {
+    scripts.push(Buffer.from(args.at(-1), 'base64').toString('utf16le'));
+    return '1';
+  };
 
   const shown = setCursorWindowPresentation({
     platform: 'win32',
@@ -112,6 +133,7 @@ test('window presentation show override pauses and resumes the PID guard', (t) =
   });
   assert.equal(shown.applied, true);
   assert.equal(readFileSync(showFlagPath, 'utf8').trim(), '12345');
+  assert.match(scripts[0], /Apply\(12345, \$true\)/);
 
   const hidden = setCursorWindowPresentation({
     platform: 'win32',
@@ -123,6 +145,7 @@ test('window presentation show override pauses and resumes the PID guard', (t) =
   });
   assert.equal(hidden.applied, true);
   assert.throws(() => readFileSync(showFlagPath, 'utf8'), /ENOENT/);
+  assert.match(scripts[1], /Apply\(12345, \$false\)/);
 });
 
 test('minimal window guard is detached and bounded when a duration is provided', () => {
