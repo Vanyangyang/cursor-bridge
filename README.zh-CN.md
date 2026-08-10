@@ -195,7 +195,7 @@ npm run build
 - `cursor_runtime({mode: "normal"})`：恢复普通可见行为。
 - `cursor_runtime({mode: "minimal"})`：保持 CCE 可用，同时持续隐藏 Cursor 窗口。
 
-切换回 `normal` 时，即使 Windows 已认为 Electron 窗口可见，也会强制执行原生 restore 与 redraw，避免有完整 DOM 的 Agents Window 恢复成白色合成表面。
+切换回 `normal` 时，会执行不激活窗口的原生显示，并对普通窗口进行不改变最终位置的合成表面刷新；这样既能唤醒已有完整 DOM 的 Agents Window，也不会主动抢走键盘焦点。最小化、最大化和贴靠布局仍归用户控制。
 
 ## 任务执行与恢复
 

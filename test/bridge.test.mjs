@@ -441,6 +441,7 @@ test('normal runtime is the fresh default and minimal remains an explicit persis
   const runtimeFile = join(directory, 'runtime.json');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const first = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
+  const peer = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
   assert.equal(first.runtimeMode, 'normal');
   assert.equal(first.runtimeModeDefault, 'normal');
   assert.equal(first.runtimeModeSource, 'default');
@@ -454,9 +455,17 @@ test('normal runtime is the fresh default and minimal remains an explicit persis
   assert.equal(enabled.presentation.action, 'hide');
   assert.match(enabled.minimalModeWarning, /Switch CCE to normal mode/i);
   assert.match(enabled.recovery, /switch CCE to normal mode/i);
+  assert.equal(peer.runtimeModeView().runtimeMode, 'minimal');
+  assert.equal(peer.runtimeModeSource, 'persistent');
+
+  const restored = await first.setRuntimeMode('normal');
+  assert.equal(restored.previousMode, 'minimal');
+  assert.equal(restored.presentation.action, 'show');
+  assert.equal(restored.minimalModeWarning, null);
+  assert.equal(peer.runtimeModeView().runtimeMode, 'normal');
 
   const restarted = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
-  assert.equal(restarted.runtimeMode, 'minimal');
+  assert.equal(restarted.runtimeMode, 'normal');
   assert.equal(restarted.runtimeModeSource, 'persistent');
   assert.equal(restarted.runtimeModeView().persistsAcrossRestart, true);
 });

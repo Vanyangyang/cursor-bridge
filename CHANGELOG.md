@@ -4,6 +4,13 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.2.1] - 2026-08-10
+
+### Fixed
+
+- Switching from `minimal` to `normal` now wakes stale Windows Electron composition surfaces with a non-activating, one-pixel size pulse for ordinary windows, then restores the exact original geometry. It does not call foreground APIs or use activating `SW_RESTORE`.
+- Long-lived Codex and Claude Code adapters now re-read the persisted runtime mode before status and Cursor lifecycle operations, preventing an adapter that cached `minimal` from hiding Cursor again after another adapter switched to `normal`.
+
 ## [5.2.0] - 2026-08-10
 
 ### Added
@@ -124,6 +131,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.2.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.2.0...cursor-bridge--v5.2.1
 [5.2.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.1.0...cursor-bridge--v5.2.0
 [5.1.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.1...cursor-bridge--v5.1.0
 [5.0.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.0...cursor-bridge--v5.0.1
