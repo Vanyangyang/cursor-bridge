@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,12 @@ import {
   selectNewCdpTarget,
   targetTitleMatchesProject,
 } from '../cursor-ensure-core.mjs';
+import {
+  normalizeWorkspacePath,
+  readWorkspaceBinding,
+  resolveWorkspaceBindingKey,
+  writeWorkspaceBinding,
+} from '../workspace-binding.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(ROOT);
@@ -80,6 +86,24 @@ test('Codex thread lookup degrades cleanly when node:sqlite is unavailable', () 
     useCache: false,
     requireImpl: () => { throw new Error('node:sqlite unavailable'); },
   }), null);
+});
+
+test('cursor_init workspace bindings persist per Codex thread and can be reinitialized', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cb-workspace-binding-'));
+  const first = join(directory, 'first');
+  const second = join(directory, 'second');
+  const file = join(directory, 'state', 'workspaces.json');
+  mkdirSync(first, { recursive: true });
+  mkdirSync(second, { recursive: true });
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  const key = resolveWorkspaceBindingKey({ CODEX_THREAD_ID: 'thread-a' });
+  assert.equal(key, 'codex-thread:thread-a');
+  writeWorkspaceBinding(file, key, first, { updatedAt: '2026-08-10T00:00:00.000Z' });
+  assert.equal(readWorkspaceBinding(file, key).projectPath, normalizeWorkspacePath(first));
+  writeWorkspaceBinding(file, key, second, { updatedAt: '2026-08-10T00:01:00.000Z' });
+  assert.equal(readWorkspaceBinding(file, key).projectPath, normalizeWorkspacePath(second));
+  assert.equal(readWorkspaceBinding(file, 'codex-thread:other'), null);
 });
 
 function makeDir() {

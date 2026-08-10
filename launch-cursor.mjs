@@ -12,6 +12,12 @@
 import { pathToFileURL } from 'url';
 import { ensureCursorRunningLocal, resolveProjectPath, CDP_PORT } from './cursor-ensure-core.mjs';
 import { ensureCursorViaSupervisor } from './cursor-lifecycle-client.mjs';
+import {
+  readWorkspaceBinding,
+  resolveClaudeProjectPath,
+  resolveWorkspaceBindingFile,
+  resolveWorkspaceBindingKey,
+} from './workspace-binding.mjs';
 
 export {
   CDP_PORT,
@@ -33,9 +39,15 @@ export {
  * adapterPid, supervisorPid, reusedSupervisor, createdSupervisor, launchReason.
  */
 export async function ensureCursorRunning(options = {}) {
+  const bindingFile = options.workspaceFile || resolveWorkspaceBindingFile();
+  const bindingKey = options.workspaceKey || resolveWorkspaceBindingKey();
+  const persistedBinding = readWorkspaceBinding(bindingFile, bindingKey);
+  const hostProjectPath = resolveClaudeProjectPath();
   const projectPath = Object.hasOwn(options, 'projectPath')
     ? options.projectPath
-    : resolveProjectPath();
+    : resolveProjectPath(persistedBinding && persistedBinding.projectPath || process.env.CURSOR_PROJECT_PATH, {
+      cwd: hostProjectPath || process.cwd(),
+    });
   const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === '1' || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === '1') {
     const local = await ensureCursorRunningLocal(ensureOptions);

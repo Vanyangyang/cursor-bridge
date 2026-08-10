@@ -28,8 +28,9 @@ Cursor Agent + project index
 ```
 
 - Each MCP context may start an adapter; all adapters share one user-level supervisor.
-- Codex adapters resolve the current task workspace internally from `CODEX_THREAD_ID` and local thread metadata; this is not exposed as a CCE parameter. Other hosts retain the explicit override / working-directory fallback.
-- The supervisor binds each resolved project to the CDP target created for that project. If Cursor is already serving another repository, Bridge opens a hidden project window and drives that exact target instead of relying on prompt text or generic window titles.
+- `cursor_init` persistently binds a Codex task or Claude Code project to one workspace. Re-running it replaces only that host-context binding. Before explicit initialization, Codex can infer the task workspace from `CODEX_THREAD_ID`; Claude Code uses its project root / working directory.
+- The supervisor binds each resolved project to a validated Editor CDP target. Stale target IDs are rejected when their window title no longer matches the project, so an old `cursor-bridge` window cannot impersonate VESPERIX.
+- Editor workspace selection and Agent UI selection are separate. When Cursor Agents v2 and the legacy workbench are both open, Bridge uses Agents v2 and creates the new Agent from the matching repository section—never from `Home`. If Agents v2 is not open, Bridge falls back to the legacy project workbench.
 - FIFO tasks use the active chat and are serialized through a UI lock.
 - `parallel_agent` tasks use independent top-level Cursor Agents.
 - On Windows, the supervisor runs outside the Codex Job lifecycle, so closing one session does not terminate Cursor.
@@ -80,7 +81,7 @@ confidence: high
 ## Requirements
 
 - Node.js 18 or later.
-- Cursor signed in with the target project open and indexed.
+- Cursor installed and signed in. The target project can be opened/indexed by `cursor_init` and the lifecycle supervisor.
 - Cursor running with `--remote-debugging-port=9223`; Bridge can manage this lifecycle automatically on supported setups.
 - Windows for actual top-level window suppression. Other platforms persist runtime mode but report window control as unsupported.
 
@@ -102,6 +103,30 @@ claude plugin install cursor-bridge@vanyangyang
 ```
 
 Restart Claude Code or run `/reload-plugins`.
+
+## First run: bind the workspace
+
+Initialize once per Codex task or Claude Code project. The binding is stored outside the plugin cache and survives adapter/plugin restarts; run init again whenever you want to replace it.
+
+### Codex
+
+Ask Codex:
+
+```text
+Initialize Cursor Bridge workspace to C:\absolute\path\to\project
+```
+
+Codex calls the one-parameter `cursor_init({path})` tool. The current task path is also auto-detected as a safe first-use fallback, but explicit initialization is authoritative.
+
+### Claude Code
+
+```text
+/cursor-bridge:init C:\absolute\path\to\project
+```
+
+Claude Code already owns the bare `/init` command, so Cursor Bridge uses the plugin-namespaced form instead of shadowing host behavior. Both hosts ultimately call the same persistent `cursor_init({path})` implementation.
+
+You choose whether Cursor itself uses the legacy workbench, the new Agents Window, or both. Bridge does not rewrite that preference. If both are already open, requests prefer the new Agents Window and create the conversation inside the initialized repository rather than `Home`.
 
 <details>
 <summary><strong>Run from source</strong></summary>
@@ -132,6 +157,7 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 
 | Tool | Purpose |
 |---|---|
+| `cursor_init` | Persistently bind or re-bind this Codex task / Claude Code project to one absolute workspace path. |
 | `cursor_context_engine` | Adaptive read-only project understanding with compact, verified `path:line` evidence. Its only parameter is `query`. |
 | `cursor_do` | Submit bounded FIFO or independent `parallel_agent` work. |
 | `cursor_status` | Read-only connectivity, queue, reservation, runtime, and task snapshot. |
@@ -163,7 +189,7 @@ The `show` path forces a native restore and redraw even when Windows already con
 - `submitting`, `running`, and `collecting` are normal non-terminal states. `cursor_status` never mutates a task.
 - A newly observed `LLM provider error` tray is a terminal failure. Bridge records its message and Request ID and never clicks retry automatically.
 - Bridge verifies that Cursor accepted a submission. If Enter leaves the prompt in the editor, it tries Cursor's exact Send control once and then fails quickly as `submit_not_accepted` instead of waiting five minutes or creating an orphan.
-- Cursor 3 Editor targets are opened through the native Chat sidepanel shortcut when the standalone Agents Window is not the project-bound target.
+- When Agents v2 is open, Bridge prefers it and creates new work from the initialized repository's sidebar section. A missing or ambiguous repository fails closed instead of falling back to `Home` or another project. If Agents v2 is absent, Bridge uses the validated legacy Editor target and its native Chat sidepanel.
 - A timeout means Bridge could not confirm both a complete assistant reply and the end of generation. It does not prove the underlying Agent stopped.
 - Partial Markdown while Stop remains active is not accepted as success.
 - Post-send uncertainty retains an Agent or global reservation; Bridge does not silently release, resubmit, or click a broad global Stop control.
@@ -198,6 +224,7 @@ These are deployment and compatibility controls, not part of the normal CCE call
 | `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override the persistent runtime-mode file. |
 | `CURSOR_BRIDGE_POLICY` | `active` | Bootstrap participation policy when no persisted choice exists. |
 | `CURSOR_BRIDGE_POLICY_FILE` | user config directory | Override the persistent policy file. |
+| `CURSOR_BRIDGE_WORKSPACE_FILE` | user lifecycle directory | Override the per-host persistent `cursor_init` binding file. |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. |
 | `CURSOR_PROJECT_PATH` | auto-detected | Project Cursor should open and index. |
 | `CURSOR_EXE` | auto-detected | Explicit Cursor executable path. |

@@ -25,6 +25,7 @@ import {
   selectNewAgentEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
+  exprCreateAgentForWorkspace,
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
@@ -85,6 +86,29 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_FIND_NEWAGENT, /glass-sidebar-agent-menu-btn/);
   assert.match(EXPR_PAGE_CAPABILITIES, /glass-sidebar-agent-list-container/);
   assert.match(EXPR_PAGE_CAPABILITIES, /agentAdapterKind/);
+});
+
+test('Cursor Agents workspace expression creates a new Agent inside the exact repository section', () => {
+  let clicked = 0;
+  const section = {
+    querySelector(selector) {
+      if (selector === '.ui-sidebar-section-head') return { innerText: 'VESPERIX' };
+      return null;
+    },
+    querySelectorAll() {
+      return [{ getAttribute: (name) => name === 'aria-label' ? 'New Agent' : null, click: () => { clicked++; } }];
+    },
+  };
+  const document = { querySelectorAll: () => [section] };
+  const result = JSON.parse(Function('document', `return ${exprCreateAgentForWorkspace('G:\\\\project\\\\VESPERIX')};`)(document));
+  assert.equal(result.ok, true);
+  assert.equal(result.workspace, 'vesperix');
+  assert.equal(clicked, 1);
+
+  const missing = JSON.parse(Function('document', `return ${exprCreateAgentForWorkspace('G:\\\\project\\\\other')};`)(document));
+  assert.equal(missing.ok, false);
+  assert.equal(missing.state, 'repository_not_found');
+  assert.deepEqual(missing.available, ['VESPERIX']);
 });
 
 test('chat panel fallback includes the current Cursor Ctrl+I sidepanel shortcut', () => {
@@ -195,7 +219,7 @@ class OfflineBridge extends CursorBridge {
     const defaultPolicy = Object.prototype.hasOwnProperty.call(options, 'delegationPolicy')
       ? {}
       : { delegationPolicy: 'active' };
-    super({ policyFile: null, runtimeFile: null, runtimeMode: 'normal', ...defaultPolicy, ...options });
+    super({ policyFile: null, runtimeFile: null, workspaceFile: null, runtimeMode: 'normal', ...defaultPolicy, ...options });
   }
 
   async _ensureCursor() {}
@@ -529,6 +553,7 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   const bridge = new OfflineBridge();
   const tools = buildToolDefinitions(bridge);
   const search = tools.find((tool) => tool.name === 'cursor_context_engine');
+  const init = tools.find((tool) => tool.name === 'cursor_init');
   const runtime = tools.find((tool) => tool.name === 'cursor_runtime');
   assert.match(search.description, /Cursor Context Engine \(CCE\)/);
   assert.match(search.description, /semantic retrieval/);
@@ -538,6 +563,10 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.match(search.description, /NOT_FOUND/);
   assert.match(search.description, /not a filesystem sandbox/);
   assert.deepEqual(Object.keys(search.inputSchema.properties), ['query']);
+  assert.deepEqual(Object.keys(init.inputSchema.properties), ['path']);
+  assert.deepEqual(init.inputSchema.required, ['path']);
+  assert.match(init.description, /Agents Window/);
+  assert.match(init.description, /instead of Home/);
   assert.equal(tools.some((tool) => tool.name === 'cursor_search'), false);
   assert.equal(tools.some((tool) => tool.name === 'cursor_search_deep'), false);
   assert.deepEqual(runtime.inputSchema.properties.mode.enum, ['normal', 'minimal']);
@@ -611,6 +640,7 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     const listed = await client.listTools();
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_do'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_context_engine'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_init'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search_deep'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_task_control'), true);
