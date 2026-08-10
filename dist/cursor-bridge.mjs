@@ -22792,7 +22792,7 @@ function buildToolDefinitions(bridgeInstance) {
 }
 var bridge = new CursorBridge();
 var server = new Server(
-  { name: "cursor-bridge", version: "5.1.0" },
+  { name: "cursor-bridge", version: "5.2.0" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {

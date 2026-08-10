@@ -4,6 +4,18 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.2.0] - 2026-08-10
+
+### Added
+
+- Added a narrow Claude Code routing hook that recognizes high-confidence project-semantic questions and asks Claude to try `cursor_context_engine` before generic context collection.
+- Added a bounded, session-scoped guard for competing context-mode calls: at most two are redirected, a CCE attempt clears the guard immediately, and every lock or state failure falls open.
+
+### Changed
+
+- CCE routing now treats known symbols as valid starting points for callers, data-flow, registration, and cross-module tracing while leaving direct known-file and known-symbol reads on native tools.
+- Explicit Cursor/CCE opt-outs, external-document lookups, tests, logs, builds, Git inspection, and direct deterministic work are never intercepted.
+
 ## [5.1.0] - 2026-08-10
 
 ### Added
@@ -112,6 +124,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.2.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.1.0...cursor-bridge--v5.2.0
 [5.1.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.1...cursor-bridge--v5.1.0
 [5.0.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.0...cursor-bridge--v5.0.1
 [5.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v4.0.0...cursor-bridge--v5.0.0
