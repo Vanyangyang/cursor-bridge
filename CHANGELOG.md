@@ -4,7 +4,7 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.1.0] - 2026-08-10
 
 ### Fixed
 
@@ -48,4 +48,5 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[3.1.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.0.0...cursor-bridge--v3.1.0
 [3.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v2.2.3...cursor-bridge--v3.0.0
