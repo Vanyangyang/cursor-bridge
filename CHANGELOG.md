@@ -4,6 +4,17 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Removed
+
+- Removed `cursor_policy`, its four participation levels, persistent policy storage, environment overrides, and policy skill. `cursor_do` now has one fixed bounded-execution contract, while the administrator-only `CURSOR_BRIDGE_DELEGATION=off` kill switch remains.
+- Removed the plugin init slash wrapper. Codex and Claude Code now use the same natural-language instruction, `Initialize CCE workspace to ...`, mapped to `cursor_init({path})`.
+
+### Changed
+
+- Fresh installations now default to visible `normal` runtime. `minimal` is an explicit, persistent opt-in whose warning explains that the single-instance window remains hidden until CCE shows it or switches back to normal.
+
 ## [3.2.0] - 2026-08-10
 
 ### Added

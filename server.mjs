@@ -22,8 +22,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocket } from 'ws';
 import http from 'http';
@@ -54,72 +52,6 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
 }
 
 const DELEGATION_MODE = normalizeDelegationMode();
-const DELEGATION_POLICIES = Object.freeze(['manual', 'auto', 'active', 'eager']);
-const DELEGATION_POLICY_GUIDANCE = Object.freeze({
-  manual: 'Cursor waits until the user asks for it. Ordinary work stays with the main agent.',
-  auto: 'Cursor helps when a clear, bounded handoff is likely to save meaningful time or add a useful second pass. Small one-step edits usually stay local.',
-  active: 'Cursor works as a regular teammate. For most non-trivial tasks, look for one useful, separable piece to hand off while keeping decisions and final review with the main agent.',
-  eager: 'Hand Cursor every safe, separable piece you can, including small probes and mechanical work. Run independent tasks in parallel when their paths do not overlap. Product decisions and final approval still stay with the main agent.',
-});
-
-function resolveDelegationPolicyFile(value = process.env.CURSOR_BRIDGE_POLICY_FILE) {
-  const configured = String(value || '').trim();
-  if (configured) return resolve(configured);
-  const configRoot = process.platform === 'win32' && process.env.APPDATA
-    ? process.env.APPDATA
-    : process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-  return join(configRoot, 'cursor-bridge', 'policy.json');
-}
-
-const DELEGATION_POLICY_FILE = resolveDelegationPolicyFile();
-
-function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = 'active') {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'on') return 'active';
-  if (DELEGATION_POLICIES.includes(normalized)) return normalized;
-  return fallback;
-}
-
-const DELEGATION_POLICY_DEFAULT = normalizeDelegationPolicy(
-  process.env.CURSOR_BRIDGE_POLICY,
-  'active',
-);
-
-function readPersistedDelegationPolicy(filePath = DELEGATION_POLICY_FILE) {
-  if (!filePath) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
-    const candidate = typeof parsed === 'string' ? parsed : parsed && parsed.policy;
-    const normalized = normalizeDelegationPolicy(candidate, '');
-    return DELEGATION_POLICIES.includes(normalized) ? normalized : null;
-  } catch (error) {
-    if (error && error.code === 'ENOENT') return null;
-    console.error(`[cursor-bridge] ignoring unreadable policy file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  }
-}
-
-function writePersistedDelegationPolicy(filePath, policy) {
-  if (!filePath) throw new Error('persistent cursor_policy storage is disabled for this server');
-  const normalized = normalizeDelegationPolicy(policy, '');
-  if (!DELEGATION_POLICIES.includes(normalized)) {
-    throw new Error(`unsupported delegation policy: ${policy}`);
-  }
-  const target = resolve(filePath);
-  mkdirSync(dirname(target), { recursive: true });
-  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    writeFileSync(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
-    renameSync(temporary, target);
-  } catch (error) {
-    rmSync(temporary, { force: true });
-    throw new Error(`failed to persist cursor_policy at ${target}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return target;
-}
 
 // Cursor Context Engine (CCE) search contracts: use Cursor's indexed/code-navigation
 // context, but return compact evidence anchors that the primary agent can verify.
@@ -661,33 +593,13 @@ function createProviderError(info) {
 class CursorBridge {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    this.policyFile = options.policyFile === null
-      ? null
-      : resolve(options.policyFile || DELEGATION_POLICY_FILE);
-    this.delegationPolicyDefault = DELEGATION_POLICY_DEFAULT;
-    const persistedPolicy = options.delegationPolicy === undefined
-      ? readPersistedDelegationPolicy(this.policyFile)
-      : null;
-    const requestedPolicy = options.delegationPolicy !== undefined
-      ? options.delegationPolicy
-      : persistedPolicy || this.delegationPolicyDefault;
-    this.persistedDelegationPolicy = persistedPolicy;
-    this.delegationPolicySource = options.delegationPolicy !== undefined
-      ? 'constructor'
-      : persistedPolicy
-        ? 'persistent'
-        : process.env.CURSOR_BRIDGE_POLICY
-          ? 'environment'
-          : 'default';
-    this.delegationPolicyScope = persistedPolicy ? 'persistent' : 'session';
-    this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
     this.runtimeFile = options.runtimeFile === null
       ? null
       : resolve(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
-      'minimal',
+      'normal',
     );
     const persistedRuntimeMode = options.runtimeMode === undefined
       ? readPersistedCursorRuntimeMode(this.runtimeFile)
@@ -798,52 +710,12 @@ class CursorBridge {
     this.delegationMode = this.delegationEnabled ? 'on' : 'off';
   }
 
-  delegationPolicyView() {
-    const restartPolicy = this.persistedDelegationPolicy || this.delegationPolicyDefault;
-    const policyStored = this.delegationPolicyScope === 'persistent'
-      && this.persistedDelegationPolicy === this.delegationPolicy;
+  delegationView() {
     return {
-      scope: this.delegationPolicyScope,
-      policy: this.delegationPolicy,
-      policySource: this.delegationPolicySource,
-      policyDefault: this.delegationPolicyDefault,
-      persistedPolicy: this.persistedDelegationPolicy,
-      policyFile: this.policyFile,
-      policyStored,
-      persistsAcrossRestart: this.delegationPolicy === restartPolicy,
-      restartPolicy,
-      guidance: DELEGATION_POLICY_GUIDANCE[this.delegationPolicy],
       delegationMode: this.delegationMode,
       delegationEnabled: this.delegationEnabled,
       environmentLockedOff: this.environmentDelegationMode === 'off',
-      availablePolicies: [...DELEGATION_POLICIES],
-      appliesTo: 'future_submissions',
-      runningTasksUnchanged: true,
     };
-  }
-
-  setDelegationPolicy(value, scope = 'persistent') {
-    const normalizedScope = String(scope || 'persistent').trim().toLowerCase();
-    if (normalizedScope !== 'persistent' && normalizedScope !== 'session') {
-      throw new Error('cursor_policy supports scope=persistent or scope=session');
-    }
-    const normalized = normalizeDelegationPolicy(value, '');
-    if (!DELEGATION_POLICIES.includes(normalized)) {
-      throw new Error(`unsupported delegation policy: ${value}`);
-    }
-    if (this.environmentDelegationMode === 'off') {
-      throw new Error('CURSOR_BRIDGE_DELEGATION=off locks delegation off until the MCP server is restarted without that setting');
-    }
-    if (normalizedScope === 'persistent') {
-      writePersistedDelegationPolicy(this.policyFile, normalized);
-    }
-    const previousPolicy = this.delegationPolicy;
-    this.delegationPolicy = normalized;
-    this.delegationPolicySource = normalizedScope === 'persistent' ? 'persistent' : 'runtime';
-    this.delegationPolicyScope = normalizedScope;
-    if (normalizedScope === 'persistent') this.persistedDelegationPolicy = normalized;
-    this._syncDelegationState();
-    return { previousPolicy, ...this.delegationPolicyView() };
   }
 
   runtimeModeView() {
@@ -863,6 +735,9 @@ class CursorBridge {
       availableRuntimeModes: [...CURSOR_RUNTIME_MODES],
       platformWindowControl: process.platform === 'win32' ? 'supported' : 'unsupported',
       startupBehavior: cursorStartupBehavior(this.runtimeMode),
+      minimalModeWarning: this.runtimeMode === 'minimal'
+        ? 'Cursor windows are continuously hidden. Clicking the Cursor icon reuses the same single-instance process and will be hidden again; ask CCE to show Cursor temporarily or switch to normal mode.'
+        : null,
       lastPresentation: this._lastPresentation,
     };
   }
@@ -894,7 +769,14 @@ class CursorBridge {
     this.runtimeModeScope = normalizedScope;
     if (normalizedScope === 'persistent') this.persistedRuntimeMode = normalized;
     const presentation = await this.applyRuntimePresentation(normalized === 'minimal' ? 'hide' : 'show');
-    return { previousMode, ...this.runtimeModeView(), presentation };
+    return {
+      previousMode,
+      ...this.runtimeModeView(),
+      presentation,
+      recovery: normalized === 'minimal'
+        ? 'Ask CCE to show Cursor temporarily, or switch CCE to normal mode before opening Cursor manually.'
+        : null,
+    };
   }
 
   async contextEngine(query) {
@@ -965,7 +847,6 @@ class CursorBridge {
       execution,
       readOnly,
       allowedPaths,
-      submittedPolicy: this.delegationPolicy,
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -1017,7 +898,6 @@ class CursorBridge {
       effectiveExecution: options.execution || 'fifo',
       readOnly: options.readOnly === true,
       allowedPaths: options.allowedPaths || [],
-      submittedPolicy: options.submittedPolicy || null,
       projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
       status: 'queued',
       phase: 'queued',
@@ -2270,7 +2150,6 @@ class CursorBridge {
       effectiveExecution: job.effectiveExecution,
       readOnly: job.readOnly,
       allowedPaths: job.allowedPaths,
-      submittedPolicy: job.submittedPolicy,
       projectPath: job.projectPath,
       agentId: job.agentId,
       agentLabel: job.agentLabel,
@@ -2323,15 +2202,15 @@ class CursorBridge {
   async status(taskId = '') {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationPolicyView(), ...this.runtimeModeView() };
-      return { found: true, ...this.workspaceView(), ...this.delegationPolicyView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView() };
+      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
     const common = {
       ...this.workspaceView(),
-      ...this.delegationPolicyView(),
+      ...this.delegationView(),
       ...this.runtimeModeView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
@@ -2369,16 +2248,6 @@ class CursorBridge {
   }
 }
 
-function delegationPolicyToolContext(bridgeInstance) {
-  const view = bridgeInstance.delegationPolicyView();
-  const restartText = view.policyStored
-    ? 'This choice is persisted and will remain after the MCP server restarts.'
-    : view.persistsAcrossRestart
-      ? `A restart currently resolves to the same ${view.restartPolicy} policy.`
-      : `This temporary session override resets to ${view.restartPolicy} after restart.`;
-  return `Current effective Cursor participation policy: ${view.policy}. ${view.guidance} ${restartText} A direct user opt-out always wins.`;
-}
-
 function buildSearchInputSchema() {
   return {
     type: 'object',
@@ -2390,7 +2259,6 @@ function buildSearchInputSchema() {
 }
 
 function buildToolDefinitions(bridgeInstance) {
-  const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
     {
       name: 'cursor_init',
@@ -2409,7 +2277,6 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_context_engine',
       description:
-        `${policyContext} ` +
         'Evidence-driven, read-only Cursor Context Engine (CCE) for understanding an indexed project from natural-language intent. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies only intent, not a harness recipe. ' +
         'It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. ' +
         'Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.',
@@ -2418,10 +2285,9 @@ function buildToolDefinitions(bridgeInstance) {
     bridgeInstance.environmentDelegationMode !== 'off' ? {
       name: 'cursor_do',
       description:
-        `${policyContext} ` +
         'Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. ' +
         'Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. ' +
-        'Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification.',
+        'Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -2440,7 +2306,6 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_task_control',
       description:
-        `${policyContext} ` +
         'Recover or terminate one exact in-memory Cursor task without resubmitting it; task records do not survive this MCP server process. ' +
         'Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and collects a stable terminal result when possible. ' +
         'Use cancel with confirm=true and the exact expected_agent_id to target Stop safely. ' +
@@ -2460,41 +2325,15 @@ function buildToolDefinitions(bridgeInstance) {
       },
     },
     {
-      name: 'cursor_policy',
-      description:
-        `${policyContext} ` +
-        'Choose how readily the main agent should hand suitable work to Cursor. ' +
-        'This does not run Cursor by itself and is not a call-frequency setting. ' +
-        'Use manual when Cursor should wait for an explicit request, auto for selective help, active for regular teamwork, or eager for every safe separable task. ' +
-        'Persistent is the default scope; session is available only for an intentional temporary override. ' +
-        'The choice never gives Cursor authority over product decisions, overlapping writes, or final approval. Omit mode to see the current choice.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          mode: {
-            type: 'string',
-            enum: [...DELEGATION_POLICIES],
-            description: 'How readily to hand suitable work to Cursor: manual waits for you, auto is selective, active treats Cursor as a regular teammate, and eager hands off every safe separable task. Omit this field to see the current choice.',
-          },
-          scope: {
-            type: 'string',
-            enum: ['persistent', 'session'],
-            default: 'persistent',
-            description: 'persistent stores the choice across MCP server restarts. session intentionally keeps it only until this server restarts.',
-          },
-        },
-      },
-    },
-    {
       name: 'cursor_runtime',
       description:
         'Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, while Bridge prewarms it hidden for cursor_context_engine or cursor_do. ' +
-        'normal keeps the historical visible/autolaunch behavior. This is UI suppression, not a headless reimplementation. ' +
+        'normal is the fresh-install default and keeps ordinary visible/autolaunch behavior. minimal is opt-in only: before enabling it, tell the user that manually clicking Cursor will reuse the guarded process and be hidden again until CCE temporarily shows it or switches back to normal. This is UI suppression, not a headless reimplementation. ' +
         'Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.',
       inputSchema: {
         type: 'object',
         properties: {
-          mode: { type: 'string', enum: [...CURSOR_RUNTIME_MODES], description: 'normal shows Cursor; minimal keeps the Cursor-powered CCE running with its Windows UI hidden.' },
+          mode: { type: 'string', enum: [...CURSOR_RUNTIME_MODES], description: 'normal shows Cursor and is the default. minimal is an explicit opt-in that keeps the Cursor-powered CCE running while continuously hiding its Windows UI.' },
           scope: { type: 'string', enum: ['persistent', 'session'], default: 'persistent', description: 'persistent survives MCP restarts; session is a temporary override.' },
           action: { type: 'string', enum: ['show', 'hide'], description: 'Immediately show or hide the Cursor instance serving the configured CDP port without changing the runtime mode.' },
         },
@@ -2502,7 +2341,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: 'cursor_status',
-      description: `${policyContext} Read-only snapshot of Cursor connectivity, queued/running work, reservations, delegation policy, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.`,
+      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.',
       inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: 'A task ID returned by cursor_do. Omit it for an overall status view.' } } },
     },
     {
@@ -2590,20 +2429,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
-    if (name === 'cursor_policy') {
-      const mode = args && args.mode;
-      const result = mode === undefined
-        ? bridge.delegationPolicyView()
-        : bridge.setDelegationPolicy(mode, (args && args.scope) || 'persistent');
-      if (mode !== undefined) {
-        try {
-          await server.sendToolListChanged();
-        } catch (error) {
-          console.error(`[cursor-bridge] policy changed but tools/list_changed notification failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
     if (name === 'cursor_runtime') {
       const mode = args && args.mode;
       const action = args && args.action;
@@ -2668,10 +2493,8 @@ if (isMain) {
 export {
   CursorBridge,
   bridge,
-  DELEGATION_POLICIES,
   normalizeAllowedPath,
   normalizeDelegationMode,
-  normalizeDelegationPolicy,
   CURSOR_RUNTIME_MODES,
   cursorStartupBehavior,
   normalizeCursorRuntimeMode,
