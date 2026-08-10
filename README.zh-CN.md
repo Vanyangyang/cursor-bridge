@@ -28,10 +28,10 @@ Cursor Agent + project index
 ```
 
 - 每个 MCP 上下文可以启动 adapter；所有 adapter 共用一个用户级 supervisor。
-- `cursor_init` 会把当前 Codex 任务或 Claude Code 项目持久绑定到一个工作区；再次执行只替换当前宿主上下文的绑定。显式初始化前，Codex 可通过 `CODEX_THREAD_ID` 推断任务目录，Claude Code 使用项目根目录 / 工作目录作为首次回退。
+- `cursor_init` 会为当前 Codex 或 Claude Code 上下文初始化一个工作区；再次执行只替换当前宿主上下文的工作区。显式初始化前，Codex 可通过 `CODEX_THREAD_ID` 推断工作区，Claude Code 使用项目根目录 / 工作目录作为首次回退。
 - supervisor 会把解析出的项目绑定到经过校验的 Editor CDP target。缓存 target 的窗口标题若已不匹配就会失效，因此旧的 `cursor-bridge` 窗口不能再冒充 VESPERIX。
 - Editor 工作区选择与 Agent UI 选择分离。Cursor Agents v2 与旧 workbench 同时打开时，Bridge 优先 Agents v2，并从匹配仓库分组创建新 Agent——不会再落到 `Home`。Agents v2 未打开时才回退到旧版项目 workbench。
-- FIFO 使用当前对话，并通过 UI lock 串行执行。
+- FIFO 即先进先出：任务通过 UI lock 串行执行，并且默认各自在干净对话中开始。
 - `parallel_agent` 使用独立顶层 Cursor Agent。
 - Windows 上 supervisor 会脱离 Codex Job 生命周期，因此关闭一个会话不会带走 Cursor。
 
@@ -82,8 +82,8 @@ confidence: high
 
 - Node.js 18+。
 - Cursor 已安装并登录；目标项目存在于本机，并且能够由 Cursor 正常打开。
-- 使用“初始化 CCE 工作区为……”建立持久绑定。项目索引由 Cursor 自己完成；`cursor_init` 与 lifecycle supervisor 不负责构建索引。
-- Cursor 使用 `--remote-debugging-port=9223`；受支持环境中 Bridge 可以自动管理该生命周期。
+- 使用“初始化 CCE 工作区为……”将该项目持久设为当前 CCE 工作区。项目索引由 Cursor 自己完成；`cursor_init` 与 lifecycle supervisor 不负责构建索引。
+- Bridge 会自动管理 CCE 所需的本地连接。如果 Cursor 在 Bridge 之前启动且没有该连接，只需保存工作、正常退出 Cursor 一次，再重复同一句初始化指令。
 - 只有 Windows 支持真实顶层窗口抑制。其他平台会保存运行模式，但明确报告窗口控制不支持。
 
 ## 安装
@@ -105,9 +105,9 @@ claude plugin install cursor-bridge@vanyangyang
 
 重启 Claude Code 或执行 `/reload-plugins`。
 
-## 首次使用：绑定工作区
+## 初始化 CCE
 
-每个 Codex 任务或 Claude Code 项目初始化一次即可。绑定保存在插件缓存之外，adapter / 插件重启后仍然有效；需要切换项目时再次 init 就会覆盖当前绑定。
+当前 Codex 或 Claude Code 上下文初始化一次即可。初始化会校验并持久化工作区，通过系统对应的方式查找 Cursor，确保所需 CDP 生命周期可用，并打开或核验匹配的项目 target。结果保存在插件缓存之外，adapter / 插件重启后仍然有效；需要切换项目时再次初始化即可覆盖。
 
 直接用自然语言告诉 Codex 或 Claude Code：
 
@@ -115,7 +115,11 @@ claude plugin install cursor-bridge@vanyangyang
 初始化 CCE 工作区为 C:\absolute\path\to\project
 ```
 
-宿主会把这句话映射到单参数工具 `cursor_init({path})`。Cursor Bridge 不再提供需要记忆、也可能与宿主冲突的 slash 命令。当前任务路径仍可作为首次使用的安全自动回退，但显式初始化拥有最高优先级。
+宿主会把这句话映射到单参数工具 `cursor_init({path})`。Cursor Bridge 不再提供需要记忆、也可能与宿主冲突的 slash 命令。没有持久化初始化结果时，当前宿主路径与 `CURSOR_PROJECT_PATH` 仍可作为兼容回退；显式初始化拥有最高优先级。
+
+路径必须指向已存在的项目文件夹或 `.code-workspace` 文件。带引号路径、Windows UNC / 扩展路径以及 macOS `~` 路径都会在内部规范化；相对路径和无关普通文件会直接给出简单纠正提示。
+
+Cursor 可执行文件的查找完全由内部处理，不增加初始化参数。Windows 会先检查 Cursor shell / 卸载注册信息，再检查标准用户级与系统级安装位置；macOS 会检查 `/Applications/Cursor.app` 与 `~/Applications/Cursor.app`。只有便携版或自定义安装通常需要设置 `CURSOR_EXE`；它可以指向 `Cursor.exe`、Windows Cursor 安装文件夹、macOS `.app`，或其中的 `Contents/MacOS/Cursor`。带引号路径也会自动规范化。
 
 Cursor 使用旧 workbench、新 Agents Window，还是两者同时开启，仍由用户自己选择；Bridge 不会改写这项偏好。两者同时存在时，请求默认选择新的 Agents Window，并从已初始化仓库分组创建对话，而不是放进 `Home`。
 
@@ -148,32 +152,28 @@ npm run build
 
 | 工具 | 作用 |
 |---|---|
-| `cursor_init` | 把当前 Codex 任务 / Claude Code 项目持久绑定或重新绑定到一个绝对工作区路径。 |
+| `cursor_init` | 使用一个绝对工作区路径初始化或重新初始化 CCE。 |
 | `cursor_context_engine` | 自适应只读项目理解，返回紧凑、可核验的 `path:line` 证据；唯一参数是 `query`。 |
-| `cursor_do` | 提交有边界的 FIFO 或独立 `parallel_agent` 工作。 |
+| `cursor_do` | 提交有边界的 FIFO（先进先出的串行队列）或独立 `parallel_agent` 任务。 |
 | `cursor_status` | 只读查看连接、队列、占用、运行时和任务状态。 |
 | `cursor_task_control` | 对单个任务执行 `reap`、定向 `cancel` 或显式 `abandon`。 |
-| `cursor_runtime` | 查看或设置 `normal` / `minimal` Cursor 展示方式。 |
-| `cursor_launch` | 确保 Cursor 带 CDP 运行并返回生命周期诊断。 |
+| `cursor_runtime` | 在可见的 `normal` 与后台 `minimal` 模式之间持久切换。 |
 
 ## 极简运行时
 
-```text
-cursor_runtime({mode: "minimal"})
-```
+直接告诉 Codex 或 Claude Code：“将 CCE 切换到极简模式。”需要再次使用 Cursor 界面时，说：“将 CCE 切换到普通模式。”
 
 极简模式是希望无感使用 Cursor Bridge 时的推荐选项，但它不会默认开启：全新安装仍使用可见的 `normal` 模式。目前只有 Windows 11 的顶层窗口抑制经过实机测试成功。用户明确开启后，选择会持久化；Bridge 会预热真实 Cursor 进程并隐藏其顶层窗口，同时保留项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
 
 - **优点：** `cursor_context_engine` 与 `cursor_do` 可以持续在后台使用，不会让 Cursor 界面打断当前工作。
-- **代价：** 极简模式启用期间，手动打开 Cursor 只会复用受守卫的单实例，窗口会再次被隐藏。要恢复日常 Cursor 界面使用，必须先让 CCE **切换到普通模式**。
+- **代价：** 极简模式启用期间，手动打开 Cursor 只会复用受守卫的单实例，窗口会再次被隐藏。要恢复日常 Cursor 界面使用，必须先让 CCE **切换到普通模式**；无需再记一个临时显示状态。
 
-如果 Bridge 启动前已经存在不带 CDP 的 Cursor，Bridge 仍不会强杀它，以免丢失未保存内容。只需安全退出该实例一次；下次 adapter 启动会预热隐藏的 CDP runtime，后续“用 Cursor 打开”也会安全复用它。
+如果 Cursor 在 CCE 建立连接前已经打开，初始化仍会保存工作区，并只给出一个安全动作：保存当前工作，正常退出 Cursor 一次。随后重复同一句初始化指令，Bridge 会按照当前选择的 `normal` 或 `minimal` 模式自动重新打开 Cursor；无需重启 Codex 或 Claude Code。
 
-- `cursor_runtime({action: "show"})`：临时显示 Cursor，用于登录、升级或诊断；日常交互使用仍应切换到普通模式。
-- `cursor_runtime({action: "hide"})`：再次隐藏，不改变已保存模式。
 - `cursor_runtime({mode: "normal"})`：恢复普通可见行为。
+- `cursor_runtime({mode: "minimal"})`：保持 CCE 可用，同时持续隐藏 Cursor 窗口。
 
-`show` 路径即使在 Windows 已认为 Electron 窗口可见时，也会强制执行原生 restore 与 redraw，避免有完整 DOM 的 Agents Window 恢复成白色合成表面。
+切换回 `normal` 时，即使 Windows 已认为 Electron 窗口可见，也会强制执行原生 restore 与 redraw，避免有完整 DOM 的 Agents Window 恢复成白色合成表面。
 
 ## 任务执行与恢复
 
@@ -204,8 +204,8 @@ cursor_runtime({mode: "minimal"})
 | `CURSOR_BRIDGE_RUNTIME_FILE` | 用户配置目录 | 覆盖持久化运行模式文件。 |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | 用户 lifecycle 目录 | 覆盖按宿主持久化的 `cursor_init` 绑定文件。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 设为 `off` 可禁用并隐藏 `cursor_do`。 |
-| `CURSOR_PROJECT_PATH` | 自动探测 | Cursor 应打开并索引的项目。 |
-| `CURSOR_EXE` | 自动探测 | 显式 Cursor 可执行文件路径。 |
+| `CURSOR_PROJECT_PATH` | 未设置 | 仅在没有持久化 `cursor_init` 工作区时使用的可选兼容回退；未设置时自动探测宿主项目。 |
+| `CURSOR_EXE` | 自动探测 | 便携版/自定义安装使用的可选可执行文件、Windows 安装目录或 macOS `.app` 覆盖。 |
 
 高级 lifecycle 覆盖主要用于兼容诊断；Windows 上不建议绕过单例 supervisor。
 

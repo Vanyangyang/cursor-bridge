@@ -29,6 +29,9 @@ import {
 } from '../cursor-lifecycle-client.mjs';
 import {
   normalizeCodexThreadCwd,
+  normalizeCursorExeCandidate,
+  findCursorExeDetails,
+  ensureCursorRunningLocal,
   resolveCodexThreadProjectPath,
   resolveProjectPath,
   selectNewCdpTarget,
@@ -36,6 +39,7 @@ import {
 } from '../cursor-ensure-core.mjs';
 import {
   normalizeWorkspacePath,
+  isAbsoluteWorkspacePath,
   readWorkspaceBinding,
   resolveWorkspaceBindingKey,
   writeWorkspaceBinding,
@@ -104,6 +108,71 @@ test('cursor_init workspace bindings persist per Codex thread and can be reiniti
   writeWorkspaceBinding(file, key, second, { updatedAt: '2026-08-10T00:01:00.000Z' });
   assert.equal(readWorkspaceBinding(file, key).projectPath, normalizeWorkspacePath(second));
   assert.equal(readWorkspaceBinding(file, 'codex-thread:other'), null);
+});
+
+test('cursor_init accepts only an absolute project directory or .code-workspace file', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cb-workspace-validation-'));
+  const project = join(directory, 'project');
+  const workspace = join(directory, 'project.code-workspace');
+  const ordinaryFile = join(directory, 'notes.txt');
+  const stateFile = join(directory, 'state', 'workspaces.json');
+  mkdirSync(project, { recursive: true });
+  writeFileSync(workspace, '{}', 'utf8');
+  writeFileSync(ordinaryFile, 'not a workspace', 'utf8');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  assert.equal(isAbsoluteWorkspacePath(project), true);
+  assert.equal(isAbsoluteWorkspacePath('relative/project'), false);
+  assert.throws(() => writeWorkspaceBinding(stateFile, 'test', 'relative/project'), /完整路径/);
+  assert.throws(() => writeWorkspaceBinding(stateFile, 'test', ordinaryFile), /项目文件夹或 \.code-workspace/);
+  assert.equal(writeWorkspaceBinding(stateFile, 'directory', project).projectPath, normalizeWorkspacePath(project));
+  assert.equal(writeWorkspaceBinding(stateFile, 'workspace', workspace).projectPath, normalizeWorkspacePath(workspace));
+  writeFileSync(stateFile, JSON.stringify({
+    version: 1,
+    bindings: { stale: { projectPath: ordinaryFile, updatedAt: '2026-08-10T00:00:00.000Z' } },
+  }), 'utf8');
+  assert.equal(readWorkspaceBinding(stateFile, 'stale'), null);
+});
+
+test('Cursor executable discovery normalizes easy Windows and macOS override formats', () => {
+  const winExe = 'D:\\Portable Cursor\\Cursor.exe';
+  assert.equal(normalizeCursorExeCandidate('"D:\\Portable Cursor"', {
+    platform: 'win32',
+    existsImpl: (candidate) => candidate === winExe,
+  }), winExe);
+
+  const macExe = '/Volumes/Apps/Cursor.app/Contents/MacOS/Cursor';
+  assert.equal(normalizeCursorExeCandidate('/Volumes/Apps/Cursor.app', {
+    platform: 'darwin',
+    existsImpl: (candidate) => candidate === macExe,
+  }), macExe);
+
+  assert.deepEqual(findCursorExeDetails({
+    platform: 'darwin',
+    env: { CURSOR_EXE: '/Volumes/Apps/Cursor.app' },
+    existsImpl: (candidate) => candidate === macExe,
+  }), { path: macExe, source: 'CURSOR_EXE', platform: 'darwin' });
+});
+
+test('an already-running Cursor without CCE access fails safely with one simple retry step', async () => {
+  const project = resolve('C:\\Projects\\demo');
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => false,
+    cursorRunningImpl: () => true,
+    findCursorExeDetailsImpl: () => ({
+      path: 'C:\\Program Files\\Cursor\\Cursor.exe',
+      source: 'windows_standard_location',
+      platform: 'win32',
+    }),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'running-no-debug');
+  assert.equal(result.needsAction, 'close_cursor_and_retry');
+  assert.equal(result.retryable, true);
+  assert.match(result.message, /不会强制关闭/);
+  assert.match(result.nextStep, /正常退出 Cursor 一次/);
+  assert.doesNotMatch(result.nextStep, /remote-debugging-port|9223/);
 });
 
 function makeDir() {

@@ -4,7 +4,7 @@ Read this file only when constructing a task envelope, choosing an `execution` m
 
 ## Delegation controls
 
-- When `CURSOR_BRIDGE_DELEGATION=off`, Bridge does not expose `cursor_do`, and direct invocation must fail. Search, status, and launch tools remain available.
+- When `CURSOR_BRIDGE_DELEGATION=off`, Bridge does not expose `cursor_do`, and direct invocation must fail. Initialization, search, and status tools remain available.
 - When the user opts out, `cursor_do` is unavailable, or `cursor_status.delegationMode=off`, complete the task in the primary agent. Do not ask the user to re-enable delegation or bypass the setting through another call.
 - Re-enable the environment-level kill switch by starting a new MCP server process with `CURSOR_BRIDGE_DELEGATION=on` or with the variable unset. A running process does not dynamically change this environment setting.
 - There is one fixed public delegation contract. No participation levels or call-frequency settings exist. `CURSOR_BRIDGE_DELEGATION=off` is an administrator-level compatibility switch and never relaxes the task-envelope, path, independence, or verification contracts below.
@@ -21,7 +21,6 @@ Provide every task independently:
 | `allowed_paths` | Required when `read_only=false`. Provide the smallest workspace-relative path set, with no glob, absolute path, or workspace-escaping `..`. Omit it when `read_only=true`. This is not a filesystem sandbox. |
 | `completion_contract` | State the deliverables, validation commands, permitted incomplete items, and final report format. |
 | `background` | Default to `true` so the primary agent may continue independent work. |
-| `new_chat` | Default to `true` to create a clean top-level Cursor Agent. |
 
 ## Routing contract
 
@@ -44,7 +43,6 @@ Parallel read-only task:
   "execution": "parallel_agent",
   "read_only": true,
   "background": true,
-  "new_chat": true,
   "completion_contract": "Return conclusions, evidence files, and unresolved questions."
 }
 ```
@@ -57,7 +55,6 @@ Bounded write task:
   "execution": "parallel_agent",
   "read_only": false,
   "background": true,
-  "new_chat": true,
   "allowed_paths": ["Tools/Example/"],
   "completion_contract": "List changed files and run the specified static check; preserve the original error when validation fails."
 }

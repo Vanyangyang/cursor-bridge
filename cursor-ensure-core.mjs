@@ -8,7 +8,7 @@ import { spawn, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { createRequire as createNodeRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { basename, extname, join, resolve } from 'node:path';
+import { basename, extname, join, resolve, win32 as winPath, posix as posixPath } from 'node:path';
 import http from 'http';
 import {
   findCursorPidByPort,
@@ -83,8 +83,12 @@ export function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, opti
   return resolve(cwd);
 }
 
-function cursorFromRegistry() {
+function cursorFromRegistry(options = {}) {
+  const execSyncImpl = options.execSyncImpl || execSync;
+  const existsImpl = options.existsImpl || existsSync;
   const queries = [
+    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
+    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
     'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
     'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
     'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
@@ -92,9 +96,9 @@ function cursorFromRegistry() {
   ];
   for (const q of queries) {
     try {
-      const out = execSync(q, { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      const out = execSyncImpl(q, { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
       const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
-      if (m && existsSync(m[1])) return m[1];
+      if (m && existsImpl(m[1])) return m[1];
     } catch {}
   }
   return null;
@@ -103,28 +107,77 @@ function cursorFromRegistry() {
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 
-const WIN_FALLBACKS = [
-  `${process.env.LOCALAPPDATA || ''}\\Programs\\cursor\\Cursor.exe`,
-  'C:\\Program Files\\cursor\\Cursor.exe',
-];
-const MAC_CANDIDATES = [
-  '/Applications/Cursor.app/Contents/MacOS/Cursor',
-  `${process.env.HOME || ''}/Applications/Cursor.app/Contents/MacOS/Cursor`,
-];
+export function normalizeCursorExeCandidate(value, options = {}) {
+  const platform = options.platform || process.platform;
+  const existsImpl = options.existsImpl || existsSync;
+  const raw = String(value || '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+  if (!raw) return null;
+  let candidates;
+  if (platform === 'win32') {
+    const normalized = raw.replace(/\//g, '\\');
+    candidates = /\.exe$/i.test(normalized)
+      ? [normalized]
+      : [winPath.join(normalized, 'Cursor.exe')];
+  } else if (platform === 'darwin') {
+    const normalized = raw.replace(/\\/g, '/').replace(/\/$/, '');
+    candidates = /\.app$/i.test(normalized)
+      ? [posixPath.join(normalized, 'Contents', 'MacOS', 'Cursor')]
+      : /\/Contents\/MacOS$/i.test(normalized)
+        ? [posixPath.join(normalized, 'Cursor')]
+        : [normalized];
+  } else {
+    candidates = [raw];
+  }
+  for (const candidate of candidates) {
+    try { if (existsImpl(candidate)) return candidate; } catch {}
+  }
+  return null;
+}
 
-export function findCursorExe() {
-  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
-  if (IS_WIN) {
-    const fromReg = cursorFromRegistry();
-    if (fromReg) return fromReg;
-    for (const p of WIN_FALLBACKS) { try { if (existsSync(p)) return p; } catch {} }
+export function findCursorExeDetails(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const existsImpl = options.existsImpl || existsSync;
+  const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
+  if (override) return { path: override, source: 'CURSOR_EXE', platform };
+
+  if (platform === 'win32') {
+    const fromReg = cursorFromRegistry({ execSyncImpl: options.execSyncImpl, existsImpl });
+    if (fromReg) return { path: fromReg, source: 'windows_registry', platform };
+    const localAppData = env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
+    const programFiles = env.ProgramFiles || env.PROGRAMFILES || 'C:\\Program Files';
+    const programFilesX86 = env['ProgramFiles(x86)'] || env.PROGRAMFILES_X86 || '';
+    const candidates = [
+      localAppData && winPath.join(localAppData, 'Programs', 'Cursor', 'Cursor.exe'),
+      programFiles && winPath.join(programFiles, 'Cursor', 'Cursor.exe'),
+      programFilesX86 && winPath.join(programFilesX86, 'Cursor', 'Cursor.exe'),
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      try {
+        if (existsImpl(candidate)) return { path: candidate, source: 'windows_standard_location', platform };
+      } catch {}
+    }
     return null;
   }
-  if (IS_MAC) {
-    for (const p of MAC_CANDIDATES) { try { if (existsSync(p)) return p; } catch {} }
+
+  if (platform === 'darwin') {
+    const userHome = env.HOME || homedir();
+    const candidates = [
+      '/Applications/Cursor.app/Contents/MacOS/Cursor',
+      userHome && posixPath.join(userHome, 'Applications', 'Cursor.app', 'Contents', 'MacOS', 'Cursor'),
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      try {
+        if (existsImpl(candidate)) return { path: candidate, source: 'macos_standard_location', platform };
+      } catch {}
+    }
     return null;
   }
   return null;
+}
+
+export function findCursorExe(options = {}) {
+  return findCursorExeDetails(options)?.path || null;
 }
 
 export function cdpUp(timeoutMs = 1500) {
@@ -188,11 +241,15 @@ export async function ensureCursorRunningLocal(options = {}) {
   const waitMs = Number(options.waitMs || 30000);
   const runtimeMode = options.runtimeMode || 'normal';
   const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
+  const cdpUpImpl = options.cdpUpImpl || cdpUp;
+  const cdpIsCursorImpl = options.cdpIsCursorImpl || cdpIsCursor;
+  const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
+  const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
   const projectPath = Object.hasOwn(options, 'projectPath')
     ? (options.projectPath ? resolve(String(options.projectPath)) : null)
     : resolveProjectPath();
-  if (await cdpUp()) {
-    const isCursor = await cdpIsCursor();
+  if (await cdpUpImpl()) {
+    const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
       const cursorPid = findCursorPidByPort(CDP_PORT);
       const windowGuard = effectiveRuntimeMode === 'minimal' && cursorPid
@@ -219,7 +276,8 @@ export async function ensureCursorRunningLocal(options = {}) {
         }
       }
       if (projectPath && existsSync(projectPath) && !targetId) {
-        const exe = findCursorExe();
+        const cursorExecutable = findCursorExeDetailsImpl();
+        const exe = cursorExecutable && cursorExecutable.path;
         if (!exe) {
           return {
             ok: false,
@@ -230,7 +288,10 @@ export async function ensureCursorRunningLocal(options = {}) {
             projectPath,
             presentation,
             windowGuard,
-            message: `Cursor 已连接，但目标工作区 ${projectPath} 未打开，且找不到 Cursor 可执行文件用于打开新窗口。`,
+            needsAction: 'install_or_locate_cursor',
+            retryable: true,
+            nextStep: '请确认 Cursor 已安装并登录。若使用便携版或自定义目录，请设置 CURSOR_EXE 后重新执行同一句初始化命令。',
+            message: `CCE 已连接 Cursor，但还不能打开工作区 ${projectPath}，因为没有找到 Cursor 程序。`,
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target) => target.id));
@@ -253,7 +314,12 @@ export async function ensureCursorRunningLocal(options = {}) {
             presentation,
             windowGuard,
             workspaceAction,
-            message: `Cursor 已连接，但未捕获目标工作区 ${projectPath} 新建的 CDP target；CCE 已停止，避免在错误索引中检索。`,
+            cursorExecutable: exe,
+            cursorExecutableSource: cursorExecutable.source,
+            needsAction: 'retry_initialization',
+            retryable: true,
+            nextStep: '请等待 Cursor 完成打开项目，然后重新执行同一句初始化命令。',
+            message: `Cursor 已打开项目，但 CCE 还没有确认工作区 ${projectPath} 已准备好；为避免搜索错项目，本次初始化已安全停止。`,
           };
         }
         targetId = openedTarget.id;
@@ -277,24 +343,39 @@ export async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: 'port-not-cursor',
       port: CDP_PORT,
-      message: `CDP ${CDP_PORT} 被【非 Cursor】的 IDE 占用。换端口或排查。`,
+      needsAction: 'free_cce_port',
+      retryable: true,
+      nextStep: `本机端口 ${CDP_PORT} 正被其他程序使用。关闭占用它的程序后，重新执行同一句初始化命令。`,
+      message: `CCE 现在无法连接 Cursor，因为所需的本机端口 ${CDP_PORT} 正被其他程序占用。`,
     };
   }
-  if (cursorRunning()) {
+  if (cursorRunningImpl()) {
+    const cursorExecutable = findCursorExeDetailsImpl();
     return {
       ok: false,
       status: 'running-no-debug',
       port: CDP_PORT,
-      message: `Cursor 正在运行但没带 --remote-debugging-port=${CDP_PORT}（可能由 Codex、资源管理器或其他启动器先打开；单实例锁会忽略后续 flag）。请先安全退出这一次 Cursor，cursor-bridge 会在下次启动时预热带 CDP 的实例并持续隐藏窗口。注意：不主动 kill 以免丢未保存内容。`,
+      cursorExecutable: cursorExecutable && cursorExecutable.path || null,
+      cursorExecutableSource: cursorExecutable && cursorExecutable.source || null,
+      needsAction: 'close_cursor_and_retry',
+      retryable: true,
+      nextStep: projectPath
+        ? `保存手头内容并正常退出 Cursor 一次，然后再次说“初始化 CCE 工作区为 ${projectPath}”。`
+        : '保存手头内容并正常退出 Cursor 一次，然后重试刚才的 CCE 操作。',
+      message: 'Cursor 已经提前打开，CCE 无法在运行中为它补上连接能力。为保护未保存内容，Cursor Bridge 不会强制关闭它。',
     };
   }
-  const exe = findCursorExe();
+  const cursorExecutable = findCursorExeDetailsImpl();
+  const exe = cursorExecutable && cursorExecutable.path;
   if (!exe) {
     return {
       ok: false,
       status: 'no-exe',
       port: CDP_PORT,
-      message: '找不到 Cursor 可执行文件（Windows：注册表/默认位置；macOS：/Applications/Cursor.app 都没命中）。设环境变量 CURSOR_EXE 指定完整路径。',
+      needsAction: 'install_or_locate_cursor',
+      retryable: true,
+      nextStep: '请先安装并登录 Cursor。若使用便携版或自定义目录，请设置 CURSOR_EXE 后重新执行同一句初始化命令。',
+      message: '没有找到 Cursor。标准 Windows 与 macOS 安装会自动识别，通常不需要填写程序路径。',
     };
   }
 
@@ -328,7 +409,12 @@ export async function ensureCursorRunningLocal(options = {}) {
       runtimeMode: effectiveRuntimeMode,
       projectPath,
       windowGuard: startupWindowGuard,
-      message: `已启动 Cursor（${exe}），但 ${waitMs}ms 内 CDP ${CDP_PORT} 未就绪，稍后重试。`,
+      cursorExecutable: exe,
+      cursorExecutableSource: cursorExecutable.source,
+      needsAction: 'retry_initialization',
+      retryable: true,
+      nextStep: '请稍等片刻，然后重新执行同一句初始化命令。',
+      message: 'Cursor 已经启动，但 CCE 还没准备好；无需修改任何端口设置。',
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
@@ -344,7 +430,12 @@ export async function ensureCursorRunningLocal(options = {}) {
       runtimeMode: effectiveRuntimeMode,
       projectPath,
       windowGuard: startupWindowGuard,
-      message: `Cursor 已启动，但未捕获目标工作区 ${projectPath} 的 CDP target；CCE 已停止，避免在错误索引中检索。`,
+      cursorExecutable: exe,
+      cursorExecutableSource: cursorExecutable.source,
+      needsAction: 'retry_initialization',
+      retryable: true,
+      nextStep: '请等待 Cursor 完成打开项目，然后重新执行同一句初始化命令。',
+      message: `Cursor 已启动，但 CCE 还没有确认工作区 ${projectPath} 已准备好；为避免搜索错项目，本次初始化已安全停止。`,
     };
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
@@ -366,6 +457,8 @@ export async function ensureCursorRunningLocal(options = {}) {
     presentation,
     windowGuard,
     startupWindowGuard,
+    cursorExecutable: exe,
+    cursorExecutableSource: cursorExecutable.source,
     targetId,
     workspaceAction: projectPath ? 'launched-project' : 'launched-last-workspace',
     message: `已启动 Cursor（${exe}，${target}），CDP ${CDP_PORT} 就绪。`,

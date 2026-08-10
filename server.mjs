@@ -590,6 +590,21 @@ function createProviderError(info) {
   return error;
 }
 
+function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
+  return {
+    ...lifecycle,
+    status: 'agents-workspace-ready',
+    launchReason: 'agents-repository-ready',
+    targetId: agentsWorkspace.targetId,
+    targetUiFlavor: agentsWorkspace.targetUiFlavor,
+    workspaceAction: 'reused-agents-repository',
+    message: `CCE 已确认 Cursor Agents 中的工作区 ${lifecycle.projectPath || agentsWorkspace.workspace || ''} 可以使用。`,
+    needsAction: null,
+    nextStep: null,
+    retryable: false,
+  };
+}
+
 class CursorBridge {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
@@ -616,7 +631,13 @@ class CursorBridge {
         : process.env.CURSOR_BRIDGE_RUNTIME_MODE
           ? 'environment'
           : 'default';
-    this.runtimeModeScope = persistedRuntimeMode ? 'persistent' : 'session';
+    this.runtimeModeScope = persistedRuntimeMode
+      ? 'persistent'
+      : options.runtimeMode !== undefined
+        ? 'constructor'
+        : process.env.CURSOR_BRIDGE_RUNTIME_MODE
+          ? 'environment'
+          : 'default';
     this.workspaceFile = options.workspaceFile === null
       ? null
       : resolve(options.workspaceFile || resolveWorkspaceBindingFile());
@@ -671,10 +692,38 @@ class CursorBridge {
     this.workspaceSource = 'persistent_init';
     this.workspaceUpdatedAt = saved.updatedAt;
     this._lastLifecycle = null;
-    await this._ensureCursor();
+    try {
+      await this._ensureCursor();
+    } catch (error) {
+      const lifecycle = this._lastLifecycle;
+      const recoverableStatuses = new Set([
+        'running-no-debug',
+        'port-not-cursor',
+        'no-exe',
+        'timeout',
+        'workspace-not-ready',
+      ]);
+      if (!lifecycle || !recoverableStatuses.has(lifecycle.status)) throw error;
+      return {
+        previousProjectPath,
+        ...this.workspaceView(),
+        bindingPersisted: true,
+        ready: false,
+        status: lifecycle.status,
+        message: lifecycle.message || 'CCE 初始化尚未完成，但工作区已经保存。',
+        nextStep: lifecycle.nextStep || '处理提示后，重新执行同一句初始化命令。',
+        retryable: lifecycle.retryable !== false,
+        lifecycle,
+      };
+    }
     return {
       previousProjectPath,
       ...this.workspaceView(),
+      bindingPersisted: true,
+      ready: true,
+      status: 'ready',
+      message: `CCE 已准备好使用工作区 ${saved.projectPath}。`,
+      nextStep: '现在可以直接使用 cursor_context_engine 或 cursor_do。',
       lifecycle: this._lastLifecycle,
     };
   }
@@ -736,7 +785,7 @@ class CursorBridge {
       platformWindowControl: process.platform === 'win32' ? 'supported' : 'unsupported',
       startupBehavior: cursorStartupBehavior(this.runtimeMode),
       minimalModeWarning: this.runtimeMode === 'minimal'
-        ? 'Cursor windows are continuously hidden. Clicking the Cursor icon reuses the same single-instance process and will be hidden again; ask CCE to show Cursor temporarily or switch to normal mode.'
+        ? 'Cursor windows are continuously hidden. Switch CCE to normal mode before using the Cursor interface.'
         : null,
       lastPresentation: this._lastPresentation,
     };
@@ -774,7 +823,7 @@ class CursorBridge {
       ...this.runtimeModeView(),
       presentation,
       recovery: normalized === 'minimal'
-        ? 'Ask CCE to show Cursor temporarily, or switch CCE to normal mode before opening Cursor manually.'
+        ? 'Switch CCE to normal mode before opening Cursor manually.'
         : null,
     };
   }
@@ -843,7 +892,7 @@ class CursorBridge {
 
     const job = this._enqueue('do', fullPrompt, {
       timeoutMs,
-      newChat: execution === 'parallel_agent' ? true : options.newChat !== false,
+      newChat: true,
       execution,
       readOnly,
       allowedPaths,
@@ -1073,15 +1122,17 @@ class CursorBridge {
           targetId: rr.targetId || null,
           workspaceAction: rr.workspaceAction || null,
           presentation: rr.presentation || null,
+          message: rr.message || null,
+          needsAction: rr.needsAction || null,
+          nextStep: rr.nextStep || null,
+          retryable: rr.retryable === true,
+          cursorExecutable: rr.cursorExecutable || null,
+          cursorExecutableSource: rr.cursorExecutableSource || null,
         };
         if (!rr.ok && rr.status === 'workspace-not-ready' && rr.projectPath) {
           const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
           if (agentsWorkspace) {
-            this._lastLifecycle.status = 'agents-workspace-ready';
-            this._lastLifecycle.launchReason = 'agents-repository-ready';
-            this._lastLifecycle.targetId = agentsWorkspace.targetId;
-            this._lastLifecycle.targetUiFlavor = agentsWorkspace.targetUiFlavor;
-            this._lastLifecycle.workspaceAction = 'reused-agents-repository';
+            this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
           }
         }
         if (this.runtimeMode === 'minimal') {
@@ -1091,7 +1142,7 @@ class CursorBridge {
         }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
         if (!rr.ok && this._lastLifecycle.status !== 'agents-workspace-ready') {
-          throw new Error(rr.message || `Cursor lifecycle failed: ${rr.status}`);
+          throw new Error([rr.message || `Cursor lifecycle failed: ${rr.status}`, rr.nextStep].filter(Boolean).join(' '));
         }
         if (this._lastLifecycle.status === 'agents-workspace-ready') {
           console.error(`🪟 Cursor Agents repository ready: ${this._lastLifecycle.projectPath} -> ${this._lastLifecycle.targetId}`);
@@ -2263,13 +2314,13 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_init',
       description:
-        'Persistently bind this Codex task or Claude Code project to one Cursor workspace. Re-run it to replace the binding. ' +
-        'Every later CCE or cursor_do request verifies that workspace, opens its Cursor Editor target when needed, and creates new Cursor Agents work inside the matching repository section instead of Home. ' +
-        'The path must already exist. Cursor login and the user\'s old/new UI preference are preserved; when both UIs are open, Bridge selects the new Agents Window.',
+        'Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge saves it, finds Cursor, ensures the required connection, and opens or verifies the matching project. ' +
+        'If Cursor was opened too early without CCE access, initialization safely keeps the binding and tells the user to save, close Cursor once, and repeat the same initialization sentence; it never force-closes Cursor. ' +
+        'Cursor login and the user\'s old/new UI preference are preserved. When both UIs are open, Bridge selects the new Agents Window and creates work in the matching repository instead of Home.',
       inputSchema: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Absolute project directory or .code-workspace path to bind. Re-running cursor_init replaces the previous binding for this host task/project.' },
+          path: { type: 'string', description: 'Absolute local project directory or .code-workspace path. Re-run initialization with another path to switch workspaces.' },
         },
         required: ['path'],
       },
@@ -2285,7 +2336,7 @@ function buildToolDefinitions(bridgeInstance) {
     bridgeInstance.environmentDelegationMode !== 'off' ? {
       name: 'cursor_do',
       description:
-        'Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. ' +
+        'Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. ' +
         'Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. ' +
         'Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
       inputSchema: {
@@ -2293,9 +2344,8 @@ function buildToolDefinitions(bridgeInstance) {
         properties: {
           prompt: { type: 'string', description: 'The task Cursor should receive. State the goal, boundaries, and what a complete result looks like.' },
           background: { type: 'boolean', default: true, description: 'When true, return the task ID immediately. When false, wait for the task to finish or need attention.' },
-          execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo uses the compatible serial queue. parallel_agent creates a separate top-level Cursor Agent.' },
+          execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo is the first-in, first-out serial queue and runs one task at a time in a clean chat. parallel_agent creates a separate top-level Cursor Agent.' },
           read_only: { type: 'boolean', default: false, description: 'Set true when Cursor must not change the workspace.' },
-          new_chat: { type: 'boolean', default: true, description: 'Start fifo work in a clean chat. parallel_agent always starts a separate Agent.' },
           timeout_ms: { type: 'integer', minimum: 30000, maximum: 900000, default: 600000, description: 'How long to wait before timing out, in milliseconds. The default is 10 minutes.' },
           allowed_paths: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative paths Cursor may write. Parallel write tasks require non-overlapping paths. This declaration is not a filesystem sandbox.' },
           completion_contract: { type: 'string', description: 'Optional acceptance checks or a required final-report format.' },
@@ -2327,29 +2377,21 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_runtime',
       description:
-        'Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, while Bridge prewarms it hidden for cursor_context_engine or cursor_do. ' +
-        'normal is the fresh-install default and keeps ordinary visible/autolaunch behavior. minimal is opt-in only: before enabling it, tell the user that manually clicking Cursor will reuse the guarded process and be hidden again until CCE temporarily shows it or switches back to normal. This is UI suppression, not a headless reimplementation. ' +
-        'Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.',
+        'Persistently switch Cursor presentation between normal and minimal. normal is the fresh-install default and restores ordinary visible Cursor use. ' +
+        'minimal is the recommended opt-in background experience on tested Windows 11 systems: Cursor and CCE keep running while Cursor windows stay hidden. ' +
+        'Before enabling minimal, tell the user that manually opening Cursor will remain hidden until CCE is switched back to normal. This is UI suppression, not a headless reimplementation.',
       inputSchema: {
         type: 'object',
         properties: {
           mode: { type: 'string', enum: [...CURSOR_RUNTIME_MODES], description: 'normal shows Cursor and is the default. minimal is an explicit opt-in that keeps the Cursor-powered CCE running while continuously hiding its Windows UI.' },
-          scope: { type: 'string', enum: ['persistent', 'session'], default: 'persistent', description: 'persistent survives MCP restarts; session is a temporary override.' },
-          action: { type: 'string', enum: ['show', 'hide'], description: 'Immediately show or hide the Cursor instance serving the configured CDP port without changing the runtime mode.' },
         },
+        required: ['mode'],
       },
     },
     {
       name: 'cursor_status',
       description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.',
       inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: 'A task ID returned by cursor_do. Omit it for an overall status view.' } } },
-    },
-    {
-      name: 'cursor_launch',
-      description:
-        'Make sure Cursor is running with the CDP debugging port that Cursor Bridge needs. On Windows, this can launch Cursor and open the current project automatically. ' +
-        'The result explains whether Cursor was already ready, was launched, needs a full restart with debugging enabled, could not be found, or timed out.',
-      inputSchema: { type: 'object', properties: {} },
     },
   ].filter(Boolean);
 }
@@ -2383,6 +2425,12 @@ async function ensureBridgeCursor(targetBridge, reason) {
     presentation: r.presentation || null,
     windowGuard: r.windowGuard || null,
     startupWindowGuard: r.startupWindowGuard || null,
+    message: r.message || null,
+    needsAction: r.needsAction || null,
+    nextStep: r.nextStep || null,
+    retryable: r.retryable === true,
+    cursorExecutable: r.cursorExecutable || null,
+    cursorExecutableSource: r.cursorExecutableSource || null,
   };
   if (targetBridge.runtimeMode === 'minimal') {
     targetBridge._lastPresentation = r.presentation
@@ -2412,7 +2460,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         background: !args || args.background !== false,
         execution: args && args.execution,
         readOnly: !!(args && args.read_only),
-        newChat: !args || args.new_chat !== false,
         timeoutMs: args && args.timeout_ms,
         allowedPaths: args && args.allowed_paths,
         completionContract: args && args.completion_contract,
@@ -2438,6 +2485,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (mode !== undefined && shouldAutoLaunchCursor()) {
         result = { ...result, prewarm: await ensureBridgeCursor(bridge, 'runtime-mode-change') };
       }
+      // Hidden compatibility for pre-5.0 clients. action remains intentionally absent from tools/list.
       if (action !== undefined) {
         result = { ...result, presentation: await bridge.applyRuntimePresentation(action) };
       }
@@ -2523,4 +2571,5 @@ export {
   classifyParallelTerminalIcon,
   providerErrorSignature,
   createProviderError,
+  promoteAgentsWorkspaceLifecycle,
 };

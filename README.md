@@ -28,10 +28,10 @@ Cursor Agent + project index
 ```
 
 - Each MCP context may start an adapter; all adapters share one user-level supervisor.
-- `cursor_init` persistently binds a Codex task or Claude Code project to one workspace. Re-running it replaces only that host-context binding. Before explicit initialization, Codex can infer the task workspace from `CODEX_THREAD_ID`; Claude Code uses its project root / working directory.
+- `cursor_init` initializes the current Codex or Claude Code context for one workspace. Re-running it replaces only that host-context workspace. Before explicit initialization, Codex can infer the workspace from `CODEX_THREAD_ID`; Claude Code uses its project root / working directory.
 - The supervisor binds each resolved project to a validated Editor CDP target. Stale target IDs are rejected when their window title no longer matches the project, so an old `cursor-bridge` window cannot impersonate VESPERIX.
 - Editor workspace selection and Agent UI selection are separate. When Cursor Agents v2 and the legacy workbench are both open, Bridge uses Agents v2 and creates the new Agent from the matching repository section—never from `Home`. If Agents v2 is not open, Bridge falls back to the legacy project workbench.
-- FIFO tasks use the active chat and are serialized through a UI lock.
+- FIFO means first in, first out: tasks are serialized through a UI lock, and each starts in a clean chat by default.
 - `parallel_agent` tasks use independent top-level Cursor Agents.
 - On Windows, the supervisor runs outside the Codex Job lifecycle, so closing one session does not terminate Cursor.
 
@@ -82,8 +82,8 @@ confidence: high
 
 - Node.js 18 or later.
 - Cursor installed and signed in. The target project must exist locally and open normally in Cursor.
-- Use “Initialize CCE workspace to …” to persistently bind that project. Cursor itself owns and completes project indexing; `cursor_init` and the lifecycle supervisor do not build the index.
-- Cursor running with `--remote-debugging-port=9223`; Bridge can manage this lifecycle automatically on supported setups.
+- Run “Initialize CCE workspace to …” to persist that project as the active CCE workspace. Cursor itself owns and completes project indexing; `cursor_init` and the lifecycle supervisor do not build the index.
+- Bridge manages the required local CCE connection automatically. If Cursor was opened before Bridge without that connection, save your work, close Cursor once, and repeat the same initialization sentence.
 - Windows for actual top-level window suppression. Other platforms persist runtime mode but report window control as unsupported.
 
 ## Installation
@@ -105,9 +105,9 @@ claude plugin install cursor-bridge@vanyangyang
 
 Restart Claude Code or run `/reload-plugins`.
 
-## First run: bind the workspace
+## Initialize CCE
 
-Initialize once per Codex task or Claude Code project. The binding is stored outside the plugin cache and survives adapter/plugin restarts; run init again whenever you want to replace it.
+Initialize once for the current Codex or Claude Code context. Initialization validates and persists the workspace, locates Cursor through platform-specific discovery, ensures the required CDP lifecycle, and opens or verifies the matching project target. The result is stored outside the plugin cache and survives adapter/plugin restarts; initialize again whenever you want to replace it.
 
 Tell Codex or Claude Code in natural language:
 
@@ -115,7 +115,11 @@ Tell Codex or Claude Code in natural language:
 Initialize CCE workspace to C:\absolute\path\to\project
 ```
 
-The host maps that sentence to the one-parameter `cursor_init({path})` tool. There is no Cursor Bridge slash command to remember or collide with a host command. The current task path is also auto-detected as a safe first-use fallback, but explicit initialization is authoritative.
+The host maps that sentence to the one-parameter `cursor_init({path})` tool. There is no Cursor Bridge slash command to remember or collide with a host command. The current host path and `CURSOR_PROJECT_PATH` remain compatibility fallbacks when no persisted initialization exists, but explicit initialization is authoritative.
+
+The path must identify an existing project directory or `.code-workspace` file. Quoted paths, Windows UNC/extended paths, and macOS `~` paths are normalized internally; relative paths and unrelated files are rejected with a simple correction.
+
+Cursor executable discovery is internal and requires no additional initialization parameter. On Windows, Bridge checks registered Cursor shell/uninstall locations, then standard per-user and system installations. On macOS, it checks `/Applications/Cursor.app` and `~/Applications/Cursor.app`. Only portable or custom installations should need `CURSOR_EXE`; it may point to `Cursor.exe`, a Windows Cursor installation folder, a macOS `.app` bundle, or its `Contents/MacOS/Cursor` executable. Quoted paths are normalized automatically.
 
 You choose whether Cursor itself uses the legacy workbench, the new Agents Window, or both. Bridge does not rewrite that preference. If both are already open, requests prefer the new Agents Window and create the conversation inside the initialized repository rather than `Home`.
 
@@ -148,32 +152,28 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 
 | Tool | Purpose |
 |---|---|
-| `cursor_init` | Persistently bind or re-bind this Codex task / Claude Code project to one absolute workspace path. |
+| `cursor_init` | Initialize or reinitialize CCE for one absolute workspace path. |
 | `cursor_context_engine` | Adaptive read-only project understanding with compact, verified `path:line` evidence. Its only parameter is `query`. |
-| `cursor_do` | Submit bounded FIFO or independent `parallel_agent` work. |
+| `cursor_do` | Submit bounded FIFO (first-in, first-out serial queue) or independent `parallel_agent` work. |
 | `cursor_status` | Read-only connectivity, queue, reservation, runtime, and task snapshot. |
 | `cursor_task_control` | `reap`, targeted `cancel`, or explicitly acknowledged `abandon` for one task. |
-| `cursor_runtime` | Inspect or set `normal` / `minimal` Cursor presentation. |
-| `cursor_launch` | Ensure Cursor is running with CDP and return lifecycle diagnostics. |
+| `cursor_runtime` | Persistently switch Cursor between visible `normal` and background `minimal` mode. |
 
 ## Minimal runtime
 
-```text
-cursor_runtime({mode: "minimal"})
-```
+Tell Codex or Claude Code: `Switch CCE to minimal mode.` To use the Cursor interface again, say: `Switch CCE to normal mode.`
 
 Minimal mode is the recommended option for using Cursor Bridge without bringing Cursor into the foreground. It is opt-in: fresh installations remain in visible `normal` mode, and top-level window suppression has currently been successfully tested only on Windows 11. Once enabled, the choice persists. Bridge prewarms the real Cursor process and keeps its top-level windows hidden while retaining the project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
 
 - **Advantage:** `cursor_context_engine` and `cursor_do` stay available in the background, so Cursor Bridge can be used without visible UI interruption.
-- **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and its window is hidden again. Ask CCE to **switch to normal mode** before returning to ordinary interactive Cursor use.
+- **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and its window is hidden again. Ask CCE to **switch to normal mode** before returning to ordinary interactive Cursor use. There is no separate public temporary-show state to remember.
 
-If Cursor was already running without CDP before Bridge started, Bridge still refuses to kill it because unsaved work may exist. Exit that instance once; the next adapter start prewarms the hidden CDP runtime, and later **Open in Cursor** actions reuse it safely.
+If Cursor was already open before CCE could establish its connection, initialization keeps the workspace saved and returns one safe instruction: save your work and close Cursor normally once. Repeat the same initialization sentence afterward; Bridge reopens Cursor automatically in the currently selected `normal` or `minimal` mode. Codex or Claude Code does not need to be restarted.
 
-- `cursor_runtime({action: "show"})` temporarily reveals Cursor for login, upgrades, or diagnostics; it does not replace switching to normal mode for ordinary interactive use.
-- `cursor_runtime({action: "hide"})` hides it again without changing the stored mode.
 - `cursor_runtime({mode: "normal"})` restores ordinary visible behavior.
+- `cursor_runtime({mode: "minimal"})` keeps CCE available while continuously hiding Cursor windows.
 
-The `show` path forces a native restore and redraw even when Windows already considers the Electron window visible, preventing a populated Agents window from reopening as a white compositor surface.
+Switching back to `normal` forces a native restore and redraw even when Windows already considers the Electron window visible, preventing a populated Agents window from reopening as a white compositor surface.
 
 ## Task execution and recovery
 
@@ -204,8 +204,8 @@ These are deployment and compatibility controls, not part of the normal CCE call
 | `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override the persistent runtime-mode file. |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | user lifecycle directory | Override the per-host persistent `cursor_init` binding file. |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. |
-| `CURSOR_PROJECT_PATH` | auto-detected | Project Cursor should open and index. |
-| `CURSOR_EXE` | auto-detected | Explicit Cursor executable path. |
+| `CURSOR_PROJECT_PATH` | unset | Optional compatibility fallback used only when no persisted `cursor_init` workspace exists; otherwise the host project is auto-detected. |
+| `CURSOR_EXE` | auto-detected | Optional executable, Windows installation folder, or macOS `.app` override for portable/custom installs. |
 
 Advanced lifecycle overrides are intended for compatibility diagnostics. Bypassing the singleton supervisor on Windows is not recommended.
 
