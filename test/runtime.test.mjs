@@ -91,7 +91,8 @@ test('window presentation passes an exact PID and action to PowerShell', () => {
   assert.match(script, /CursorBridgeWindowControl/);
   assert.match(script, /Chrome_WidgetWin_1/);
   assert.match(script, /RedrawWindow/);
-  assert.match(script, /SetForegroundWindow/);
+  assert.doesNotMatch(script, /SetForegroundWindow/);
+  assert.match(script, /ShowWindowAsync\(hWnd, 4\)/);
   assert.match(script, /Apply\(12345, \$false\)/);
 });
 

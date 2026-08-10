@@ -7,9 +7,8 @@
  * that adapter's job is reaped.
  *
  * Microsoft documents that processes created via Win32_Process.Create are NOT associated
- * with the caller's job. That is the only reliable default Windows path. A cmd.exe `start`
- * trampoline is NOT treated as reliable job breakaway; it is available only when an
- * explicit unsafe/debug env var is set, and the return value is marked degraded/unsafe.
+ * with the caller's job. That is the only supported Windows path. If it fails we stop:
+ * shell trampolines can flash a console, steal focus, and do not provide reliable breakaway.
  *
  * Because WMI Create does not inherit the parent environment, callers must pass durable
  * config through argv / boot-env files (see cursor-lifecycle-client.mjs).
@@ -79,14 +78,15 @@ function whichNode() {
   return process.execPath;
 }
 
-export function allowUnsafeCmdStart(env = process.env) {
-  return env.CURSOR_BRIDGE_UNSAFE_CMD_START === '1'
-    || env.CURSOR_BRIDGE_ALLOW_UNSAFE_JOB_BREAKAWAY === '1';
+// Backward-compatible source export. The unsafe shell trampoline was removed;
+// no environment variable can re-enable it.
+export function allowUnsafeCmdStart() {
+  return false;
 }
 
 /**
  * Spawn a process that should outlive the current Windows job.
- * @returns {{ ok: boolean, method: string, pid?: number, error?: string, commandLine?: string, warning?: string, degraded?: boolean, unsafe?: boolean }}
+ * @returns {{ ok: boolean, method: string, pid?: number, error?: string, commandLine?: string }}
  */
 export function spawnOutsideJob(file, args = [], options = {}) {
   const cwd = options.cwd || process.cwd();
@@ -129,44 +129,12 @@ export function spawnOutsideJob(file, args = [], options = {}) {
     return { ok: true, method: 'wmi-win32-process-create', pid, commandLine };
   } catch (wmiError) {
     const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
-    if (!allowUnsafeCmdStart(env)) {
-      return {
-        ok: false,
-        method: 'failed',
-        commandLine,
-        error: `WMI Win32_Process.Create failed: ${wmiMsg}. cmd.exe start fallback is disabled by default; set CURSOR_BRIDGE_UNSAFE_CMD_START=1 only for degraded/unsafe debug use.`,
-      };
-    }
-
-    // Explicit unsafe/debug fallback — not reliable job breakaway; must be marked.
-    try {
-      const boot = spawn('cmd.exe', ['/c', 'start', '', '/b', file, ...args], {
-        cwd,
-        env,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      });
-      boot.unref();
-      return {
-        ok: true,
-        method: 'cmd-start-trampoline',
-        pid: boot.pid,
-        commandLine,
-        degraded: true,
-        unsafe: true,
-        warning: `unsafe cmd-start fallback after WMI failure: ${wmiMsg}`,
-      };
-    } catch (startError) {
-      return {
-        ok: false,
-        method: 'failed',
-        commandLine,
-        degraded: true,
-        unsafe: true,
-        error: `WMI failed (${wmiMsg}); unsafe cmd-start also failed: ${startError instanceof Error ? startError.message : startError}`,
-      };
-    }
+    return {
+      ok: false,
+      method: 'failed',
+      commandLine,
+      error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`,
+    };
   }
 }
 

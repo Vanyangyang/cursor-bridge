@@ -31,6 +31,7 @@ import {
   normalizeCodexThreadCwd,
   normalizeCursorExeCandidate,
   findCursorExeDetails,
+  cursorRunning,
   ensureCursorRunningLocal,
   resolveCodexThreadProjectPath,
   resolveProjectPath,
@@ -154,6 +155,57 @@ test('Cursor executable discovery normalizes easy Windows and macOS override for
   }), { path: macExe, source: 'CURSOR_EXE', platform: 'darwin' });
 });
 
+test('Windows Cursor discovery and process probes never invoke a command shell', () => {
+  const calls = [];
+  const winExe = 'D:\\Cursor Custom\\Cursor.exe';
+  const details = findCursorExeDetails({
+    platform: 'win32',
+    env: {},
+    existsImpl: (candidate) => candidate === winExe,
+    execFileSyncImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return `    (Default)    REG_SZ    ${winExe}\n`;
+    },
+  });
+  assert.deepEqual(details, { path: winExe, source: 'windows_registry', platform: 'win32' });
+  assert.equal(calls[0].command, 'reg.exe');
+  assert.deepEqual(calls[0].args.slice(0, 2), [
+    'query',
+    'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe',
+  ]);
+  assert.equal(calls[0].options.windowsHide, true);
+  assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'ignore']);
+
+  let tasklistCall;
+  assert.equal(cursorRunning({
+    platform: 'win32',
+    execFileSyncImpl(command, args, options) {
+      tasklistCall = { command, args, options };
+      return 'Cursor.exe 123 Console 1 1,000 K';
+    },
+  }), true);
+  assert.equal(tasklistCall.command, 'tasklist.exe');
+  assert.deepEqual(tasklistCall.args, ['/fi', 'imagename eq Cursor.exe', '/nh']);
+  assert.equal(tasklistCall.options.windowsHide, true);
+  assert.deepEqual(tasklistCall.options.stdio, ['ignore', 'pipe', 'ignore']);
+});
+
+test('legacy registry probe injection remains isolated from the production execFile path', () => {
+  const winExe = 'E:\\Legacy Stub\\Cursor.exe';
+  let legacyCommand = '';
+  const details = findCursorExeDetails({
+    platform: 'win32',
+    env: {},
+    existsImpl: (candidate) => candidate === winExe,
+    execSyncImpl(command) {
+      legacyCommand = command;
+      return `    (Default)    REG_SZ    ${winExe}\n`;
+    },
+  });
+  assert.deepEqual(details, { path: winExe, source: 'windows_registry', platform: 'win32' });
+  assert.match(legacyCommand, /^reg query /);
+});
+
 test('an already-running Cursor without CCE access fails safely with one simple retry step', async () => {
   const project = resolve('C:\\Projects\\demo');
   const result = await ensureCursorRunningLocal({
@@ -255,12 +307,6 @@ test('quoteCmdArg covers spaces, embedded quotes, and trailing backslashes', () 
   assert.equal(line, [quoteCmdArg(file), quoteCmdArg(script), quoteCmdArg(flagged), quoteCmdArg(trailing)].join(' '));
 });
 
-test('allowUnsafeCmdStart is off by default', () => {
-  assert.equal(allowUnsafeCmdStart({}), false);
-  assert.equal(allowUnsafeCmdStart({ CURSOR_BRIDGE_UNSAFE_CMD_START: '1' }), true);
-  assert.equal(allowUnsafeCmdStart({ CURSOR_BRIDGE_ALLOW_UNSAFE_JOB_BREAKAWAY: '1' }), true);
-});
-
 test('WMI create script starts console processes without a visible window', () => {
   const script = buildHiddenWmiCreateScript(
     '"C:\\Program Files\\nodejs\\node.exe" "C:\\it\'s here\\supervisor.mjs"',
@@ -273,7 +319,12 @@ test('WMI create script starts console processes without a visible window', () =
   assert.match(script, /it''s here/);
 });
 
-test('WMI failure without unsafe env is an explicit failure (no silent cmd-start)', async (t) => {
+test('legacy unsafe shell fallback switch can no longer be enabled', () => {
+  assert.equal(allowUnsafeCmdStart({ CURSOR_BRIDGE_UNSAFE_CMD_START: '1' }), false);
+  assert.equal(allowUnsafeCmdStart({ CURSOR_BRIDGE_ALLOW_UNSAFE_JOB_BREAKAWAY: '1' }), false);
+});
+
+test('WMI failure is fail-closed even when a legacy unsafe fallback env is present', async (t) => {
   if (process.platform !== 'win32') {
     t.skip('Windows-only spawn policy');
     return;
@@ -282,32 +333,14 @@ test('WMI failure without unsafe env is an explicit failure (no silent cmd-start
     env: {
       ...process.env,
       CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL: '1',
+      CURSOR_BRIDGE_UNSAFE_CMD_START: '1',
     },
   });
   assert.equal(result.ok, false);
   assert.equal(result.method, 'failed');
   assert.match(String(result.error), /WMI/);
-  assert.match(String(result.error), /disabled|CURSOR_BRIDGE_UNSAFE_CMD_START/);
-});
-
-test('unsafe cmd-start fallback is marked degraded/unsafe when explicitly enabled', async (t) => {
-  if (process.platform !== 'win32') {
-    t.skip('Windows-only spawn policy');
-    return;
-  }
-  const result = spawnOutsideJob(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 2000)'], {
-    env: {
-      ...process.env,
-      CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL: '1',
-      CURSOR_BRIDGE_UNSAFE_CMD_START: '1',
-    },
-  });
-  assert.equal(result.ok, true);
-  assert.equal(result.method, 'cmd-start-trampoline');
-  assert.equal(result.degraded, true);
-  assert.equal(result.unsafe, true);
-  assert.match(String(result.warning || ''), /unsafe|WMI/i);
-  if (result.pid) killPid(result.pid);
+  assert.match(String(result.error), /without a shell fallback/);
+  assert.doesNotMatch(String(result.error), /set CURSOR_BRIDGE_UNSAFE_CMD_START/);
 });
 
 test('applyBootEnv deletes boot-env file after successful read', () => {
