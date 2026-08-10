@@ -92,20 +92,38 @@ confidence: high
 
 ### Codex
 
+First installation:
+
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin add cursor-bridge@vanyangyang
 ```
 
-Restart Codex and start a new task so the MCP tools and skills enter the session.
+Update an existing installation:
+
+```bash
+codex plugin marketplace upgrade vanyangyang
+codex plugin add cursor-bridge@vanyangyang
+```
+
+Restart Codex and start a new task after installation or update so the refreshed MCP tools and skills enter the session.
 
 ### Claude Code
+
+First installation:
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
 ```
 
-Restart Claude Code or run `/reload-plugins`.
+Update an existing installation:
+
+```bash
+claude plugin update cursor-bridge@vanyangyang
+```
+
+Restart Claude Code or run `/reload-plugins` after installation or update.
 
 ## Initialize CCE
 
