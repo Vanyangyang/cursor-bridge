@@ -8,6 +8,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- New Agents Window requests are now created from the initialized repository section instead of the global `Home` context; missing or ambiguous repositories fail closed.
+- Cached Editor target IDs are revalidated against the requested project before reuse, preventing a surviving `cursor-bridge` window from being selected for another workspace.
 - Minimal mode now prewarms the hidden CDP runtime before ordinary **Open in Cursor** actions can claim Cursor's default single-instance slot without port 9223.
 - Adapter project paths are forwarded explicitly through the persistent lifecycle supervisor instead of depending on the supervisor's working directory.
 - When a shared CDP Cursor is already serving another project, Bridge now opens the requesting adapter's project in a new Cursor window, waits for its CDP target, and selects that target. It fails closed as `workspace-not-ready` instead of searching the wrong index.
@@ -18,6 +20,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Added one-parameter `cursor_init({path})` workspace initialization. Bindings are isolated per Codex task or Claude Code project, persist outside plugin caches, and can be replaced by re-running init.
+- Cursor UI preference remains user-owned. Bridge prefers Agents v2 only when it is already available and otherwise adapts to the legacy workbench.
 - Fresh installations now default to the silent `minimal` runtime; `normal` remains available explicitly through `cursor_runtime` or `CURSOR_BRIDGE_RUNTIME_MODE`.
 - Replaced the advertised `cursor_search` / `cursor_search_deep` split with one adaptive `cursor_context_engine`. Its public schema now exposes only `query`; Cursor chooses its own investigation depth and available harness capabilities.
 

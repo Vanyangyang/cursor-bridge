@@ -72,6 +72,8 @@ export function resolveCodexThreadProjectPath(options = {}) {
 export function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {}) {
   const explicit = String(value || '').trim();
   if (explicit) return resolve(explicit);
+  const persisted = String(options.persistedProjectPath || '').trim();
+  if (persisted) return resolve(normalizeCodexThreadCwd(persisted));
   const threadProjectPath = options.threadProjectPath === undefined
     ? resolveCodexThreadProjectPath(options)
     : options.threadProjectPath;
@@ -203,7 +205,8 @@ export async function ensureCursorRunningLocal(options = {}) {
       const projectKey = normalizeProjectKey(projectPath);
       let targetId = projectKey ? PROJECT_TARGETS.get(projectKey) || null : (currentTargets[0] && currentTargets[0].id || null);
       let workspaceAction = projectPath ? 'reused-project-target' : 'reused-last-workspace';
-      if (targetId && !currentTargets.some((target) => target.id === targetId)) {
+      const cachedTarget = targetId ? currentTargets.find((target) => target.id === targetId) : null;
+      if (targetId && (!cachedTarget || (projectPath && !targetTitleMatchesProject(cachedTarget.title, projectPath)))) {
         PROJECT_TARGETS.delete(projectKey);
         targetId = null;
       }

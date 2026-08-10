@@ -28,8 +28,9 @@ Cursor Agent + project index
 ```
 
 - 每个 MCP 上下文可以启动 adapter；所有 adapter 共用一个用户级 supervisor。
-- Codex adapter 会根据 `CODEX_THREAD_ID` 与本地任务元数据在内部解析当前任务工作区；它不会成为 CCE 的公开参数。其他宿主仍使用显式覆盖或工作目录回退。
-- supervisor 会把解析出的项目绑定到为该项目创建的 CDP target。若 Cursor 正在服务另一个仓库，Bridge 会打开隐藏的项目窗口并只驱动该 target，不靠 prompt 文字或通用窗口标题猜工作区。
+- `cursor_init` 会把当前 Codex 任务或 Claude Code 项目持久绑定到一个工作区；再次执行只替换当前宿主上下文的绑定。显式初始化前，Codex 可通过 `CODEX_THREAD_ID` 推断任务目录，Claude Code 使用项目根目录 / 工作目录作为首次回退。
+- supervisor 会把解析出的项目绑定到经过校验的 Editor CDP target。缓存 target 的窗口标题若已不匹配就会失效，因此旧的 `cursor-bridge` 窗口不能再冒充 VESPERIX。
+- Editor 工作区选择与 Agent UI 选择分离。Cursor Agents v2 与旧 workbench 同时打开时，Bridge 优先 Agents v2，并从匹配仓库分组创建新 Agent——不会再落到 `Home`。Agents v2 未打开时才回退到旧版项目 workbench。
 - FIFO 使用当前对话，并通过 UI lock 串行执行。
 - `parallel_agent` 使用独立顶层 Cursor Agent。
 - Windows 上 supervisor 会脱离 Codex Job 生命周期，因此关闭一个会话不会带走 Cursor。
@@ -80,7 +81,7 @@ confidence: high
 ## 前提
 
 - Node.js 18+。
-- Cursor 已登录，并打开且索引目标项目。
+- Cursor 已安装并登录；目标项目可由 `cursor_init` 与 lifecycle supervisor 自动打开、索引。
 - Cursor 使用 `--remote-debugging-port=9223`；受支持环境中 Bridge 可以自动管理该生命周期。
 - 只有 Windows 支持真实顶层窗口抑制。其他平台会保存运行模式，但明确报告窗口控制不支持。
 
@@ -102,6 +103,30 @@ claude plugin install cursor-bridge@vanyangyang
 ```
 
 重启 Claude Code 或执行 `/reload-plugins`。
+
+## 首次使用：绑定工作区
+
+每个 Codex 任务或 Claude Code 项目初始化一次即可。绑定保存在插件缓存之外，adapter / 插件重启后仍然有效；需要切换项目时再次 init 就会覆盖当前绑定。
+
+### Codex
+
+直接告诉 Codex：
+
+```text
+把 Cursor Bridge 工作区初始化为 C:\absolute\path\to\project
+```
+
+Codex 会调用单参数工具 `cursor_init({path})`。当前任务路径也会作为首次使用的安全自动回退，但显式初始化拥有最高优先级。
+
+### Claude Code
+
+```text
+/cursor-bridge:init C:\absolute\path\to\project
+```
+
+Claude Code 自己已经占用裸 `/init`，因此 Cursor Bridge 使用插件命名空间命令，避免覆盖宿主行为。两个宿主最终调用的是同一个持久化 `cursor_init({path})` 实现。
+
+Cursor 使用旧 workbench、新 Agents Window，还是两者同时开启，仍由用户自己选择；Bridge 不会改写这项偏好。两者同时存在时，请求默认选择新的 Agents Window，并从已初始化仓库分组创建对话，而不是放进 `Home`。
 
 <details>
 <summary><strong>从源码运行</strong></summary>
@@ -132,6 +157,7 @@ npm run build
 
 | 工具 | 作用 |
 |---|---|
+| `cursor_init` | 把当前 Codex 任务 / Claude Code 项目持久绑定或重新绑定到一个绝对工作区路径。 |
 | `cursor_context_engine` | 自适应只读项目理解，返回紧凑、可核验的 `path:line` 证据；唯一参数是 `query`。 |
 | `cursor_do` | 提交有边界的 FIFO 或独立 `parallel_agent` 工作。 |
 | `cursor_status` | 只读查看连接、队列、占用、运行时和任务状态。 |
@@ -163,7 +189,7 @@ cursor_runtime({mode: "minimal"})
 - `submitting`、`running`、`collecting` 都是正常非终态；`cursor_status` 不修改任务。
 - 新出现的 `LLM provider error` 托盘属于失败终态。Bridge 会记录正文和 Request ID，不会自动点击重试。
 - Bridge 会确认 Cursor 是否真正接受提交。若 Enter 后提示仍留在输入框，会精确点击一次 Cursor Send 控件；仍未提交则数秒内返回 `submit_not_accepted`，不会空等五分钟或制造孤儿占用。
-- 当独立 Agents Window 不是目标项目绑定窗口时，Bridge 会通过 Cursor 3 原生 Chat sidepanel 快捷键打开 Editor target 的 Agent 输入区。
+- Agents v2 已打开时，Bridge 会优先使用它，并从已初始化仓库的侧栏分组创建新工作；仓库缺失或同名歧义会 fail closed，不再回退到 `Home` 或其他项目。Agents v2 不存在时，才使用已校验的旧版 Editor target 与原生 Chat sidepanel。
 - 超时表示 Bridge 无法同时确认“助手回复完整”和“生成已经结束”，不代表底层 Agent 已停止。
 - Stop 仍激活时的半截 Markdown 不会被当作成功。
 - 发送后状态不确定时保留 Agent 或全局占用；Bridge 不会静默释放、重投或点击模糊的全局 Stop。
@@ -198,6 +224,7 @@ cursor_runtime({mode: "minimal"})
 | `CURSOR_BRIDGE_RUNTIME_FILE` | 用户配置目录 | 覆盖持久化运行模式文件。 |
 | `CURSOR_BRIDGE_POLICY` | `active` | 没有持久化选择时的初始参与策略。 |
 | `CURSOR_BRIDGE_POLICY_FILE` | 用户配置目录 | 覆盖持久化策略文件。 |
+| `CURSOR_BRIDGE_WORKSPACE_FILE` | 用户 lifecycle 目录 | 覆盖按宿主持久化的 `cursor_init` 绑定文件。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 设为 `off` 可禁用并隐藏 `cursor_do`。 |
 | `CURSOR_PROJECT_PATH` | 自动探测 | Cursor 应打开并索引的项目。 |
 | `CURSOR_EXE` | 自动探测 | 显式 Cursor 可执行文件路径。 |

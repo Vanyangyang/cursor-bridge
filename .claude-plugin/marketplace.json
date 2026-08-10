@@ -8,7 +8,7 @@
     {
       "name": "cursor-bridge",
       "source": ".",
-      "description": "Use balanced or deep Cursor Context Engine search and bounded Cursor Agent execution, with normal or UI-suppressed minimal runtime. Cursor must run with --remote-debugging-port=9223.",
+      "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded Cursor Agent execution, with normal or UI-suppressed minimal runtime and legacy/Agents v2 UI adaptation.",
       "version": "3.1.0",
       "author": {
         "name": "Vanyangyang"

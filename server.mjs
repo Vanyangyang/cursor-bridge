@@ -38,6 +38,12 @@ import {
   shouldAutoLaunchCursor,
   writePersistedCursorRuntimeMode,
 } from './cursor-runtime.mjs';
+import {
+  readWorkspaceBinding,
+  resolveWorkspaceBindingFile,
+  resolveWorkspaceBindingKey,
+  writeWorkspaceBinding,
+} from './workspace-binding.mjs';
 
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
@@ -239,9 +245,14 @@ async function findPage(options = {}) {
   const list = await httpJson('/json/list');
   const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
   if (!pages.length) throw new Error('未找到 Cursor workbench page target');
-  if (options.targetId) return selectCursorPageCandidate(pages, options);
+  if (options.targetId && options.preferAgentsV2 !== true) return selectCursorPageCandidate(pages, options);
   const inspected = await Promise.all(pages.map(inspectPageTarget));
   const usable = inspected.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
+  if (options.preferAgentsV2 === true) {
+    const agentsV2 = usable.filter((page) => page.capabilities.uiFlavor === 'agents_v2');
+    if (agentsV2.length) return selectCursorPageCandidate(agentsV2, { purpose: options.purpose });
+    if (options.targetId) return selectCursorPageCandidate(inspected, options);
+  }
   return selectCursorPageCandidate(
     usable.length ? usable : inspected.filter((page) => /workbench/i.test(page.url || '') || page.capabilities),
     options,
@@ -389,6 +400,22 @@ function exprClickSelectedAgentStop(agentId) {
 // "New Agent" 新对话钮中心坐标。新版 Cursor Agents 只有可见文本，旧版主要依赖 aria-label。
 const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
+function exprCreateAgentForWorkspace(projectPath) {
+  const workspaceLabel = JSON.stringify(basename(String(projectPath || '')).trim().toLowerCase());
+  return `(function(){
+    const wanted=${workspaceLabel};
+    const sections=[...document.querySelectorAll('section.glass-sidebar-workspace-section-root')];
+    const available=sections.map(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim()).filter(Boolean);
+    const matches=sections.filter(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim().toLowerCase()===wanted);
+    if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
+    if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
+    const button=[...matches[0].querySelectorAll('button,[role=button]')].find(node=>/^New Agent$/i.test((node.getAttribute('aria-label')||'').trim()));
+    if(!button)return JSON.stringify({ok:false,state:'repository_new_agent_unavailable',wanted});
+    button.click();
+    return JSON.stringify({ok:true,state:'repository_agent_created',workspace:wanted});
+  })()`;
+}
+
 const EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
 const EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
@@ -408,7 +435,7 @@ const REACT_ADAPTER_BODY = `
     showSpinner:!!(e&&e.showSpinner),
     icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
   });
-  const normalizeV2=(header,selectedId,index)=>{
+  const normalizeV2=(header,selectedId,index,section)=>{
     const rawId=String(readScalar(header&&header.id)||'').replace(/^local:/,'');
     const status=String(readScalar(header&&header.status)||'').toLowerCase();
     const label=String(readScalar(header&&header.name)||readScalar(header&&header.subtitle)||'');
@@ -423,7 +450,8 @@ const REACT_ADAPTER_BODY = `
       id:rawId?'local:'+rawId:'',label,searchText,
       timestamp:normalizeTimestamp(readScalar(header&&header.lastUpdatedAt)||readScalar(header&&header.createdAt),index),
       isSelected:!!rawId&&(String(selectedId||'')===rawId||String(selectedId||'')==='local:'+rawId),
-      showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft'
+      showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft',
+      workspaceId:String(readScalar(section&&section.id)||''),workspaceLabel:String(readScalar(section&&section.displayName)||'')
     };
   };
   const findLegacyAdapter=()=>{
@@ -477,7 +505,7 @@ const REACT_ADAPTER_BODY = `
           for(const p of v2){
             const selectedId=readScalar(p.selectedAgentId);
             for(const header of p.section.headers){
-              const entry=normalizeV2(header,selectedId,index++);
+              const entry=normalizeV2(header,selectedId,index++,p.section);
               if(entry.id&&!seen.has(entry.id)){seen.add(entry.id);entries.push(entry);}
             }
           }
@@ -664,6 +692,22 @@ class CursorBridge {
           ? 'environment'
           : 'default';
     this.runtimeModeScope = persistedRuntimeMode ? 'persistent' : 'session';
+    this.workspaceFile = options.workspaceFile === null
+      ? null
+      : resolve(options.workspaceFile || resolveWorkspaceBindingFile());
+    this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
+    const persistedWorkspace = options.projectPath === undefined
+      ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey)
+      : null;
+    this.projectPath = options.projectPath !== undefined
+      ? resolve(String(options.projectPath))
+      : persistedWorkspace && persistedWorkspace.projectPath || null;
+    this.workspaceSource = options.projectPath !== undefined
+      ? 'constructor'
+      : persistedWorkspace
+        ? 'persistent_init'
+        : 'auto_detect';
+    this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
     this._lastPresentation = null;
     this.busy = false;
     this.queue = [];
@@ -675,6 +719,39 @@ class CursorBridge {
     this._uiTail = Promise.resolve();
     this.parallelRestoreAgentId = null;
     this.parallelRestoreTargetId = null;
+  }
+
+  workspaceView() {
+    const resolvedProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
+    return {
+      workspaceKey: this.workspaceKey,
+      projectPath: resolvedProjectPath,
+      workspaceSource: this.projectPath ? this.workspaceSource : resolvedProjectPath ? 'host_auto_detect' : this.workspaceSource,
+      workspaceUpdatedAt: this.workspaceUpdatedAt,
+      workspaceFile: this.workspaceFile,
+      initialized: !!this.projectPath,
+      reinitializable: true,
+      interactionPreference: 'agents_v2_when_open_else_legacy',
+      cursorUiPreferencePreserved: true,
+    };
+  }
+
+  async initializeWorkspace(projectPath) {
+    if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+      throw new Error('cursor_init cannot change workspace while Cursor tasks are queued or running');
+    }
+    const previousProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
+    const saved = writeWorkspaceBinding(this.workspaceFile, this.workspaceKey, projectPath);
+    this.projectPath = saved.projectPath;
+    this.workspaceSource = 'persistent_init';
+    this.workspaceUpdatedAt = saved.updatedAt;
+    this._lastLifecycle = null;
+    await this._ensureCursor();
+    return {
+      previousProjectPath,
+      ...this.workspaceView(),
+      lifecycle: this._lastLifecycle,
+    };
   }
 
   _syncDelegationState() {
@@ -902,6 +979,7 @@ class CursorBridge {
       readOnly: options.readOnly === true,
       allowedPaths: options.allowedPaths || [],
       submittedPolicy: options.submittedPolicy || null,
+      projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
       status: 'queued',
       phase: 'queued',
       createdAt: new Date().toISOString(),
@@ -1057,7 +1135,11 @@ class CursorBridge {
     this._healing = (async () => {
       try {
         const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-        const rr = await ensureCursorRunning({ reason: 'adapter-heal', runtimeMode: this.runtimeMode });
+        const rr = await ensureCursorRunning({
+          reason: 'adapter-heal',
+          runtimeMode: this.runtimeMode,
+          ...(this.projectPath ? { projectPath: this.projectPath } : {}),
+        });
         this._lastLifecycle = {
           adapterPid: rr.adapterPid ?? process.pid,
           supervisorPid: rr.supervisorPid ?? null,
@@ -1197,7 +1279,11 @@ class CursorBridge {
   }
 
   async _run(prompt, options = {}) {
-    const page = await findPage({ targetId: options.targetId || (this._lastLifecycle && this._lastLifecycle.targetId), purpose: 'fifo' });
+    const page = await findPage({
+      targetId: options.targetId || (this._lastLifecycle && this._lastLifecycle.targetId),
+      purpose: 'fifo',
+      preferAgentsV2: true,
+    });
     options.targetId = page.id;
     options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -1206,7 +1292,12 @@ class CursorBridge {
       this._throwIfCancelledBeforeSend(options);
       await this._ensureChatPanel(c);
       // 1.5) 开新对话（避免上下文累积 + 回复区干净，extract 不串旧对话）；找不到钮则跳过沿用当前
-      if (options.newChat !== false) await this._newChat(c);
+      if (options.newChat !== false) {
+        await this._newChat(c, {
+          uiFlavor: options.targetUiFlavor,
+          projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath,
+        });
+      }
       this._throwIfCancelledBeforeSend(options);
       // 2) 填查询
       const filled = await evalJS(c, exprFill(prompt));
@@ -1270,7 +1361,16 @@ class CursorBridge {
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
   // 而非新建（aria 标注 "New Agent (Ctrl+N) / [Alt] Replace Agent"）。2026-06-08 实测回复区 markdown DOM 清空
   // 2719→17，避免 extract 串旧对话。找不到钮则跳过沿用当前（不阻断查询）。
-  async _newChat(c) {
+  async _newChat(c, options = {}) {
+    if (options.uiFlavor === 'agents_v2' && options.projectPath) {
+      const created = JSON.parse(await evalJS(c, exprCreateAgentForWorkspace(options.projectPath)) || '{}');
+      if (!created.ok) {
+        const available = Array.isArray(created.available) ? `; available=${created.available.join(', ')}` : '';
+        throw new Error(`Cursor Agents workspace binding failed: ${created.state || 'unknown'}; wanted=${created.wanted || basename(options.projectPath)}${available}`);
+      }
+      await sleep(1100);
+      return true;
+    }
     return this._clickNewAgent(c, true);
   }
 
@@ -1363,7 +1463,11 @@ class CursorBridge {
   }
 
   async _submitParallelAgent(job) {
-    const page = await findPage({ targetId: this._lastLifecycle && this._lastLifecycle.targetId, purpose: 'parallel_agent' });
+    const page = await findPage({
+      targetId: this._lastLifecycle && this._lastLifecycle.targetId,
+      purpose: 'parallel_agent',
+      preferAgentsV2: true,
+    });
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -1380,7 +1484,10 @@ class CursorBridge {
       }
       const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
       this._throwIfCancelledBeforeSend(job);
-      if (!(await this._clickNewAgent(c, false))) {
+      const createdForWorkspace = job.targetUiFlavor === 'agents_v2' && job.projectPath
+        ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath })
+        : await this._clickNewAgent(c, false);
+      if (!createdForWorkspace) {
         return { fallbackReason: '找不到 Cursor New Agent 按钮，已在发送前降级 FIFO' };
       }
 
@@ -2109,6 +2216,7 @@ class CursorBridge {
       readOnly: job.readOnly,
       allowedPaths: job.allowedPaths,
       submittedPolicy: job.submittedPolicy,
+      projectPath: job.projectPath,
       agentId: job.agentId,
       agentLabel: job.agentLabel,
       targetId: job.targetId,
@@ -2160,13 +2268,14 @@ class CursorBridge {
   async status(taskId = '') {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.delegationPolicyView(), ...this.runtimeModeView() };
-      return { found: true, ...this.delegationPolicyView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationPolicyView(), ...this.runtimeModeView() };
+      return { found: true, ...this.workspaceView(), ...this.delegationPolicyView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
     const common = {
+      ...this.workspaceView(),
       ...this.delegationPolicyView(),
       ...this.runtimeModeView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
@@ -2228,6 +2337,20 @@ function buildSearchInputSchema() {
 function buildToolDefinitions(bridgeInstance) {
   const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
+    {
+      name: 'cursor_init',
+      description:
+        'Persistently bind this Codex task or Claude Code project to one Cursor workspace. Re-run it to replace the binding. ' +
+        'Every later CCE or cursor_do request verifies that workspace, opens its Cursor Editor target when needed, and creates new Cursor Agents work inside the matching repository section instead of Home. ' +
+        'The path must already exist. Cursor login and the user\'s old/new UI preference are preserved; when both UIs are open, Bridge selects the new Agents Window.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Absolute project directory or .code-workspace path to bind. Re-running cursor_init replaces the previous binding for this host task/project.' },
+        },
+        required: ['path'],
+      },
+    },
     {
       name: 'cursor_context_engine',
       description:
@@ -2345,7 +2468,11 @@ const server = new Server(
 
 async function ensureBridgeCursor(targetBridge, reason) {
   const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-  const r = await ensureCursorRunning({ reason, runtimeMode: targetBridge.runtimeMode });
+  const r = await ensureCursorRunning({
+    reason,
+    runtimeMode: targetBridge.runtimeMode,
+    ...(targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}),
+  });
   targetBridge._lastLifecycle = {
     adapterPid: r.adapterPid ?? process.pid,
     supervisorPid: r.supervisorPid ?? null,
@@ -2378,6 +2505,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   try {
+    if (name === 'cursor_init') {
+      const result = await bridge.initializeWorkspace(String(args && args.path || ''));
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === 'cursor_context_engine' || name === 'cursor_search' || name === 'cursor_search_deep') {
       const result = await bridge.contextEngine(String((args && args.query) || ''));
       return { content: [{ type: 'text', text: String(result) }] };
@@ -2500,6 +2631,7 @@ export {
   selectNewAgentEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
+  exprCreateAgentForWorkspace,
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,

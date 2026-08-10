@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve5.call(this, root, ref);
+      let _sch = resolve6.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve5(root, ref) {
+    function resolve6(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3648,7 +3648,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve5(baseURI, relativeURI, options) {
+    function resolve6(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3906,7 +3906,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve5,
+      resolve: resolve6,
       resolveComponent,
       equal,
       serialize,
@@ -10847,12 +10847,155 @@ public static class CursorBridgeWindowControl {
   }
 });
 
+// lifecycle-paths.mjs
+import { createHash } from "node:crypto";
+import { homedir as homedir2 } from "node:os";
+import { join as join2 } from "node:path";
+import { mkdirSync as mkdirSync2 } from "node:fs";
+function defaultLifecycleDir() {
+  if (process.env.CURSOR_BRIDGE_LIFECYCLE_DIR) return process.env.CURSOR_BRIDGE_LIFECYCLE_DIR;
+  if (process.platform === "win32") {
+    const root2 = process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local");
+    return join2(root2, "cursor-bridge", "lifecycle");
+  }
+  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join2(homedir2(), ".local", "state");
+  return join2(root, "cursor-bridge", "lifecycle");
+}
+function ensureLifecycleDir(dir = defaultLifecycleDir()) {
+  mkdirSync2(dir, { recursive: true });
+  return dir;
+}
+function lifecycleEndpointTag(dir) {
+  return createHash("sha256").update(String(dir), "utf8").digest("hex").slice(0, 24);
+}
+function supervisorSockPath(dir = defaultLifecycleDir()) {
+  if (process.env.CURSOR_BRIDGE_SUPERVISOR_SOCK) return process.env.CURSOR_BRIDGE_SUPERVISOR_SOCK;
+  if (process.platform === "win32") {
+    return `\\\\.\\pipe\\cursor-bridge-lifecycle-${lifecycleEndpointTag(dir)}`;
+  }
+  return join2(dir, "supervisor.sock");
+}
+function supervisorPidPath(dir = defaultLifecycleDir()) {
+  return join2(dir, "supervisor.pid");
+}
+function supervisorLockPath(dir = defaultLifecycleDir()) {
+  return join2(dir, "supervisor.lock");
+}
+var init_lifecycle_paths = __esm({
+  "lifecycle-paths.mjs"() {
+  }
+});
+
+// workspace-binding.mjs
+import {
+  existsSync,
+  mkdirSync as mkdirSync3,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2
+} from "node:fs";
+import { dirname as dirname2, join as join3, resolve as resolve2 } from "node:path";
+function pluginRuntimePath(candidate) {
+  const value = String(candidate || "").replace(/\//g, "\\").toLowerCase();
+  return value.includes("\\.codex\\.tmp\\marketplaces\\") || value.includes("\\.codex\\plugins\\cache\\") || value.includes("\\.claude\\plugins\\cache\\") || value.includes("\\appdata\\local\\npm-cache\\_npx\\");
+}
+function normalizeWorkspacePath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\\\\\?\\UNC\\/i.test(raw)) return resolve2(`\\\\${raw.slice(8)}`);
+  if (/^\\\\\?\\[a-zA-Z]:\\/.test(raw)) return resolve2(raw.slice(4));
+  return resolve2(raw);
+}
+function resolveWorkspaceBindingFile(env = process.env) {
+  return resolve2(env.CURSOR_BRIDGE_WORKSPACE_FILE || join3(defaultLifecycleDir(), "workspaces.json"));
+}
+function resolveWorkspaceBindingKey(env = process.env, options = {}) {
+  const codexThreadId = String(env.CODEX_THREAD_ID || "").trim();
+  if (codexThreadId) return `codex-thread:${codexThreadId}`;
+  const claudeProject = normalizeWorkspacePath(
+    env.CLAUDE_PROJECT_DIR || env.CLAUDE_CODE_PROJECT_DIR || ""
+  );
+  if (claudeProject && !pluginRuntimePath(claudeProject)) {
+    return `claude-project:${claudeProject.replace(/\\/g, "/").toLowerCase()}`;
+  }
+  const hostId = String(env.CURSOR_BRIDGE_HOST_ID || "").trim();
+  if (hostId) return `host:${hostId}`;
+  const cwd = normalizeWorkspacePath(options.cwd ?? process.cwd());
+  if (cwd && !pluginRuntimePath(cwd)) {
+    return `cwd:${cwd.replace(/\\/g, "/").toLowerCase()}`;
+  }
+  const claudeSessionId = String(env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID || "").trim();
+  if (claudeSessionId) return `claude-session:${claudeSessionId}`;
+  return "default";
+}
+function readWorkspaceBindings(filePath) {
+  if (!filePath) return { version: WORKSPACE_BINDING_VERSION, bindings: {} };
+  try {
+    const parsed = JSON.parse(readFileSync2(filePath, "utf8"));
+    if (!parsed || parsed.version !== WORKSPACE_BINDING_VERSION || !parsed.bindings || typeof parsed.bindings !== "object") {
+      return { version: WORKSPACE_BINDING_VERSION, bindings: {} };
+    }
+    return { version: WORKSPACE_BINDING_VERSION, bindings: { ...parsed.bindings } };
+  } catch {
+    return { version: WORKSPACE_BINDING_VERSION, bindings: {} };
+  }
+}
+function readWorkspaceBinding(filePath, bindingKey, options = {}) {
+  const entry = readWorkspaceBindings(filePath).bindings[String(bindingKey || "")];
+  if (!entry || typeof entry.projectPath !== "string") return null;
+  const projectPath = normalizeWorkspacePath(entry.projectPath);
+  const existsImpl = options.existsImpl || existsSync;
+  if (!projectPath || !existsImpl(projectPath)) return null;
+  return {
+    projectPath,
+    updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null
+  };
+}
+function writeWorkspaceBinding(filePath, bindingKey, projectPath, options = {}) {
+  if (!filePath) throw new Error("persistent cursor_init storage is disabled for this server");
+  const key = String(bindingKey || "").trim();
+  if (!key) throw new Error("cursor_init could not identify the current Codex or Claude Code workspace session");
+  const normalized = normalizeWorkspacePath(projectPath);
+  const existsImpl = options.existsImpl || existsSync;
+  if (!normalized || !existsImpl(normalized)) {
+    throw new Error(`cursor_init workspace does not exist: ${normalized || projectPath}`);
+  }
+  const state = readWorkspaceBindings(filePath);
+  const updatedAt = options.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
+  state.bindings[key] = { projectPath: normalized, updatedAt };
+  mkdirSync3(dirname2(filePath), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    writeFileSync2(temporary, JSON.stringify(state, null, 2) + "\n", "utf8");
+    renameSync2(temporary, filePath);
+  } catch (error2) {
+    rmSync2(temporary, { force: true });
+    throw new Error(`failed to persist cursor_init at ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+  }
+  return { projectPath: normalized, updatedAt };
+}
+function resolveClaudeProjectPath(env = process.env, options = {}) {
+  const candidate = normalizeWorkspacePath(
+    env.CLAUDE_PROJECT_DIR || env.CLAUDE_CODE_PROJECT_DIR || options.cwd || ""
+  );
+  if (!candidate || pluginRuntimePath(candidate)) return null;
+  return (options.existsImpl || existsSync)(candidate) ? candidate : null;
+}
+var WORKSPACE_BINDING_VERSION;
+var init_workspace_binding = __esm({
+  "workspace-binding.mjs"() {
+    init_lifecycle_paths();
+    WORKSPACE_BINDING_VERSION = 1;
+  }
+});
+
 // cursor-ensure-core.mjs
 import { spawn as spawn2, execSync } from "child_process";
-import { existsSync } from "fs";
+import { existsSync as existsSync2 } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
-import { homedir as homedir2 } from "node:os";
-import { basename as basename2, extname, join as join2, resolve as resolve2 } from "node:path";
+import { homedir as homedir3 } from "node:os";
+import { basename as basename2, extname, join as join4, resolve as resolve3 } from "node:path";
 import http from "http";
 function looksLikePluginRuntimePath(candidate) {
   const p = String(candidate || "").replace(/\//g, "\\").toLowerCase();
@@ -10874,13 +11017,13 @@ function resolveCodexThreadProjectPath(options = {}) {
   try {
     const lookupThreadCwd = options.lookupThreadCwd || ((id) => {
       const { DatabaseSync } = (options.requireImpl || loadModule)("node:sqlite");
-      const databasePath = options.databasePath || join2(homedir2(), ".codex", "state_5.sqlite");
+      const databasePath = options.databasePath || join4(homedir3(), ".codex", "state_5.sqlite");
       database = new DatabaseSync(databasePath, { readOnly: true });
       return database.prepare("SELECT cwd FROM threads WHERE id = ?").get(id)?.cwd || null;
     });
     const candidate = normalizeCodexThreadCwd(lookupThreadCwd(threadId));
-    const existsImpl = options.existsImpl || existsSync;
-    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve2(candidate) : null;
+    const existsImpl = options.existsImpl || existsSync2;
+    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve3(candidate) : null;
     if (options.useCache !== false) CODEX_THREAD_PROJECTS.set(threadId, resolved);
     return resolved;
   } catch {
@@ -10895,12 +11038,14 @@ function resolveCodexThreadProjectPath(options = {}) {
 }
 function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {}) {
   const explicit = String(value || "").trim();
-  if (explicit) return resolve2(explicit);
+  if (explicit) return resolve3(explicit);
+  const persisted = String(options.persistedProjectPath || "").trim();
+  if (persisted) return resolve3(normalizeCodexThreadCwd(persisted));
   const threadProjectPath = options.threadProjectPath === void 0 ? resolveCodexThreadProjectPath(options) : options.threadProjectPath;
-  if (threadProjectPath) return resolve2(normalizeCodexThreadCwd(threadProjectPath));
+  if (threadProjectPath) return resolve3(normalizeCodexThreadCwd(threadProjectPath));
   const cwd = options.cwd ?? process.cwd();
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
-  return resolve2(cwd);
+  return resolve3(cwd);
 }
 function cursorFromRegistry() {
   const queries = [
@@ -10913,20 +11058,20 @@ function cursorFromRegistry() {
     try {
       const out = execSync(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
       const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
-      if (m && existsSync(m[1])) return m[1];
+      if (m && existsSync2(m[1])) return m[1];
     } catch {
     }
   }
   return null;
 }
 function findCursorExe() {
-  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
+  if (process.env.CURSOR_EXE && existsSync2(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
   if (IS_WIN) {
     const fromReg = cursorFromRegistry();
     if (fromReg) return fromReg;
     for (const p of WIN_FALLBACKS) {
       try {
-        if (existsSync(p)) return p;
+        if (existsSync2(p)) return p;
       } catch {
       }
     }
@@ -10935,7 +11080,7 @@ function findCursorExe() {
   if (IS_MAC) {
     for (const p of MAC_CANDIDATES) {
       try {
-        if (existsSync(p)) return p;
+        if (existsSync2(p)) return p;
       } catch {
       }
     }
@@ -10944,42 +11089,42 @@ function findCursorExe() {
   return null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve5) => {
+  return new Promise((resolve6) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve5(res.statusCode === 200);
+      resolve6(res.statusCode === 200);
     });
-    req.on("error", () => resolve5(false));
+    req.on("error", () => resolve6(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve5(false);
+      resolve6(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve5) => {
+  return new Promise((resolve6) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve5(false);
-          resolve5(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve6(false);
+          resolve6(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve5(false);
+          resolve6(false);
         }
       });
     });
-    req.on("error", () => resolve5(false));
+    req.on("error", () => resolve6(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve5(false);
+      resolve6(false);
     });
   });
 }
@@ -11012,7 +11157,7 @@ async function ensureCursorRunningLocal(options = {}) {
   const waitMs = Number(options.waitMs || 3e4);
   const runtimeMode = options.runtimeMode || "normal";
   const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
-  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve2(String(options.projectPath)) : null : resolveProjectPath();
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve3(String(options.projectPath)) : null : resolveProjectPath();
   if (await cdpUp()) {
     const isCursor = await cdpIsCursor();
     if (isCursor) {
@@ -11023,7 +11168,8 @@ async function ensureCursorRunningLocal(options = {}) {
       const projectKey = normalizeProjectKey(projectPath);
       let targetId2 = projectKey ? PROJECT_TARGETS.get(projectKey) || null : currentTargets[0] && currentTargets[0].id || null;
       let workspaceAction = projectPath ? "reused-project-target" : "reused-last-workspace";
-      if (targetId2 && !currentTargets.some((target2) => target2.id === targetId2)) {
+      const cachedTarget = targetId2 ? currentTargets.find((target2) => target2.id === targetId2) : null;
+      if (targetId2 && (!cachedTarget || projectPath && !targetTitleMatchesProject(cachedTarget.title, projectPath))) {
         PROJECT_TARGETS.delete(projectKey);
         targetId2 = null;
       }
@@ -11035,7 +11181,7 @@ async function ensureCursorRunningLocal(options = {}) {
           workspaceAction = "recovered-project-target";
         }
       }
-      if (projectPath && existsSync(projectPath) && !targetId2) {
+      if (projectPath && existsSync2(projectPath) && !targetId2) {
         const exe2 = findCursorExe();
         if (!exe2) {
           return {
@@ -11122,7 +11268,7 @@ async function ensureCursorRunningLocal(options = {}) {
       "--disable-backgrounding-occluded-windows"
     );
   }
-  if (projectPath && existsSync(projectPath)) args.push(projectPath);
+  if (projectPath && existsSync2(projectPath)) args.push(projectPath);
   const child = spawn2(exe, args, {
     detached: true,
     stdio: "ignore",
@@ -11181,7 +11327,7 @@ async function ensureCursorRunningLocal(options = {}) {
   };
 }
 function normalizeProjectKey(projectPath) {
-  return projectPath ? resolve2(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
+  return projectPath ? resolve3(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
 }
 function targetTitleMatchesProject(title, projectPath) {
   const name = basename2(String(projectPath || "")).trim().toLowerCase();
@@ -11254,48 +11400,9 @@ var init_cursor_ensure_core = __esm({
   }
 });
 
-// lifecycle-paths.mjs
-import { createHash } from "node:crypto";
-import { homedir as homedir3 } from "node:os";
-import { join as join3 } from "node:path";
-import { mkdirSync as mkdirSync2 } from "node:fs";
-function defaultLifecycleDir() {
-  if (process.env.CURSOR_BRIDGE_LIFECYCLE_DIR) return process.env.CURSOR_BRIDGE_LIFECYCLE_DIR;
-  if (process.platform === "win32") {
-    const root2 = process.env.LOCALAPPDATA || join3(homedir3(), "AppData", "Local");
-    return join3(root2, "cursor-bridge", "lifecycle");
-  }
-  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join3(homedir3(), ".local", "state");
-  return join3(root, "cursor-bridge", "lifecycle");
-}
-function ensureLifecycleDir(dir = defaultLifecycleDir()) {
-  mkdirSync2(dir, { recursive: true });
-  return dir;
-}
-function lifecycleEndpointTag(dir) {
-  return createHash("sha256").update(String(dir), "utf8").digest("hex").slice(0, 24);
-}
-function supervisorSockPath(dir = defaultLifecycleDir()) {
-  if (process.env.CURSOR_BRIDGE_SUPERVISOR_SOCK) return process.env.CURSOR_BRIDGE_SUPERVISOR_SOCK;
-  if (process.platform === "win32") {
-    return `\\\\.\\pipe\\cursor-bridge-lifecycle-${lifecycleEndpointTag(dir)}`;
-  }
-  return join3(dir, "supervisor.sock");
-}
-function supervisorPidPath(dir = defaultLifecycleDir()) {
-  return join3(dir, "supervisor.pid");
-}
-function supervisorLockPath(dir = defaultLifecycleDir()) {
-  return join3(dir, "supervisor.lock");
-}
-var init_lifecycle_paths = __esm({
-  "lifecycle-paths.mjs"() {
-  }
-});
-
 // win-job-breakaway.mjs
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
-import { existsSync as existsSync2 } from "node:fs";
+import { existsSync as existsSync3 } from "node:fs";
 function quoteCmdArg(value) {
   const s = String(value);
   if (s.length === 0) return '""';
@@ -11340,7 +11447,7 @@ Write-Output $r.ProcessId
 `.trim();
 }
 function whichNode() {
-  if (process.env.CURSOR_BRIDGE_NODE_EXE && existsSync2(process.env.CURSOR_BRIDGE_NODE_EXE)) {
+  if (process.env.CURSOR_BRIDGE_NODE_EXE && existsSync3(process.env.CURSOR_BRIDGE_NODE_EXE)) {
     return process.env.CURSOR_BRIDGE_NODE_EXE;
   }
   return process.execPath;
@@ -11439,30 +11546,30 @@ var init_win_job_breakaway = __esm({
 
 // cursor-lifecycle-client.mjs
 import net from "node:net";
-import { existsSync as existsSync3, readFileSync as readFileSync2, unlinkSync, writeFileSync as writeFileSync2, readdirSync } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync3, unlinkSync, writeFileSync as writeFileSync3, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname as dirname2, join as join4, resolve as resolve3 } from "node:path";
+import { dirname as dirname3, join as join5, resolve as resolve4 } from "node:path";
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 function resolveSupervisorScript() {
-  if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync3(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
-    return resolve3(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+  if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
+    return resolve4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
-  const here = dirname2(fileURLToPath(import.meta.url));
+  const here = dirname3(fileURLToPath(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
-    const entryDir = dirname2(resolve3(process.argv[1]));
-    candidates.push(join4(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    const entryDir = dirname3(resolve4(process.argv[1]));
+    candidates.push(join5(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join4(here, "cursor-lifecycle-supervisor.mjs"),
-    join4(here, "dist", "cursor-lifecycle-supervisor.mjs")
+    join5(here, "cursor-lifecycle-supervisor.mjs"),
+    join5(here, "dist", "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
-    if (existsSync3(c)) return c;
+    if (existsSync4(c)) return c;
   }
-  return join4(here, "cursor-lifecycle-supervisor.mjs");
+  return join5(here, "cursor-lifecycle-supervisor.mjs");
 }
 function isProcessAlive(pid) {
   if (!pid || !Number.isFinite(pid)) return false;
@@ -11475,7 +11582,7 @@ function isProcessAlive(pid) {
 }
 function readPidFile(pidPath) {
   try {
-    const n = Number(String(readFileSync2(pidPath, "utf8")).trim());
+    const n = Number(String(readFileSync3(pidPath, "utf8")).trim());
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
@@ -11563,12 +11670,12 @@ async function tryConnect(sock) {
 }
 function tryUnlink(path) {
   try {
-    if (path && existsSync3(path)) unlinkSync(path);
+    if (path && existsSync4(path)) unlinkSync(path);
   } catch {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join4(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join5(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -11579,7 +11686,7 @@ function writeBootEnv(dir, extra = {}) {
   for (const [k, v] of Object.entries(payload)) {
     if (v != null && v !== "") cleaned[k] = String(v);
   }
-  writeFileSync2(bootPath, `${JSON.stringify(cleaned, null, 2)}
+  writeFileSync3(bootPath, `${JSON.stringify(cleaned, null, 2)}
 `, { encoding: "utf8" });
   return bootPath;
 }
@@ -11611,7 +11718,7 @@ async function ensureSupervisorConnected(options = {}) {
     }
   }
   const script = options.supervisorScript || resolveSupervisorScript();
-  if (!existsSync3(script)) {
+  if (!existsSync4(script)) {
     throw new Error(`lifecycle supervisor script missing: ${script}`);
   }
   const bootEnvPath = writeBootEnv(dir, options.bootEnv || {});
@@ -11636,7 +11743,7 @@ async function ensureSupervisorConnected(options = {}) {
       CURSOR_BRIDGE_SUPERVISOR_SOCK: sock
     };
     const spawned = spawnNodeOutsideJob(script, scriptArgs, {
-      cwd: options.cwd || dirname2(script),
+      cwd: options.cwd || dirname3(script),
       env: childEnv
     });
     if (!spawned.ok) {
@@ -11754,7 +11861,13 @@ __export(launch_cursor_exports, {
 });
 import { pathToFileURL } from "url";
 async function ensureCursorRunning(options = {}) {
-  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath : resolveProjectPath();
+  const bindingFile = options.workspaceFile || resolveWorkspaceBindingFile();
+  const bindingKey = options.workspaceKey || resolveWorkspaceBindingKey();
+  const persistedBinding = readWorkspaceBinding(bindingFile, bindingKey);
+  const hostProjectPath = resolveClaudeProjectPath();
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath : resolveProjectPath(persistedBinding && persistedBinding.projectPath || process.env.CURSOR_PROJECT_PATH, {
+    cwd: hostProjectPath || process.cwd()
+  });
   const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === "1" || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === "1") {
     const local = await ensureCursorRunningLocal(ensureOptions);
@@ -11777,6 +11890,7 @@ var init_launch_cursor = __esm({
   "launch-cursor.mjs"() {
     init_cursor_ensure_core();
     init_cursor_lifecycle_client();
+    init_workspace_binding();
     init_cursor_ensure_core();
     isMain = import.meta.url === pathToFileURL(process.argv[1] || "").href && import.meta.url.endsWith("launch-cursor.mjs");
     if (isMain) {
@@ -19115,7 +19229,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve5) => setTimeout(resolve5, pollInterval));
+        await new Promise((resolve6) => setTimeout(resolve6, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -19132,7 +19246,7 @@ var Protocol = class {
    */
   request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve5, reject) => {
+    return new Promise((resolve6, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -19210,7 +19324,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve5(parseResult.data);
+            resolve6(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -19471,12 +19585,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve5, reject) => {
+    return new Promise((resolve6, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve5, interval);
+      const timeoutId = setTimeout(resolve6, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -20346,21 +20460,21 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve5) => {
+    return new Promise((resolve6) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve5();
+        resolve6();
       } else {
-        this._stdout.once("drain", resolve5);
+        this._stdout.once("drain", resolve6);
       }
     });
   }
 };
 
 // server.mjs
-import { mkdirSync as mkdirSync3, readFileSync as readFileSync3, renameSync as renameSync2, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
+import { mkdirSync as mkdirSync4, readFileSync as readFileSync4, renameSync as renameSync3, rmSync as rmSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
-import { basename as basename3, dirname as dirname3, join as join5, resolve as resolve4 } from "node:path";
+import { basename as basename3, dirname as dirname4, join as join6, resolve as resolve5 } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -20374,6 +20488,7 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // server.mjs
 init_cursor_runtime();
+init_workspace_binding();
 import http2 from "http";
 import { pathToFileURL as pathToFileURL2 } from "url";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
@@ -20392,9 +20507,9 @@ var DELEGATION_POLICY_GUIDANCE = Object.freeze({
 });
 function resolveDelegationPolicyFile(value = process.env.CURSOR_BRIDGE_POLICY_FILE) {
   const configured = String(value || "").trim();
-  if (configured) return resolve4(configured);
-  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join5(homedir4(), ".config");
-  return join5(configRoot, "cursor-bridge", "policy.json");
+  if (configured) return resolve5(configured);
+  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join6(homedir4(), ".config");
+  return join6(configRoot, "cursor-bridge", "policy.json");
 }
 var DELEGATION_POLICY_FILE = resolveDelegationPolicyFile();
 function normalizeDelegationPolicy(value = process.env.CURSOR_BRIDGE_POLICY, fallback = "active") {
@@ -20410,7 +20525,7 @@ var DELEGATION_POLICY_DEFAULT = normalizeDelegationPolicy(
 function readPersistedDelegationPolicy(filePath = DELEGATION_POLICY_FILE) {
   if (!filePath) return null;
   try {
-    const parsed = JSON.parse(readFileSync3(filePath, "utf8"));
+    const parsed = JSON.parse(readFileSync4(filePath, "utf8"));
     const candidate = typeof parsed === "string" ? parsed : parsed && parsed.policy;
     const normalized = normalizeDelegationPolicy(candidate, "");
     return DELEGATION_POLICIES.includes(normalized) ? normalized : null;
@@ -20426,18 +20541,18 @@ function writePersistedDelegationPolicy(filePath, policy) {
   if (!DELEGATION_POLICIES.includes(normalized)) {
     throw new Error(`unsupported delegation policy: ${policy}`);
   }
-  const target = resolve4(filePath);
-  mkdirSync3(dirname3(target), { recursive: true });
-  const temporary = join5(dirname3(target), `.${basename3(target)}.${process.pid}.${Date.now()}.tmp`);
+  const target = resolve5(filePath);
+  mkdirSync4(dirname4(target), { recursive: true });
+  const temporary = join6(dirname4(target), `.${basename3(target)}.${process.pid}.${Date.now()}.tmp`);
   try {
-    writeFileSync3(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}
+    writeFileSync4(temporary, `${JSON.stringify({ version: 1, policy: normalized }, null, 2)}
 `, {
       encoding: "utf8",
       mode: 384
     });
-    renameSync2(temporary, target);
+    renameSync3(temporary, target);
   } catch (error2) {
-    rmSync2(temporary, { force: true });
+    rmSync3(temporary, { force: true });
     throw new Error(`failed to persist cursor_policy at ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`);
   }
   return target;
@@ -20489,13 +20604,13 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
 var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve5, reject) => {
+  return new Promise((resolve6, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve5(JSON.parse(d));
+          resolve6(JSON.parse(d));
         } catch {
           reject(new Error("CDP \u975E JSON \u54CD\u5E94"));
         }
@@ -20551,9 +20666,14 @@ async function findPage(options = {}) {
   const list = await httpJson("/json/list");
   const pages = list.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
   if (!pages.length) throw new Error("\u672A\u627E\u5230 Cursor workbench page target");
-  if (options.targetId) return selectCursorPageCandidate(pages, options);
+  if (options.targetId && options.preferAgentsV2 !== true) return selectCursorPageCandidate(pages, options);
   const inspected = await Promise.all(pages.map(inspectPageTarget));
   const usable = inspected.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
+  if (options.preferAgentsV2 === true) {
+    const agentsV2 = usable.filter((page) => page.capabilities.uiFlavor === "agents_v2");
+    if (agentsV2.length) return selectCursorPageCandidate(agentsV2, { purpose: options.purpose });
+    if (options.targetId) return selectCursorPageCandidate(inspected, options);
+  }
   return selectCursorPageCandidate(
     usable.length ? usable : inspected.filter((page) => /workbench/i.test(page.url || "") || page.capabilities),
     options
@@ -20728,6 +20848,21 @@ function exprClickSelectedAgentStop(agentId) {
   })()`;
 }
 var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+function exprCreateAgentForWorkspace(projectPath) {
+  const workspaceLabel = JSON.stringify(basename3(String(projectPath || "")).trim().toLowerCase());
+  return `(function(){
+    const wanted=${workspaceLabel};
+    const sections=[...document.querySelectorAll('section.glass-sidebar-workspace-section-root')];
+    const available=sections.map(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim()).filter(Boolean);
+    const matches=sections.filter(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim().toLowerCase()===wanted);
+    if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
+    if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
+    const button=[...matches[0].querySelectorAll('button,[role=button]')].find(node=>/^New Agent$/i.test((node.getAttribute('aria-label')||'').trim()));
+    if(!button)return JSON.stringify({ok:false,state:'repository_new_agent_unavailable',wanted});
+    button.click();
+    return JSON.stringify({ok:true,state:'repository_agent_created',workspace:wanted});
+  })()`;
+}
 var EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
 var EXPR_FIND_HISTORY = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null)return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'');return /Show Chat History|Chat History|Agent History/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 var REACT_ADAPTER_BODY = `
@@ -20744,7 +20879,7 @@ var REACT_ADAPTER_BODY = `
     showSpinner:!!(e&&e.showSpinner),
     icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
   });
-  const normalizeV2=(header,selectedId,index)=>{
+  const normalizeV2=(header,selectedId,index,section)=>{
     const rawId=String(readScalar(header&&header.id)||'').replace(/^local:/,'');
     const status=String(readScalar(header&&header.status)||'').toLowerCase();
     const label=String(readScalar(header&&header.name)||readScalar(header&&header.subtitle)||'');
@@ -20759,7 +20894,8 @@ var REACT_ADAPTER_BODY = `
       id:rawId?'local:'+rawId:'',label,searchText,
       timestamp:normalizeTimestamp(readScalar(header&&header.lastUpdatedAt)||readScalar(header&&header.createdAt),index),
       isSelected:!!rawId&&(String(selectedId||'')===rawId||String(selectedId||'')==='local:'+rawId),
-      showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft'
+      showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft',
+      workspaceId:String(readScalar(section&&section.id)||''),workspaceLabel:String(readScalar(section&&section.displayName)||'')
     };
   };
   const findLegacyAdapter=()=>{
@@ -20813,7 +20949,7 @@ var REACT_ADAPTER_BODY = `
           for(const p of v2){
             const selectedId=readScalar(p.selectedAgentId);
             for(const header of p.section.headers){
-              const entry=normalizeV2(header,selectedId,index++);
+              const entry=normalizeV2(header,selectedId,index++,p.section);
               if(entry.id&&!seen.has(entry.id)){seen.add(entry.id);entries.push(entry);}
             }
           }
@@ -20943,7 +21079,7 @@ function createProviderError(info) {
 var CursorBridge = class {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
-    this.policyFile = options.policyFile === null ? null : resolve4(options.policyFile || DELEGATION_POLICY_FILE);
+    this.policyFile = options.policyFile === null ? null : resolve5(options.policyFile || DELEGATION_POLICY_FILE);
     this.delegationPolicyDefault = DELEGATION_POLICY_DEFAULT;
     const persistedPolicy = options.delegationPolicy === void 0 ? readPersistedDelegationPolicy(this.policyFile) : null;
     const requestedPolicy = options.delegationPolicy !== void 0 ? options.delegationPolicy : persistedPolicy || this.delegationPolicyDefault;
@@ -20952,7 +21088,7 @@ var CursorBridge = class {
     this.delegationPolicyScope = persistedPolicy ? "persistent" : "session";
     this.delegationPolicy = normalizeDelegationPolicy(requestedPolicy);
     this._syncDelegationState();
-    this.runtimeFile = options.runtimeFile === null ? null : resolve4(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeFile = options.runtimeFile === null ? null : resolve5(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
       "minimal"
@@ -20963,6 +21099,12 @@ var CursorBridge = class {
     this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
     this.runtimeModeSource = options.runtimeMode !== void 0 ? "constructor" : persistedRuntimeMode ? "persistent" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
     this.runtimeModeScope = persistedRuntimeMode ? "persistent" : "session";
+    this.workspaceFile = options.workspaceFile === null ? null : resolve5(options.workspaceFile || resolveWorkspaceBindingFile());
+    this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
+    const persistedWorkspace = options.projectPath === void 0 ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey) : null;
+    this.projectPath = options.projectPath !== void 0 ? resolve5(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
+    this.workspaceSource = options.projectPath !== void 0 ? "constructor" : persistedWorkspace ? "persistent_init" : "auto_detect";
+    this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
     this._lastPresentation = null;
     this.busy = false;
     this.queue = [];
@@ -20974,6 +21116,37 @@ var CursorBridge = class {
     this._uiTail = Promise.resolve();
     this.parallelRestoreAgentId = null;
     this.parallelRestoreTargetId = null;
+  }
+  workspaceView() {
+    const resolvedProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
+    return {
+      workspaceKey: this.workspaceKey,
+      projectPath: resolvedProjectPath,
+      workspaceSource: this.projectPath ? this.workspaceSource : resolvedProjectPath ? "host_auto_detect" : this.workspaceSource,
+      workspaceUpdatedAt: this.workspaceUpdatedAt,
+      workspaceFile: this.workspaceFile,
+      initialized: !!this.projectPath,
+      reinitializable: true,
+      interactionPreference: "agents_v2_when_open_else_legacy",
+      cursorUiPreferencePreserved: true
+    };
+  }
+  async initializeWorkspace(projectPath) {
+    if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+      throw new Error("cursor_init cannot change workspace while Cursor tasks are queued or running");
+    }
+    const previousProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
+    const saved = writeWorkspaceBinding(this.workspaceFile, this.workspaceKey, projectPath);
+    this.projectPath = saved.projectPath;
+    this.workspaceSource = "persistent_init";
+    this.workspaceUpdatedAt = saved.updatedAt;
+    this._lastLifecycle = null;
+    await this._ensureCursor();
+    return {
+      previousProjectPath,
+      ...this.workspaceView(),
+      lifecycle: this._lastLifecycle
+    };
   }
   _syncDelegationState() {
     this.delegationEnabled = this.environmentDelegationMode !== "off";
@@ -21169,8 +21342,8 @@ var CursorBridge = class {
     const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve5, reject) => {
-      resolvePromise = resolve5;
+    const promise = new Promise((resolve6, reject) => {
+      resolvePromise = resolve6;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -21186,6 +21359,7 @@ var CursorBridge = class {
       readOnly: options.readOnly === true,
       allowedPaths: options.allowedPaths || [],
       submittedPolicy: options.submittedPolicy || null,
+      projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
       status: "queued",
       phase: "queued",
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -21327,7 +21501,11 @@ var CursorBridge = class {
     this._healing = (async () => {
       try {
         const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-        const rr = await ensureCursorRunning2({ reason: "adapter-heal", runtimeMode: this.runtimeMode });
+        const rr = await ensureCursorRunning2({
+          reason: "adapter-heal",
+          runtimeMode: this.runtimeMode,
+          ...this.projectPath ? { projectPath: this.projectPath } : {}
+        });
         this._lastLifecycle = {
           adapterPid: rr.adapterPid ?? process.pid,
           supervisorPid: rr.supervisorPid ?? null,
@@ -21470,7 +21648,11 @@ var CursorBridge = class {
     }
   }
   async _run(prompt, options = {}) {
-    const page = await findPage({ targetId: options.targetId || this._lastLifecycle && this._lastLifecycle.targetId, purpose: "fifo" });
+    const page = await findPage({
+      targetId: options.targetId || this._lastLifecycle && this._lastLifecycle.targetId,
+      purpose: "fifo",
+      preferAgentsV2: true
+    });
     options.targetId = page.id;
     options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -21478,7 +21660,12 @@ var CursorBridge = class {
     try {
       this._throwIfCancelledBeforeSend(options);
       await this._ensureChatPanel(c);
-      if (options.newChat !== false) await this._newChat(c);
+      if (options.newChat !== false) {
+        await this._newChat(c, {
+          uiFlavor: options.targetUiFlavor,
+          projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath
+        });
+      }
       this._throwIfCancelledBeforeSend(options);
       const filled = await evalJS(c, exprFill(prompt));
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
@@ -21540,7 +21727,16 @@ var CursorBridge = class {
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
   // 而非新建（aria 标注 "New Agent (Ctrl+N) / [Alt] Replace Agent"）。2026-06-08 实测回复区 markdown DOM 清空
   // 2719→17，避免 extract 串旧对话。找不到钮则跳过沿用当前（不阻断查询）。
-  async _newChat(c) {
+  async _newChat(c, options = {}) {
+    if (options.uiFlavor === "agents_v2" && options.projectPath) {
+      const created = JSON.parse(await evalJS(c, exprCreateAgentForWorkspace(options.projectPath)) || "{}");
+      if (!created.ok) {
+        const available = Array.isArray(created.available) ? `; available=${created.available.join(", ")}` : "";
+        throw new Error(`Cursor Agents workspace binding failed: ${created.state || "unknown"}; wanted=${created.wanted || basename3(options.projectPath)}${available}`);
+      }
+      await sleep2(1100);
+      return true;
+    }
     return this._clickNewAgent(c, true);
   }
   async _clickNewAgent(c, replaceCurrent) {
@@ -21629,7 +21825,11 @@ var CursorBridge = class {
     throw createProviderError(providerError);
   }
   async _submitParallelAgent(job) {
-    const page = await findPage({ targetId: this._lastLifecycle && this._lastLifecycle.targetId, purpose: "parallel_agent" });
+    const page = await findPage({
+      targetId: this._lastLifecycle && this._lastLifecycle.targetId,
+      purpose: "parallel_agent",
+      preferAgentsV2: true
+    });
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -21646,7 +21846,8 @@ var CursorBridge = class {
       }
       const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
       this._throwIfCancelledBeforeSend(job);
-      if (!await this._clickNewAgent(c, false)) {
+      const createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath }) : await this._clickNewAgent(c, false);
+      if (!createdForWorkspace) {
         return { fallbackReason: "\u627E\u4E0D\u5230 Cursor New Agent \u6309\u94AE\uFF0C\u5DF2\u5728\u53D1\u9001\u524D\u964D\u7EA7 FIFO" };
       }
       let agent = null;
@@ -22346,6 +22547,7 @@ var CursorBridge = class {
       readOnly: job.readOnly,
       allowedPaths: job.allowedPaths,
       submittedPolicy: job.submittedPolicy,
+      projectPath: job.projectPath,
       agentId: job.agentId,
       agentLabel: job.agentLabel,
       targetId: job.targetId,
@@ -22393,13 +22595,14 @@ var CursorBridge = class {
   async status(taskId = "") {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.delegationPolicyView(), ...this.runtimeModeView() };
-      return { found: true, ...this.delegationPolicyView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationPolicyView(), ...this.runtimeModeView() };
+      return { found: true, ...this.workspaceView(), ...this.delegationPolicyView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
     const common = {
+      ...this.workspaceView(),
       ...this.delegationPolicyView(),
       ...this.runtimeModeView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
@@ -22452,6 +22655,17 @@ function buildSearchInputSchema() {
 function buildToolDefinitions(bridgeInstance) {
   const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
+    {
+      name: "cursor_init",
+      description: "Persistently bind this Codex task or Claude Code project to one Cursor workspace. Re-run it to replace the binding. Every later CCE or cursor_do request verifies that workspace, opens its Cursor Editor target when needed, and creates new Cursor Agents work inside the matching repository section instead of Home. The path must already exist. Cursor login and the user's old/new UI preference are preserved; when both UIs are open, Bridge selects the new Agents Window.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Absolute project directory or .code-workspace path to bind. Re-running cursor_init replaces the previous binding for this host task/project." }
+        },
+        required: ["path"]
+      }
+    },
     {
       name: "cursor_context_engine",
       description: `${policyContext} Evidence-driven, read-only Cursor Context Engine (CCE) for understanding an indexed project from natural-language intent. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies only intent, not a harness recipe. It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.`,
@@ -22542,7 +22756,11 @@ var server = new Server(
 );
 async function ensureBridgeCursor(targetBridge, reason) {
   const { ensureCursorRunning: ensureCursorRunning2 } = await Promise.resolve().then(() => (init_launch_cursor(), launch_cursor_exports));
-  const r = await ensureCursorRunning2({ reason, runtimeMode: targetBridge.runtimeMode });
+  const r = await ensureCursorRunning2({
+    reason,
+    runtimeMode: targetBridge.runtimeMode,
+    ...targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}
+  });
   targetBridge._lastLifecycle = {
     adapterPid: r.adapterPid ?? process.pid,
     supervisorPid: r.supervisorPid ?? null,
@@ -22571,6 +22789,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request2) => {
   const { name, arguments: args } = request2.params;
   try {
+    if (name === "cursor_init") {
+      const result = await bridge.initializeWorkspace(String(args && args.path || ""));
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === "cursor_context_engine" || name === "cursor_search" || name === "cursor_search_deep") {
       const result = await bridge.contextEngine(String(args && args.query || ""));
       return { content: [{ type: "text", text: String(result) }] };
@@ -22674,6 +22896,7 @@ export {
   createProviderError,
   cursorStartupBehavior,
   exprClickSelectedAgentStop,
+  exprCreateAgentForWorkspace,
   exprFill,
   exprOpenAgent,
   isConfirmedCompletedReply,

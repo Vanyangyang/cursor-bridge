@@ -28,6 +28,7 @@
     ],
     "defaultPrompt": [
       "Use cursor_context_engine for intent-based project understanding. Give it the question once, let Cursor choose the necessary search depth, then verify returned path:line evidence in the real files.",
+      "Use cursor_init when the user supplies or changes the workspace. It persistently binds the current task and prevents CCE or delegation from falling into Cursor Home or a different repository.",
       "Use cursor_runtime when the user wants normal or UI-suppressed minimal Cursor operation.",
       "Use cursor_policy to follow the user's preferred level of Cursor involvement. Active is the recommended default for regular teamwork.",
       "When a useful bounded handoff exists, give Cursor a clear goal, scope, boundaries, and acceptance checks. Collect the task with cursor_status, inspect the real changes, and keep final approval in Codex.",
