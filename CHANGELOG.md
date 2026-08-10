@@ -4,6 +4,14 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.0.1] - 2026-08-10
+
+### Fixed
+
+- Windows lifecycle startup now fails closed when the hidden WMI launch is unavailable. The former opt-in `cmd.exe start` trampoline was removed so Bridge-owned recovery cannot flash a Node console or leave an unreliable orphan.
+- Windows Cursor discovery and running-process probes now call `reg.exe` and `tasklist.exe` directly with hidden stdio instead of passing command strings through `cmd.exe`.
+- Showing Cursor or returning to normal runtime now uses a non-activating window restore and no longer calls `SetForegroundWindow`, so Bridge does not deliberately take keyboard focus from Codex, Claude Code, or a terminal.
+
 ## [5.0.0] - 2026-08-10
 
 ### Removed
@@ -93,6 +101,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.0.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.0...cursor-bridge--v5.0.1
 [5.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v4.0.0...cursor-bridge--v5.0.0
 [4.0.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.2.0...cursor-bridge--v4.0.0
 [3.2.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v3.1.0...cursor-bridge--v3.2.0
