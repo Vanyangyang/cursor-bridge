@@ -158,6 +158,36 @@ process.exit(0);
   }
 });
 
+test('adapter project path is forwarded through a reused supervisor', async () => {
+  const { dir, counter } = makeLifecycleSandbox();
+  const requestFile = join(dir, 'last-request.json');
+  const env = {
+    ...envFor(dir, counter),
+    CURSOR_BRIDGE_TEST_REQUEST: requestFile,
+  };
+  try {
+    await withEnv(env, async () => {
+      const ready = await pingSupervisor();
+      assert.equal(ready.ok, true);
+      const result = await ensureCursorViaSupervisor({
+        reason: 'project-path-test',
+        waitMs: 1000,
+        runtimeMode: 'minimal',
+        projectPath: REPO,
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.reusedSupervisor, true);
+      assert.equal(result.projectPath, REPO);
+      const captured = JSON.parse(readFileSync(requestFile, 'utf8'));
+      assert.equal(captured.projectPath, REPO);
+      assert.equal(captured.runtimeMode, 'minimal');
+    });
+  } finally {
+    await stopSupervisor(dir);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('singleton reconnect after supervisor restart', async () => {
   const { dir, counter } = makeLifecycleSandbox();
   const env = envFor(dir, counter);

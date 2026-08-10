@@ -20,14 +20,14 @@
   "interface": {
     "displayName": "Cursor Bridge",
     "shortDescription": "Evidence-backed CCE search and bounded Cursor Agent work.",
-    "longDescription": "Use Cursor's indexed Agent as a two-depth Cursor Context Engine: balanced search locates code from intent, while deep search verifies call chains, data flows, and cross-module relationships. Both return compact path:line evidence instead of guessed locations. Cursor Bridge can also execute bounded FIFO or independent Agent tasks while Codex retains review and final control. Minimal runtime keeps CCE and execution tools available while hiding the Windows Cursor UI.",
+    "longDescription": "Use Cursor's indexed Agent as an adaptive Cursor Context Engine. State the intent once; Cursor chooses the necessary investigation depth and returns compact path:line evidence instead of guessed locations. Cursor Bridge can also execute bounded FIFO or independent Agent tasks while Codex retains review and final control. Minimal runtime keeps CCE and execution tools available while hiding the Windows Cursor UI.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [
       "Interactive"
     ],
     "defaultPrompt": [
-      "Use caller-side Grep for obvious literals, cursor_search for balanced intent-based location, and cursor_search_deep for call chains, data flows, cross-module relationships, or architecture context. Verify returned path:line evidence in the real files.",
+      "Use cursor_context_engine for intent-based project understanding. Give it the question once, let Cursor choose the necessary search depth, then verify returned path:line evidence in the real files.",
       "Use cursor_runtime when the user wants normal or UI-suppressed minimal Cursor operation.",
       "Use cursor_policy to follow the user's preferred level of Cursor involvement. Active is the recommended default for regular teamwork.",
       "When a useful bounded handoff exists, give Cursor a clear goal, scope, boundaries, and acceptance checks. Collect the task with cursor_status, inspect the real changes, and keep final approval in Codex.",

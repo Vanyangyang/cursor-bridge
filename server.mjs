@@ -13,10 +13,10 @@
  *
  * 实测确认的链路（2026-06-08，见 .claude/scripts/cursor-bridge/probe-*.mjs）：
  *   - 输入框 `.aislash-editor-input`（lexical contenteditable）；Ctrl+L 开/关 chat（toggle）。
- *   - 填字 execCommand insertText + input 事件；发送 = 真实 Enter（无显式发送钮）。
+ *   - 填字 execCommand insertText + input 事件；先发真实 Enter，若未被接受则精确点击当前 composer 的 Send。
  *   - 回复渲染在 `.markdown-root`；完成信号 = 停止钮（codicon-stop 等）从 >0 → 0（生成中 stop=2~3）。
  *
- * 注意：Cursor 是 agent（比 fast-context 更主动），prompt 强约束「只列 path:行号、不读正文、不改代码」，
+ * 注意：Cursor 是 agent（比 fast-context 更主动），CCE prompt 强约束只读与可核验证据，
  *   但非技术隔离，理论上 agent 仍有写能力，别当沙箱。前提：Cursor 带 --remote-debugging-port=9223 在跑。
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -30,10 +30,12 @@ import http from 'http';
 import { pathToFileURL } from 'url';
 import {
   CURSOR_RUNTIME_MODES,
+  cursorStartupBehavior,
   normalizeCursorRuntimeMode,
   readPersistedCursorRuntimeMode,
   resolveCursorRuntimeFile,
   setCursorWindowPresentation,
+  shouldAutoLaunchCursor,
   writePersistedCursorRuntimeMode,
 } from './cursor-runtime.mjs';
 
@@ -115,27 +117,14 @@ function writePersistedDelegationPolicy(filePath, policy) {
 
 // Cursor Context Engine (CCE) search contracts: use Cursor's indexed/code-navigation
 // context, but return compact evidence anchors that the primary agent can verify.
-function searchPromptOptions(options = {}) {
-  const scope = Array.isArray(options.scope)
-    ? options.scope.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  const requestedMaxResults = Number(options.maxResults || 12);
-  const maxResults = Number.isFinite(requestedMaxResults)
-    ? Math.max(1, Math.min(30, Math.trunc(requestedMaxResults)))
-    : 12;
-  const scopeText = scope.length
-    ? `\n检索范围优先限制为：\n${scope.map((value) => `- ${value}`).join('\n')}`
-    : '\n检索范围：当前 Cursor 已打开并完成索引的整个工作区。';
-  return { maxResults, scopeText };
-}
-
-function searchResultContract(maxResults) {
+function searchResultContract() {
   return [
-    `最多返回 ${maxResults} 个高相关结果，按证据强度排序。`,
+    '只返回支撑结论所需的最小充分证据集，按证据强度排序；不要为了凑数量堆砌相似结果。',
     '',
     '输出格式（保持紧凑，不要追加长篇解释）：',
     'CCE_SEARCH_RESULT',
     'intent: <一句话复述检索意图>',
+    'coverage: <focused|extended> | <为什么采用该检索力度；是否扩展过优先范围>',
     'evidence:',
     '- <workspace-relative-path>:<start>-<end> | <symbol 或锚点> | <相关性或已核验关系> | <semantic|exact|reference|source-read>',
     'gaps: <没有确认的部分；没有则写 none>',
@@ -143,37 +132,19 @@ function searchResultContract(maxResults) {
   ];
 }
 
-function buildSearchPrompt(query, options = {}) {
-  const { maxResults, scopeText } = searchPromptOptions(options);
+function buildContextEnginePrompt(query) {
   return [
-    '你现在是 Cursor Context Engine（CCE）的平衡型只读代码定位器。',
-    '目标是高精度定位，不是完整架构调查、实现方案设计或全仓库综述。',
-    '必须先检索再回答：组合 Cursor 索引语义检索、精确文本搜索、符号/引用追踪，并只读取少量直接相关源码来核对证据。',
-    '优先精度；禁止宽泛遍历仓库，禁止启动 Explore/子代理，禁止根据框架惯例猜路径。每条结论都必须由实际搜索或读取证据支撑。',
+    '你现在是 Cursor Context Engine（CCE）：一个只读、证据驱动的项目理解引擎。',
+    '目标是把自然语言意图解析成可核验的真实代码上下文，而不是猜测代码位置、复述框架惯例或生成实现方案。',
+    '必须先检索再回答。根据问题形状和检索中发现的关系，自主决定检索力度：简单定位快速收敛；调用链、数据流、注册关系或跨模块问题继续追踪到最小充分证据。',
+    '自行选择 Cursor 当前可用的最佳能力，包括项目索引语义检索、精确文本搜索、符号/引用追踪、定向源码读取，以及确有收益时的 Explore/子代理。调用方只约束只读、证据和停止条件，不替 Cursor 编排内部 harness。',
+    '每条关系都必须由实际搜索、引用或源码读取支撑；语义相似不能冒充已证明调用边。达到最小充分上下文后立即停止，不做无关全仓库漫游。',
     '不得修改、创建或删除文件，不得执行改变工作区状态的命令。只读取足以确认定位的上下文。',
-    '若问题需要多跳调用链、数据流、跨模块核验或大范围读取，不要自动扩大调查；在 gaps 中写 deep_search_recommended: <原因>。',
-    '没有证据时明确写 NOT_FOUND，并在 gaps 中列出实际搜索过的词、符号或范围。',
-    scopeText,
-    ...searchResultContract(maxResults),
+    '没有证据时明确写 NOT_FOUND，并在 gaps 中列出实际搜索过的词、符号、引用或范围；不得跳过搜索直接回答。',
+    '检索范围是当前 Cursor 已打开并完成索引的整个工作区。若意图点名了模块或路径，把它视为线索而非硬边界。',
+    ...searchResultContract(),
     '',
     `检索意图：${String(query || '').trim()}`,
-  ].join('\n');
-}
-
-function buildDeepSearchPrompt(query, options = {}) {
-  const { maxResults, scopeText } = searchPromptOptions(options);
-  return [
-    '你现在是 Cursor Context Engine（CCE）的深度只读仓库上下文调查器。',
-    '目标是为当前意图找齐“最小充分代码上下文”，并用真实跨文件证据核验关系；不是生成实现计划、大片代码或长篇架构说明。',
-    '必须先检索再回答：组合 Cursor 已索引项目的语义检索、精确文本搜索、符号/引用追踪和定向源码读取。只有确有必要且当前能力可用时，才使用 Explore/子代理补足跨文件验证。',
-    '适合核验业务逻辑、调用链、数据流、route→service→storage、producer→queue→consumer、config→registration→implementation、interface→implementation，以及跨模块/子系统关系或实现前上下文。',
-    '每条关系必须由实际搜索或源码读取证据支撑；语义相似不能冒充已证明调用边。达到最小充分上下文后立即停止，不做无关全仓库漫游。',
-    '不得修改、创建或删除文件，不得执行改变工作区状态的命令。',
-    '没有证据时明确写 NOT_FOUND，并在 gaps 中列出实际搜索过的词、符号、引用或范围。',
-    scopeText,
-    ...searchResultContract(maxResults),
-    '',
-    `深度检索意图：${String(query || '').trim()}`,
   ].join('\n');
 }
 
@@ -181,7 +152,9 @@ function normalizeCceSearchResult(value) {
   const text = String(value || '').trim();
   const marker = text.indexOf('CCE_SEARCH_RESULT');
   if (marker < 0) return text;
-  return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, 'CCE_SEARCH_RESULT\n');
+  return text.slice(marker)
+    .replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, 'CCE_SEARCH_RESULT\n')
+    .replace(/[^\S\r\n]+(?=(?:coverage|evidence|gaps|confidence):)/g, '\n');
 }
 
 function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, baselineCount = 0 } = {}) {
@@ -332,7 +305,19 @@ const EXPR_SNAP = `(function(){
   const last=texts[texts.length-1]||'';
   let hash=0; for(let i=0;i<last.length;i++)hash=((hash<<5)-hash+last.charCodeAt(i))|0;
   const stop=[...document.querySelectorAll('[class*=codicon-stop],[class*=debug-stop],[aria-label*=Stop],[aria-label*=stop],[aria-label*=Cancel],[title*=Stop]')].filter(e=>e.offsetParent!==null).length;
-  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop});
+  ${INPUT_PICKER_BODY}
+  const input=pickInput();
+  const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
+  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length});
+})()`;
+const EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
+  const input=pickInput();if(!input)return 'NO_INPUT';
+  const composer=input.closest('.composer-bar')||input.parentElement;
+  if(!composer)return 'NO_COMPOSER';
+  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button[aria-label="Send"]')]
+    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar'));
+  if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
+  buttons[0].click();return 'CLICKED';
 })()`;
 // 抓答案：最后一个可见且不属于模型选择器的 markdown；短回复同样有效。
 const EXPR_EXTRACT = `(function(){
@@ -534,7 +519,7 @@ const EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
     hasWritableInput:!!input,uiFlavor,
     agentAdapterKind:hasV2Sidebar?'agents_v2':hasLegacyHistory?'legacy':'none',
     hasComposer:!!document.querySelector('.composer-bar[data-composer-id]'),
-    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus()
+    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus(),documentTitle:String(document.title||'')
   });
 })()`;
 
@@ -661,7 +646,7 @@ class CursorBridge {
       : resolve(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
-      'normal',
+      'minimal',
     );
     const persistedRuntimeMode = options.runtimeMode === undefined
       ? readPersistedCursorRuntimeMode(this.runtimeFile)
@@ -761,9 +746,7 @@ class CursorBridge {
       restartMode,
       availableRuntimeModes: [...CURSOR_RUNTIME_MODES],
       platformWindowControl: process.platform === 'win32' ? 'supported' : 'unsupported',
-      startupBehavior: this.runtimeMode === 'minimal'
-        ? 'deferred_until_cursor_search_or_cursor_do'
-        : 'normal_autolaunch_unless_disabled',
+      startupBehavior: cursorStartupBehavior(this.runtimeMode),
       lastPresentation: this._lastPresentation,
     };
   }
@@ -798,15 +781,7 @@ class CursorBridge {
     return { previousMode, ...this.runtimeModeView(), presentation };
   }
 
-  async search(query, options = {}) {
-    return this._searchWithPrompt('search', query, options, buildSearchPrompt);
-  }
-
-  async searchDeep(query, options = {}) {
-    return this._searchWithPrompt('search_deep', query, options, buildDeepSearchPrompt);
-  }
-
-  async _searchWithPrompt(kind, query, options, promptBuilder) {
+  async contextEngine(query) {
     const text = String(query || '').trim();
     if (!text) throw new Error('query 不能为空');
     if (text.length > 20000) throw new Error('query 过长（最大 20000 字符）');
@@ -814,7 +789,7 @@ class CursorBridge {
       throw new Error('存在 Stop 未确认的全局 Cursor 占用；请先处理 cursor_status 中的 blockingTaskIds');
     }
     await this._ensureCursor();
-    const job = this._enqueue(kind, promptBuilder(text, options), {
+    const job = this._enqueue('context_engine', buildContextEnginePrompt(text), {
       timeoutMs: QUERY_TIMEOUT,
       newChat: true,
       execution: 'fifo',
@@ -823,6 +798,10 @@ class CursorBridge {
     });
     return normalizeCceSearchResult(await job.promise);
   }
+
+  // Unlisted compatibility aliases for clients that cached the pre-3.0 tool surface.
+  async search(query) { return this.contextEngine(query); }
+  async searchDeep(query) { return this.contextEngine(query); }
 
   async doTask(prompt, options = {}) {
     if (!this.delegationEnabled) {
@@ -1089,6 +1068,9 @@ class CursorBridge {
           spawnMethod: rr.spawnMethod || null,
           cursorPid: rr.cursorPid || null,
           runtimeMode: rr.runtimeMode || this.runtimeMode,
+          projectPath: rr.projectPath || null,
+          targetId: rr.targetId || null,
+          workspaceAction: rr.workspaceAction || null,
           presentation: rr.presentation || null,
         };
         if (this.runtimeMode === 'minimal') {
@@ -1097,13 +1079,17 @@ class CursorBridge {
             : await this.applyRuntimePresentation('hide');
         }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
+        if (!rr.ok) throw new Error(rr.message || `Cursor lifecycle failed: ${rr.status}`);
         if (rr.status === 'already') {
           console.error('🪟 cursor ensure already: ' + life);
           return;
         }
         if (rr.status === 'port-not-cursor') { console.error('⚠️ ' + rr.message + ' | ' + life); return; }
         console.error('🪟 cursor 自愈拉起：' + (rr.message || rr.status) + ' | ' + life);
-      } catch (e) { console.error('⚠️ cursor 自愈失败（降级，按需手动启动）：', e.message); }
+      } catch (e) {
+        console.error('⚠️ cursor 自愈失败（CCE/委托已中止，避免驱动错误工作区）：', e.message);
+        throw e;
+      }
       finally { this._healing = null; }
     })();
     return this._healing;
@@ -1211,7 +1197,7 @@ class CursorBridge {
   }
 
   async _run(prompt, options = {}) {
-    const page = await findPage({ targetId: options.targetId, purpose: 'fifo' });
+    const page = await findPage({ targetId: options.targetId || (this._lastLifecycle && this._lastLifecycle.targetId), purpose: 'fifo' });
     options.targetId = page.id;
     options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -1234,6 +1220,7 @@ class CursorBridge {
       options.sendState = 'dispatching';
       try {
         await chord(c, 0, 'Enter', 'Enter', 13);
+        await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
         options.sendState = 'sent';
         options.sentAt = options.sentAt || new Date().toISOString();
         // 4) 等完成（stop 钮 >0 出现过 → 归 0）
@@ -1245,6 +1232,10 @@ class CursorBridge {
           providerErrorBaseline,
         );
       } catch (error) {
+        if (error && error.confirmedNotSent) {
+          options.sendState = 'not_sent';
+          throw error;
+        }
         // Enter 派发开始后无法证明消息未发送；任何后续异常都必须保守保留全局占用。
         error.sent = true;
         throw error;
@@ -1265,6 +1256,11 @@ class CursorBridge {
     let vis = await evalJS(c, EXPR_VISIBLE);
     if (!vis) {
       await chord(c, 2, 'L', 'KeyL', 76);
+      await sleep(1300);
+      vis = await evalJS(c, EXPR_VISIBLE);
+    }
+    if (!vis) {
+      await chord(c, 2, 'I', 'KeyI', 73);
       await sleep(1300);
       vis = await evalJS(c, EXPR_VISIBLE);
     }
@@ -1323,6 +1319,32 @@ class CursorBridge {
     }
   }
 
+  async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = '') {
+    const accepted = async () => {
+      await this._throwIfNewProviderError(c, providerErrorBaseline);
+      let snap = {};
+      try { snap = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
+      const inputTextLength = Number(snap.inputTextLength);
+      return Number(snap.stop || 0) > 0
+        || Number(snap.messageCount || 0) > Number(baselineCount || 0)
+        || (Number.isFinite(inputTextLength) && inputTextLength === 0);
+    };
+    for (let i = 0; i < 6; i++) {
+      await sleep(250);
+      if (await accepted()) return 'enter';
+    }
+    const clicked = await evalJS(c, EXPR_CLICK_SEND);
+    if (clicked === 'CLICKED') {
+      for (let i = 0; i < 20; i++) {
+        await sleep(250);
+        if (await accepted()) return 'button';
+      }
+    }
+    const error = new Error(`Cursor 未接受提交（submit_not_accepted: ${clicked || 'unknown'}）；提示仍在输入框中，未创建孤儿任务`);
+    error.confirmedNotSent = true;
+    throw error;
+  }
+
   async _readProviderError(c) {
     const raw = await evalJS(c, EXPR_PROVIDER_ERROR);
     try {
@@ -1341,7 +1363,7 @@ class CursorBridge {
   }
 
   async _submitParallelAgent(job) {
-    const page = await findPage({ purpose: 'parallel_agent' });
+    const page = await findPage({ targetId: this._lastLifecycle && this._lastLifecycle.targetId, purpose: 'parallel_agent' });
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
@@ -1381,9 +1403,12 @@ class CursorBridge {
       await sleep(350);
       this._throwIfCancelledBeforeSend(job);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
+      let baseline = { messageCount: 0 };
+      try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
       job.sendState = 'dispatching';
-      sent = true;
       await chord(c, 0, 'Enter', 'Enter', 13);
+      await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
+      sent = true;
       job.sendState = 'sent';
       job.sentAt = new Date().toISOString();
 
@@ -2195,8 +2220,6 @@ function buildSearchInputSchema() {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory.' },
-      scope: { type: 'array', items: { type: 'string' }, description: 'Optional workspace-relative files or directories to prioritize. Omit to search the indexed workspace.' },
-      max_results: { type: 'integer', minimum: 1, maximum: 30, default: 12, description: 'Maximum number of evidence anchors requested from CCE.' },
     },
     required: ['query'],
   };
@@ -2206,23 +2229,12 @@ function buildToolDefinitions(bridgeInstance) {
   const policyContext = delegationPolicyToolContext(bridgeInstance);
   return [
     {
-      name: 'cursor_search',
+      name: 'cursor_context_engine',
       description:
         `${policyContext} ` +
-        'Balanced read-only Cursor Context Engine (CCE) locator for intent-based code discovery. It combines Cursor indexed semantic retrieval with exact search, symbol/reference tracing, and small targeted source checks, returning compact verifiable workspace-relative path:line evidence. ' +
-        'Use caller-side Grep for an obvious literal or known exact symbol. Use cursor_search_deep for call chains, data flows, cross-module/subsystem or architecture relationships, or when this tool reports deep_search_recommended. ' +
-        'Results distinguish confirmed evidence from gaps and must say NOT_FOUND instead of answering from framework convention. ' +
+        'Evidence-driven, read-only Cursor Context Engine (CCE) for understanding an indexed project from natural-language intent. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies only intent, not a harness recipe. ' +
+        'It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. ' +
         'Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.',
-      inputSchema: buildSearchInputSchema(),
-    },
-    {
-      name: 'cursor_search_deep',
-      description:
-        `${policyContext} ` +
-        'Heavier read-only CCE repository-context investigation over Cursor\'s indexed project plus targeted cross-file exploration. ' +
-        'Use it when the question requires a verified call chain, data flow, route-to-storage path, producer/consumer relationship, config-to-implementation path, interface implementations, cross-module/subsystem ownership, architecture context, or when cursor_search says deeper evidence is required. ' +
-        'It stops at the minimum sufficient code context and returns the same compact path:line evidence contract; it does not produce an implementation plan or modify the workspace. ' +
-        'Do not default to running both search modes: choose this directly when the investigation shape is already deep. Read-only behavior is a strong prompt contract, not a filesystem sandbox.',
       inputSchema: buildSearchInputSchema(),
     },
     bridgeInstance.environmentDelegationMode !== 'off' ? {
@@ -2298,7 +2310,7 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_runtime',
       description:
-        'Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, but Bridge defers startup until cursor_search or cursor_do and hides the Windows Cursor window. ' +
+        'Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, while Bridge prewarms it hidden for cursor_context_engine or cursor_do. ' +
         'normal keeps the historical visible/autolaunch behavior. This is UI suppression, not a headless reimplementation. ' +
         'Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.',
       inputSchema: {
@@ -2331,6 +2343,34 @@ const server = new Server(
   { capabilities: { tools: { listChanged: true } } },
 );
 
+async function ensureBridgeCursor(targetBridge, reason) {
+  const { ensureCursorRunning } = await import('./launch-cursor.mjs');
+  const r = await ensureCursorRunning({ reason, runtimeMode: targetBridge.runtimeMode });
+  targetBridge._lastLifecycle = {
+    adapterPid: r.adapterPid ?? process.pid,
+    supervisorPid: r.supervisorPid ?? null,
+    reusedSupervisor: !!r.reusedSupervisor,
+    createdSupervisor: !!r.createdSupervisor,
+    launchReason: r.launchReason || r.status,
+    status: r.status,
+    spawnMethod: r.spawnMethod || null,
+    cursorPid: r.cursorPid || null,
+    runtimeMode: r.runtimeMode || targetBridge.runtimeMode,
+    projectPath: r.projectPath || null,
+    targetId: r.targetId || null,
+    workspaceAction: r.workspaceAction || null,
+    presentation: r.presentation || null,
+    windowGuard: r.windowGuard || null,
+    startupWindowGuard: r.startupWindowGuard || null,
+  };
+  if (targetBridge.runtimeMode === 'minimal') {
+    targetBridge._lastPresentation = r.presentation
+      ? { ...r.presentation, at: new Date().toISOString() }
+      : await targetBridge.applyRuntimePresentation('hide');
+  }
+  return r;
+}
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: buildToolDefinitions(bridge),
 }));
@@ -2338,18 +2378,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   try {
-    if (name === 'cursor_search') {
-      const result = await bridge.search(String((args && args.query) || ''), {
-        scope: args && args.scope,
-        maxResults: args && args.max_results,
-      });
-      return { content: [{ type: 'text', text: String(result) }] };
-    }
-    if (name === 'cursor_search_deep') {
-      const result = await bridge.searchDeep(String((args && args.query) || ''), {
-        scope: args && args.scope,
-        maxResults: args && args.max_results,
-      });
+    if (name === 'cursor_context_engine' || name === 'cursor_search' || name === 'cursor_search_deep') {
+      const result = await bridge.contextEngine(String((args && args.query) || ''));
       return { content: [{ type: 'text', text: String(result) }] };
     }
     if (name === 'cursor_do') {
@@ -2394,6 +2424,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       let result = mode === undefined
         ? bridge.runtimeModeView()
         : await bridge.setRuntimeMode(mode, (args && args.scope) || 'persistent');
+      if (mode !== undefined && shouldAutoLaunchCursor()) {
+        result = { ...result, prewarm: await ensureBridgeCursor(bridge, 'runtime-mode-change') };
+      }
       if (action !== undefined) {
         result = { ...result, presentation: await bridge.applyRuntimePresentation(action) };
       }
@@ -2403,25 +2436,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
     }
     if (name === 'cursor_launch') {
-      const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-      const r = await ensureCursorRunning({ reason: 'cursor_launch', runtimeMode: bridge.runtimeMode });
-      bridge._lastLifecycle = {
-        adapterPid: r.adapterPid ?? process.pid,
-        supervisorPid: r.supervisorPid ?? null,
-        reusedSupervisor: !!r.reusedSupervisor,
-        createdSupervisor: !!r.createdSupervisor,
-        launchReason: r.launchReason || r.status,
-        status: r.status,
-        spawnMethod: r.spawnMethod || null,
-        cursorPid: r.cursorPid || null,
-        runtimeMode: r.runtimeMode || bridge.runtimeMode,
-        presentation: r.presentation || null,
-      };
-      if (bridge.runtimeMode === 'minimal') {
-        bridge._lastPresentation = r.presentation
-          ? { ...r.presentation, at: new Date().toISOString() }
-          : await bridge.applyRuntimePresentation('hide');
-      }
+      const r = await ensureBridgeCursor(bridge, 'cursor_launch');
       return { content: [{ type: 'text', text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
     throw new Error(`未知工具: ${name}`);
@@ -2432,28 +2447,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   console.error('🚀 启动 cursor-bridge（CDP 直驱 :' + CDP_PORT + '）...');
-  await server.connect(new StdioServerTransport());
-  console.error('✅ MCP 已连接。');
-  // normal 模式启动即确保 Cursor 带 CDP 在跑；minimal 模式始终延迟到首次 cursor_search/cursor_do，避免 MCP 启动时出现 UI。
-  // 也可设 CURSOR_BRIDGE_NO_AUTOLAUNCH=1 关闭 normal 模式的自动拉起。
-  // Cursor lifecycle is owned by the user-level singleton supervisor (job-breakaway on Windows).
-  if (process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH !== '1' && bridge.runtimeMode !== 'minimal') {
-    (async () => {
-      try {
-        const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-        const r = await ensureCursorRunning({ reason: 'adapter-startup', runtimeMode: bridge.runtimeMode });
-        bridge._lastLifecycle = {
-          adapterPid: r.adapterPid ?? process.pid,
-          supervisorPid: r.supervisorPid ?? null,
-          reusedSupervisor: !!r.reusedSupervisor,
-          createdSupervisor: !!r.createdSupervisor,
-          launchReason: r.launchReason || r.status,
-          status: r.status,
-          spawnMethod: r.spawnMethod || null,
-          cursorPid: r.cursorPid || null,
-          runtimeMode: r.runtimeMode || bridge.runtimeMode,
-          presentation: r.presentation || null,
-        };
+  // Prewarm both runtime modes before the MCP handshake completes. In minimal mode this claims
+  // Cursor's default single-instance slot with CDP enabled, then the PID-scoped guard keeps its
+  // windows hidden. That prevents later "Open in Cursor" actions from stealing the slot without 9223.
+  const startupEnsure = shouldAutoLaunchCursor()
+    ? ensureBridgeCursor(bridge, 'adapter-startup')
+      .then((r) => {
         console.error(
           '🪟 启动即确保 Cursor：' + (r.message || r.status)
           + ' | adapterPid=' + bridge._lastLifecycle.adapterPid
@@ -2461,9 +2460,16 @@ async function main() {
           + ' reused=' + bridge._lastLifecycle.reusedSupervisor
           + ' reason=' + bridge._lastLifecycle.launchReason,
         );
-      } catch (e) { console.error('⚠️ 启动即拉起 Cursor 失败（忽略，按需再拉）：', e.message); }
-    })();
-  }
+        return r;
+      })
+      .catch((error) => {
+        console.error('⚠️ 启动即拉起 Cursor 失败（忽略，按需再拉）：', error.message);
+        return null;
+      })
+    : Promise.resolve(null);
+  await server.connect(new StdioServerTransport());
+  console.error('✅ MCP 已连接。');
+  void startupEnsure;
 }
 
 // 仅在直接运行（node server.mjs）时启 MCP；被 import（如 test 脚本）时只导出 CursorBridge/bridge。
@@ -2481,9 +2487,10 @@ export {
   normalizeDelegationMode,
   normalizeDelegationPolicy,
   CURSOR_RUNTIME_MODES,
+  cursorStartupBehavior,
   normalizeCursorRuntimeMode,
-  buildSearchPrompt,
-  buildDeepSearchPrompt,
+  shouldAutoLaunchCursor,
+  buildContextEnginePrompt,
   normalizeCceSearchResult,
   isConfirmedCompletedReply,
   buildToolDefinitions,
@@ -2496,6 +2503,7 @@ export {
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
+  EXPR_CLICK_SEND,
   exprFill,
   exprOpenAgent,
   exprClickSelectedAgentStop,

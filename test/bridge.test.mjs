@@ -12,8 +12,7 @@ import {
   CursorBridge,
   DELEGATION_POLICIES,
   CURSOR_RUNTIME_MODES,
-  buildDeepSearchPrompt,
-  buildSearchPrompt,
+  buildContextEnginePrompt,
   buildToolDefinitions,
   isConfirmedCompletedReply,
   normalizeCceSearchResult,
@@ -29,6 +28,7 @@ import {
   EXPR_PAGE_CAPABILITIES,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
+  EXPR_CLICK_SEND,
   exprFill,
   exprOpenAgent,
   exprClickSelectedAgentStop,
@@ -79,10 +79,16 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_VISIBLE, /tiptap\.ProseMirror/);
   assert.match(EXPR_VISIBLE, /aislash-editor-input/);
   assert.match(exprFill('hello'), /InputEvent/);
+  assert.match(EXPR_CLICK_SEND, /ui-prompt-input-submit-button/);
+  assert.match(EXPR_CLICK_SEND, /data-state="send"/);
   assert.match(EXPR_FIND_NEWAGENT, /innerText/);
   assert.match(EXPR_FIND_NEWAGENT, /glass-sidebar-agent-menu-btn/);
   assert.match(EXPR_PAGE_CAPABILITIES, /glass-sidebar-agent-list-container/);
   assert.match(EXPR_PAGE_CAPABILITIES, /agentAdapterKind/);
+});
+
+test('chat panel fallback includes the current Cursor Ctrl+I sidepanel shortcut', () => {
+  assert.match(CursorBridge.prototype._ensureChatPanel.toString(), /'I', 'KeyI', 73/);
 });
 
 test('Cursor Agents v2 React adapter normalizes headers and opens by header identity', () => {
@@ -454,16 +460,19 @@ test('persistent policy survives bridge reconstruction while session overrides r
   assert.equal(restartedAgain.delegationPolicy, 'auto');
 });
 
-test('minimal runtime is persistent, defers startup, and remains separate from delegation policy', async (t) => {
+test('minimal runtime is persistent, prewarms hidden, and remains separate from delegation policy', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-runtime-view-'));
   const runtimeFile = join(directory, 'runtime.json');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const first = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
+  assert.equal(first.runtimeMode, 'minimal');
+  assert.equal(first.runtimeModeDefault, 'minimal');
+  assert.equal(first.runtimeModeSource, 'default');
   first.applyRuntimePresentation = async (action) => ({ supported: true, applied: false, action, reason: 'offline-test' });
   const enabled = await first.setRuntimeMode('minimal');
   assert.deepEqual(CURSOR_RUNTIME_MODES, ['normal', 'minimal']);
   assert.equal(enabled.runtimeMode, 'minimal');
-  assert.equal(enabled.startupBehavior, 'deferred_until_cursor_search_or_cursor_do');
+  assert.equal(enabled.startupBehavior, 'hidden_prewarm_on_adapter_start');
   assert.equal(enabled.modeStored, true);
   assert.equal(enabled.presentation.action, 'hide');
   assert.equal(first.delegationPolicy, 'active');
@@ -474,53 +483,34 @@ test('minimal runtime is persistent, defers startup, and remains separate from d
   assert.equal(restarted.runtimeModeView().persistsAcrossRestart, true);
 });
 
-test('balanced CCE search prompt is a precise locator with an explicit deep-search boundary', () => {
-  const prompt = buildSearchPrompt('谁负责计算最终伤害？', {
-    scope: ['Assets/Scripts/Battle'],
-    maxResults: 7,
-  });
+test('unified CCE prompt lets Cursor choose the minimum sufficient investigation depth', () => {
+  const prompt = buildContextEnginePrompt('谁负责计算最终伤害并如何进入最终结算？重点关注 Assets/Scripts/Battle。');
   assert.match(prompt, /Cursor Context Engine（CCE）/);
   assert.match(prompt, /必须先检索再回答/);
-  assert.match(prompt, /不是完整架构调查/);
-  assert.match(prompt, /禁止启动 Explore\/子代理/);
-  assert.match(prompt, /禁止根据框架惯例猜路径/);
-  assert.match(prompt, /deep_search_recommended/);
+  assert.match(prompt, /自主决定检索力度/);
+  assert.match(prompt, /Explore\/子代理/);
+  assert.match(prompt, /不替 Cursor 编排内部 harness/);
+  assert.match(prompt, /最小充分证据/);
   assert.match(prompt, /NOT_FOUND/);
   assert.match(prompt, /Assets\/Scripts\/Battle/);
-  assert.match(prompt, /最多返回 7 个/);
+  assert.match(prompt, /线索而非硬边界/);
+  assert.match(prompt, /coverage: <focused\|extended>/);
   assert.match(prompt, /workspace-relative-path/);
   assert.match(prompt, /confidence: <high\|medium\|low>/);
 });
 
-test('deep CCE prompt requires minimum sufficient cross-file evidence and remains read-only', () => {
-  const prompt = buildDeepSearchPrompt('核验 route 到 storage 的完整数据流', {
-    scope: ['src'],
-    maxResults: 9,
-  });
-  assert.match(prompt, /深度只读仓库上下文调查器/);
-  assert.match(prompt, /最小充分代码上下文/);
-  assert.match(prompt, /真实跨文件证据/);
-  assert.match(prompt, /route→service→storage/);
-  assert.match(prompt, /只有确有必要.*Explore\/子代理/);
-  assert.match(prompt, /不得修改、创建或删除文件/);
-  assert.match(prompt, /最多返回 9 个/);
-  assert.match(prompt, /CCE_SEARCH_RESULT/);
-});
-
-test('balanced and deep search reuse readiness, FIFO, read-only options, and result normalization', async () => {
+test('unified context engine reuses readiness, FIFO, read-only options, and result normalization', async () => {
   const bridge = new SearchProbeBridge();
-  const balanced = await bridge.search('locate owner', { scope: ['src'], maxResults: 4 });
-  const deep = await bridge.searchDeep('trace caller to storage', { scope: ['src'], maxResults: 6 });
-  assert.equal(bridge.ensureCalls, 2);
-  assert.deepEqual(bridge.searchJobs.map((job) => job.kind), ['search', 'search_deep']);
+  const result = await bridge.contextEngine('trace caller to storage, starting from src');
+  assert.equal(bridge.ensureCalls, 1);
+  assert.deepEqual(bridge.searchJobs.map((job) => job.kind), ['context_engine']);
   for (const job of bridge.searchJobs) {
     assert.equal(job.options.execution, 'fifo');
     assert.equal(job.options.readOnly, true);
     assert.deepEqual(job.options.allowedPaths, []);
     assert.equal(job.options.newChat, true);
   }
-  assert.equal(balanced.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
-  assert.equal(deep.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
+  assert.equal(result.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
 });
 
 test('CCE result normalization removes conversational preamble without inventing evidence', () => {
@@ -528,26 +518,28 @@ test('CCE result normalization removes conversational preamble without inventing
   const normalized = normalizeCceSearchResult(raw);
   assert.equal(normalized.startsWith('CCE_SEARCH_RESULT\nintent:'), true);
   assert.doesNotMatch(normalized, /先解释/);
+  const compact = normalizeCceSearchResult('CCE_SEARCH_RESULT intent: locate owner coverage: focused | enough evidence: - a.js:1-2 | fn | owner | exact gaps: none confidence: high');
+  assert.match(compact, /intent: locate owner\ncoverage:/);
+  assert.match(compact, /\nevidence:/);
+  assert.match(compact, /\ngaps: none\nconfidence: high/);
   assert.equal(normalizeCceSearchResult('legacy result'), 'legacy result');
 });
 
 test('CCE tool description states real capabilities and explicit limits', () => {
   const bridge = new OfflineBridge();
   const tools = buildToolDefinitions(bridge);
-  const search = tools.find((tool) => tool.name === 'cursor_search');
-  const deep = tools.find((tool) => tool.name === 'cursor_search_deep');
+  const search = tools.find((tool) => tool.name === 'cursor_context_engine');
   const runtime = tools.find((tool) => tool.name === 'cursor_runtime');
   assert.match(search.description, /Cursor Context Engine \(CCE\)/);
   assert.match(search.description, /semantic retrieval/);
-  assert.match(search.description, /caller-side Grep/);
-  assert.match(search.description, /cursor_search_deep/);
+  assert.match(search.description, /autonomously chooses/);
+  assert.match(search.description, /call chains/);
+  assert.match(search.description, /minimum sufficient context/);
   assert.match(search.description, /NOT_FOUND/);
   assert.match(search.description, /not a filesystem sandbox/);
-  assert.match(deep.description, /call chain/);
-  assert.match(deep.description, /minimum sufficient code context/);
-  assert.match(deep.description, /does not produce an implementation plan/);
-  assert.deepEqual(search.inputSchema.properties.max_results.maximum, 30);
-  assert.deepEqual(deep.inputSchema, search.inputSchema);
+  assert.deepEqual(Object.keys(search.inputSchema.properties), ['query']);
+  assert.equal(tools.some((tool) => tool.name === 'cursor_search'), false);
+  assert.equal(tools.some((tool) => tool.name === 'cursor_search_deep'), false);
   assert.deepEqual(runtime.inputSchema.properties.mode.enum, ['normal', 'minimal']);
   assert.match(runtime.description, /UI suppression, not a headless reimplementation/);
 });
@@ -618,15 +610,16 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     await client.connect(transport);
     const listed = await client.listTools();
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_do'), false);
-    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search'), true);
-    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search_deep'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_context_engine'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search'), false);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_search_deep'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_task_control'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_runtime'), true);
-    const search = listed.tools.find((tool) => tool.name === 'cursor_search');
+    const search = listed.tools.find((tool) => tool.name === 'cursor_context_engine');
     assert.match(search.description, /Cursor Context Engine \(CCE\)/);
-    assert.ok(search.inputSchema.properties.scope);
-    assert.ok(search.inputSchema.properties.max_results);
+    assert.equal(Object.keys(search.inputSchema.properties).length, 1);
+    assert.equal(Object.hasOwn(search.inputSchema.properties, 'max_results'), false);
     const taskControl = listed.tools.find((tool) => tool.name === 'cursor_task_control');
     assert.deepEqual(taskControl.inputSchema.properties.action.enum, ['reap', 'cancel', 'abandon']);
     const missingTask = await client.callTool({

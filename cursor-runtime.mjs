@@ -5,6 +5,17 @@ import { basename, dirname, join, resolve } from 'node:path';
 
 export const CURSOR_RUNTIME_MODES = Object.freeze(['normal', 'minimal']);
 
+export function shouldAutoLaunchCursor(value = process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH) {
+  return String(value || '').trim() !== '1';
+}
+
+export function cursorStartupBehavior(mode, noAutolaunch = process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH) {
+  if (!shouldAutoLaunchCursor(noAutolaunch)) return 'manual_launch_only';
+  return normalizeCursorRuntimeMode(mode) === 'minimal'
+    ? 'hidden_prewarm_on_adapter_start'
+    : 'normal_autolaunch';
+}
+
 export function normalizeCursorRuntimeMode(value, fallback = 'normal') {
   const normalized = String(value || '').trim().toLowerCase();
   return CURSOR_RUNTIME_MODES.includes(normalized) ? normalized : fallback;
@@ -98,6 +109,8 @@ public static class CursorBridgeWindowControl {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(IntPtr hWnd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
+  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
 
   public static int Apply(int expectedProcessId, bool show) {
     int changed = 0;
@@ -109,7 +122,12 @@ public static class CursorBridgeWindowControl {
       GetClassNameW(hWnd, className, className.Capacity);
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
-      if (show && !visible) { if (ShowWindowAsync(hWnd, 9)) changed++; }
+      if (show) {
+        bool restored = ShowWindowAsync(hWnd, 9);
+        bool redrawn = RedrawWindow(hWnd, IntPtr.Zero, IntPtr.Zero, 0x00000585);
+        SetForegroundWindow(hWnd);
+        if (restored || redrawn) changed++;
+      }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
       return true;
     }, IntPtr.Zero);
@@ -121,12 +139,35 @@ public static class CursorBridgeWindowControl {
 function powershellWindowScript(options) {
   const targetPid = Number(options.pid);
   const loop = options.loop === true;
+  const lifetime = options.lifetime === true;
   const show = options.action === 'show' ? '$true' : '$false';
   const iterations = Number(options.iterations || 1);
   const intervalMs = Number(options.intervalMs || 100);
-  const apply = loop
-    ? `for ($i = 0; $i -lt ${iterations}; $i++) { [void][CursorBridgeWindowControl]::Apply(${targetPid}, $false); Start-Sleep -Milliseconds ${intervalMs} }`
-    : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
+  const showFlagPath = String(options.showFlagPath || '').replace(/'/g, "''");
+  const hideIfAllowed = `if (-not (Test-Path -LiteralPath '${showFlagPath}')) { [void][CursorBridgeWindowControl]::Apply(${targetPid}, $false) }`;
+  const mutexName = `Local\\CursorBridgeMinimalGuard-${targetPid}`;
+  const lifetimeLoop = [
+    '$createdNew = $false',
+    `$guardMutex = [System.Threading.Mutex]::new($true, '${mutexName}', [ref]$createdNew)`,
+    'if (-not $createdNew) { $guardMutex.Dispose(); exit 0 }',
+    'try {',
+    '  while ($true) {',
+    `    $target = Get-Process -Id ${targetPid} -ErrorAction SilentlyContinue`,
+    "    if ($null -eq $target -or $target.ProcessName -ine 'Cursor') { break }",
+    `    ${hideIfAllowed}`,
+    `    Start-Sleep -Milliseconds ${intervalMs}`,
+    '  }',
+    '} finally {',
+    '  try { $guardMutex.ReleaseMutex() } catch {}',
+    '  $guardMutex.Dispose()',
+    `  Remove-Item -LiteralPath '${showFlagPath}' -Force -ErrorAction SilentlyContinue`,
+    '}',
+  ].join('\n');
+  const apply = lifetime
+    ? lifetimeLoop
+    : loop
+      ? `for ($i = 0; $i -lt ${iterations}; $i++) { ${hideIfAllowed}; Start-Sleep -Milliseconds ${intervalMs} }`
+      : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
   return `$ErrorActionPreference = 'Stop'\nAdd-Type -TypeDefinition @'\n${WINDOW_CONTROL_TYPE}\n'@\n${apply}`;
 }
 
@@ -146,6 +187,24 @@ export function setCursorWindowPresentation(options = {}) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return { supported: true, applied: false, action, port, reason: `no listening Cursor PID found on CDP ${port}` };
   }
+  const showFlagPath = resolve(options.showFlagPath || join(dirname(resolveCursorRuntimeFile()), `show-${pid}.flag`));
+  try {
+    if (action === 'show') {
+      mkdirSync(dirname(showFlagPath), { recursive: true });
+      writeFileSync(showFlagPath, `${pid}\n`, { encoding: 'utf8', mode: 0o600 });
+    } else {
+      rmSync(showFlagPath, { force: true });
+    }
+  } catch (error) {
+    return {
+      supported: true,
+      applied: false,
+      action,
+      port,
+      pid,
+      reason: `failed to update minimal-window override: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
   const run = options.execFileSyncImpl || execFileSync;
   try {
     const script = powershellWindowScript({ pid, action });
@@ -159,8 +218,9 @@ export function setCursorWindowPresentation(options = {}) {
       timeout: Number(options.timeoutMs || 15000),
     });
     const changedWindows = Number(String(output || '').trim() || 0);
-    return { supported: true, applied: true, action, port, pid, changedWindows };
+    return { supported: true, applied: true, action, port, pid, changedWindows, showFlagPath };
   } catch (error) {
+    if (action === 'show') rmSync(showFlagPath, { force: true });
     return {
       supported: true,
       applied: false,
@@ -177,22 +237,37 @@ export function startMinimalWindowGuard(pid, options = {}) {
   const targetPid = Number(pid);
   if (!Number.isInteger(targetPid) || targetPid <= 0) return { started: false, reason: 'invalid-pid' };
   const intervalMs = Math.max(50, Math.min(1000, Number(options.intervalMs || 100)));
-  const durationMs = Math.max(intervalMs, Math.min(120000, Number(options.durationMs || 45000)));
-  const iterations = Math.ceil(durationMs / intervalMs);
+  const lifetime = options.durationMs == null;
+  const durationMs = lifetime
+    ? null
+    : Math.max(intervalMs, Math.min(120000, Number(options.durationMs)));
+  const iterations = lifetime ? null : Math.ceil(durationMs / intervalMs);
+  const showFlagPath = resolve(options.showFlagPath || join(dirname(resolveCursorRuntimeFile()), `show-${targetPid}.flag`));
   const spawnImpl = options.spawnImpl || spawn;
   try {
     const script = powershellWindowScript({
       pid: targetPid,
-      loop: true,
+      loop: !lifetime,
+      lifetime,
       iterations,
       intervalMs,
+      showFlagPath,
     });
     const child = spawnImpl('powershell.exe', [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-EncodedCommand', encodePowerShell(script),
-    ], { detached: true, stdio: 'ignore', windowsHide: true });
-    if (child && typeof child.unref === 'function') child.unref();
-    return { started: true, pid: child && child.pid || null, targetPid, durationMs, intervalMs };
+    ], { detached: !lifetime, stdio: 'ignore', windowsHide: true });
+    if (!lifetime && child && typeof child.unref === 'function') child.unref();
+    return {
+      started: true,
+      pid: child && child.pid || null,
+      targetPid,
+      lifetime,
+      retainedBySupervisor: lifetime,
+      durationMs,
+      intervalMs,
+      showFlagPath,
+    };
   } catch (error) {
     return { started: false, targetPid, reason: error instanceof Error ? error.message : String(error) };
   }

@@ -28,28 +28,25 @@ Cursor Agent + project index
 ```
 
 - Each MCP context may start an adapter; all adapters share one user-level supervisor.
+- Codex adapters resolve the current task workspace internally from `CODEX_THREAD_ID` and local thread metadata; this is not exposed as a CCE parameter. Other hosts retain the explicit override / working-directory fallback.
+- The supervisor binds each resolved project to the CDP target created for that project. If Cursor is already serving another repository, Bridge opens a hidden project window and drives that exact target instead of relying on prompt text or generic window titles.
 - FIFO tasks use the active chat and are serialized through a UI lock.
 - `parallel_agent` tasks use independent top-level Cursor Agents.
 - On Windows, the supervisor runs outside the Codex Job lifecycle, so closing one session does not terminate Cursor.
 
 ## Cursor Context Engine
 
-Cursor Bridge exposes two read-only CCE search depths. Both return compact, workspace-relative source evidence for the primary agent to verify.
+Cursor Bridge exposes one read-only `cursor_context_engine` entry point with one parameter: `query`. State the intent once; Cursor decides how much investigation the question actually needs.
 
-### `cursor_search`: balanced locator
-
-Use `cursor_search` for natural-language concepts, behavior ownership, unknown naming, and other intent-to-code location tasks. It combines:
+It can combine:
 
 - Cursor indexed semantic retrieval
 - exact text search
 - symbol and reference tracing
-- a small amount of targeted source inspection
+- targeted source inspection
+- Cursor Explore capabilities when they materially improve cross-file verification
 
-It intentionally avoids broad repository traversal. If a query requires multi-hop, data-flow, or cross-module proof, `gaps` reports `deep_search_recommended: <reason>` instead of silently widening the investigation.
-
-### `cursor_search_deep`: repository investigation
-
-Use `cursor_search_deep` when the question already requires verified relationships across files or subsystems, such as:
+Simple locations converge quickly. Call chains, data flows, registrations, interface implementations, and cross-module questions continue until Cursor has the minimum sufficient evidence, for example:
 
 - route → service → storage
 - producer → queue → consumer
@@ -58,24 +55,14 @@ Use `cursor_search_deep` when the question already requires verified relationshi
 - cross-module ownership or data flow
 - implementation context spanning multiple subsystems
 
-Deep search stops after collecting the minimum sufficient code context. It does not produce an implementation plan or large code blocks.
-
-### Search routing
-
-| Query shape | Use |
-|---|---|
-| Known literal, filename, or exact symbol | Caller-side Grep / `rg` |
-| Concept, behavior owner, unknown naming | `cursor_search` |
-| Call chain, data flow, cross-module/subsystem relationship | `cursor_search_deep` |
-| Balanced result reports `deep_search_recommended` | Escalate that query to `cursor_search_deep` |
-
-Do not run balanced search and deep search by default. Choose the depth that matches the question.
+The Bridge constrains read-only behavior, evidence quality, and stopping conditions. It does not pretend to micromanage Cursor's internal harness or force every question through the same search recipe.
 
 ### Result contract
 
 ```text
 CCE_SEARCH_RESULT
 intent: <normalized intent>
+coverage: <focused|extended> | <why this investigation depth was sufficient>
 evidence:
 - path/to/file.ts:42-67 | symbolOrAnchor | verified relevance or relationship | reference
 gaps: none
@@ -145,8 +132,7 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 
 | Tool | Purpose |
 |---|---|
-| `cursor_search` | Balanced read-only CCE location with compact `path:line` evidence. |
-| `cursor_search_deep` | Deep read-only repository investigation for verified cross-file relationships. |
+| `cursor_context_engine` | Adaptive read-only project understanding with compact, verified `path:line` evidence. Its only parameter is `query`. |
 | `cursor_do` | Submit bounded FIFO or independent `parallel_agent` work. |
 | `cursor_status` | Read-only connectivity, queue, reservation, runtime, and task snapshot. |
 | `cursor_task_control` | `reap`, targeted `cancel`, or explicitly acknowledged `abandon` for one task. |
@@ -160,11 +146,15 @@ Set `CURSOR_BRIDGE_NO_AUTOLAUNCH=1` to disable automatic launch. On Linux, set `
 cursor_runtime({mode: "minimal"})
 ```
 
-Minimal mode persists and defers Cursor startup until the first `cursor_search`, `cursor_search_deep`, or `cursor_do`. On Windows, Bridge hides top-level Cursor windows while retaining the real Cursor process, project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
+Minimal mode is the default for a fresh installation and persists once selected. It prewarms Cursor as soon as the MCP adapter starts, without showing the Cursor interface. Bridge claims Cursor's default single-instance slot with CDP enabled before an editor/file opener can launch an incompatible instance. On Windows, a PID-scoped guard keeps top-level Cursor windows hidden while retaining the real Cursor process, project index, Agent DOM, and task queue. This is a **UI-suppressed runtime**, not a headless reimplementation.
+
+If Cursor was already running without CDP before Bridge started, Bridge still refuses to kill it because unsaved work may exist. Exit that instance once; the next adapter start prewarms the hidden CDP runtime, and later **Open in Cursor** actions reuse it safely.
 
 - `cursor_runtime({action: "show"})` temporarily reveals Cursor for login, upgrades, or diagnostics.
 - `cursor_runtime({action: "hide"})` hides it again without changing the stored mode.
 - `cursor_runtime({mode: "normal"})` restores ordinary visible behavior.
+
+The `show` path forces a native restore and redraw even when Windows already considers the Electron window visible, preventing a populated Agents window from reopening as a white compositor surface.
 
 ## Task execution and recovery
 
@@ -172,6 +162,8 @@ Minimal mode persists and defers Cursor startup until the first `cursor_search`,
 - Parallel write tasks require non-overlapping `allowed_paths`; read-only tasks use `read_only=true`.
 - `submitting`, `running`, and `collecting` are normal non-terminal states. `cursor_status` never mutates a task.
 - A newly observed `LLM provider error` tray is a terminal failure. Bridge records its message and Request ID and never clicks retry automatically.
+- Bridge verifies that Cursor accepted a submission. If Enter leaves the prompt in the editor, it tries Cursor's exact Send control once and then fails quickly as `submit_not_accepted` instead of waiting five minutes or creating an orphan.
+- Cursor 3 Editor targets are opened through the native Chat sidepanel shortcut when the standalone Agents Window is not the project-bound target.
 - A timeout means Bridge could not confirm both a complete assistant reply and the end of generation. It does not prove the underlying Agent stopped.
 - Partial Markdown while Stop remains active is not accepted as success.
 - Post-send uncertainty retains an Agent or global reservation; Bridge does not silently release, resubmit, or click a broad global Stop control.
@@ -192,14 +184,17 @@ Minimal mode persists and defers Cursor startup until the first `cursor_search`,
 
 Product decisions, overlapping writes, exclusive GUI state, and final verification remain with the primary agent.
 
-## Environment variables
+<details>
+<summary><strong>Advanced environment overrides</strong></summary>
+
+These are deployment and compatibility controls, not part of the normal CCE calling surface.
 
 | Variable | Default | Description |
 |---|---|---|
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor remote-debugging port. |
 | `CURSOR_BRIDGE_TIMEOUT` | `300000` | Search completion timeout in milliseconds. |
-| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable automatic launch in normal mode. |
-| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | Bootstrap runtime mode when no persisted choice exists. |
+| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable startup prewarming in both normal and minimal modes. |
+| `CURSOR_BRIDGE_RUNTIME_MODE` | `minimal` | Bootstrap runtime mode when no persisted choice exists. Set `normal` for a visible first-run Cursor. |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override the persistent runtime-mode file. |
 | `CURSOR_BRIDGE_POLICY` | `active` | Bootstrap participation policy when no persisted choice exists. |
 | `CURSOR_BRIDGE_POLICY_FILE` | user config directory | Override the persistent policy file. |
@@ -208,6 +203,8 @@ Product decisions, overlapping writes, exclusive GUI state, and final verificati
 | `CURSOR_EXE` | auto-detected | Explicit Cursor executable path. |
 
 Advanced lifecycle overrides are intended for compatibility diagnostics. Bypassing the singleton supervisor on Windows is not recommended.
+
+</details>
 
 ## Development
 

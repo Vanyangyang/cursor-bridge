@@ -6,11 +6,13 @@ import test from 'node:test';
 
 import {
   CURSOR_RUNTIME_MODES,
+  cursorStartupBehavior,
   findCursorPidByPort,
   normalizeCursorRuntimeMode,
   parseNetstatListeningPid,
   readPersistedCursorRuntimeMode,
   setCursorWindowPresentation,
+  shouldAutoLaunchCursor,
   startMinimalWindowGuard,
   writePersistedCursorRuntimeMode,
 } from '../cursor-runtime.mjs';
@@ -20,6 +22,15 @@ test('runtime modes are intentionally limited to normal and minimal', () => {
   assert.equal(normalizeCursorRuntimeMode(' MINIMAL '), 'minimal');
   assert.equal(normalizeCursorRuntimeMode('headless'), 'normal');
   assert.equal(normalizeCursorRuntimeMode('headless', ''), '');
+});
+
+test('minimal runtime prewarms unless autolaunch is explicitly disabled', () => {
+  assert.equal(shouldAutoLaunchCursor(undefined), true);
+  assert.equal(shouldAutoLaunchCursor('0'), true);
+  assert.equal(shouldAutoLaunchCursor('1'), false);
+  assert.equal(cursorStartupBehavior('minimal'), 'hidden_prewarm_on_adapter_start');
+  assert.equal(cursorStartupBehavior('normal'), 'normal_autolaunch');
+  assert.equal(cursorStartupBehavior('minimal', '1'), 'manual_launch_only');
 });
 
 test('runtime mode persistence is atomic and rejects unknown values', () => {
@@ -79,10 +90,41 @@ test('window presentation passes an exact PID and action to PowerShell', () => {
   const script = Buffer.from(invocation.args.at(-1), 'base64').toString('utf16le');
   assert.match(script, /CursorBridgeWindowControl/);
   assert.match(script, /Chrome_WidgetWin_1/);
+  assert.match(script, /RedrawWindow/);
+  assert.match(script, /SetForegroundWindow/);
   assert.match(script, /Apply\(12345, \$false\)/);
 });
 
-test('minimal window guard is detached and bounded', () => {
+test('window presentation show override pauses and resumes the PID guard', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-show-'));
+  const showFlagPath = join(directory, 'show-12345.flag');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const execFileSyncImpl = () => '1';
+
+  const shown = setCursorWindowPresentation({
+    platform: 'win32',
+    action: 'show',
+    port: 9223,
+    pid: 12345,
+    showFlagPath,
+    execFileSyncImpl,
+  });
+  assert.equal(shown.applied, true);
+  assert.equal(readFileSync(showFlagPath, 'utf8').trim(), '12345');
+
+  const hidden = setCursorWindowPresentation({
+    platform: 'win32',
+    action: 'hide',
+    port: 9223,
+    pid: 12345,
+    showFlagPath,
+    execFileSyncImpl,
+  });
+  assert.equal(hidden.applied, true);
+  assert.throws(() => readFileSync(showFlagPath, 'utf8'), /ENOENT/);
+});
+
+test('minimal window guard is detached and bounded when a duration is provided', () => {
   let invocation;
   let unrefCalled = false;
   const result = startMinimalWindowGuard(54321, {
@@ -95,6 +137,7 @@ test('minimal window guard is detached and bounded', () => {
     },
   });
   assert.equal(result.started, true);
+  assert.equal(result.lifetime, false);
   assert.equal(unrefCalled, true);
   assert.equal(invocation.command, 'powershell.exe');
   assert.equal(invocation.args.at(-2), '-EncodedCommand');
@@ -104,4 +147,29 @@ test('minimal window guard is detached and bounded', () => {
   assert.match(script, /Milliseconds 100/);
   assert.equal(invocation.options.windowsHide, true);
   assert.equal(invocation.options.detached, true);
+});
+
+test('minimal window guard defaults to one PID lifetime and supports a show override', () => {
+  let invocation;
+  const result = startMinimalWindowGuard(54321, {
+    platform: 'win32',
+    intervalMs: 250,
+    showFlagPath: 'C:\\temp\\cursor-bridge-show.flag',
+    spawnImpl(command, args, options) {
+      invocation = { command, args, options };
+      return { pid: 1001, unref() {} };
+    },
+  });
+  assert.equal(result.started, true);
+  assert.equal(result.lifetime, true);
+  assert.equal(result.retainedBySupervisor, true);
+  assert.equal(result.durationMs, null);
+  assert.equal(invocation.options.detached, false);
+  const script = Buffer.from(invocation.args.at(-1), 'base64').toString('utf16le');
+  assert.match(script, /CursorBridgeMinimalGuard-54321/);
+  assert.match(script, /while \(\$true\)/);
+  assert.match(script, /Get-Process -Id 54321/);
+  assert.match(script, /ProcessName -ine 'Cursor'/);
+  assert.match(script, /Test-Path -LiteralPath 'C:\\temp\\cursor-bridge-show.flag'/);
+  assert.match(script, /Milliseconds 250/);
 });

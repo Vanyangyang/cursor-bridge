@@ -11,7 +11,7 @@ Use Cursor as an execution partner. Keep direction, scope decisions, risk owners
 
 - Do not call `cursor_do` when the user explicitly says not to use Cursor or not to delegate. A direct user opt-out overrides every policy mode.
 - If `cursor_do` is unavailable, or `cursor_status` reports delegation as disabled, do not bypass the setting, repeatedly retry, or ask Cursor to re-enable itself. Complete the work in the primary agent.
-- Treat `CURSOR_BRIDGE_DELEGATION=off` as a legacy administrator-level host switch, not a user policy. It disables delegated execution but does not by itself disable `cursor_search`, `cursor_status`, `cursor_policy`, or `cursor_launch`.
+- Treat `CURSOR_BRIDGE_DELEGATION=off` as a legacy administrator-level host switch, not a user policy. It disables delegated execution but does not by itself disable `cursor_context_engine`, `cursor_status`, `cursor_policy`, or `cursor_launch`.
 
 ## Follow the user's chosen level of involvement
 

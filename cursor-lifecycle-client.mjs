@@ -278,6 +278,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
       reason,
       adapterPid,
       runtimeMode: options.runtimeMode || null,
+      projectPath: Object.hasOwn(options, 'projectPath') ? options.projectPath : null,
     }, Math.max(waitMs + 15000, 60000));
 
     if (response.type === 'error') {
@@ -302,8 +303,12 @@ export async function ensureCursorViaSupervisor(options = {}) {
       exe: response.exe,
       cursorPid: response.cursorPid || null,
       runtimeMode: response.runtimeMode || options.runtimeMode || null,
+      projectPath: response.projectPath || options.projectPath || null,
+      targetId: response.targetId || null,
+      workspaceAction: response.workspaceAction || null,
       presentation: response.presentation || null,
       windowGuard: response.windowGuard || null,
+      startupWindowGuard: response.startupWindowGuard || null,
       adapterPid,
       supervisorPid: response.supervisorPid || conn.supervisorPid,
       reusedSupervisor: conn.reusedSupervisor,

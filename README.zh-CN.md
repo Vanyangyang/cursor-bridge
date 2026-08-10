@@ -28,28 +28,25 @@ Cursor Agent + project index
 ```
 
 - 每个 MCP 上下文可以启动 adapter；所有 adapter 共用一个用户级 supervisor。
+- Codex adapter 会根据 `CODEX_THREAD_ID` 与本地任务元数据在内部解析当前任务工作区；它不会成为 CCE 的公开参数。其他宿主仍使用显式覆盖或工作目录回退。
+- supervisor 会把解析出的项目绑定到为该项目创建的 CDP target。若 Cursor 正在服务另一个仓库，Bridge 会打开隐藏的项目窗口并只驱动该 target，不靠 prompt 文字或通用窗口标题猜工作区。
 - FIFO 使用当前对话，并通过 UI lock 串行执行。
 - `parallel_agent` 使用独立顶层 Cursor Agent。
 - Windows 上 supervisor 会脱离 Codex Job 生命周期，因此关闭一个会话不会带走 Cursor。
 
 ## Cursor Context Engine
 
-Cursor Bridge 提供两种只读 CCE 搜索深度。两者都返回工作区相对的紧凑源码证据，供主 Agent 在真实文件中核验。
+Cursor Bridge 只提供一个只读入口 `cursor_context_engine`，且只有一个参数：`query`。调用方一次说清意图；问题究竟需要多深，由 Cursor 根据真实检索结果自行判断。
 
-### `cursor_search`：平衡定位
-
-用于自然语言概念、行为所有权、未知命名等意图到代码定位任务。它会组合：
+它可以组合：
 
 - Cursor 索引语义检索
 - 精确文本搜索
 - 符号与引用追踪
-- 少量定向源码核对
+- 定向源码核对
+- 确有助于跨文件核验时使用 Cursor Explore 能力
 
-它有意避免宽泛遍历仓库。如果问题需要多跳、数据流或跨模块证明，`gaps` 会返回 `deep_search_recommended: <原因>`，而不是静默扩大调查。
-
-### `cursor_search_deep`：仓库调查
-
-问题已经需要跨文件或跨子系统关系证明时使用，例如：
+简单定位会快速收敛；调用链、数据流、注册关系、接口实现和跨模块问题则继续追踪到最小充分证据，例如：
 
 - route → service → storage
 - producer → queue → consumer
@@ -58,24 +55,14 @@ Cursor Bridge 提供两种只读 CCE 搜索深度。两者都返回工作区相�
 - 跨模块所有权或数据流
 - 横跨多个子系统的实现上下文
 
-Deep 搜索取得最小充分代码上下文后就会停止，不输出实现计划或大片代码。
-
-### 搜索路由
-
-| 问题形状 | 使用方式 |
-|---|---|
-| 已知字面量、文件名或精确符号 | 调用方 Grep / `rg` |
-| 概念、行为所有者、未知命名 | `cursor_search` |
-| 调用链、数据流、跨模块/子系统关系 | `cursor_search_deep` |
-| 平衡搜索返回 `deep_search_recommended` | 将该问题升级到 `cursor_search_deep` |
-
-不要默认同时运行平衡搜索和深度搜索；按问题实际深度选择。
+Bridge 只约束只读边界、证据质量和停止条件，不假装能够替 Cursor 编排其内部 harness，也不会强迫所有问题走同一套搜索配方。
 
 ### 结果合同
 
 ```text
 CCE_SEARCH_RESULT
 intent: <标准化意图>
+coverage: <focused|extended> | <为什么该检索力度已经足够>
 evidence:
 - path/to/file.ts:42-67 | symbolOrAnchor | 已核验的相关性或关系 | reference
 gaps: none
@@ -145,8 +132,7 @@ npm run build
 
 | 工具 | 作用 |
 |---|---|
-| `cursor_search` | 平衡型只读 CCE 定位，返回紧凑 `path:line` 证据。 |
-| `cursor_search_deep` | 深度只读仓库调查，用于核验跨文件关系。 |
+| `cursor_context_engine` | 自适应只读项目理解，返回紧凑、可核验的 `path:line` 证据；唯一参数是 `query`。 |
 | `cursor_do` | 提交有边界的 FIFO 或独立 `parallel_agent` 工作。 |
 | `cursor_status` | 只读查看连接、队列、占用、运行时和任务状态。 |
 | `cursor_task_control` | 对单个任务执行 `reap`、定向 `cancel` 或显式 `abandon`。 |
@@ -160,11 +146,15 @@ npm run build
 cursor_runtime({mode: "minimal"})
 ```
 
-极简模式会持久化，并把 Cursor 启动延迟到首次 `cursor_search`、`cursor_search_deep` 或 `cursor_do`。Windows 上 Bridge 会隐藏顶层 Cursor 窗口，同时保留真实 Cursor 进程、项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
+全新安装默认使用极简模式，选择后也会持久化。MCP adapter 启动时会在不显示 Cursor 界面的情况下预热 Cursor。Bridge 会先用启用 CDP 的实例占住 Cursor 默认单实例，避免编辑器或文件打开器抢先拉起不兼容实例。Windows 上由 PID 级窗口守卫持续隐藏顶层 Cursor 窗口，同时保留真实 Cursor 进程、项目索引、Agent DOM 与任务队列。它是 **UI-suppressed runtime**，不是重新实现的 headless Cursor。
+
+如果 Bridge 启动前已经存在不带 CDP 的 Cursor，Bridge 仍不会强杀它，以免丢失未保存内容。只需安全退出该实例一次；下次 adapter 启动会预热隐藏的 CDP runtime，后续“用 Cursor 打开”也会安全复用它。
 
 - `cursor_runtime({action: "show"})`：临时显示 Cursor，用于登录、升级或诊断。
 - `cursor_runtime({action: "hide"})`：再次隐藏，不改变已保存模式。
 - `cursor_runtime({mode: "normal"})`：恢复普通可见行为。
+
+`show` 路径即使在 Windows 已认为 Electron 窗口可见时，也会强制执行原生 restore 与 redraw，避免有完整 DOM 的 Agents Window 恢复成白色合成表面。
 
 ## 任务执行与恢复
 
@@ -172,6 +162,8 @@ cursor_runtime({mode: "minimal"})
 - 并行写任务需要互不重叠的 `allowed_paths`；只读任务使用 `read_only=true`。
 - `submitting`、`running`、`collecting` 都是正常非终态；`cursor_status` 不修改任务。
 - 新出现的 `LLM provider error` 托盘属于失败终态。Bridge 会记录正文和 Request ID，不会自动点击重试。
+- Bridge 会确认 Cursor 是否真正接受提交。若 Enter 后提示仍留在输入框，会精确点击一次 Cursor Send 控件；仍未提交则数秒内返回 `submit_not_accepted`，不会空等五分钟或制造孤儿占用。
+- 当独立 Agents Window 不是目标项目绑定窗口时，Bridge 会通过 Cursor 3 原生 Chat sidepanel 快捷键打开 Editor target 的 Agent 输入区。
 - 超时表示 Bridge 无法同时确认“助手回复完整”和“生成已经结束”，不代表底层 Agent 已停止。
 - Stop 仍激活时的半截 Markdown 不会被当作成功。
 - 发送后状态不确定时保留 Agent 或全局占用；Bridge 不会静默释放、重投或点击模糊的全局 Stop。
@@ -192,14 +184,17 @@ cursor_runtime({mode: "minimal"})
 
 产品决策、重叠写入、独占 GUI 状态和最终验收始终由主 Agent 负责。
 
-## 环境变量
+<details>
+<summary><strong>高级环境覆盖</strong></summary>
+
+这些是部署与兼容控制，不属于日常 CCE 调用面。
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor 远程调试端口。 |
 | `CURSOR_BRIDGE_TIMEOUT` | `300000` | 搜索完成超时，单位毫秒。 |
-| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | 未设置 | 设为 `1` 可关闭 normal 模式的自动拉起。 |
-| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | 没有持久化选择时的初始运行模式。 |
+| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | 未设置 | 设为 `1` 可关闭 normal 与 minimal 模式的启动预热。 |
+| `CURSOR_BRIDGE_RUNTIME_MODE` | `minimal` | 没有持久化选择时的初始运行模式；设为 `normal` 可让首次启动显示 Cursor。 |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | 用户配置目录 | 覆盖持久化运行模式文件。 |
 | `CURSOR_BRIDGE_POLICY` | `active` | 没有持久化选择时的初始参与策略。 |
 | `CURSOR_BRIDGE_POLICY_FILE` | 用户配置目录 | 覆盖持久化策略文件。 |
@@ -208,6 +203,8 @@ cursor_runtime({mode: "minimal"})
 | `CURSOR_EXE` | 自动探测 | 显式 Cursor 可执行文件路径。 |
 
 高级 lifecycle 覆盖主要用于兼容诊断；Windows 上不建议绕过单例 supervisor。
+
+</details>
 
 ## 开发
 
