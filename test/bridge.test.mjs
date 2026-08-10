@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,7 @@ import {
   classifyParallelTerminalIcon,
   providerErrorSignature,
   createProviderError,
+  promoteAgentsWorkspaceLifecycle,
 } from '../server.mjs';
 
 test('page capability scoring prefers Cursor Agents and pins an existing target', () => {
@@ -214,6 +215,27 @@ test('provider error tray expression extracts terminal evidence without clicking
   assert.equal(error.confirmedTerminal, true);
   assert.equal(error.providerError.requestId, result.requestId);
   assert.match(error.terminalEvidence, /provider_error_tray:0238f19d/);
+});
+
+test('Agents workspace recovery clears stale failure guidance before reporting ready', () => {
+  const promoted = promoteAgentsWorkspaceLifecycle({
+    status: 'workspace-not-ready',
+    projectPath: 'G:\\project\\VESPERIX',
+    message: 'old failure',
+    needsAction: 'retry_initialization',
+    nextStep: 'old retry',
+    retryable: true,
+  }, {
+    targetId: 'agents-target',
+    targetUiFlavor: 'agents_v2',
+    workspace: 'VESPERIX',
+  });
+  assert.equal(promoted.status, 'agents-workspace-ready');
+  assert.equal(promoted.targetId, 'agents-target');
+  assert.equal(promoted.needsAction, null);
+  assert.equal(promoted.nextStep, null);
+  assert.equal(promoted.retryable, false);
+  assert.doesNotMatch(promoted.message, /old failure|old retry/);
 });
 
 class OfflineBridge extends CursorBridge {
@@ -422,6 +444,7 @@ test('normal runtime is the fresh default and minimal remains an explicit persis
   assert.equal(first.runtimeMode, 'normal');
   assert.equal(first.runtimeModeDefault, 'normal');
   assert.equal(first.runtimeModeSource, 'default');
+  assert.equal(first.runtimeModeScope, 'default');
   first.applyRuntimePresentation = async (action) => ({ supported: true, applied: false, action, reason: 'offline-test' });
   const enabled = await first.setRuntimeMode('minimal');
   assert.deepEqual(CURSOR_RUNTIME_MODES, ['normal', 'minimal']);
@@ -429,13 +452,46 @@ test('normal runtime is the fresh default and minimal remains an explicit persis
   assert.equal(enabled.startupBehavior, 'hidden_prewarm_on_adapter_start');
   assert.equal(enabled.modeStored, true);
   assert.equal(enabled.presentation.action, 'hide');
-  assert.match(enabled.minimalModeWarning, /Clicking the Cursor icon/i);
+  assert.match(enabled.minimalModeWarning, /Switch CCE to normal mode/i);
   assert.match(enabled.recovery, /switch CCE to normal mode/i);
 
   const restarted = new OfflineBridge({ runtimeFile, runtimeMode: undefined });
   assert.equal(restarted.runtimeMode, 'minimal');
   assert.equal(restarted.runtimeModeSource, 'persistent');
   assert.equal(restarted.runtimeModeView().persistsAcrossRestart, true);
+});
+
+test('cursor_init keeps a valid binding and returns child-friendly recovery when Cursor needs one safe restart', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-init-recovery-'));
+  const project = join(directory, 'project');
+  const workspaceFile = join(directory, 'state', 'workspaces.json');
+  mkdirSync(project, { recursive: true });
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+
+  class InitRecoveryBridge extends CursorBridge {
+    constructor() {
+      super({ runtimeFile: null, workspaceFile, workspaceKey: 'test-host', runtimeMode: 'normal' });
+    }
+
+    async _ensureCursor() {
+      this._lastLifecycle = {
+        status: 'running-no-debug',
+        message: 'Cursor 已经提前打开。',
+        nextStep: '保存手头内容并正常退出 Cursor 一次，然后重复初始化。',
+        retryable: true,
+      };
+      throw new Error(this._lastLifecycle.message);
+    }
+  }
+
+  const result = await new InitRecoveryBridge().initializeWorkspace(project);
+  assert.equal(result.initialized, true);
+  assert.equal(result.bindingPersisted, true);
+  assert.equal(result.ready, false);
+  assert.equal(result.status, 'running-no-debug');
+  assert.equal(result.projectPath, project);
+  assert.equal(result.retryable, true);
+  assert.match(result.nextStep, /正常退出 Cursor 一次/);
 });
 
 test('unified CCE prompt lets Cursor choose the minimum sufficient investigation depth', () => {
@@ -496,12 +552,19 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.deepEqual(Object.keys(search.inputSchema.properties), ['query']);
   assert.deepEqual(Object.keys(init.inputSchema.properties), ['path']);
   assert.deepEqual(init.inputSchema.required, ['path']);
+  assert.match(init.description, /never force-closes Cursor/);
   assert.match(init.description, /Agents Window/);
   assert.match(init.description, /instead of Home/);
   assert.equal(tools.some((tool) => tool.name === 'cursor_search'), false);
   assert.equal(tools.some((tool) => tool.name === 'cursor_search_deep'), false);
   assert.deepEqual(runtime.inputSchema.properties.mode.enum, ['normal', 'minimal']);
+  assert.deepEqual(Object.keys(runtime.inputSchema.properties), ['mode']);
+  assert.deepEqual(runtime.inputSchema.required, ['mode']);
   assert.match(runtime.description, /UI suppression, not a headless reimplementation/);
+  const cursorDo = tools.find((tool) => tool.name === 'cursor_do');
+  assert.match(cursorDo.description, /first in, first out/);
+  assert.equal(Object.hasOwn(cursorDo.inputSchema.properties, 'new_chat'), false);
+  assert.equal(tools.some((tool) => tool.name === 'cursor_launch'), false);
 });
 
 test('timeout completion rejects a generating partial reply and accepts confirmed stopped evidence', () => {
@@ -550,6 +613,7 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
       ...process.env,
       CURSOR_BRIDGE_DELEGATION: 'off',
       CURSOR_BRIDGE_NO_AUTOLAUNCH: '1',
+      CURSOR_BRIDGE_CDP_PORT: '1',
     },
   });
   const client = new Client({ name: 'cursor-bridge-test', version: '1.0.0' });
@@ -564,10 +628,20 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_task_control'), true);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), false);
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_runtime'), true);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_launch'), false);
     const search = listed.tools.find((tool) => tool.name === 'cursor_context_engine');
     assert.match(search.description, /Cursor Context Engine \(CCE\)/);
     assert.equal(Object.keys(search.inputSchema.properties).length, 1);
     assert.equal(Object.hasOwn(search.inputSchema.properties, 'max_results'), false);
+    const runtime = listed.tools.find((tool) => tool.name === 'cursor_runtime');
+    assert.deepEqual(Object.keys(runtime.inputSchema.properties), ['mode']);
+    assert.deepEqual(runtime.inputSchema.required, ['mode']);
+    const runtimeStatus = await client.callTool({ name: 'cursor_runtime', arguments: {} });
+    assert.notEqual(runtimeStatus.isError, true);
+    assert.ok(['normal', 'minimal'].includes(JSON.parse(runtimeStatus.content[0].text).runtimeMode));
+    const hiddenShow = await client.callTool({ name: 'cursor_runtime', arguments: { action: 'show' } });
+    assert.notEqual(hiddenShow.isError, true);
+    assert.equal(JSON.parse(hiddenShow.content[0].text).presentation.action, 'show');
     const taskControl = listed.tools.find((tool) => tool.name === 'cursor_task_control');
     assert.deepEqual(taskControl.inputSchema.properties.action.enum, ['reap', 'cancel', 'abandon']);
     const missingTask = await client.callTool({
@@ -598,6 +672,8 @@ test('bundled MCP exposes a fixed cursor_do contract without cursor_policy', asy
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_policy'), false);
     const cursorDo = listed.tools.find((tool) => tool.name === 'cursor_do');
     assert.match(cursorDo.description, /direct user opt-out always wins/i);
+    assert.match(cursorDo.description, /first in, first out/i);
+    assert.equal(Object.hasOwn(cursorDo.inputSchema.properties, 'new_chat'), false);
     assert.doesNotMatch(cursorDo.description, /manual|auto|active|eager|participation policy/i);
     const status = await first.callTool({ name: 'cursor_status', arguments: { task_id: 'cursor-missing' } });
     const view = JSON.parse(status.content[0].text);
@@ -626,12 +702,13 @@ test('new agent selection uses ID diff, selected entry, then newest timestamp', 
 
 test('cursor_do defaults to FIFO and keeps background task identity', async () => {
   const bridge = new OfflineBridge();
-  const view = await bridge.doTask('检查一个明确任务');
+  const view = await bridge.doTask('检查一个明确任务', { newChat: false });
   assert.equal(view.status, 'queued');
   assert.equal(view.execution, 'fifo');
   assert.equal(view.effectiveExecution, 'fifo');
   assert.equal(Object.hasOwn(view, 'submittedPolicy'), false);
   assert.match(view.taskId, /^cursor-/);
+  assert.equal(bridge.tasks.get(view.taskId).newChat, true);
 });
 
 test('parallel agent requires read_only or a writable path boundary', async () => {

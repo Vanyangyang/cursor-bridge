@@ -10893,19 +10893,40 @@ import {
   readFileSync as readFileSync2,
   renameSync as renameSync2,
   rmSync as rmSync2,
+  statSync,
   writeFileSync as writeFileSync2
 } from "node:fs";
-import { dirname as dirname2, join as join3, resolve as resolve2 } from "node:path";
+import { dirname as dirname2, extname, isAbsolute, join as join3, resolve as resolve2 } from "node:path";
+import { homedir as homedir3 } from "node:os";
 function pluginRuntimePath(candidate) {
   const value = String(candidate || "").replace(/\//g, "\\").toLowerCase();
   return value.includes("\\.codex\\.tmp\\marketplaces\\") || value.includes("\\.codex\\plugins\\cache\\") || value.includes("\\.claude\\plugins\\cache\\") || value.includes("\\appdata\\local\\npm-cache\\_npx\\");
 }
 function normalizeWorkspacePath(value) {
-  const raw = String(value || "").trim();
+  let raw = String(value || "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
   if (!raw) return "";
+  if (raw === "~") raw = homedir3();
+  else if (raw.startsWith("~/") || raw.startsWith("~\\")) raw = join3(homedir3(), raw.slice(2));
   if (/^\\\\\?\\UNC\\/i.test(raw)) return resolve2(`\\\\${raw.slice(8)}`);
   if (/^\\\\\?\\[a-zA-Z]:\\/.test(raw)) return resolve2(raw.slice(4));
   return resolve2(raw);
+}
+function isAbsoluteWorkspacePath(value) {
+  const raw = String(value || "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (!raw) return false;
+  if (raw === "~" || raw.startsWith("~/") || raw.startsWith("~\\")) return true;
+  return isAbsolute(raw) || /^\\\\\?\\(?:UNC\\|[a-zA-Z]:\\)/i.test(raw) || /^\\\\[^\\]+\\[^\\]+/.test(raw);
+}
+function isWorkspaceTarget(projectPath, options = {}) {
+  const existsImpl = options.existsImpl || existsSync;
+  if (!projectPath || !existsImpl(projectPath)) return false;
+  const statImpl = options.statImpl || statSync;
+  try {
+    const info = statImpl(projectPath);
+    return info.isDirectory() || info.isFile() && extname(projectPath).toLowerCase() === ".code-workspace";
+  } catch {
+    return false;
+  }
 }
 function resolveWorkspaceBindingFile(env = process.env) {
   return resolve2(env.CURSOR_BRIDGE_WORKSPACE_FILE || join3(defaultLifecycleDir(), "workspaces.json"));
@@ -10945,8 +10966,7 @@ function readWorkspaceBinding(filePath, bindingKey, options = {}) {
   const entry = readWorkspaceBindings(filePath).bindings[String(bindingKey || "")];
   if (!entry || typeof entry.projectPath !== "string") return null;
   const projectPath = normalizeWorkspacePath(entry.projectPath);
-  const existsImpl = options.existsImpl || existsSync;
-  if (!projectPath || !existsImpl(projectPath)) return null;
+  if (!isWorkspaceTarget(projectPath, options)) return null;
   return {
     projectPath,
     updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null
@@ -10956,10 +10976,16 @@ function writeWorkspaceBinding(filePath, bindingKey, projectPath, options = {}) 
   if (!filePath) throw new Error("persistent cursor_init storage is disabled for this server");
   const key = String(bindingKey || "").trim();
   if (!key) throw new Error("cursor_init could not identify the current Codex or Claude Code workspace session");
+  if (!isAbsoluteWorkspacePath(projectPath)) {
+    throw new Error("\u8BF7\u63D0\u4F9B\u9879\u76EE\u7684\u5B8C\u6574\u8DEF\u5F84\uFF0C\u4F8B\u5982 C:\\Projects\\my-app \u6216 /Users/me/Projects/my-app");
+  }
   const normalized = normalizeWorkspacePath(projectPath);
   const existsImpl = options.existsImpl || existsSync;
   if (!normalized || !existsImpl(normalized)) {
-    throw new Error(`cursor_init workspace does not exist: ${normalized || projectPath}`);
+    throw new Error(`\u627E\u4E0D\u5230\u5DE5\u4F5C\u533A\uFF1A${normalized || projectPath}`);
+  }
+  if (!isWorkspaceTarget(normalized, options)) {
+    throw new Error("\u5DE5\u4F5C\u533A\u5FC5\u987B\u662F\u9879\u76EE\u6587\u4EF6\u5939\u6216 .code-workspace \u6587\u4EF6");
   }
   const state = readWorkspaceBindings(filePath);
   const updatedAt = options.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
@@ -10994,8 +11020,8 @@ var init_workspace_binding = __esm({
 import { spawn as spawn2, execSync } from "child_process";
 import { existsSync as existsSync2 } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
-import { homedir as homedir3 } from "node:os";
-import { basename as basename2, extname, join as join4, resolve as resolve3 } from "node:path";
+import { homedir as homedir4 } from "node:os";
+import { basename as basename2, extname as extname2, join as join4, resolve as resolve3, win32 as winPath, posix as posixPath } from "node:path";
 import http from "http";
 function looksLikePluginRuntimePath(candidate) {
   const p = String(candidate || "").replace(/\//g, "\\").toLowerCase();
@@ -11017,7 +11043,7 @@ function resolveCodexThreadProjectPath(options = {}) {
   try {
     const lookupThreadCwd = options.lookupThreadCwd || ((id) => {
       const { DatabaseSync } = (options.requireImpl || loadModule)("node:sqlite");
-      const databasePath = options.databasePath || join4(homedir3(), ".codex", "state_5.sqlite");
+      const databasePath = options.databasePath || join4(homedir4(), ".codex", "state_5.sqlite");
       database = new DatabaseSync(databasePath, { readOnly: true });
       return database.prepare("SELECT cwd FROM threads WHERE id = ?").get(id)?.cwd || null;
     });
@@ -11047,8 +11073,12 @@ function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
   return resolve3(cwd);
 }
-function cursorFromRegistry() {
+function cursorFromRegistry(options = {}) {
+  const execSyncImpl = options.execSyncImpl || execSync;
+  const existsImpl = options.existsImpl || existsSync2;
   const queries = [
+    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
+    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
     'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
     'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
     'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
@@ -11056,37 +11086,80 @@ function cursorFromRegistry() {
   ];
   for (const q of queries) {
     try {
-      const out = execSync(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      const out = execSyncImpl(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
       const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
-      if (m && existsSync2(m[1])) return m[1];
+      if (m && existsImpl(m[1])) return m[1];
     } catch {
     }
   }
   return null;
 }
-function findCursorExe() {
-  if (process.env.CURSOR_EXE && existsSync2(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
-  if (IS_WIN) {
-    const fromReg = cursorFromRegistry();
-    if (fromReg) return fromReg;
-    for (const p of WIN_FALLBACKS) {
+function normalizeCursorExeCandidate(value, options = {}) {
+  const platform = options.platform || process.platform;
+  const existsImpl = options.existsImpl || existsSync2;
+  const raw = String(value || "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (!raw) return null;
+  let candidates;
+  if (platform === "win32") {
+    const normalized = raw.replace(/\//g, "\\");
+    candidates = /\.exe$/i.test(normalized) ? [normalized] : [winPath.join(normalized, "Cursor.exe")];
+  } else if (platform === "darwin") {
+    const normalized = raw.replace(/\\/g, "/").replace(/\/$/, "");
+    candidates = /\.app$/i.test(normalized) ? [posixPath.join(normalized, "Contents", "MacOS", "Cursor")] : /\/Contents\/MacOS$/i.test(normalized) ? [posixPath.join(normalized, "Cursor")] : [normalized];
+  } else {
+    candidates = [raw];
+  }
+  for (const candidate of candidates) {
+    try {
+      if (existsImpl(candidate)) return candidate;
+    } catch {
+    }
+  }
+  return null;
+}
+function findCursorExeDetails(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const existsImpl = options.existsImpl || existsSync2;
+  const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
+  if (override) return { path: override, source: "CURSOR_EXE", platform };
+  if (platform === "win32") {
+    const fromReg = cursorFromRegistry({ execSyncImpl: options.execSyncImpl, existsImpl });
+    if (fromReg) return { path: fromReg, source: "windows_registry", platform };
+    const localAppData = env.LOCALAPPDATA || join4(homedir4(), "AppData", "Local");
+    const programFiles = env.ProgramFiles || env.PROGRAMFILES || "C:\\Program Files";
+    const programFilesX86 = env["ProgramFiles(x86)"] || env.PROGRAMFILES_X86 || "";
+    const candidates = [
+      localAppData && winPath.join(localAppData, "Programs", "Cursor", "Cursor.exe"),
+      programFiles && winPath.join(programFiles, "Cursor", "Cursor.exe"),
+      programFilesX86 && winPath.join(programFilesX86, "Cursor", "Cursor.exe")
+    ].filter(Boolean);
+    for (const candidate of candidates) {
       try {
-        if (existsSync2(p)) return p;
+        if (existsImpl(candidate)) return { path: candidate, source: "windows_standard_location", platform };
       } catch {
       }
     }
     return null;
   }
-  if (IS_MAC) {
-    for (const p of MAC_CANDIDATES) {
+  if (platform === "darwin") {
+    const userHome = env.HOME || homedir4();
+    const candidates = [
+      "/Applications/Cursor.app/Contents/MacOS/Cursor",
+      userHome && posixPath.join(userHome, "Applications", "Cursor.app", "Contents", "MacOS", "Cursor")
+    ].filter(Boolean);
+    for (const candidate of candidates) {
       try {
-        if (existsSync2(p)) return p;
+        if (existsImpl(candidate)) return { path: candidate, source: "macos_standard_location", platform };
       } catch {
       }
     }
     return null;
   }
   return null;
+}
+function findCursorExe(options = {}) {
+  return findCursorExeDetails(options)?.path || null;
 }
 function cdpUp(timeoutMs = 1500) {
   return new Promise((resolve6) => {
@@ -11157,9 +11230,13 @@ async function ensureCursorRunningLocal(options = {}) {
   const waitMs = Number(options.waitMs || 3e4);
   const runtimeMode = options.runtimeMode || "normal";
   const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
+  const cdpUpImpl = options.cdpUpImpl || cdpUp;
+  const cdpIsCursorImpl = options.cdpIsCursorImpl || cdpIsCursor;
+  const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
+  const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
   const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve3(String(options.projectPath)) : null : resolveProjectPath();
-  if (await cdpUp()) {
-    const isCursor = await cdpIsCursor();
+  if (await cdpUpImpl()) {
+    const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
       const cursorPid2 = findCursorPidByPort(CDP_PORT);
       const windowGuard2 = effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
@@ -11182,7 +11259,8 @@ async function ensureCursorRunningLocal(options = {}) {
         }
       }
       if (projectPath && existsSync2(projectPath) && !targetId2) {
-        const exe2 = findCursorExe();
+        const cursorExecutable2 = findCursorExeDetailsImpl();
+        const exe2 = cursorExecutable2 && cursorExecutable2.path;
         if (!exe2) {
           return {
             ok: false,
@@ -11193,7 +11271,10 @@ async function ensureCursorRunningLocal(options = {}) {
             projectPath,
             presentation: presentation2,
             windowGuard: windowGuard2,
-            message: `Cursor \u5DF2\u8FDE\u63A5\uFF0C\u4F46\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u672A\u6253\u5F00\uFF0C\u4E14\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\u7528\u4E8E\u6253\u5F00\u65B0\u7A97\u53E3\u3002`
+            needsAction: "install_or_locate_cursor",
+            retryable: true,
+            nextStep: "\u8BF7\u786E\u8BA4 Cursor \u5DF2\u5B89\u88C5\u5E76\u767B\u5F55\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+            message: `CCE \u5DF2\u8FDE\u63A5 Cursor\uFF0C\u4F46\u8FD8\u4E0D\u80FD\u6253\u5F00\u5DE5\u4F5C\u533A ${projectPath}\uFF0C\u56E0\u4E3A\u6CA1\u6709\u627E\u5230 Cursor \u7A0B\u5E8F\u3002`
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
@@ -11216,7 +11297,12 @@ async function ensureCursorRunningLocal(options = {}) {
             presentation: presentation2,
             windowGuard: windowGuard2,
             workspaceAction,
-            message: `Cursor \u5DF2\u8FDE\u63A5\uFF0C\u4F46\u672A\u6355\u83B7\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u65B0\u5EFA\u7684 CDP target\uFF1BCCE \u5DF2\u505C\u6B62\uFF0C\u907F\u514D\u5728\u9519\u8BEF\u7D22\u5F15\u4E2D\u68C0\u7D22\u3002`
+            cursorExecutable: exe2,
+            cursorExecutableSource: cursorExecutable2.source,
+            needsAction: "retry_initialization",
+            retryable: true,
+            nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+            message: `Cursor \u5DF2\u6253\u5F00\u9879\u76EE\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
           };
         }
         targetId2 = openedTarget2.id;
@@ -11240,24 +11326,37 @@ async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: "port-not-cursor",
       port: CDP_PORT,
-      message: `CDP ${CDP_PORT} \u88AB\u3010\u975E Cursor\u3011\u7684 IDE \u5360\u7528\u3002\u6362\u7AEF\u53E3\u6216\u6392\u67E5\u3002`
+      needsAction: "free_cce_port",
+      retryable: true,
+      nextStep: `\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u4F7F\u7528\u3002\u5173\u95ED\u5360\u7528\u5B83\u7684\u7A0B\u5E8F\u540E\uFF0C\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002`,
+      message: `CCE \u73B0\u5728\u65E0\u6CD5\u8FDE\u63A5 Cursor\uFF0C\u56E0\u4E3A\u6240\u9700\u7684\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u5360\u7528\u3002`
     };
   }
-  if (cursorRunning()) {
+  if (cursorRunningImpl()) {
+    const cursorExecutable2 = findCursorExeDetailsImpl();
     return {
       ok: false,
       status: "running-no-debug",
       port: CDP_PORT,
-      message: `Cursor \u6B63\u5728\u8FD0\u884C\u4F46\u6CA1\u5E26 --remote-debugging-port=${CDP_PORT}\uFF08\u53EF\u80FD\u7531 Codex\u3001\u8D44\u6E90\u7BA1\u7406\u5668\u6216\u5176\u4ED6\u542F\u52A8\u5668\u5148\u6253\u5F00\uFF1B\u5355\u5B9E\u4F8B\u9501\u4F1A\u5FFD\u7565\u540E\u7EED flag\uFF09\u3002\u8BF7\u5148\u5B89\u5168\u9000\u51FA\u8FD9\u4E00\u6B21 Cursor\uFF0Ccursor-bridge \u4F1A\u5728\u4E0B\u6B21\u542F\u52A8\u65F6\u9884\u70ED\u5E26 CDP \u7684\u5B9E\u4F8B\u5E76\u6301\u7EED\u9690\u85CF\u7A97\u53E3\u3002\u6CE8\u610F\uFF1A\u4E0D\u4E3B\u52A8 kill \u4EE5\u514D\u4E22\u672A\u4FDD\u5B58\u5185\u5BB9\u3002`
+      cursorExecutable: cursorExecutable2 && cursorExecutable2.path || null,
+      cursorExecutableSource: cursorExecutable2 && cursorExecutable2.source || null,
+      needsAction: "close_cursor_and_retry",
+      retryable: true,
+      nextStep: projectPath ? `\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u518D\u6B21\u8BF4\u201C\u521D\u59CB\u5316 CCE \u5DE5\u4F5C\u533A\u4E3A ${projectPath}\u201D\u3002` : "\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u91CD\u8BD5\u521A\u624D\u7684 CCE \u64CD\u4F5C\u3002",
+      message: "Cursor \u5DF2\u7ECF\u63D0\u524D\u6253\u5F00\uFF0CCCE \u65E0\u6CD5\u5728\u8FD0\u884C\u4E2D\u4E3A\u5B83\u8865\u4E0A\u8FDE\u63A5\u80FD\u529B\u3002\u4E3A\u4FDD\u62A4\u672A\u4FDD\u5B58\u5185\u5BB9\uFF0CCursor Bridge \u4E0D\u4F1A\u5F3A\u5236\u5173\u95ED\u5B83\u3002"
     };
   }
-  const exe = findCursorExe();
+  const cursorExecutable = findCursorExeDetailsImpl();
+  const exe = cursorExecutable && cursorExecutable.path;
   if (!exe) {
     return {
       ok: false,
       status: "no-exe",
       port: CDP_PORT,
-      message: "\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\uFF08Windows\uFF1A\u6CE8\u518C\u8868/\u9ED8\u8BA4\u4F4D\u7F6E\uFF1BmacOS\uFF1A/Applications/Cursor.app \u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u5B8C\u6574\u8DEF\u5F84\u3002"
+      needsAction: "install_or_locate_cursor",
+      retryable: true,
+      nextStep: "\u8BF7\u5148\u5B89\u88C5\u5E76\u767B\u5F55 Cursor\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+      message: "\u6CA1\u6709\u627E\u5230 Cursor\u3002\u6807\u51C6 Windows \u4E0E macOS \u5B89\u88C5\u4F1A\u81EA\u52A8\u8BC6\u522B\uFF0C\u901A\u5E38\u4E0D\u9700\u8981\u586B\u5199\u7A0B\u5E8F\u8DEF\u5F84\u3002"
     };
   }
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
@@ -11287,7 +11386,12 @@ async function ensureCursorRunningLocal(options = {}) {
       runtimeMode: effectiveRuntimeMode,
       projectPath,
       windowGuard: startupWindowGuard,
-      message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002`
+      cursorExecutable: exe,
+      cursorExecutableSource: cursorExecutable.source,
+      needsAction: "retry_initialization",
+      retryable: true,
+      nextStep: "\u8BF7\u7A0D\u7B49\u7247\u523B\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+      message: "Cursor \u5DF2\u7ECF\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u51C6\u5907\u597D\uFF1B\u65E0\u9700\u4FEE\u6539\u4EFB\u4F55\u7AEF\u53E3\u8BBE\u7F6E\u3002"
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
@@ -11303,7 +11407,12 @@ async function ensureCursorRunningLocal(options = {}) {
       runtimeMode: effectiveRuntimeMode,
       projectPath,
       windowGuard: startupWindowGuard,
-      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46\u672A\u6355\u83B7\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u7684 CDP target\uFF1BCCE \u5DF2\u505C\u6B62\uFF0C\u907F\u514D\u5728\u9519\u8BEF\u7D22\u5F15\u4E2D\u68C0\u7D22\u3002`
+      cursorExecutable: exe,
+      cursorExecutableSource: cursorExecutable.source,
+      needsAction: "retry_initialization",
+      retryable: true,
+      nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
     };
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
@@ -11321,6 +11430,8 @@ async function ensureCursorRunningLocal(options = {}) {
     presentation,
     windowGuard,
     startupWindowGuard,
+    cursorExecutable: exe,
+    cursorExecutableSource: cursorExecutable.source,
     targetId,
     workspaceAction: projectPath ? "launched-project" : "launched-last-workspace",
     message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
@@ -11332,7 +11443,7 @@ function normalizeProjectKey(projectPath) {
 function targetTitleMatchesProject(title, projectPath) {
   const name = basename2(String(projectPath || "")).trim().toLowerCase();
   if (!name) return false;
-  const extension2 = extname(name);
+  const extension2 = extname2(name);
   const candidates = [...new Set([name, extension2 ? name.slice(0, -extension2.length) : name].filter(Boolean))];
   const normalizedTitle = String(title || "").trim().toLowerCase();
   return candidates.some((candidate) => normalizedTitle === candidate || normalizedTitle.startsWith(candidate + " - ") || normalizedTitle.includes(" - " + candidate + " - "));
@@ -11377,7 +11488,7 @@ async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = 
   }
   return null;
 }
-var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES;
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, IS_WIN, IS_MAC;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
     init_cursor_runtime();
@@ -11389,14 +11500,6 @@ var init_cursor_ensure_core = __esm({
     loadModule = createNodeRequire(import.meta.url);
     IS_WIN = process.platform === "win32";
     IS_MAC = process.platform === "darwin";
-    WIN_FALLBACKS = [
-      `${process.env.LOCALAPPDATA || ""}\\Programs\\cursor\\Cursor.exe`,
-      "C:\\Program Files\\cursor\\Cursor.exe"
-    ];
-    MAC_CANDIDATES = [
-      "/Applications/Cursor.app/Contents/MacOS/Cursor",
-      `${process.env.HOME || ""}/Applications/Cursor.app/Contents/MacOS/Cursor`
-    ];
   }
 });
 
@@ -21027,6 +21130,20 @@ function createProviderError(info) {
   error2.providerError = providerError;
   return error2;
 }
+function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
+  return {
+    ...lifecycle,
+    status: "agents-workspace-ready",
+    launchReason: "agents-repository-ready",
+    targetId: agentsWorkspace.targetId,
+    targetUiFlavor: agentsWorkspace.targetUiFlavor,
+    workspaceAction: "reused-agents-repository",
+    message: `CCE \u5DF2\u786E\u8BA4 Cursor Agents \u4E2D\u7684\u5DE5\u4F5C\u533A ${lifecycle.projectPath || agentsWorkspace.workspace || ""} \u53EF\u4EE5\u4F7F\u7528\u3002`,
+    needsAction: null,
+    nextStep: null,
+    retryable: false
+  };
+}
 var CursorBridge = class {
   constructor(options = {}) {
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
@@ -21041,7 +21158,7 @@ var CursorBridge = class {
     this.persistedRuntimeMode = persistedRuntimeMode;
     this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
     this.runtimeModeSource = options.runtimeMode !== void 0 ? "constructor" : persistedRuntimeMode ? "persistent" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
-    this.runtimeModeScope = persistedRuntimeMode ? "persistent" : "session";
+    this.runtimeModeScope = persistedRuntimeMode ? "persistent" : options.runtimeMode !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
     this.workspaceFile = options.workspaceFile === null ? null : resolve5(options.workspaceFile || resolveWorkspaceBindingFile());
     this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
     const persistedWorkspace = options.projectPath === void 0 ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey) : null;
@@ -21084,10 +21201,38 @@ var CursorBridge = class {
     this.workspaceSource = "persistent_init";
     this.workspaceUpdatedAt = saved.updatedAt;
     this._lastLifecycle = null;
-    await this._ensureCursor();
+    try {
+      await this._ensureCursor();
+    } catch (error2) {
+      const lifecycle = this._lastLifecycle;
+      const recoverableStatuses = /* @__PURE__ */ new Set([
+        "running-no-debug",
+        "port-not-cursor",
+        "no-exe",
+        "timeout",
+        "workspace-not-ready"
+      ]);
+      if (!lifecycle || !recoverableStatuses.has(lifecycle.status)) throw error2;
+      return {
+        previousProjectPath,
+        ...this.workspaceView(),
+        bindingPersisted: true,
+        ready: false,
+        status: lifecycle.status,
+        message: lifecycle.message || "CCE \u521D\u59CB\u5316\u5C1A\u672A\u5B8C\u6210\uFF0C\u4F46\u5DE5\u4F5C\u533A\u5DF2\u7ECF\u4FDD\u5B58\u3002",
+        nextStep: lifecycle.nextStep || "\u5904\u7406\u63D0\u793A\u540E\uFF0C\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+        retryable: lifecycle.retryable !== false,
+        lifecycle
+      };
+    }
     return {
       previousProjectPath,
       ...this.workspaceView(),
+      bindingPersisted: true,
+      ready: true,
+      status: "ready",
+      message: `CCE \u5DF2\u51C6\u5907\u597D\u4F7F\u7528\u5DE5\u4F5C\u533A ${saved.projectPath}\u3002`,
+      nextStep: "\u73B0\u5728\u53EF\u4EE5\u76F4\u63A5\u4F7F\u7528 cursor_context_engine \u6216 cursor_do\u3002",
       lifecycle: this._lastLifecycle
     };
   }
@@ -21143,7 +21288,7 @@ var CursorBridge = class {
       availableRuntimeModes: [...CURSOR_RUNTIME_MODES],
       platformWindowControl: process.platform === "win32" ? "supported" : "unsupported",
       startupBehavior: cursorStartupBehavior(this.runtimeMode),
-      minimalModeWarning: this.runtimeMode === "minimal" ? "Cursor windows are continuously hidden. Clicking the Cursor icon reuses the same single-instance process and will be hidden again; ask CCE to show Cursor temporarily or switch to normal mode." : null,
+      minimalModeWarning: this.runtimeMode === "minimal" ? "Cursor windows are continuously hidden. Switch CCE to normal mode before using the Cursor interface." : null,
       lastPresentation: this._lastPresentation
     };
   }
@@ -21177,7 +21322,7 @@ var CursorBridge = class {
       previousMode,
       ...this.runtimeModeView(),
       presentation,
-      recovery: normalized === "minimal" ? "Ask CCE to show Cursor temporarily, or switch CCE to normal mode before opening Cursor manually." : null
+      recovery: normalized === "minimal" ? "Switch CCE to normal mode before opening Cursor manually." : null
     };
   }
   async contextEngine(query) {
@@ -21241,7 +21386,7 @@ var CursorBridge = class {
     fullPrompt += contract ? "\n\n\u9A8C\u6536\u4E0E\u56DE\u62A5\u5408\u540C\uFF1A\n" + contract : DO_DEFAULT_CONTRACT;
     const job = this._enqueue("do", fullPrompt, {
       timeoutMs,
-      newChat: execution === "parallel_agent" ? true : options.newChat !== false,
+      newChat: true,
       execution,
       readOnly,
       allowedPaths
@@ -21453,16 +21598,18 @@ var CursorBridge = class {
           projectPath: rr.projectPath || null,
           targetId: rr.targetId || null,
           workspaceAction: rr.workspaceAction || null,
-          presentation: rr.presentation || null
+          presentation: rr.presentation || null,
+          message: rr.message || null,
+          needsAction: rr.needsAction || null,
+          nextStep: rr.nextStep || null,
+          retryable: rr.retryable === true,
+          cursorExecutable: rr.cursorExecutable || null,
+          cursorExecutableSource: rr.cursorExecutableSource || null
         };
         if (!rr.ok && rr.status === "workspace-not-ready" && rr.projectPath) {
           const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
           if (agentsWorkspace) {
-            this._lastLifecycle.status = "agents-workspace-ready";
-            this._lastLifecycle.launchReason = "agents-repository-ready";
-            this._lastLifecycle.targetId = agentsWorkspace.targetId;
-            this._lastLifecycle.targetUiFlavor = agentsWorkspace.targetUiFlavor;
-            this._lastLifecycle.workspaceAction = "reused-agents-repository";
+            this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
           }
         }
         if (this.runtimeMode === "minimal") {
@@ -21470,7 +21617,7 @@ var CursorBridge = class {
         }
         const life = "adapterPid=" + this._lastLifecycle.adapterPid + " supervisorPid=" + this._lastLifecycle.supervisorPid + " reused=" + this._lastLifecycle.reusedSupervisor + " reason=" + this._lastLifecycle.launchReason;
         if (!rr.ok && this._lastLifecycle.status !== "agents-workspace-ready") {
-          throw new Error(rr.message || `Cursor lifecycle failed: ${rr.status}`);
+          throw new Error([rr.message || `Cursor lifecycle failed: ${rr.status}`, rr.nextStep].filter(Boolean).join(" "));
         }
         if (this._lastLifecycle.status === "agents-workspace-ready") {
           console.error(`\u{1FA9F} Cursor Agents repository ready: ${this._lastLifecycle.projectPath} -> ${this._lastLifecycle.targetId}`);
@@ -22600,11 +22747,11 @@ function buildToolDefinitions(bridgeInstance) {
   return [
     {
       name: "cursor_init",
-      description: "Persistently bind this Codex task or Claude Code project to one Cursor workspace. Re-run it to replace the binding. Every later CCE or cursor_do request verifies that workspace, opens its Cursor Editor target when needed, and creates new Cursor Agents work inside the matching repository section instead of Home. The path must already exist. Cursor login and the user's old/new UI preference are preserved; when both UIs are open, Bridge selects the new Agents Window.",
+      description: "Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge saves it, finds Cursor, ensures the required connection, and opens or verifies the matching project. If Cursor was opened too early without CCE access, initialization safely keeps the binding and tells the user to save, close Cursor once, and repeat the same initialization sentence; it never force-closes Cursor. Cursor login and the user's old/new UI preference are preserved. When both UIs are open, Bridge selects the new Agents Window and creates work in the matching repository instead of Home.",
       inputSchema: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Absolute project directory or .code-workspace path to bind. Re-running cursor_init replaces the previous binding for this host task/project." }
+          path: { type: "string", description: "Absolute local project directory or .code-workspace path. Re-run initialization with another path to switch workspaces." }
         },
         required: ["path"]
       }
@@ -22616,15 +22763,14 @@ function buildToolDefinitions(bridgeInstance) {
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
-      description: "Give Cursor a clearly bounded task and get back a task ID. Use fifo for the compatible serial queue or parallel_agent for a separate top-level Cursor Agent. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.",
+      description: "Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.",
       inputSchema: {
         type: "object",
         properties: {
           prompt: { type: "string", description: "The task Cursor should receive. State the goal, boundaries, and what a complete result looks like." },
           background: { type: "boolean", default: true, description: "When true, return the task ID immediately. When false, wait for the task to finish or need attention." },
-          execution: { type: "string", enum: ["fifo", "parallel_agent"], default: "fifo", description: "fifo uses the compatible serial queue. parallel_agent creates a separate top-level Cursor Agent." },
+          execution: { type: "string", enum: ["fifo", "parallel_agent"], default: "fifo", description: "fifo is the first-in, first-out serial queue and runs one task at a time in a clean chat. parallel_agent creates a separate top-level Cursor Agent." },
           read_only: { type: "boolean", default: false, description: "Set true when Cursor must not change the workspace." },
-          new_chat: { type: "boolean", default: true, description: "Start fifo work in a clean chat. parallel_agent always starts a separate Agent." },
           timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "How long to wait before timing out, in milliseconds. The default is 10 minutes." },
           allowed_paths: { type: "array", items: { type: "string" }, description: "Workspace-relative paths Cursor may write. Parallel write tasks require non-overlapping paths. This declaration is not a filesystem sandbox." },
           completion_contract: { type: "string", description: "Optional acceptance checks or a required final-report format." }
@@ -22650,25 +22796,19 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_runtime",
-      description: "Inspect or change how Cursor itself is presented. minimal persists a UI-suppressed runtime: Cursor still runs with CDP and its indexed Agent capabilities, while Bridge prewarms it hidden for cursor_context_engine or cursor_do. normal is the fresh-install default and keeps ordinary visible/autolaunch behavior. minimal is opt-in only: before enabling it, tell the user that manually clicking Cursor will reuse the guarded process and be hidden again until CCE temporarily shows it or switches back to normal. This is UI suppression, not a headless reimplementation. Use action=show or action=hide for an immediate reversible presentation change without changing the stored mode. Omit mode and action for status.",
+      description: "Persistently switch Cursor presentation between normal and minimal. normal is the fresh-install default and restores ordinary visible Cursor use. minimal is the recommended opt-in background experience on tested Windows 11 systems: Cursor and CCE keep running while Cursor windows stay hidden. Before enabling minimal, tell the user that manually opening Cursor will remain hidden until CCE is switched back to normal. This is UI suppression, not a headless reimplementation.",
       inputSchema: {
         type: "object",
         properties: {
-          mode: { type: "string", enum: [...CURSOR_RUNTIME_MODES], description: "normal shows Cursor and is the default. minimal is an explicit opt-in that keeps the Cursor-powered CCE running while continuously hiding its Windows UI." },
-          scope: { type: "string", enum: ["persistent", "session"], default: "persistent", description: "persistent survives MCP restarts; session is a temporary override." },
-          action: { type: "string", enum: ["show", "hide"], description: "Immediately show or hide the Cursor instance serving the configured CDP port without changing the runtime mode." }
-        }
+          mode: { type: "string", enum: [...CURSOR_RUNTIME_MODES], description: "normal shows Cursor and is the default. minimal is an explicit opt-in that keeps the Cursor-powered CCE running while continuously hiding its Windows UI." }
+        },
+        required: ["mode"]
       }
     },
     {
       name: "cursor_status",
       description: "Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.",
       inputSchema: { type: "object", properties: { task_id: { type: "string", description: "A task ID returned by cursor_do. Omit it for an overall status view." } } }
-    },
-    {
-      name: "cursor_launch",
-      description: "Make sure Cursor is running with the CDP debugging port that Cursor Bridge needs. On Windows, this can launch Cursor and open the current project automatically. The result explains whether Cursor was already ready, was launched, needs a full restart with debugging enabled, could not be found, or timed out.",
-      inputSchema: { type: "object", properties: {} }
     }
   ].filter(Boolean);
 }
@@ -22699,7 +22839,13 @@ async function ensureBridgeCursor(targetBridge, reason) {
     workspaceAction: r.workspaceAction || null,
     presentation: r.presentation || null,
     windowGuard: r.windowGuard || null,
-    startupWindowGuard: r.startupWindowGuard || null
+    startupWindowGuard: r.startupWindowGuard || null,
+    message: r.message || null,
+    needsAction: r.needsAction || null,
+    nextStep: r.nextStep || null,
+    retryable: r.retryable === true,
+    cursorExecutable: r.cursorExecutable || null,
+    cursorExecutableSource: r.cursorExecutableSource || null
   };
   if (targetBridge.runtimeMode === "minimal") {
     targetBridge._lastPresentation = r.presentation ? { ...r.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await targetBridge.applyRuntimePresentation("hide");
@@ -22725,7 +22871,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
         background: !args || args.background !== false,
         execution: args && args.execution,
         readOnly: !!(args && args.read_only),
-        newChat: !args || args.new_chat !== false,
         timeoutMs: args && args.timeout_ms,
         allowedPaths: args && args.allowed_paths,
         completionContract: args && args.completion_contract
@@ -22817,6 +22962,7 @@ export {
   normalizeCursorRuntimeMode,
   normalizeDelegationMode,
   pathsOverlap,
+  promoteAgentsWorkspaceLifecycle,
   providerErrorSignature,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,

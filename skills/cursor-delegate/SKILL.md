@@ -11,7 +11,7 @@ Use Cursor as an execution partner. Keep direction, scope decisions, risk owners
 
 - Do not call `cursor_do` when the user explicitly says not to use Cursor or not to delegate. A direct user opt-out always wins.
 - If `cursor_do` is unavailable, or `cursor_status` reports delegation as disabled, do not bypass the setting, repeatedly retry, or ask Cursor to re-enable itself. Complete the work in the primary agent.
-- Treat `CURSOR_BRIDGE_DELEGATION=off` as an administrator-level host switch. It disables delegated execution but does not by itself disable `cursor_context_engine`, `cursor_status`, or `cursor_launch`.
+- Treat `CURSOR_BRIDGE_DELEGATION=off` as an administrator-level host switch. It disables delegated execution but does not by itself disable `cursor_context_engine`, `cursor_init`, or `cursor_status`.
 - Cursor Bridge exposes one fixed delegation contract. Do not invent participation levels, call-frequency controls, or slash commands.
 
 ## Follow the default workflow
@@ -22,7 +22,7 @@ Use this responsibility chain:
 
 - Decide what should be achieved, why it matters, what must not change, where Cursor may work, and what evidence makes the result acceptable. Do not delegate product direction, architecture boundaries, or state verdicts.
 - Allow Cursor to locate relevant implementation, compare local approaches, and complete code, documentation, configuration, scripts, tests, and tooling inside those boundaries. Do not require the primary agent to pre-solve the task line by line.
-- Once a task has been selected for delegation, normally call `cursor_do` once with `background=true` and `new_chat=true`, then continue non-conflicting primary-agent work.
+- Once a task has been selected for delegation, normally call `cursor_do` once with `background=true`, then continue non-conflicting primary-agent work. Bridge starts FIFO work in a clean chat automatically.
 - Prefer `execution=fifo` unless the parallel contract is clearly satisfied.
 - Do not inject a unique completion marker or impose a minimum response length. Rely on task state, stable `task_id` or `agent_id`, and the actual result.
 
@@ -60,7 +60,7 @@ Do not choose parallel execution merely because there are many tasks. When depen
 
 1. Record the relevant pre-dispatch workspace state so later review can distinguish existing user changes.
 2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md).
-3. Call `cursor_do` with `background=true` and `new_chat=true` by default.
+3. Call `cursor_do` with `background=true`; do not invent a chat-selection parameter.
 4. Save each returned `task_id`; also save `agent_id` for `parallel_agent`.
 5. If a parallel submission does not return a usable `agent_id`, stop expanding the parallel batch and use `fifo` or report the ambiguous state.
 

@@ -253,8 +253,10 @@ __export(cursor_ensure_core_exports, {
   cursorRunning: () => cursorRunning,
   ensureCursorRunningLocal: () => ensureCursorRunningLocal,
   findCursorExe: () => findCursorExe,
+  findCursorExeDetails: () => findCursorExeDetails,
   looksLikePluginRuntimePath: () => looksLikePluginRuntimePath,
   normalizeCodexThreadCwd: () => normalizeCodexThreadCwd,
+  normalizeCursorExeCandidate: () => normalizeCursorExeCandidate,
   resolveCodexThreadProjectPath: () => resolveCodexThreadProjectPath,
   resolveProjectPath: () => resolveProjectPath,
   selectNewCdpTarget: () => selectNewCdpTarget,
@@ -265,7 +267,7 @@ import { spawn as spawn2, execSync } from "child_process";
 import { existsSync } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
 import { homedir as homedir3 } from "node:os";
-import { basename as basename2, extname, join as join3, resolve as resolve2 } from "node:path";
+import { basename as basename2, extname, join as join3, resolve as resolve2, win32 as winPath, posix as posixPath } from "node:path";
 import http from "http";
 function looksLikePluginRuntimePath(candidate) {
   const p = String(candidate || "").replace(/\//g, "\\").toLowerCase();
@@ -317,8 +319,12 @@ function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
   return resolve2(cwd);
 }
-function cursorFromRegistry() {
+function cursorFromRegistry(options = {}) {
+  const execSyncImpl = options.execSyncImpl || execSync;
+  const existsImpl = options.existsImpl || existsSync;
   const queries = [
+    'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
+    'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Cursor.exe" /ve',
     'reg query "HKCU\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
     'reg query "HKLM\\Software\\Classes\\cursor\\shell\\open\\command" /ve',
     'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Cursor (User)" /v DisplayIcon',
@@ -326,37 +332,80 @@ function cursorFromRegistry() {
   ];
   for (const q of queries) {
     try {
-      const out = execSync(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      const out = execSyncImpl(q, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
       const m = out.match(/([A-Za-z]:\\[^"\r\n]*?Cursor\.exe)/i);
-      if (m && existsSync(m[1])) return m[1];
+      if (m && existsImpl(m[1])) return m[1];
     } catch {
     }
   }
   return null;
 }
-function findCursorExe() {
-  if (process.env.CURSOR_EXE && existsSync(process.env.CURSOR_EXE)) return process.env.CURSOR_EXE;
-  if (IS_WIN) {
-    const fromReg = cursorFromRegistry();
-    if (fromReg) return fromReg;
-    for (const p of WIN_FALLBACKS) {
+function normalizeCursorExeCandidate(value, options = {}) {
+  const platform = options.platform || process.platform;
+  const existsImpl = options.existsImpl || existsSync;
+  const raw = String(value || "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  if (!raw) return null;
+  let candidates;
+  if (platform === "win32") {
+    const normalized = raw.replace(/\//g, "\\");
+    candidates = /\.exe$/i.test(normalized) ? [normalized] : [winPath.join(normalized, "Cursor.exe")];
+  } else if (platform === "darwin") {
+    const normalized = raw.replace(/\\/g, "/").replace(/\/$/, "");
+    candidates = /\.app$/i.test(normalized) ? [posixPath.join(normalized, "Contents", "MacOS", "Cursor")] : /\/Contents\/MacOS$/i.test(normalized) ? [posixPath.join(normalized, "Cursor")] : [normalized];
+  } else {
+    candidates = [raw];
+  }
+  for (const candidate of candidates) {
+    try {
+      if (existsImpl(candidate)) return candidate;
+    } catch {
+    }
+  }
+  return null;
+}
+function findCursorExeDetails(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const existsImpl = options.existsImpl || existsSync;
+  const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
+  if (override) return { path: override, source: "CURSOR_EXE", platform };
+  if (platform === "win32") {
+    const fromReg = cursorFromRegistry({ execSyncImpl: options.execSyncImpl, existsImpl });
+    if (fromReg) return { path: fromReg, source: "windows_registry", platform };
+    const localAppData = env.LOCALAPPDATA || join3(homedir3(), "AppData", "Local");
+    const programFiles = env.ProgramFiles || env.PROGRAMFILES || "C:\\Program Files";
+    const programFilesX86 = env["ProgramFiles(x86)"] || env.PROGRAMFILES_X86 || "";
+    const candidates = [
+      localAppData && winPath.join(localAppData, "Programs", "Cursor", "Cursor.exe"),
+      programFiles && winPath.join(programFiles, "Cursor", "Cursor.exe"),
+      programFilesX86 && winPath.join(programFilesX86, "Cursor", "Cursor.exe")
+    ].filter(Boolean);
+    for (const candidate of candidates) {
       try {
-        if (existsSync(p)) return p;
+        if (existsImpl(candidate)) return { path: candidate, source: "windows_standard_location", platform };
       } catch {
       }
     }
     return null;
   }
-  if (IS_MAC) {
-    for (const p of MAC_CANDIDATES) {
+  if (platform === "darwin") {
+    const userHome = env.HOME || homedir3();
+    const candidates = [
+      "/Applications/Cursor.app/Contents/MacOS/Cursor",
+      userHome && posixPath.join(userHome, "Applications", "Cursor.app", "Contents", "MacOS", "Cursor")
+    ].filter(Boolean);
+    for (const candidate of candidates) {
       try {
-        if (existsSync(p)) return p;
+        if (existsImpl(candidate)) return { path: candidate, source: "macos_standard_location", platform };
       } catch {
       }
     }
     return null;
   }
   return null;
+}
+function findCursorExe(options = {}) {
+  return findCursorExeDetails(options)?.path || null;
 }
 function cdpUp(timeoutMs = 1500) {
   return new Promise((resolve3) => {
@@ -427,9 +476,13 @@ async function ensureCursorRunningLocal(options = {}) {
   const waitMs = Number(options.waitMs || 3e4);
   const runtimeMode = options.runtimeMode || "normal";
   const effectiveRuntimeMode = normalizeCursorRuntimeMode(runtimeMode);
+  const cdpUpImpl = options.cdpUpImpl || cdpUp;
+  const cdpIsCursorImpl = options.cdpIsCursorImpl || cdpIsCursor;
+  const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
+  const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
   const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve2(String(options.projectPath)) : null : resolveProjectPath();
-  if (await cdpUp()) {
-    const isCursor = await cdpIsCursor();
+  if (await cdpUpImpl()) {
+    const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
       const cursorPid2 = findCursorPidByPort(CDP_PORT);
       const windowGuard2 = effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
@@ -452,7 +505,8 @@ async function ensureCursorRunningLocal(options = {}) {
         }
       }
       if (projectPath && existsSync(projectPath) && !targetId2) {
-        const exe2 = findCursorExe();
+        const cursorExecutable2 = findCursorExeDetailsImpl();
+        const exe2 = cursorExecutable2 && cursorExecutable2.path;
         if (!exe2) {
           return {
             ok: false,
@@ -463,7 +517,10 @@ async function ensureCursorRunningLocal(options = {}) {
             projectPath,
             presentation: presentation2,
             windowGuard: windowGuard2,
-            message: `Cursor \u5DF2\u8FDE\u63A5\uFF0C\u4F46\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u672A\u6253\u5F00\uFF0C\u4E14\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\u7528\u4E8E\u6253\u5F00\u65B0\u7A97\u53E3\u3002`
+            needsAction: "install_or_locate_cursor",
+            retryable: true,
+            nextStep: "\u8BF7\u786E\u8BA4 Cursor \u5DF2\u5B89\u88C5\u5E76\u767B\u5F55\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+            message: `CCE \u5DF2\u8FDE\u63A5 Cursor\uFF0C\u4F46\u8FD8\u4E0D\u80FD\u6253\u5F00\u5DE5\u4F5C\u533A ${projectPath}\uFF0C\u56E0\u4E3A\u6CA1\u6709\u627E\u5230 Cursor \u7A0B\u5E8F\u3002`
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
@@ -486,7 +543,12 @@ async function ensureCursorRunningLocal(options = {}) {
             presentation: presentation2,
             windowGuard: windowGuard2,
             workspaceAction,
-            message: `Cursor \u5DF2\u8FDE\u63A5\uFF0C\u4F46\u672A\u6355\u83B7\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u65B0\u5EFA\u7684 CDP target\uFF1BCCE \u5DF2\u505C\u6B62\uFF0C\u907F\u514D\u5728\u9519\u8BEF\u7D22\u5F15\u4E2D\u68C0\u7D22\u3002`
+            cursorExecutable: exe2,
+            cursorExecutableSource: cursorExecutable2.source,
+            needsAction: "retry_initialization",
+            retryable: true,
+            nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+            message: `Cursor \u5DF2\u6253\u5F00\u9879\u76EE\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
           };
         }
         targetId2 = openedTarget2.id;
@@ -510,24 +572,37 @@ async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: "port-not-cursor",
       port: CDP_PORT,
-      message: `CDP ${CDP_PORT} \u88AB\u3010\u975E Cursor\u3011\u7684 IDE \u5360\u7528\u3002\u6362\u7AEF\u53E3\u6216\u6392\u67E5\u3002`
+      needsAction: "free_cce_port",
+      retryable: true,
+      nextStep: `\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u4F7F\u7528\u3002\u5173\u95ED\u5360\u7528\u5B83\u7684\u7A0B\u5E8F\u540E\uFF0C\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002`,
+      message: `CCE \u73B0\u5728\u65E0\u6CD5\u8FDE\u63A5 Cursor\uFF0C\u56E0\u4E3A\u6240\u9700\u7684\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u5360\u7528\u3002`
     };
   }
-  if (cursorRunning()) {
+  if (cursorRunningImpl()) {
+    const cursorExecutable2 = findCursorExeDetailsImpl();
     return {
       ok: false,
       status: "running-no-debug",
       port: CDP_PORT,
-      message: `Cursor \u6B63\u5728\u8FD0\u884C\u4F46\u6CA1\u5E26 --remote-debugging-port=${CDP_PORT}\uFF08\u53EF\u80FD\u7531 Codex\u3001\u8D44\u6E90\u7BA1\u7406\u5668\u6216\u5176\u4ED6\u542F\u52A8\u5668\u5148\u6253\u5F00\uFF1B\u5355\u5B9E\u4F8B\u9501\u4F1A\u5FFD\u7565\u540E\u7EED flag\uFF09\u3002\u8BF7\u5148\u5B89\u5168\u9000\u51FA\u8FD9\u4E00\u6B21 Cursor\uFF0Ccursor-bridge \u4F1A\u5728\u4E0B\u6B21\u542F\u52A8\u65F6\u9884\u70ED\u5E26 CDP \u7684\u5B9E\u4F8B\u5E76\u6301\u7EED\u9690\u85CF\u7A97\u53E3\u3002\u6CE8\u610F\uFF1A\u4E0D\u4E3B\u52A8 kill \u4EE5\u514D\u4E22\u672A\u4FDD\u5B58\u5185\u5BB9\u3002`
+      cursorExecutable: cursorExecutable2 && cursorExecutable2.path || null,
+      cursorExecutableSource: cursorExecutable2 && cursorExecutable2.source || null,
+      needsAction: "close_cursor_and_retry",
+      retryable: true,
+      nextStep: projectPath ? `\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u518D\u6B21\u8BF4\u201C\u521D\u59CB\u5316 CCE \u5DE5\u4F5C\u533A\u4E3A ${projectPath}\u201D\u3002` : "\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u91CD\u8BD5\u521A\u624D\u7684 CCE \u64CD\u4F5C\u3002",
+      message: "Cursor \u5DF2\u7ECF\u63D0\u524D\u6253\u5F00\uFF0CCCE \u65E0\u6CD5\u5728\u8FD0\u884C\u4E2D\u4E3A\u5B83\u8865\u4E0A\u8FDE\u63A5\u80FD\u529B\u3002\u4E3A\u4FDD\u62A4\u672A\u4FDD\u5B58\u5185\u5BB9\uFF0CCursor Bridge \u4E0D\u4F1A\u5F3A\u5236\u5173\u95ED\u5B83\u3002"
     };
   }
-  const exe = findCursorExe();
+  const cursorExecutable = findCursorExeDetailsImpl();
+  const exe = cursorExecutable && cursorExecutable.path;
   if (!exe) {
     return {
       ok: false,
       status: "no-exe",
       port: CDP_PORT,
-      message: "\u627E\u4E0D\u5230 Cursor \u53EF\u6267\u884C\u6587\u4EF6\uFF08Windows\uFF1A\u6CE8\u518C\u8868/\u9ED8\u8BA4\u4F4D\u7F6E\uFF1BmacOS\uFF1A/Applications/Cursor.app \u90FD\u6CA1\u547D\u4E2D\uFF09\u3002\u8BBE\u73AF\u5883\u53D8\u91CF CURSOR_EXE \u6307\u5B9A\u5B8C\u6574\u8DEF\u5F84\u3002"
+      needsAction: "install_or_locate_cursor",
+      retryable: true,
+      nextStep: "\u8BF7\u5148\u5B89\u88C5\u5E76\u767B\u5F55 Cursor\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+      message: "\u6CA1\u6709\u627E\u5230 Cursor\u3002\u6807\u51C6 Windows \u4E0E macOS \u5B89\u88C5\u4F1A\u81EA\u52A8\u8BC6\u522B\uFF0C\u901A\u5E38\u4E0D\u9700\u8981\u586B\u5199\u7A0B\u5E8F\u8DEF\u5F84\u3002"
     };
   }
   const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
@@ -557,7 +632,12 @@ async function ensureCursorRunningLocal(options = {}) {
       runtimeMode: effectiveRuntimeMode,
       projectPath,
       windowGuard: startupWindowGuard,
-      message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF09\uFF0C\u4F46 ${waitMs}ms \u5185 CDP ${CDP_PORT} \u672A\u5C31\u7EEA\uFF0C\u7A0D\u540E\u91CD\u8BD5\u3002`
+      cursorExecutable: exe,
+      cursorExecutableSource: cursorExecutable.source,
+      needsAction: "retry_initialization",
+      retryable: true,
+      nextStep: "\u8BF7\u7A0D\u7B49\u7247\u523B\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+      message: "Cursor \u5DF2\u7ECF\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u51C6\u5907\u597D\uFF1B\u65E0\u9700\u4FEE\u6539\u4EFB\u4F55\u7AEF\u53E3\u8BBE\u7F6E\u3002"
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
@@ -573,7 +653,12 @@ async function ensureCursorRunningLocal(options = {}) {
       runtimeMode: effectiveRuntimeMode,
       projectPath,
       windowGuard: startupWindowGuard,
-      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46\u672A\u6355\u83B7\u76EE\u6807\u5DE5\u4F5C\u533A ${projectPath} \u7684 CDP target\uFF1BCCE \u5DF2\u505C\u6B62\uFF0C\u907F\u514D\u5728\u9519\u8BEF\u7D22\u5F15\u4E2D\u68C0\u7D22\u3002`
+      cursorExecutable: exe,
+      cursorExecutableSource: cursorExecutable.source,
+      needsAction: "retry_initialization",
+      retryable: true,
+      nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
     };
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
@@ -591,6 +676,8 @@ async function ensureCursorRunningLocal(options = {}) {
     presentation,
     windowGuard,
     startupWindowGuard,
+    cursorExecutable: exe,
+    cursorExecutableSource: cursorExecutable.source,
     targetId,
     workspaceAction: projectPath ? "launched-project" : "launched-last-workspace",
     message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
@@ -647,7 +734,7 @@ async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = 
   }
   return null;
 }
-var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, IS_WIN, IS_MAC, WIN_FALLBACKS, MAC_CANDIDATES;
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, IS_WIN, IS_MAC;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
     init_cursor_runtime();
@@ -659,14 +746,6 @@ var init_cursor_ensure_core = __esm({
     loadModule = createNodeRequire(import.meta.url);
     IS_WIN = process.platform === "win32";
     IS_MAC = process.platform === "darwin";
-    WIN_FALLBACKS = [
-      `${process.env.LOCALAPPDATA || ""}\\Programs\\cursor\\Cursor.exe`,
-      "C:\\Program Files\\cursor\\Cursor.exe"
-    ];
-    MAC_CANDIDATES = [
-      "/Applications/Cursor.app/Contents/MacOS/Cursor",
-      `${process.env.HOME || ""}/Applications/Cursor.app/Contents/MacOS/Cursor`
-    ];
   }
 });
 
