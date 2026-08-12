@@ -11,7 +11,8 @@
     "start": "node server.mjs",
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:live-minimal": "node test/live-minimal-smoke.mjs"
+    "test:live-minimal": "node test/live-minimal-smoke.mjs",
+    "star-history": "node scripts/update-star-history.mjs"
   },
   "keywords": [
     "mcp",
