@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "repository": "Vanyangyang/cursor-bridge",
+  "repositoryCreatedAt": "2025-07-18T01:47:36.000Z",
+  "updatedAt": "2026-08-12T03:20:27.000Z",
+  "sources": {
+    "bootstrap": "Owner-authorized GitHub Stargazers API aggregated by UTC day; no user identities are stored.",
+    "updates": "Daily GitHub repository stargazers_count snapshots."
+  },
+  "snapshots": [
+    {
+      "date": "2025-07-24",
+      "stars": 1,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2025-08-04",
+      "stars": 2,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2025-08-06",
+      "stars": 3,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2025-08-07",
+      "stars": 5,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2025-08-11",
+      "stars": 6,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2025-08-20",
+      "stars": 7,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-01-29",
+      "stars": 8,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-07-14",
+      "stars": 11,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-08-05",
+      "stars": 12,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-08-06",
+      "stars": 13,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-08-10",
+      "stars": 15,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-08-11",
+      "stars": 19,
+      "kind": "daily-cumulative"
+    },
+    {
+      "date": "2026-08-12",
+      "stars": 20,
+      "kind": "daily-cumulative"
+    }
+  ]
+}

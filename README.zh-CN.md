@@ -3,7 +3,7 @@
 [English](./README.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
 [![Release](https://img.shields.io/github/v/release/Vanyangyang/cursor-bridge?style=flat-square&logo=github)](https://github.com/Vanyangyang/cursor-bridge/releases)
-[![Stars](https://img.shields.io/github/stars/Vanyangyang/cursor-bridge?style=flat-square&logo=github)](https://github.com/Vanyangyang/cursor-bridge/stargazers)
+[![Stars](https://img.shields.io/github/stars/Vanyangyang/cursor-bridge?style=flat-square&logo=github)](https://github.com/Vanyangyang/cursor-bridge)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
@@ -247,4 +247,6 @@ npm run build
 
 ## Star History
 
-[![Cursor Bridge Star History](./assets/star-history.svg)](https://github.com/Vanyangyang/cursor-bridge/stargazers)
+[![Cursor Bridge Star History](./assets/star-history.svg)](https://github.com/Vanyangyang/cursor-bridge)
+
+由 GitHub 仓库 API 自动更新，不依赖外部图表服务，也不需要手工维护 PAT。
