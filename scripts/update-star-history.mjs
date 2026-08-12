@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SCRIPT_DIR, '..');
 const DATA_FILE = resolve(ROOT, 'assets', 'star-history.json');
 const SVG_FILE = resolve(ROOT, 'assets', 'star-history.svg');
+const README_FILES = [resolve(ROOT, 'README.md'), resolve(ROOT, 'README.zh-CN.md')];
 
 function utcDay(value) {
   const date = new Date(value);
@@ -191,6 +193,14 @@ ${points.slice(1).map((point, index) => `    <circle cx="${scaleX(point.timestam
 `;
 }
 
+export function updateReadmeChartCacheKey(content, svg, repository) {
+  const cacheKey = createHash('sha256').update(svg).digest('hex').slice(0, 12);
+  const chartUrl = `https://raw.githubusercontent.com/${repository}/master/assets/star-history.svg?v=${cacheKey}`;
+  const chartPattern = /(!\[Cursor Bridge Star History\]\()(?:\.\/assets\/star-history\.svg|https:\/\/raw\.githubusercontent\.com\/[^\s)]+\/master\/assets\/star-history\.svg)(?:\?v=[a-f0-9]+)?(\))/;
+  if (!chartPattern.test(content)) throw new Error('README does not embed the generated star history chart');
+  return content.replace(chartPattern, `$1${chartUrl}$2`);
+}
+
 async function fetchRepositoryCount(repository, token = process.env.GITHUB_TOKEN) {
   const headers = {
     Accept: 'application/vnd.github+json',
@@ -234,6 +244,11 @@ export async function main(argv = process.argv.slice(2)) {
   const svg = renderStarHistorySvg(history);
   if (readFileSync(DATA_FILE, 'utf8') !== serialized) writeFileSync(DATA_FILE, serialized, 'utf8');
   if (readFileSync(SVG_FILE, 'utf8') !== svg) writeFileSync(SVG_FILE, svg, 'utf8');
+  for (const readmeFile of README_FILES) {
+    const content = readFileSync(readmeFile, 'utf8');
+    const updated = updateReadmeChartCacheKey(content, svg, history.repository);
+    if (content !== updated) writeFileSync(readmeFile, updated, 'utf8');
+  }
   console.log(JSON.stringify({
     repository: history.repository,
     stars: history.snapshots.at(-1)?.stars || 0,
