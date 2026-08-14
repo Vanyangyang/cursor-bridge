@@ -8,15 +8,13 @@ Compatible with **Cursor 3.16.17** and officially installable in **Grok Build**.
 
 ## Fixed
 
-- Cursor 3.16.17 Agents Window can bind the current repository from `.ui-sidebar-section-head` after the older `section.glass-sidebar-workspace-section-root` wrapper disappeared.
-- If the Agents Window cannot bind that repository, CCE falls back to the workbench instead of failing closed.
+- Cursor 3.16.17 Agents Window works with the current project again.
+- If Agents Window is unavailable, CCE uses the workbench.
 
 ## Compatibility
 
-- Every current Cursor version still has two editors: workbench and Agents Window.
-- Detection uses on-screen elements, not the Cursor version number.
-- The workbench and the previous Agents Window sidebar remain supported.
-- 3.16.17 Agents Window was live-tested on Windows 11.
+- Supports Cursor 3.16.17 Agents Window, the workbench, and older Agents Window.
+- Live-tested on Windows 11.
 
 ## Install
 

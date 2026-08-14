@@ -11,7 +11,7 @@
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Every current Cursor version ships two editors: the workbench and the Agents Window. Bridge uses the Agents Window when it can bind the project, otherwise the workbench. It supports the older Agents Window sidebar and the 3.16.17 sidebar. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Works with Cursor’s workbench and Agents Window. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -67,9 +67,9 @@ Initialization is persistent. Repeat the initialization sentence with another ab
 
 ## Compatibility
 
-- **Cursor 3.16.17** Agents Window is live-tested on Windows 11. Bridge detects the current editor from on-screen elements, not the Cursor version number.
-- The **workbench** and the **previous Agents Window** sidebar stay supported. If the Agents Window cannot bind the current repository, CCE uses the workbench.
-- **Grok Build** is a supported plugin host alongside Codex and Claude Code. After `grok plugin install … --trust` and `grok plugin enable cursor-bridge`, reload with `/plugins` then `r` or start a new session.
+- **Cursor 3.16.17** is supported, including Agents Window. Tested on Windows 11.
+- The **workbench** and **older Agents Window** keep working. If Agents Window is unavailable, CCE uses the workbench.
+- **Grok Build** is supported alongside Codex and Claude Code. After install, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
 ## Use it
 
@@ -178,7 +178,7 @@ Cursor Agent + project index
 - `cursor_init` validates and persists one workspace for the current host context. Re-running it switches that context to another workspace.
 - Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
-- When the Agents Window and the workbench are both open, Bridge prefers the Agents Window and creates work in the initialized repository section, including the 3.16.17 sidebar. If that window cannot bind the repo, or only the workbench is available, it uses the workbench. It does not create work in `Home`.
+- When the Agents Window and the workbench are both open, Bridge prefers the Agents Window for the current project. If only the workbench is available, it uses that. It does not create work in `Home`.
 - Stale target IDs are rejected when the title no longer matches the requested project.
 - Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
 - On Windows, the supervisor survives an individual Codex, Claude Code, or Grok session closing.
