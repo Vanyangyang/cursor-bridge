@@ -2503,7 +2503,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.2.1' },
+  { name: 'cursor-bridge', version: '5.3.0' },
   { capabilities: { tools: { listChanged: true } } },
 );
 

@@ -8,8 +8,8 @@
     {
       "name": "cursor-bridge",
       "source": ".",
-      "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded Cursor Agent execution, with normal or UI-suppressed minimal runtime and legacy/Agents v2 UI adaptation.",
-      "version": "5.2.1",
+      "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded Cursor Agent execution from Codex, Claude Code, or Grok Build, with workbench plus Agents Window support through Cursor 3.16.17.",
+      "version": "5.3.0",
       "author": {
         "name": "Vanyangyang"
       }
