@@ -8,14 +8,14 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
-**Bring the project understanding in your real, signed-in Cursor session to Codex and Claude Code.**
+**Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor 3.7.42. Bridge targets both the legacy workbench and Agents v2. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested; Cursor 3.7.42 is the recommended compatibility target today.
+> **Live-tested environment:** Windows 11 + Cursor 3.7.42, including Grok Build TUI. Bridge targets both the legacy workbench and Agents v2. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested; Cursor 3.7.42 is the recommended compatibility target today.
 
 ## What is CCE?
 
-**Cursor Context Engine (CCE) exposes Cursor's existing project index and Agent search capabilities to Codex and Claude Code through MCP.**
+**Cursor Context Engine (CCE) exposes Cursor's existing project index and Agent search capabilities to Codex, Claude Code, and Grok Build through MCP.**
 
 Ask a project question once. Cursor chooses the semantic retrieval, exact search, source reading, reference tracing, or Agent exploration it needs. Cursor Bridge returns compact, source-anchored `path:line` evidence with relevance notes instead of dumping the entire search process into the main Agent's context.
 
@@ -39,7 +39,19 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
 ```
 
-Restart Codex and start a new task, or restart Claude Code / run `/reload-plugins`. Then initialize the project in natural language:
+### Grok Build
+
+```bash
+grok plugin marketplace add Vanyangyang/cursor-bridge
+grok plugin install Vanyangyang/cursor-bridge --trust
+grok plugin enable cursor-bridge
+```
+
+Grok keeps plugins off until you enable them. `--trust` is required so the plugin's MCP server and hooks can run. Installing does not hot-reload the current session: open `/plugins` and press `r`, or start a new Grok session.
+
+`grok plugin install Vanyangyang/cursor-bridge --trust` also works without adding the marketplace first.
+
+Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, or reload Grok as above. Then initialize the project in natural language:
 
 ```text
 Initialize CCE workspace to C:\absolute\path\to\project
@@ -78,7 +90,14 @@ claude plugin marketplace update vanyangyang
 claude plugin update cursor-bridge@vanyangyang
 ```
 
-Restart Codex and start a new task, or restart Claude Code / run `/reload-plugins`.
+Grok Build:
+
+```bash
+grok plugin marketplace update cursor-bridge
+grok plugin update cursor-bridge
+```
+
+Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, or in Grok open `/plugins` and press `r` / start a new session.
 
 </details>
 
@@ -99,7 +118,7 @@ Why reuse Cursor? Its project understanding already combines semantic indexing, 
 
 Simple locations should converge quickly. Call chains, data flows, registrations, interface implementations, and ownership questions can continue across modules until the evidence is sufficient.
 
-The installed `cce-routing` Skill offers bounded guidance for selecting CCE on unfamiliar-project semantic questions while leaving known-file reads, tests, logs, builds, Git work, and external documentation on native tools. Claude Code also has a narrow, fail-open routing guard for competing context collection. The host model still controls tool selection.
+The installed `cce-routing` Skill offers bounded guidance for selecting CCE on unfamiliar-project semantic questions while leaving known-file reads, tests, logs, builds, Git work, and external documentation on native tools. Grok Build loads the same plugin skills after the plugin is enabled. Claude Code also has a narrow, fail-open routing guard for competing context collection. The host model still controls tool selection.
 
 Result shape:
 
@@ -138,7 +157,7 @@ confidence: high
 <summary><strong>Workspace, Cursor UI, and lifecycle behavior</strong></summary>
 
 ```text
-Codex / Claude Code
+Codex / Claude Code / Grok Build
         │ MCP
         ▼
 Cursor Bridge adapter(s)
@@ -156,7 +175,7 @@ Cursor Agent + project index
 - When both Cursor Agents v2 and the legacy workbench are open, Bridge prefers Agents v2 and creates work inside the initialized repository section instead of `Home`. Otherwise it falls back to the matching legacy project workbench.
 - Stale target IDs are rejected when the title no longer matches the requested project.
 - Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
-- On Windows, the supervisor survives an individual Codex session closing.
+- On Windows, the supervisor survives an individual Codex, Claude Code, or Grok session closing.
 
 The path may be an existing project directory or `.code-workspace` file. Quoted paths, Windows UNC/extended paths, and macOS `~` paths are normalized; relative and unrelated file paths are rejected.
 
