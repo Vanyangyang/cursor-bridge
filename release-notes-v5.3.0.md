@@ -1,6 +1,6 @@
 # Cursor Bridge v5.3.0
 
-Compatible with **Cursor 3.16.17** and officially installable in **Grok Build**.
+Compatible with **Cursor 3.16.17** and earlier supported 3.x releases. Officially installable in **Grok Build**.
 
 ## Added
 
@@ -13,8 +13,13 @@ Compatible with **Cursor 3.16.17** and officially installable in **Grok Build**.
 
 ## Compatibility
 
-- Supports Cursor 3.16.17 Agents Window, the workbench, and older Agents Window.
-- Live-tested on Windows 11.
+Supported Cursor versions (Windows 11):
+
+| Cursor | Status |
+|---|---|
+| **3.16.17** | Current. Workbench and Agents Window. Live-tested. |
+| **3.7.42 – 3.16.16** | Still compatible. Workbench and Agents Window keep working. |
+| **3.7.42** | Previous live-test baseline. Still supported. |
 
 ## Install
 

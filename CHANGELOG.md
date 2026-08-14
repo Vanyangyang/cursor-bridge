@@ -16,7 +16,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Compatibility
 
-- Cursor 3.16.17 Agents Window, the workbench, and older Agents Window remain supported. Live-tested on Windows 11.
+- Supported Cursor versions: **3.16.17** (current, live-tested) and **3.7.42 – 3.16.16** (still compatible). Workbench and Agents Window both remain available. Older Cursor 3.x releases that already worked stay compatible.
 
 ## [5.2.1] - 2026-08-10
 
