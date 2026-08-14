@@ -20642,6 +20642,7 @@ init_workspace_binding();
 init_cursor_ensure_core();
 import http2 from "http";
 import { pathToFileURL as pathToFileURL2 } from "url";
+var PLUGIN_VERSION = "5.3.2";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -22904,6 +22905,8 @@ var CursorBridge = class {
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
     const common = {
+      pluginVersion: PLUGIN_VERSION,
+      statusPath: "json-list",
       ...this.workspaceView(),
       ...this.delegationView(),
       ...this.runtimeModeView(),
@@ -23020,7 +23023,7 @@ function buildToolDefinitions(bridgeInstance) {
 }
 var bridge = new CursorBridge();
 var server = new Server(
-  { name: "cursor-bridge", version: "5.3.1" },
+  { name: "cursor-bridge", version: "5.3.2" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {
@@ -23107,7 +23110,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_status") {
-      return { content: [{ type: "text", text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
+      const statusMs = Math.max(1e3, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8e3));
+      let result;
+      try {
+        result = await Promise.race([
+          bridge.status(args && args.task_id),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`cursor_status_timeout_${statusMs}`)), statusMs))
+        ]);
+      } catch (error2) {
+        result = {
+          connected: false,
+          pluginVersion: PLUGIN_VERSION,
+          statusPath: "json-list",
+          error: error2 instanceof Error ? error2.message : String(error2),
+          ...bridge.workspaceView(),
+          ...bridge.delegationView(),
+          ...bridge.runtimeModeView()
+        };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_launch") {
       const r = await ensureBridgeCursor(bridge, "cursor_launch");
@@ -23151,6 +23172,7 @@ export {
   EXPR_PAGE_CAPABILITIES,
   EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
+  PLUGIN_VERSION,
   bridge,
   buildContextEnginePrompt,
   buildToolDefinitions,
