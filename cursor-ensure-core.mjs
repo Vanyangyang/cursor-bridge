@@ -17,6 +17,12 @@ import {
   startMinimalWindowGuard,
 } from './cursor-runtime.mjs';
 
+export function resolveCursorLaunchCdpPort(port = process.env.CURSOR_BRIDGE_CDP_PORT) {
+  const parsed = Number(port == null || String(port).trim() === '' ? 9223 : port);
+  if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65535) return 9223;
+  return parsed;
+}
+
 export const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 export const CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
 // Probe with literal IPv4 — Windows often resolves localhost to ::1 while Chromium listens on 127.0.0.1.
@@ -407,7 +413,8 @@ export async function ensureCursorRunningLocal(options = {}) {
     };
   }
 
-  const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
+  const launchPort = resolveCursorLaunchCdpPort(CDP_PORT);
+  const args = [`--remote-debugging-port=${launchPort}`, `--remote-allow-origins=http://localhost:${launchPort}`];
   if (effectiveRuntimeMode === 'minimal') {
     args.push(
       '--disable-background-timer-throttling',

@@ -34,6 +34,7 @@ import {
   cursorRunning,
   ensureCursorRunningLocal,
   resolveCodexThreadProjectPath,
+  resolveCursorLaunchCdpPort,
   resolveProjectPath,
   selectAgentsWindowTarget,
   selectNewCdpTarget,
@@ -64,6 +65,14 @@ test('new Cursor CDP targets bind a newly opened project without relying on gene
     { id: 'vesperix-target', title: 'VESPERIX - Cursor' },
   ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'vesperix-target');
   assert.equal(selectNewCdpTarget(before, [{ id: 'existing-target' }]), null);
+});
+
+test('Cursor launch never uses privileged or invalid CDP ports', () => {
+  assert.equal(resolveCursorLaunchCdpPort(1), 9223);
+  assert.equal(resolveCursorLaunchCdpPort('1'), 9223);
+  assert.equal(resolveCursorLaunchCdpPort(0), 9223);
+  assert.equal(resolveCursorLaunchCdpPort(9223), 9223);
+  assert.equal(resolveCursorLaunchCdpPort(9333), 9333);
 });
 
 test('existing Editor targets can recover a project binding while generic Agents titles cannot', () => {

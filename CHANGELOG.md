@@ -4,6 +4,12 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.3.3] - 2026-08-14
+
+### Fixed
+
+- Cursor is never launched with a privileged CDP port. `CURSOR_BRIDGE_CDP_PORT=1` (used by tests as a sinkhole) can no longer steal the real Cursor instance onto `127.0.0.1:1`. Launch args fall back to `9223`.
+
 ## [5.3.2] - 2026-08-14
 
 ### Fixed
@@ -159,6 +165,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.3.3]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.2...cursor-bridge--v5.3.3
 [5.3.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.1...cursor-bridge--v5.3.2
 [5.3.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.0...cursor-bridge--v5.3.1
 [5.3.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.2.1...cursor-bridge--v5.3.0
