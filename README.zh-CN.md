@@ -65,6 +65,12 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 初始化结果会持久保存。需要切换项目时，再用另一个绝对路径重复同一句初始化指令即可。
 
+## 兼容性
+
+- **Cursor 3.16.17** 的 Agents Window 已在 Windows 11 实机验证。Bridge 靠当前窗口上的界面元素分流，不读 Cursor 版本号。
+- **workbench** 和 **旧 Agents Window** 侧栏继续可用。Agents Window 绑不上当前仓库时，CCE 回退 workbench。
+- **Grok Build** 与 Codex、Claude Code 一样是正式插件宿主。`grok plugin install … --trust` 且 `grok plugin enable cursor-bridge` 之后，在 `/plugins` 按 `r` 或新开会话即可加载。
+
 ## 两项核心能力
 
 - **理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。

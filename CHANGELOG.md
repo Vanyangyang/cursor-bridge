@@ -4,11 +4,19 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [5.3.0] - 2026-08-14
+
+### Added
+
+- Official Grok Build plugin support: install from this repository, `--trust` plus `enable`, and `/plugins` reload. Grok loads the same `cce-routing` and `cursor-delegate` skills after the plugin is enabled.
 
 ### Fixed
 
-- Cursor 3.16.17 Agents Window workspace binding now finds a repository from `.ui-sidebar-section-head` when the older `section.glass-sidebar-workspace-section-root` wrapper is absent. The workbench editor and the previous Agents Window sidebar remain supported. If the Agents Window cannot bind the current repo, CCE falls back to the workbench instead of failing closed.
+- Cursor 3.16.17 Agents Window workspace binding now finds a repository from `.ui-sidebar-section-head` when the older `section.glass-sidebar-workspace-section-root` wrapper is absent. If the Agents Window cannot bind the current repo, CCE falls back to the workbench instead of failing closed.
+
+### Compatibility
+
+- Every current Cursor version still has two editors. The workbench and the previous Agents Window sidebar remain supported; 3.16.17 Agents Window was live-tested on Windows 11.
 
 ## [5.2.1] - 2026-08-10
 
@@ -137,6 +145,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.3.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.2.1...cursor-bridge--v5.3.0
 [5.2.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.2.0...cursor-bridge--v5.2.1
 [5.2.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.1.0...cursor-bridge--v5.2.0
 [5.1.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.0.1...cursor-bridge--v5.1.0

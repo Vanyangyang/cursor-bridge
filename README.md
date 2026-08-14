@@ -65,6 +65,12 @@ Who owns this state, and what is the complete path from save loading to runtime 
 
 Initialization is persistent. Repeat the initialization sentence with another absolute path whenever you want to switch projects.
 
+## Compatibility
+
+- **Cursor 3.16.17** Agents Window is live-tested on Windows 11. Bridge detects the current editor from on-screen elements, not the Cursor version number.
+- The **workbench** and the **previous Agents Window** sidebar stay supported. If the Agents Window cannot bind the current repository, CCE uses the workbench.
+- **Grok Build** is a supported plugin host alongside Codex and Claude Code. After `grok plugin install … --trust` and `grok plugin enable cursor-bridge`, reload with `/plugins` then `r` or start a new session.
+
 ## Use it
 
 - **Understand a project:** `cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships, then returns compact source anchors, coverage, gaps, and confidence.

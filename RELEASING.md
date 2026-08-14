@@ -1,6 +1,6 @@
 # Releasing a New Version
 
-This repository ships as both a **Claude Code plugin** and a **Codex marketplace plugin**.
+This repository ships as a **Claude Code plugin**, a **Codex marketplace plugin**, and a **Grok Build plugin**.
 
 Claude Code users install it with:
 
@@ -16,6 +16,16 @@ Codex users install the marketplace with:
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 ```
+
+Grok Build users install with:
+
+```bash
+grok plugin marketplace add Vanyangyang/cursor-bridge
+grok plugin install Vanyangyang/cursor-bridge --trust
+grok plugin enable cursor-bridge
+```
+
+Reload Grok with `/plugins` then `r`, or start a new session.
 
 ## Release steps after source changes
 
@@ -54,6 +64,7 @@ gh release create cursor-bridge--vX.Y.Z \
 - Always run `npm run build` after changing `server.mjs` or `launch-cursor.mjs`; otherwise `dist/` remains stale.
 - Claude Code users can receive updates through `/reload-plugins`, a restart, or `claude plugin update cursor-bridge`.
 - Codex users can run `codex plugin marketplace upgrade vanyangyang`, then start a new task or restart Codex.
+- Grok Build users can run `grok plugin update cursor-bridge`, then open `/plugins` and press `r` or start a new session.
 
 ## Local validation without changing production configuration
 
