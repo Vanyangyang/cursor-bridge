@@ -44,6 +44,7 @@ import {
 } from './workspace-binding.mjs';
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 
+const PLUGIN_VERSION = '5.3.2';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -2427,6 +2428,8 @@ class CursorBridge {
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
     const common = {
+      pluginVersion: PLUGIN_VERSION,
+      statusPath: 'json-list',
       ...this.workspaceView(),
       ...this.delegationView(),
       ...this.runtimeModeView(),
@@ -2565,7 +2568,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.3.1' },
+  { name: 'cursor-bridge', version: '5.3.2' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -2660,7 +2663,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_status') {
-      return { content: [{ type: 'text', text: JSON.stringify(await bridge.status(args && args.task_id), null, 2) }] };
+      const statusMs = Math.max(1000, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8000));
+      let result;
+      try {
+        result = await Promise.race([
+          bridge.status(args && args.task_id),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`cursor_status_timeout_${statusMs}`)), statusMs)),
+        ]);
+      } catch (error) {
+        result = {
+          connected: false,
+          pluginVersion: PLUGIN_VERSION,
+          statusPath: 'json-list',
+          error: error instanceof Error ? error.message : String(error),
+          ...bridge.workspaceView(),
+          ...bridge.delegationView(),
+          ...bridge.runtimeModeView(),
+        };
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_launch') {
       const r = await ensureBridgeCursor(bridge, 'cursor_launch');
@@ -2742,4 +2763,5 @@ export {
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
   isBlankAgentsWindow,
+  PLUGIN_VERSION,
 };

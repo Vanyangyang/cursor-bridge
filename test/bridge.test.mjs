@@ -41,6 +41,7 @@ import {
   promoteAgentsWorkspaceLifecycle,
   summarizeCdpPages,
   isBlankAgentsWindow,
+  PLUGIN_VERSION,
 } from '../server.mjs';
 
 test('status snapshot lists CDP titles without requiring a live page probe', () => {
@@ -1343,6 +1344,8 @@ test('status is a pure snapshot and explicit reap performs recovery', async () =
     { id: job.agentId, showSpinner: true, icon: 'loading' },
   ];
   const overall = await bridge.status();
+  assert.equal(overall.pluginVersion, PLUGIN_VERSION);
+  assert.equal(overall.statusPath, 'json-list');
   assert.deepEqual(overall.blockingTaskIds, [job.id]);
   assert.equal(overall.activeParallel[0].blocksFifo, true);
 
