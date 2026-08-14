@@ -71,11 +71,10 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 | Cursor | 说明 |
 |---|---|
-| **3.16.17** | 当前版本。支持 workbench 和 Agents Window。已实机验证。 |
-| **3.7.42 – 3.16.16** | 继续兼容。workbench 和 Agents Window 都可用。 |
-| **3.7.42** | 此前的实机基线，现在仍支持。 |
+| **3.16.17** | 已实机验证。workbench 和 Agents Window。 |
+| **3.7.42** | 已实机验证。workbench 和 Agents Window。 |
 
-打不开 Agents Window 时，会改用 workbench。已经能用 Bridge 的更早 Cursor 3.x 也继续兼容。
+其他 Cursor 版本尚未测试。打不开 Agents Window 时，会改用 workbench。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
