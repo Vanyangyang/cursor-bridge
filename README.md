@@ -80,10 +80,10 @@ Supported Cursor versions (Windows 11):
 
 | Cursor | Status |
 |---|---|
-| **3.16.17** | Live-tested. Workbench and Agents Window. |
-| **3.7.42** | Live-tested. Workbench and Agents Window. |
+| **3.16.17** | Live-tested. IDE and Agents Window. |
+| **3.7.42** | Live-tested. IDE and Agents Window. |
 
-Other Cursor versions have not been tested. If Agents Window is not available, CCE uses the workbench.
+Other Cursor versions have not been tested. If Agents Window is not available, CCE uses the IDE.
 
 Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
