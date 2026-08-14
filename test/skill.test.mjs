@@ -49,3 +49,21 @@ test('bilingual README documents plugin install and update commands', () => {
     assert.match(content, /claude plugin update cursor-bridge@vanyangyang/);
   }
 });
+
+test('bilingual README promotes the minimal runtime benefit and trade-off', () => {
+  const english = readProjectFile('README.md');
+  const chinese = readProjectFile('README.zh-CN.md');
+  const englishTip = english.match(/> \[!TIP\][\s\S]*?(?=\r?\n\r?\n## Compatibility)/)?.[0] || '';
+  const chineseTip = chinese.match(/> \[!TIP\][\s\S]*?(?=\r?\n\r?\n## 兼容性)/)?.[0] || '';
+
+  assert.match(englishTip, /Recommended on Windows 11: minimal runtime/);
+  assert.match(englishTip, /manually opening Cursor[\s\S]*Switch CCE to normal mode/);
+  assert.match(englishTip, /explicit, persistent opt-in[\s\S]*not a headless reimplementation/);
+  assert.match(chineseTip, /Windows 11 推荐：极简模式/);
+  assert.match(chineseTip, /手动打开 Cursor[\s\S]*将 CCE 切换到普通模式/);
+  assert.match(chineseTip, /显式、持久选择[\s\S]*不是重新实现的 headless Cursor/);
+  for (const content of [english, chinese]) {
+    assert.ok(content.indexOf('> [!TIP]') < content.indexOf('<details>'));
+    assert.doesNotMatch(content, /<summary><strong>(?:Minimal runtime details|极简运行时细节)<\/strong><\/summary>/);
+  }
+});

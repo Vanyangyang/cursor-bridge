@@ -65,6 +65,15 @@ Who owns this state, and what is the complete path from save loading to runtime 
 
 Initialization is persistent. Repeat the initialization sentence with another absolute path whenever you want to switch projects.
 
+> [!TIP]
+> **Recommended on Windows 11: minimal runtime**
+>
+> After initialization, say “Switch CCE to minimal mode.” The real Cursor process, project index, Agent DOM, and task queue keep running in the background while top-level windows stay hidden. You can use Cursor as the capability behind the plugin without visible interruption; `cursor_context_engine` and `cursor_do` remain available.
+>
+> **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and remains hidden. Before you need the Cursor UI again, say “Switch CCE to normal mode.”
+>
+> This is an explicit, persistent opt-in live-tested on Windows 11, not a headless reimplementation of Cursor. Returning to normal does not deliberately take keyboard focus; minimized, maximized, and snapped placement remains user-owned.
+
 ## Compatibility
 
 Supported Cursor versions (Windows 11):
@@ -194,23 +203,6 @@ Cursor executable discovery is internal. Standard Windows registered/user/system
 The macOS path normalization and executable-discovery branches are implementation details, not an end-to-end support claim; they have not yet been live-tested.
 
 If Cursor is already running without the connection Bridge needs, Bridge returns one `close_cursor_and_retry` step instead of terminating it. Save your work, close Cursor normally once, and repeat the initialization sentence.
-
-</details>
-
-<details>
-<summary><strong>Minimal runtime details</strong></summary>
-
-Minimal mode is an explicit, persistent opt-in for UI-suppressed use on Windows 11. It keeps the real Cursor process, index, Agent DOM, and task queue running while hiding top-level Cursor windows. It is not a headless reimplementation.
-
-- Advantage: `cursor_context_engine` and `cursor_do` stay available without a visible Cursor interruption.
-- Trade-off: manually opening Cursor reuses the guarded single-instance process and remains hidden until CCE switches back to `normal`.
-- Returning to `normal` performs a non-activating native show and a placement-safe compositor refresh for ordinary windows, without deliberately taking keyboard focus.
-- Minimized, maximized, and snapped placement remains user-owned.
-
-```text
-Switch CCE to minimal mode.
-Switch CCE to normal mode.
-```
 
 </details>
 
