@@ -65,6 +65,15 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 初始化结果会持久保存。需要切换项目时，再用另一个绝对路径重复同一句初始化指令即可。
 
+> [!TIP]
+> **Windows 11 推荐：极简模式**
+>
+> 初始化完成后，说“将 CCE 切换到极简模式”。真实 Cursor、项目索引、Agent DOM 与任务队列会继续在后台运行，只隐藏顶层窗口；你可以把 Cursor 作为插件背后的能力无感使用，`cursor_context_engine` 和 `cursor_do` 仍然可用。
+>
+> **代价：**极简模式期间，手动打开 Cursor 只会复用受守卫的单实例，并继续保持隐藏。需要重新使用 Cursor 界面时，先说“将 CCE 切换到普通模式”。
+>
+> 这是 Windows 11 上经过实测的显式、持久选择，不是重新实现的 headless Cursor。切回普通模式时不会主动抢走键盘焦点；最小化、最大化与贴靠布局仍由你控制。
+
 ## 兼容性
 
 支持的 Cursor 版本（Windows 11）：
@@ -194,23 +203,6 @@ Cursor 可执行文件通常无需配置。Bridge 会自动检查 Windows 注册
 macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代表完成了端到端支持验证；这些分支目前尚未实机测试。
 
 如果 Cursor 已经在运行、但没有 Bridge 所需的连接能力，Bridge 会返回一次 `close_cursor_and_retry`，不会自行终止 Cursor。请先保存工作，正常退出 Cursor 一次，再重复初始化指令。
-
-</details>
-
-<details>
-<summary><strong>极简运行时细节</strong></summary>
-
-极简模式是 Windows 11 上经过实测的显式持久选项。它保留真实 Cursor 进程、项目索引、Agent DOM 和任务队列，只隐藏顶层窗口；它不是重新实现的 headless Cursor。
-
-- 优点：`cursor_context_engine` 与 `cursor_do` 可以在后台继续使用。
-- 代价：极简模式期间手动打开 Cursor 只会复用受守卫的单实例，并继续保持隐藏，直到 CCE 切回 `normal`。
-- 切回 `normal` 时会执行不激活窗口的原生显示，并对普通窗口做保持最终位置不变的合成表面刷新，不会主动抢走键盘焦点。
-- 最小化、最大化与贴靠布局仍归用户控制。
-
-```text
-将 CCE 切换到极简模式。
-将 CCE 切换到普通模式。
-```
 
 </details>
 

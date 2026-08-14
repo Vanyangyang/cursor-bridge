@@ -86,7 +86,8 @@ test('scheduled workflow uses GitHub repository metadata without a managed PAT',
 
 test('both READMEs embed the repository-owned generated chart', () => {
   const svg = readFileSync(new URL('assets/star-history.svg', root), 'utf8');
-  const cacheKey = createHash('sha256').update(svg).digest('hex').slice(0, 12);
+  const canonicalSvg = svg.replaceAll('\r\n', '\n');
+  const cacheKey = createHash('sha256').update(canonicalSvg).digest('hex').slice(0, 12);
   const expectedUrl = `https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=${cacheKey}`;
   for (const readme of ['README.md', 'README.zh-CN.md']) {
     const content = readFileSync(new URL(readme, root), 'utf8');
