@@ -11,7 +11,7 @@
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Bridge targets the legacy workbench and Agents v2, including the 3.16 Agents Window sidebar. Older Cursor workbench/Agents v2 DOM remains supported. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Every current Cursor version ships two editors: the workbench and the Agents Window. Bridge uses the Agents Window when it can bind the project, otherwise the workbench. It supports the older Agents Window sidebar and the 3.16.17 sidebar. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -172,7 +172,7 @@ Cursor Agent + project index
 - `cursor_init` validates and persists one workspace for the current host context. Re-running it switches that context to another workspace.
 - Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
-- When both Cursor Agents v2 and the legacy workbench are open, Bridge prefers Agents v2 and creates work inside the initialized repository section instead of `Home`. Otherwise it falls back to the matching legacy project workbench.
+- When the Agents Window and the workbench are both open, Bridge prefers the Agents Window and creates work in the initialized repository section, including the 3.16.17 sidebar. If that window cannot bind the repo, or only the workbench is available, it uses the workbench. It does not create work in `Home`.
 - Stale target IDs are rejected when the title no longer matches the requested project.
 - Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
 - On Windows, the supervisor survives an individual Codex, Claude Code, or Grok session closing.

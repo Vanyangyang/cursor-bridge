@@ -20730,22 +20730,38 @@ async function inspectPageTarget(page) {
     c.close();
   }
 }
+function pagesWithFlavor(pages, flavor) {
+  return (Array.isArray(pages) ? pages : []).filter((page) => page && page.capabilities && page.capabilities.uiFlavor === flavor);
+}
+function selectPageForUiPreference(inspected, options = {}) {
+  const pages = Array.isArray(inspected) ? inspected.filter(Boolean) : [];
+  const usable = pages.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
+  if (options.preferAgentsV2 === true) {
+    const agentsV2 = pagesWithFlavor(usable, "agents_v2");
+    if (agentsV2.length) return selectCursorPageCandidate(agentsV2, { purpose: options.purpose });
+    if (options.targetId) return selectCursorPageCandidate(pages, options);
+  }
+  if (options.preferLegacy === true) {
+    const legacy = pagesWithFlavor(usable, "legacy");
+    if (legacy.length) return selectCursorPageCandidate(legacy, { purpose: options.purpose });
+  }
+  return selectCursorPageCandidate(
+    usable.length ? usable : pages.filter((page) => /workbench/i.test(page.url || "") || page.capabilities),
+    options
+  ) || pages[0] || null;
+}
+function isAgentsWorkspaceBindError(error2) {
+  return !!(error2 && /Cursor Agents workspace binding failed/.test(String(error2.message || "")));
+}
 async function findPage(options = {}) {
   const list = await httpJson("/json/list");
   const pages = list.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
   if (!pages.length) throw new Error("\u672A\u627E\u5230 Cursor workbench page target");
-  if (options.targetId && options.preferAgentsV2 !== true) return selectCursorPageCandidate(pages, options);
-  const inspected = await Promise.all(pages.map(inspectPageTarget));
-  const usable = inspected.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
-  if (options.preferAgentsV2 === true) {
-    const agentsV2 = usable.filter((page) => page.capabilities.uiFlavor === "agents_v2");
-    if (agentsV2.length) return selectCursorPageCandidate(agentsV2, { purpose: options.purpose });
-    if (options.targetId) return selectCursorPageCandidate(inspected, options);
+  if (options.targetId && options.preferAgentsV2 !== true && options.preferLegacy !== true) {
+    return selectCursorPageCandidate(pages, options);
   }
-  return selectCursorPageCandidate(
-    usable.length ? usable : inspected.filter((page) => /workbench/i.test(page.url || "") || page.capabilities),
-    options
-  ) || pages[0];
+  const inspected = await Promise.all(pages.map(inspectPageTarget));
+  return selectPageForUiPreference(inspected, options) || pages[0];
 }
 function makeClient(wsUrl) {
   const ws = new import_websocket.default(wsUrl, { origin: ORIGIN });
@@ -21832,58 +21848,72 @@ var CursorBridge = class {
     }
   }
   async _run(prompt, options = {}) {
-    const page = await findPage({
+    let page = await findPage({
       targetId: options.targetId || this._lastLifecycle && this._lastLifecycle.targetId,
       purpose: "fifo",
       preferAgentsV2: true
     });
-    options.targetId = page.id;
-    options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
-    const c = makeClient(page.webSocketDebuggerUrl);
-    await c.ready;
-    try {
-      this._throwIfCancelledBeforeSend(options);
-      await this._ensureChatPanel(c);
-      if (options.newChat !== false) {
-        await this._newChat(c, {
-          uiFlavor: options.targetUiFlavor,
-          projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath
-        });
-      }
-      this._throwIfCancelledBeforeSend(options);
-      const filled = await evalJS(c, exprFill(prompt));
-      if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
-      await sleep2(450);
-      this._throwIfCancelledBeforeSend(options);
-      let baseline = { messageCount: 0 };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      options.targetId = page.id;
+      options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
+      const c = makeClient(page.webSocketDebuggerUrl);
+      await c.ready;
       try {
-        baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
-      } catch {
-      }
-      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
-      options.sendState = "dispatching";
-      try {
-        await chord(c, 0, "Enter", "Enter", 13);
-        await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
-        options.sendState = "sent";
-        options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
-        return await this._waitComplete(
-          c,
-          options.timeoutMs || QUERY_TIMEOUT,
-          baseline.messageCount || 0,
-          options,
-          providerErrorBaseline
-        );
-      } catch (error2) {
-        if (error2 && error2.confirmedNotSent) {
-          options.sendState = "not_sent";
+        this._throwIfCancelledBeforeSend(options);
+        await this._ensureChatPanel(c);
+        if (options.newChat !== false) {
+          try {
+            await this._newChat(c, {
+              uiFlavor: options.targetUiFlavor,
+              projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath
+            });
+          } catch (error2) {
+            if (attempt === 0 && options.targetUiFlavor === "agents_v2" && isAgentsWorkspaceBindError(error2)) {
+              const fallback = await findPage({ purpose: "fifo", preferLegacy: true });
+              if (fallback && fallback.id !== page.id) {
+                options.fallbackReason = "agents_window_unbound_use_workbench";
+                page = fallback;
+                continue;
+              }
+            }
+            throw error2;
+          }
+        }
+        this._throwIfCancelledBeforeSend(options);
+        const filled = await evalJS(c, exprFill(prompt));
+        if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
+        await sleep2(450);
+        this._throwIfCancelledBeforeSend(options);
+        let baseline = { messageCount: 0 };
+        try {
+          baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
+        } catch {
+        }
+        const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
+        options.sendState = "dispatching";
+        try {
+          await chord(c, 0, "Enter", "Enter", 13);
+          await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
+          options.sendState = "sent";
+          options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
+          return await this._waitComplete(
+            c,
+            options.timeoutMs || QUERY_TIMEOUT,
+            baseline.messageCount || 0,
+            options,
+            providerErrorBaseline
+          );
+        } catch (error2) {
+          if (error2 && error2.confirmedNotSent) {
+            options.sendState = "not_sent";
+            throw error2;
+          }
+          error2.sent = true;
           throw error2;
         }
-        error2.sent = true;
-        throw error2;
+      } finally {
+        c.close();
       }
-    } finally {
-      c.close();
     }
   }
   _throwIfCancelledBeforeSend(job) {
@@ -22030,7 +22060,15 @@ var CursorBridge = class {
       }
       const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
       this._throwIfCancelledBeforeSend(job);
-      const createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath }) : await this._clickNewAgent(c, false);
+      let createdForWorkspace = false;
+      try {
+        createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath }) : await this._clickNewAgent(c, false);
+      } catch (error2) {
+        if (isAgentsWorkspaceBindError(error2)) {
+          return { fallbackReason: "Agents Window \u65E0\u6CD5\u7ED1\u5B9A\u5F53\u524D\u4ED3\u5E93\uFF0C\u5DF2\u5728\u53D1\u9001\u524D\u964D\u7EA7 FIFO / workbench" };
+        }
+        throw error2;
+      }
       if (!createdForWorkspace) {
         return { fallbackReason: "\u627E\u4E0D\u5230 Cursor New Agent \u6309\u94AE\uFF0C\u5DF2\u5728\u53D1\u9001\u524D\u964D\u7EA7 FIFO" };
       }
@@ -23055,6 +23093,7 @@ export {
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
   selectNewAgentEntry,
+  selectPageForUiPreference,
   shouldAutoLaunchCursor,
   updateStableEntryObservation
 };

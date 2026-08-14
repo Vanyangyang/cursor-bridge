@@ -8,7 +8,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Cursor 3.16.17 Agents Window workspace binding now finds a repository from `.ui-sidebar-section-head` when the older `section.glass-sidebar-workspace-section-root` wrapper is absent. Legacy workbench and older Agents v2 section DOM remain supported.
+- Cursor 3.16.17 Agents Window workspace binding now finds a repository from `.ui-sidebar-section-head` when the older `section.glass-sidebar-workspace-section-root` wrapper is absent. The workbench editor and the previous Agents Window sidebar remain supported. If the Agents Window cannot bind the current repo, CCE falls back to the workbench instead of failing closed.
 
 ## [5.2.1] - 2026-08-10
 

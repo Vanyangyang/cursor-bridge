@@ -20,6 +20,7 @@ import {
   pathsOverlap,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
+  selectPageForUiPreference,
   selectNewAgentEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
@@ -73,6 +74,8 @@ test('page capability scoring prefers Cursor Agents and pins an existing target'
     () => selectCursorPageCandidate([legacy, agentsV2], { targetId: 'missing' }),
     /target 已消失/,
   );
+  assert.equal(selectPageForUiPreference([legacy, agentsV2], { preferAgentsV2: true }).id, 'agents-v2');
+  assert.equal(selectPageForUiPreference([legacy, agentsV2], { preferLegacy: true }).id, 'legacy');
 });
 
 test('input and New Agent expressions cover legacy and Cursor Agents UI contracts', () => {

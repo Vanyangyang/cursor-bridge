@@ -11,7 +11,7 @@
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。Bridge 面向旧 workbench 与 Agents v2，并覆盖 3.16 的 Agents Window 侧栏。更旧的 workbench / Agents v2 DOM 仍可用。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。当前每个 Cursor 版本都同时有两个编辑器：workbench 和 Agents Window。Bridge 能绑上当前仓库时走 Agents Window，否则回退 workbench。旧版 Agents Window 侧栏和 3.16.17 侧栏都支持。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -172,7 +172,7 @@ Cursor Agent + project index
 - `cursor_init` 为当前宿主上下文校验并持久化一个工作区；再次执行即可切换项目。
 - 项目索引由 Cursor 自己负责。Bridge 只确保连接，并选择经过校验、与项目匹配的 CDP target。
 - 多个 MCP adapter 共用一个用户级 lifecycle supervisor，并在读取状态或执行生命周期操作前重新同步持久运行模式。
-- Cursor Agents v2 与旧 workbench 同时打开时，Bridge 优先 Agents v2，并在已初始化仓库分组中创建工作，而不是落到 `Home`；否则回退到匹配项目的旧 workbench。
+- workbench 和 Agents Window 同时开着时，Bridge 优先 Agents Window，并在已初始化仓库分组里建工作，包括 3.16.17 侧栏。绑不上该仓库，或只有 workbench 时，回退 workbench。不会落到 `Home`。
 - 缓存 target 的窗口标题不再匹配项目时会被拒绝。
 - Cursor 使用旧 UI、新 UI 还是同时开启，仍由用户决定；Bridge 不会改写偏好。
 - Windows 上 supervisor 不会随单个 Codex、Claude Code 或 Grok 会话关闭而退出 Cursor。
