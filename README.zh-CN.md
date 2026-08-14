@@ -11,7 +11,7 @@
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。支持 Cursor 的 workbench 与 Agents Window。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -67,9 +67,17 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 ## 兼容性
 
-- 支持 **Cursor 3.16.17**，含 Agents Window。已在 Windows 11 验证。
-- **workbench** 和更早的 **Agents Window** 继续可用。打不开 Agents Window 时，会改用 workbench。
-- 支持 **Grok Build**，与 Codex、Claude Code 一样。安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
+支持的 Cursor 版本（Windows 11）：
+
+| Cursor | 说明 |
+|---|---|
+| **3.16.17** | 当前版本。支持 workbench 和 Agents Window。已实机验证。 |
+| **3.7.42 – 3.16.16** | 继续兼容。workbench 和 Agents Window 都可用。 |
+| **3.7.42** | 此前的实机基线，现在仍支持。 |
+
+打不开 Agents Window 时，会改用 workbench。已经能用 Bridge 的更早 Cursor 3.x 也继续兼容。
+
+支持的宿主：**Codex**、**Claude Code**、**Grok Build**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
 ## 两项核心能力
 

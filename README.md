@@ -11,7 +11,7 @@
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Works with Cursor’s workbench and Agents Window. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -67,9 +67,17 @@ Initialization is persistent. Repeat the initialization sentence with another ab
 
 ## Compatibility
 
-- **Cursor 3.16.17** is supported, including Agents Window. Tested on Windows 11.
-- The **workbench** and **older Agents Window** keep working. If Agents Window is unavailable, CCE uses the workbench.
-- **Grok Build** is supported alongside Codex and Claude Code. After install, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
+Supported Cursor versions (Windows 11):
+
+| Cursor | Status |
+|---|---|
+| **3.16.17** | Current. Workbench and Agents Window. Live-tested. |
+| **3.7.42 – 3.16.16** | Still compatible. Workbench and Agents Window keep working. |
+| **3.7.42** | Previous live-test baseline. Still supported. |
+
+If Agents Window is not available, CCE uses the workbench. Older Cursor 3.x releases that already worked with Bridge stay compatible.
+
+Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
 ## Use it
 
