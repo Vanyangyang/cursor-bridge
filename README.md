@@ -84,6 +84,17 @@ Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installin
 - **Understand a project:** `cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships, then returns compact source anchors, coverage, gaps, and confidence.
 - **Delegate a bounded task:** `cursor_do` sends an explicitly scoped subtask to Cursor Agent and returns a task ID. The primary Agent remains responsible for reviewing the result and workspace changes.
 
+## Full MCP tool reference
+
+| Tool | What it does |
+|---|---|
+| **`cursor_init`** | Initializes or switches CCE to one absolute workspace path. |
+| **`cursor_context_engine`** | Read-only project understanding from one natural-language `query`. |
+| **`cursor_do`** | Submits a clear, bounded subtask to Cursor Agent for execution. |
+| **`cursor_status`** | Reads connection, queue, runtime, and task state without changing it. |
+| `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
+| `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery. |
+
 > [!WARNING]
 > Cursor is an Agent, not a filesystem sandbox. CCE strongly prompts read-only investigation, but prompts and allowed paths are not OS-level isolation. Verify consequential anchors and workspace changes.
 
@@ -150,20 +161,6 @@ confidence: high
 - Semantic similarity is not presented as a proven call edge.
 - Missing evidence returns `NOT_FOUND` and the actual searched scope instead of a framework guess.
 - Conversational preambles are removed without inventing evidence.
-
-</details>
-
-<details>
-<summary><strong>Full MCP tool reference</strong></summary>
-
-| Tool | What it does |
-|---|---|
-| `cursor_context_engine` | Read-only project understanding from one natural-language `query`. |
-| `cursor_do` | Submits a clear, bounded subtask to Cursor Agent for execution. |
-| `cursor_init` | Initializes or switches CCE to one absolute workspace path. |
-| `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
-| `cursor_status` | Reads connection, queue, runtime, and task state without changing it. |
-| `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery. |
 
 </details>
 

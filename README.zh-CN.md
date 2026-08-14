@@ -84,6 +84,17 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 - **理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。
 - **委派有边界任务：** `cursor_do` 会把明确限定范围的子任务交给 Cursor Agent，并返回任务 ID；最终结果和工作区改动仍由主 Agent 审核。
 
+## 完整 MCP 工具说明
+
+| 工具 | 作用 |
+|---|---|
+| **`cursor_init`** | 使用一个绝对路径初始化 CCE，或切换工作区。 |
+| **`cursor_context_engine`** | 使用一个自然语言 `query` 进行只读项目理解。 |
+| **`cursor_do`** | 把明确、有边界的子任务交给 Cursor Agent 执行。 |
+| **`cursor_status`** | 只读查看连接、队列、运行时和任务状态。 |
+| `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
+| `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`。 |
+
 > [!WARNING]
 > Cursor 是 Agent，不是文件系统沙箱。CCE 会强提示只读调查，但提示词与允许路径并不是操作系统级隔离；重要结论和工作区改动仍需核验。
 
@@ -150,20 +161,6 @@ confidence: high
 - 语义相似不会被包装成已证明调用边。
 - 缺少证据时返回 `NOT_FOUND` 和实际搜索范围，而不是按框架惯例猜测。
 - 对话式前言会被移除，但不会编造证据。
-
-</details>
-
-<details>
-<summary><strong>完整 MCP 工具说明</strong></summary>
-
-| 工具 | 作用 |
-|---|---|
-| `cursor_context_engine` | 使用一个自然语言 `query` 进行只读项目理解。 |
-| `cursor_do` | 把明确、有边界的子任务交给 Cursor Agent 执行。 |
-| `cursor_init` | 使用一个绝对路径初始化 CCE，或切换工作区。 |
-| `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
-| `cursor_status` | 只读查看连接、队列、运行时和任务状态。 |
-| `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`。 |
 
 </details>
 
