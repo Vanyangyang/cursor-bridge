@@ -173,22 +173,41 @@ async function inspectPageTarget(page) {
   }
 }
 
+function pagesWithFlavor(pages, flavor) {
+  return (Array.isArray(pages) ? pages : []).filter((page) => page && page.capabilities && page.capabilities.uiFlavor === flavor);
+}
+
+function selectPageForUiPreference(inspected, options = {}) {
+  const pages = Array.isArray(inspected) ? inspected.filter(Boolean) : [];
+  const usable = pages.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
+  if (options.preferAgentsV2 === true) {
+    const agentsV2 = pagesWithFlavor(usable, 'agents_v2');
+    if (agentsV2.length) return selectCursorPageCandidate(agentsV2, { purpose: options.purpose });
+    if (options.targetId) return selectCursorPageCandidate(pages, options);
+  }
+  if (options.preferLegacy === true) {
+    const legacy = pagesWithFlavor(usable, 'legacy');
+    if (legacy.length) return selectCursorPageCandidate(legacy, { purpose: options.purpose });
+  }
+  return selectCursorPageCandidate(
+    usable.length ? usable : pages.filter((page) => /workbench/i.test(page.url || '') || page.capabilities),
+    options,
+  ) || pages[0] || null;
+}
+
+function isAgentsWorkspaceBindError(error) {
+  return !!(error && /Cursor Agents workspace binding failed/.test(String(error.message || '')));
+}
+
 async function findPage(options = {}) {
   const list = await httpJson('/json/list');
   const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
   if (!pages.length) throw new Error('未找到 Cursor workbench page target');
-  if (options.targetId && options.preferAgentsV2 !== true) return selectCursorPageCandidate(pages, options);
-  const inspected = await Promise.all(pages.map(inspectPageTarget));
-  const usable = inspected.filter((page) => page.capabilities && page.capabilities.hasWritableInput);
-  if (options.preferAgentsV2 === true) {
-    const agentsV2 = usable.filter((page) => page.capabilities.uiFlavor === 'agents_v2');
-    if (agentsV2.length) return selectCursorPageCandidate(agentsV2, { purpose: options.purpose });
-    if (options.targetId) return selectCursorPageCandidate(inspected, options);
+  if (options.targetId && options.preferAgentsV2 !== true && options.preferLegacy !== true) {
+    return selectCursorPageCandidate(pages, options);
   }
-  return selectCursorPageCandidate(
-    usable.length ? usable : inspected.filter((page) => /workbench/i.test(page.url || '') || page.capabilities),
-    options,
-  ) || pages[0];
+  const inspected = await Promise.all(pages.map(inspectPageTarget));
+  return selectPageForUiPreference(inspected, options) || pages[0];
 }
 function makeClient(wsUrl) {
   const ws = new WebSocket(wsUrl, { origin: ORIGIN });
@@ -332,9 +351,10 @@ function exprClickSelectedAgentStop(agentId) {
 // "New Agent" 新对话钮中心坐标。新版 Cursor Agents 只有可见文本，旧版主要依赖 aria-label。
 const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
-// Legacy Agents v2 wrapped each repo in section.glass-sidebar-workspace-section-root.
-// Cursor 3.16.17 Agents Window dropped that wrapper; repo identity is now the
-// .ui-sidebar-section-head label, with New Agent in the same compact row.
+// Cursor currently ships two editors in every version: the workbench and the
+// Agents Window. Agents Window repo rows used to be
+// section.glass-sidebar-workspace-section-root; 3.16.17 dropped that wrapper
+// and keeps the repo identity on .ui-sidebar-section-head. Collect both.
 const WORKSPACE_SECTION_BODY = `
   const headText=(el)=>String(el&&(el.innerText||el.textContent)||'').trim();
   const isNewAgentButton=(node)=>{
@@ -1333,59 +1353,68 @@ class CursorBridge {
   }
 
   async _run(prompt, options = {}) {
-    const page = await findPage({
+    let page = await findPage({
       targetId: options.targetId || (this._lastLifecycle && this._lastLifecycle.targetId),
       purpose: 'fifo',
       preferAgentsV2: true,
     });
-    options.targetId = page.id;
-    options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
-    const c = makeClient(page.webSocketDebuggerUrl);
-    await c.ready;
-    try {
-      this._throwIfCancelledBeforeSend(options);
-      await this._ensureChatPanel(c);
-      // 1.5) 开新对话（避免上下文累积 + 回复区干净，extract 不串旧对话）；找不到钮则跳过沿用当前
-      if (options.newChat !== false) {
-        await this._newChat(c, {
-          uiFlavor: options.targetUiFlavor,
-          projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath,
-        });
-      }
-      this._throwIfCancelledBeforeSend(options);
-      // 2) 填查询
-      const filled = await evalJS(c, exprFill(prompt));
-      if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('填入查询失败（输入框状态异常）');
-      await sleep(450);
-      this._throwIfCancelledBeforeSend(options);
-      let baseline = { messageCount: 0 };
-      try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
-      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
-      // 3) Enter 发送
-      options.sendState = 'dispatching';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      options.targetId = page.id;
+      options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
+      const c = makeClient(page.webSocketDebuggerUrl);
+      await c.ready;
       try {
-        await chord(c, 0, 'Enter', 'Enter', 13);
-        await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
-        options.sendState = 'sent';
-        options.sentAt = options.sentAt || new Date().toISOString();
-        // 4) 等完成（stop 钮 >0 出现过 → 归 0）
-        return await this._waitComplete(
-          c,
-          options.timeoutMs || QUERY_TIMEOUT,
-          baseline.messageCount || 0,
-          options,
-          providerErrorBaseline,
-        );
-      } catch (error) {
-        if (error && error.confirmedNotSent) {
-          options.sendState = 'not_sent';
+        this._throwIfCancelledBeforeSend(options);
+        await this._ensureChatPanel(c);
+        if (options.newChat !== false) {
+          try {
+            await this._newChat(c, {
+              uiFlavor: options.targetUiFlavor,
+              projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath,
+            });
+          } catch (error) {
+            if (attempt === 0 && options.targetUiFlavor === 'agents_v2' && isAgentsWorkspaceBindError(error)) {
+              const fallback = await findPage({ purpose: 'fifo', preferLegacy: true });
+              if (fallback && fallback.id !== page.id) {
+                options.fallbackReason = 'agents_window_unbound_use_workbench';
+                page = fallback;
+                continue;
+              }
+            }
+            throw error;
+          }
+        }
+        this._throwIfCancelledBeforeSend(options);
+        const filled = await evalJS(c, exprFill(prompt));
+        if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('填入查询失败（输入框状态异常）');
+        await sleep(450);
+        this._throwIfCancelledBeforeSend(options);
+        let baseline = { messageCount: 0 };
+        try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
+        const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
+        options.sendState = 'dispatching';
+        try {
+          await chord(c, 0, 'Enter', 'Enter', 13);
+          await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
+          options.sendState = 'sent';
+          options.sentAt = options.sentAt || new Date().toISOString();
+          return await this._waitComplete(
+            c,
+            options.timeoutMs || QUERY_TIMEOUT,
+            baseline.messageCount || 0,
+            options,
+            providerErrorBaseline,
+          );
+        } catch (error) {
+          if (error && error.confirmedNotSent) {
+            options.sendState = 'not_sent';
+            throw error;
+          }
+          error.sent = true;
           throw error;
         }
-        // Enter 派发开始后无法证明消息未发送；任何后续异常都必须保守保留全局占用。
-        error.sent = true;
-        throw error;
-      }
-    } finally { c.close(); }
+      } finally { c.close(); }
+    }
   }
 
   _throwIfCancelledBeforeSend(job) {
@@ -1538,9 +1567,17 @@ class CursorBridge {
       }
       const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
       this._throwIfCancelledBeforeSend(job);
-      const createdForWorkspace = job.targetUiFlavor === 'agents_v2' && job.projectPath
-        ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath })
-        : await this._clickNewAgent(c, false);
+      let createdForWorkspace = false;
+      try {
+        createdForWorkspace = job.targetUiFlavor === 'agents_v2' && job.projectPath
+          ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath })
+          : await this._clickNewAgent(c, false);
+      } catch (error) {
+        if (isAgentsWorkspaceBindError(error)) {
+          return { fallbackReason: 'Agents Window 无法绑定当前仓库，已在发送前降级 FIFO / workbench' };
+        }
+        throw error;
+      }
       if (!createdForWorkspace) {
         return { fallbackReason: '找不到 Cursor New Agent 按钮，已在发送前降级 FIFO' };
       }
@@ -2623,6 +2660,7 @@ export {
   pathsOverlap,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
+  selectPageForUiPreference,
   selectNewAgentEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
