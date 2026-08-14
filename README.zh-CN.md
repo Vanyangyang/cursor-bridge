@@ -8,14 +8,14 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
-**把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code。**
+**把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor 3.7.42。Bridge 面向旧 workbench 与 Agents v2 适配。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证；现阶段建议使用 Cursor 3.7.42。
+> **实机验证环境：** Windows 11 + Cursor 3.7.42，含 Grok Build TUI。Bridge 面向旧 workbench 与 Agents v2 适配。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证；现阶段建议使用 Cursor 3.7.42。
 
 ## CCE 是什么？
 
-**Cursor Context Engine（CCE）通过 MCP，把 Cursor 已有的项目索引与 Agent 搜索能力交给 Codex / Claude Code 使用。**
+**Cursor Context Engine（CCE）通过 MCP，把 Cursor 已有的项目索引与 Agent 搜索能力交给 Codex / Claude Code / Grok Build 使用。**
 
 你只需要问一次真实的项目问题。Cursor 自己决定要使用语义检索、精确搜索、源码读取、引用追踪还是 Agent 探索；Cursor Bridge 最后只把精简、可追溯到源码的 `path:line` 证据与相关性说明交回主 Agent，而不是把整个搜索过程塞进主上下文。
 
@@ -39,7 +39,19 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
 ```
 
-重启 Codex 并新建任务，或重启 Claude Code / 执行 `/reload-plugins`。然后用自然语言初始化项目：
+### Grok Build
+
+```bash
+grok plugin marketplace add Vanyangyang/cursor-bridge
+grok plugin install Vanyangyang/cursor-bridge --trust
+grok plugin enable cursor-bridge
+```
+
+Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放行插件自带的 MCP 和 hooks。当前会话不会热加载刚装的插件：打开 `/plugins` 按 `r`，或新开一个 Grok 会话。
+
+不先加市场也可以直接装：`grok plugin install Vanyangyang/cursor-bridge --trust`。
+
+重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，或按上面的方式重载 Grok。然后用自然语言初始化项目：
 
 ```text
 初始化 CCE 工作区为 C:\absolute\path\to\project
@@ -78,7 +90,14 @@ claude plugin marketplace update vanyangyang
 claude plugin update cursor-bridge@vanyangyang
 ```
 
-更新后请重启 Codex 并新建任务，或重启 Claude Code / 执行 `/reload-plugins`。
+Grok Build：
+
+```bash
+grok plugin marketplace update cursor-bridge
+grok plugin update cursor-bridge
+```
+
+更新后请重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，或在 Grok 打开 `/plugins` 按 `r` / 新开会话。
 
 </details>
 
@@ -99,7 +118,7 @@ claude plugin update cursor-bridge@vanyangyang
 
 简单定位应快速收敛；调用链、数据流、注册关系、接口实现和所有权问题可以跨模块继续追踪，直到取得最小充分证据。
 
-安装后的 `cce-routing` Skill 会为陌生项目语义问题提供有边界的 CCE 路由指引，同时让已知文件读取、测试、日志、构建、Git 和外部文档继续使用原生工具。Claude Code 还有一个很窄、失败开放的竞争检索路由保护；最终是否调用工具，仍由宿主模型决定。
+安装后的 `cce-routing` Skill 会为陌生项目语义问题提供有边界的 CCE 路由指引，同时让已知文件读取、测试、日志、构建、Git 和外部文档继续使用原生工具。Grok Build 在插件启用后会加载同一套 plugin skill。Claude Code 还有一个很窄、失败开放的竞争检索路由保护；最终是否调用工具，仍由宿主模型决定。
 
 返回格式：
 
@@ -138,7 +157,7 @@ confidence: high
 <summary><strong>工作区、Cursor UI 与生命周期</strong></summary>
 
 ```text
-Codex / Claude Code
+Codex / Claude Code / Grok Build
         │ MCP
         ▼
 Cursor Bridge adapter(s)
@@ -156,7 +175,7 @@ Cursor Agent + project index
 - Cursor Agents v2 与旧 workbench 同时打开时，Bridge 优先 Agents v2，并在已初始化仓库分组中创建工作，而不是落到 `Home`；否则回退到匹配项目的旧 workbench。
 - 缓存 target 的窗口标题不再匹配项目时会被拒绝。
 - Cursor 使用旧 UI、新 UI 还是同时开启，仍由用户决定；Bridge 不会改写偏好。
-- Windows 上 supervisor 不会随单个 Codex 会话关闭而退出 Cursor。
+- Windows 上 supervisor 不会随单个 Codex、Claude Code 或 Grok 会话关闭而退出 Cursor。
 
 初始化路径可以是已存在的项目目录或 `.code-workspace` 文件。带引号路径、Windows UNC / 扩展路径和 macOS `~` 路径会自动规范化；相对路径和无关文件会被拒绝。
 
