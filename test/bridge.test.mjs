@@ -114,6 +114,58 @@ test('Cursor Agents workspace expression creates a new Agent inside the exact re
   assert.deepEqual(ready, { ok: true, state: 'repository_ready', workspace: 'vesperix' });
 });
 
+test('Cursor 3.16.17 Agents Window binds a repo by sidebar head when the legacy section wrapper is gone', () => {
+  let clicked = 0;
+  const newAgent = {
+    getAttribute: (name) => name === 'aria-label' ? 'New Agent' : null,
+    innerText: 'New Agent',
+    click: () => { clicked++; },
+  };
+  const makeHead = (name, row) => {
+    const head = {
+      innerText: name,
+      textContent: name,
+      parentElement: row,
+      querySelectorAll: () => [],
+    };
+    return head;
+  };
+  const makeRow = (name) => {
+    const row = {
+      parentElement: { parentElement: null, querySelectorAll: () => [] },
+      querySelectorAll(selector) {
+        if (selector === '.ui-sidebar-section-head') return [row.head];
+        if (selector === 'button,[role=button]') return [newAgent];
+        return [];
+      },
+    };
+    row.head = makeHead(name, row);
+    return row;
+  };
+  const bridgeRow = makeRow('cursor-bridge');
+  const vesperixRow = makeRow('vesperix');
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === 'section.glass-sidebar-workspace-section-root') return [];
+      if (selector === '.ui-sidebar-section-head') return [bridgeRow.head, vesperixRow.head];
+      return [];
+    },
+  };
+
+  const created = JSON.parse(Function('document', `return ${exprCreateAgentForWorkspace('G:\\\\u2dProject\\\\u6project\\\\VESPERIX')};`)(document));
+  assert.equal(created.ok, true);
+  assert.equal(created.workspace, 'vesperix');
+  assert.equal(clicked, 1);
+
+  const ready = JSON.parse(Function('document', `return ${exprInspectWorkspaceRepository('G:\\\\u2dProject\\\\u6project\\\\VESPERIX')};`)(document));
+  assert.deepEqual(ready, { ok: true, state: 'repository_ready', workspace: 'vesperix' });
+
+  const missing = JSON.parse(Function('document', `return ${exprInspectWorkspaceRepository('G:\\\\project\\\\other')};`)(document));
+  assert.equal(missing.ok, false);
+  assert.equal(missing.state, 'repository_not_found');
+  assert.deepEqual(missing.available, ['cursor-bridge', 'vesperix']);
+});
+
 test('chat panel fallback includes the current Cursor Ctrl+I sidepanel shortcut', () => {
   assert.match(CursorBridge.prototype._ensureChatPanel.toString(), /'I', 'KeyI', 73/);
 });

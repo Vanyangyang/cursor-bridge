@@ -11,7 +11,7 @@
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor 3.7.42，含 Grok Build TUI。Bridge 面向旧 workbench 与 Agents v2 适配。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证；现阶段建议使用 Cursor 3.7.42。
+> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。Bridge 面向旧 workbench 与 Agents v2，并覆盖 3.16 的 Agents Window 侧栏。更旧的 workbench / Agents v2 DOM 仍可用。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
