@@ -4,6 +4,12 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Cursor 3.16.17 Agents Window workspace binding now finds a repository from `.ui-sidebar-section-head` when the older `section.glass-sidebar-workspace-section-root` wrapper is absent. Legacy workbench and older Agents v2 section DOM remain supported.
+
 ## [5.2.1] - 2026-08-10
 
 ### Fixed

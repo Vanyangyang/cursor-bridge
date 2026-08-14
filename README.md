@@ -11,7 +11,7 @@
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor 3.7.42, including Grok Build TUI. Bridge targets both the legacy workbench and Agents v2. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested; Cursor 3.7.42 is the recommended compatibility target today.
+> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Bridge targets the legacy workbench and Agents v2, including the 3.16 Agents Window sidebar. Older Cursor workbench/Agents v2 DOM remains supported. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 

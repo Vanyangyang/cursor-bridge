@@ -20916,16 +20916,59 @@ function exprClickSelectedAgentStop(agentId) {
   })()`;
 }
 var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+var WORKSPACE_SECTION_BODY = `
+  const headText=(el)=>String(el&&(el.innerText||el.textContent)||'').trim();
+  const isNewAgentButton=(node)=>{
+    if(!node)return false;
+    const aria=String(node.getAttribute&&node.getAttribute('aria-label')||'').trim();
+    const text=String(node.innerText||'').trim().split('\\n')[0].trim();
+    return /^New Agent$/i.test(aria)||/^New Agent$/i.test(text);
+  };
+  const findNewAgent=(root)=>[...(root&&root.querySelectorAll?root.querySelectorAll('button,[role=button]'):[])].find(isNewAgentButton)||null;
+  const collectWorkspaceSections=()=>{
+    const sections=[];
+    const seen=new Set();
+    const add=(head,node,button)=>{
+      const name=String(head||'').trim();
+      if(!name)return;
+      const key=name.toLowerCase();
+      if(seen.has(key))return;
+      seen.add(key);
+      sections.push({head:name,node,button:button||findNewAgent(node)});
+    };
+    for(const section of document.querySelectorAll('section.glass-sidebar-workspace-section-root')){
+      add(headText(section.querySelector('.ui-sidebar-section-head')),section,null);
+    }
+    for(const headEl of document.querySelectorAll('.ui-sidebar-section-head')){
+      const name=headText(headEl);
+      if(!name)continue;
+      let scope=headEl;
+      let chosen=null;
+      for(let i=0;scope&&i<16;i++,scope=scope.parentElement){
+        const nested=[...scope.querySelectorAll('.ui-sidebar-section-head')].map(headText).filter(Boolean);
+        const unique=[...new Set(nested.map((h)=>h.toLowerCase()))];
+        const button=findNewAgent(scope);
+        if(button&&unique.length===1&&unique[0]===name.toLowerCase()){
+          chosen={node:scope,button};
+          break;
+        }
+      }
+      add(name,chosen?chosen.node:headEl,chosen&&chosen.button);
+    }
+    return sections;
+  };
+`;
 function exprCreateAgentForWorkspace(projectPath) {
   const workspaceLabel = JSON.stringify(basename3(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
+    ${WORKSPACE_SECTION_BODY}
     const wanted=${workspaceLabel};
-    const sections=[...document.querySelectorAll('section.glass-sidebar-workspace-section-root')];
-    const available=sections.map(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim()).filter(Boolean);
-    const matches=sections.filter(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim().toLowerCase()===wanted);
+    const sections=collectWorkspaceSections();
+    const available=sections.map((section)=>section.head).filter(Boolean);
+    const matches=sections.filter((section)=>section.head.toLowerCase()===wanted);
     if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
     if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
-    const button=[...matches[0].querySelectorAll('button,[role=button]')].find(node=>/^New Agent$/i.test((node.getAttribute('aria-label')||'').trim()));
+    const button=matches[0].button;
     if(!button)return JSON.stringify({ok:false,state:'repository_new_agent_unavailable',wanted});
     button.click();
     return JSON.stringify({ok:true,state:'repository_agent_created',workspace:wanted});
@@ -20934,10 +20977,11 @@ function exprCreateAgentForWorkspace(projectPath) {
 function exprInspectWorkspaceRepository(projectPath) {
   const workspaceLabel = JSON.stringify(basename3(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
+    ${WORKSPACE_SECTION_BODY}
     const wanted=${workspaceLabel};
-    const sections=[...document.querySelectorAll('section.glass-sidebar-workspace-section-root')];
-    const available=sections.map(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim()).filter(Boolean);
-    const matches=sections.filter(section=>(section.querySelector('.ui-sidebar-section-head')?.innerText||'').trim().toLowerCase()===wanted);
+    const sections=collectWorkspaceSections();
+    const available=sections.map((section)=>section.head).filter(Boolean);
+    const matches=sections.filter((section)=>section.head.toLowerCase()===wanted);
     if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
     if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
     return JSON.stringify({ok:true,state:'repository_ready',workspace:wanted});
