@@ -12,11 +12,11 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Cursor 3.16.17 Agents Window workspace binding now finds a repository from `.ui-sidebar-section-head` when the older `section.glass-sidebar-workspace-section-root` wrapper is absent. If the Agents Window cannot bind the current repo, CCE falls back to the workbench instead of failing closed.
+- Cursor 3.16.17 Agents Window can use the current project again. If Agents Window is unavailable, CCE uses the workbench.
 
 ### Compatibility
 
-- Every current Cursor version still has two editors. The workbench and the previous Agents Window sidebar remain supported; 3.16.17 Agents Window was live-tested on Windows 11.
+- Cursor 3.16.17 Agents Window, the workbench, and older Agents Window remain supported. Live-tested on Windows 11.
 
 ## [5.2.1] - 2026-08-10
 

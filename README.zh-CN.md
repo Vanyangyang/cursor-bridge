@@ -11,7 +11,7 @@
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。当前每个 Cursor 版本都同时有两个编辑器：workbench 和 Agents Window。Bridge 能绑上当前仓库时走 Agents Window，否则回退 workbench。旧版 Agents Window 侧栏和 3.16.17 侧栏都支持。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。支持 Cursor 的 workbench 与 Agents Window。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -67,9 +67,9 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 ## 兼容性
 
-- **Cursor 3.16.17** 的 Agents Window 已在 Windows 11 实机验证。Bridge 靠当前窗口上的界面元素分流，不读 Cursor 版本号。
-- **workbench** 和 **旧 Agents Window** 侧栏继续可用。Agents Window 绑不上当前仓库时，CCE 回退 workbench。
-- **Grok Build** 与 Codex、Claude Code 一样是正式插件宿主。`grok plugin install … --trust` 且 `grok plugin enable cursor-bridge` 之后，在 `/plugins` 按 `r` 或新开会话即可加载。
+- 支持 **Cursor 3.16.17**，含 Agents Window。已在 Windows 11 验证。
+- **workbench** 和更早的 **Agents Window** 继续可用。打不开 Agents Window 时，会改用 workbench。
+- 支持 **Grok Build**，与 Codex、Claude Code 一样。安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
 ## 两项核心能力
 
@@ -178,7 +178,7 @@ Cursor Agent + project index
 - `cursor_init` 为当前宿主上下文校验并持久化一个工作区；再次执行即可切换项目。
 - 项目索引由 Cursor 自己负责。Bridge 只确保连接，并选择经过校验、与项目匹配的 CDP target。
 - 多个 MCP adapter 共用一个用户级 lifecycle supervisor，并在读取状态或执行生命周期操作前重新同步持久运行模式。
-- workbench 和 Agents Window 同时开着时，Bridge 优先 Agents Window，并在已初始化仓库分组里建工作，包括 3.16.17 侧栏。绑不上该仓库，或只有 workbench 时，回退 workbench。不会落到 `Home`。
+- workbench 和 Agents Window 同时开着时，Bridge 优先在当前项目的 Agents Window 里工作；只有 workbench 时就用 workbench。不会落到 `Home`。
 - 缓存 target 的窗口标题不再匹配项目时会被拒绝。
 - Cursor 使用旧 UI、新 UI 还是同时开启，仍由用户决定；Bridge 不会改写偏好。
 - Windows 上 supervisor 不会随单个 Codex、Claude Code 或 Grok 会话关闭而退出 Cursor。
