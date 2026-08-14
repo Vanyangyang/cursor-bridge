@@ -307,6 +307,7 @@ __export(cursor_ensure_core_exports, {
   normalizeCodexThreadCwd: () => normalizeCodexThreadCwd,
   normalizeCursorExeCandidate: () => normalizeCursorExeCandidate,
   resolveCodexThreadProjectPath: () => resolveCodexThreadProjectPath,
+  resolveCursorLaunchCdpPort: () => resolveCursorLaunchCdpPort,
   resolveProjectPath: () => resolveProjectPath,
   selectAgentsWindowTarget: () => selectAgentsWindowTarget,
   selectNewCdpTarget: () => selectNewCdpTarget,
@@ -320,6 +321,11 @@ import { createRequire as createNodeRequire } from "node:module";
 import { homedir as homedir3 } from "node:os";
 import { basename as basename2, extname, join as join3, resolve as resolve2, win32 as winPath, posix as posixPath } from "node:path";
 import http from "http";
+function resolveCursorLaunchCdpPort(port = process.env.CURSOR_BRIDGE_CDP_PORT) {
+  const parsed = Number(port == null || String(port).trim() === "" ? 9223 : port);
+  if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65535) return 9223;
+  return parsed;
+}
 function looksLikePluginRuntimePath(candidate) {
   const p = String(candidate || "").replace(/\//g, "\\").toLowerCase();
   return p.includes("\\.codex\\.tmp\\marketplaces\\") || p.includes("\\.codex\\plugins\\cache\\") || p.includes("\\.claude\\plugins\\cache\\") || p.includes("\\appdata\\local\\npm-cache\\_npx\\");
@@ -681,7 +687,8 @@ async function ensureCursorRunningLocal(options = {}) {
       message: "\u6CA1\u6709\u627E\u5230 Cursor\u3002\u6807\u51C6 Windows \u4E0E macOS \u5B89\u88C5\u4F1A\u81EA\u52A8\u8BC6\u522B\uFF0C\u901A\u5E38\u4E0D\u9700\u8981\u586B\u5199\u7A0B\u5E8F\u8DEF\u5F84\u3002"
     };
   }
-  const args = [`--remote-debugging-port=${CDP_PORT}`, `--remote-allow-origins=${CDP_ORIGIN}`];
+  const launchPort = resolveCursorLaunchCdpPort(CDP_PORT);
+  const args = [`--remote-debugging-port=${launchPort}`, `--remote-allow-origins=http://localhost:${launchPort}`];
   if (effectiveRuntimeMode === "minimal") {
     args.push(
       "--disable-background-timer-throttling",

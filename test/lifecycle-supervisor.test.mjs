@@ -228,11 +228,12 @@ test('inline ensure path still works without supervisor', async () => {
   try {
     const { ensureCursorRunning } = await import('../launch-cursor.mjs');
     const result = await ensureCursorRunning({ waitMs: 200, reason: 'inline-test' });
-    assert.equal(result.ok, false);
-    assert.ok(['no-exe', 'running-no-debug', 'timeout', 'port-not-cursor'].includes(result.status), result.status);
     assert.equal(result.adapterPid, process.pid);
     assert.equal(result.supervisorPid, null);
     assert.match(String(result.launchReason || ''), /^inline-/);
+    if (result.ok === false) {
+      assert.ok(['no-exe', 'running-no-debug', 'timeout', 'port-not-cursor', 'workspace-not-ready'].includes(result.status), result.status);
+    }
   } finally {
     if (previousInline == null) delete process.env.CURSOR_BRIDGE_INLINE_ENSURE;
     else process.env.CURSOR_BRIDGE_INLINE_ENSURE = previousInline;

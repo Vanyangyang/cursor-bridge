@@ -44,7 +44,7 @@ import {
 } from './workspace-binding.mjs';
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 
-const PLUGIN_VERSION = '5.3.2';
+const PLUGIN_VERSION = '5.3.3';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -2568,7 +2568,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.3.2' },
+  { name: 'cursor-bridge', version: '5.3.3' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
