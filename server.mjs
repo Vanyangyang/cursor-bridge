@@ -42,6 +42,7 @@ import {
   resolveWorkspaceBindingKey,
   writeWorkspaceBinding,
 } from './workspace-binding.mjs';
+import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
@@ -157,20 +158,81 @@ function selectCursorPageCandidate(candidates, options = {}) {
     .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.page || null;
 }
 
-async function inspectPageTarget(page) {
+export function summarizeCdpPages(list) {
+  const pages = (Array.isArray(list) ? list : []).filter((target) => target && target.type === 'page');
+  const agents = pages.find((page) => isAgentsWindowTitle(page.title));
+  const first = agents || pages[0] || null;
+  return {
+    pageCount: pages.length,
+    pageTitles: pages.map((page) => String(page.title || '')),
+    agentsWindowPresent: !!agents,
+    page: first && first.url ? String(first.url).slice(0, 60) : '',
+  };
+}
+
+function isBlankAgentsWindow(page) {
+  if (!page || !isAgentsWindowTitle(page.title)) return false;
+  if (page.probeError || !page.capabilities) return true;
+  return page.capabilities.uiFlavor !== 'agents_v2' && !page.capabilities.hasWritableInput;
+}
+
+async function reloadPageTarget(page, timeoutMs = 5000) {
+  if (!page || !page.webSocketDebuggerUrl) return false;
   const c = makeClient(page.webSocketDebuggerUrl);
   try {
     await Promise.race([
       c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 连接超时')), 5000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 连接超时')), timeoutMs)),
     ]);
-    const raw = await evalJS(c, EXPR_PAGE_CAPABILITIES);
+    await Promise.race([
+      c.send('Page.reload', { ignoreCache: true }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP reload 超时')), timeoutMs)),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    c.close();
+  }
+}
+
+async function inspectPageTarget(page) {
+  const c = makeClient(page.webSocketDebuggerUrl);
+  const probeMs = Number(process.env.CURSOR_BRIDGE_PAGE_PROBE_TIMEOUT || 5000);
+  try {
+    await Promise.race([
+      c.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 连接超时')), probeMs)),
+    ]);
+    const raw = await Promise.race([
+      evalJS(c, EXPR_PAGE_CAPABILITIES),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 探测超时')), probeMs)),
+    ]);
     return { ...page, capabilities: JSON.parse(raw || '{}') };
   } catch (error) {
     return { ...page, capabilities: null, probeError: error.message };
   } finally {
     c.close();
   }
+}
+
+async function recoverBlankAgentsWindows(inspected) {
+  const pages = Array.isArray(inspected) ? inspected : [];
+  const recovered = [];
+  for (const page of pages) {
+    if (!isBlankAgentsWindow(page)) {
+      recovered.push(page);
+      continue;
+    }
+    const reloaded = await reloadPageTarget(page);
+    if (!reloaded) {
+      recovered.push(page);
+      continue;
+    }
+    await sleep(800);
+    recovered.push(await inspectPageTarget(page));
+  }
+  return recovered;
 }
 
 function pagesWithFlavor(pages, flavor) {
@@ -206,7 +268,7 @@ async function findPage(options = {}) {
   if (options.targetId && options.preferAgentsV2 !== true && options.preferLegacy !== true) {
     return selectCursorPageCandidate(pages, options);
   }
-  const inspected = await Promise.all(pages.map(inspectPageTarget));
+  const inspected = await recoverBlankAgentsWindows(await Promise.all(pages.map(inspectPageTarget)));
   return selectPageForUiPreference(inspected, options) || pages[0];
 }
 function makeClient(wsUrl) {
@@ -2396,8 +2458,8 @@ class CursorBridge {
     };
     try {
       const ver = await httpJson('/json/version');
-      const page = await findPage();
-      return { connected: true, ...common, browser: ver.Browser, page: (page.url || '').slice(0, 60) };
+      const list = await httpJson('/json/list');
+      return { connected: true, ...common, browser: ver.Browser, ...summarizeCdpPages(list) };
     } catch (e) {
       return { connected: false, ...common, error: e.message };
     }
@@ -2503,7 +2565,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.3.0' },
+  { name: 'cursor-bridge', version: '5.3.1' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -2679,4 +2741,5 @@ export {
   providerErrorSignature,
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
+  isBlankAgentsWindow,
 };

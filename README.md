@@ -192,7 +192,9 @@ Cursor Agent + project index
 - Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
 - When the Agents Window and the workbench are both open, Bridge prefers the Agents Window for the current project. If only the workbench is available, it uses that. It does not create work in `Home`.
-- Stale target IDs are rejected when the title no longer matches the requested project.
+- If Agents Window is already open, ensure reuses that CDP page and does not spawn `Cursor.exe --new-window`. A new workbench window is opened only when Cursor is connected and neither Agents Window nor a matching editor title exists.
+- `cursor_status` lists CDP page titles only. It does not inspect page DOM. If Agents Window is white, CCE reloads that page once, then continues.
+- Stale target IDs are rejected when the title no longer matches the requested project, except for the Agents Window title `Cursor Agents`, which is a valid reusable target.
 - Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
 - On Windows, the supervisor survives an individual Codex, Claude Code, or Grok session closing.
 
