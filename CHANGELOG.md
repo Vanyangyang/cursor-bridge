@@ -4,6 +4,12 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.3.4] - 2026-08-14
+
+### Changed
+
+- Bump the published plugin version to **5.3.4** so Grok / marketplace registry records a version change after the 5.3.3 live pass and GitHub release notes. Runtime behavior is unchanged from 5.3.3.
+
 ## [5.3.3] - 2026-08-14
 
 ### Fixed
@@ -165,6 +171,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.3.4]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.3...cursor-bridge--v5.3.4
 [5.3.3]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.2...cursor-bridge--v5.3.3
 [5.3.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.1...cursor-bridge--v5.3.2
 [5.3.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.0...cursor-bridge--v5.3.1
