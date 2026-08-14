@@ -16,7 +16,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Compatibility
 
-- Supported Cursor versions: **3.16.17** (current, live-tested) and **3.7.42 – 3.16.16** (still compatible). Workbench and Agents Window both remain available. Older Cursor 3.x releases that already worked stay compatible.
+- Live-tested Cursor versions: **3.16.17** and **3.7.42** (workbench and Agents Window). Other versions have not been tested.
 
 ## [5.2.1] - 2026-08-10
 
