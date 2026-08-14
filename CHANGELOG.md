@@ -4,6 +4,14 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.3.1] - 2026-08-14
+
+### Fixed
+
+- When Agents Window is already open, CCE ensure reuses the `Cursor Agents` page instead of spawning `Cursor.exe --new-window`. That extra workbench ignored Cursor's Window Restoration setting, often restored an unrelated last folder, and could blank Agents Window.
+- `cursor_status` now reads `/json/list` only. It no longer runs `Runtime.evaluate` on every page, so a white Agents Window cannot stall the tool for minutes.
+- CCE page selection times out probes in 5 seconds and reloads a blank Agents Window once before failing over.
+
 ## [5.3.0] - 2026-08-14
 
 ### Added
@@ -145,6 +153,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.3.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.0...cursor-bridge--v5.3.1
 [5.3.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.2.1...cursor-bridge--v5.3.0
 [5.2.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.2.0...cursor-bridge--v5.2.1
 [5.2.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.1.0...cursor-bridge--v5.2.0

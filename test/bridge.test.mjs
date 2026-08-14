@@ -39,7 +39,33 @@ import {
   providerErrorSignature,
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
+  summarizeCdpPages,
+  isBlankAgentsWindow,
 } from '../server.mjs';
+
+test('status snapshot lists CDP titles without requiring a live page probe', () => {
+  const summary = summarizeCdpPages([
+    { type: 'page', title: 'Cursor Settings - cursor-bridge - Cursor', url: 'vscode-file://settings' },
+    { type: 'page', title: 'Cursor Agents', url: 'vscode-file://agents' },
+    { type: 'worker', title: '' },
+  ]);
+  assert.equal(summary.pageCount, 2);
+  assert.equal(summary.agentsWindowPresent, true);
+  assert.deepEqual(summary.pageTitles, [
+    'Cursor Settings - cursor-bridge - Cursor',
+    'Cursor Agents',
+  ]);
+  assert.equal(summary.page, 'vscode-file://agents');
+  assert.equal(isBlankAgentsWindow({ title: 'Cursor Agents', probeError: 'CDP target 探测超时' }), true);
+  assert.equal(isBlankAgentsWindow({
+    title: 'Cursor Agents',
+    capabilities: { uiFlavor: 'agents_v2', hasWritableInput: true },
+  }), false);
+  assert.equal(isBlankAgentsWindow({
+    title: 'Cursor Settings - cursor-bridge - Cursor',
+    probeError: 'ignored',
+  }), false);
+});
 
 test('page capability scoring prefers Cursor Agents and pins an existing target', () => {
   const legacy = {

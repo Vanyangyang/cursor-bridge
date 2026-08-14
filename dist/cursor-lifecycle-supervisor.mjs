@@ -302,12 +302,15 @@ __export(cursor_ensure_core_exports, {
   ensureCursorRunningLocal: () => ensureCursorRunningLocal,
   findCursorExe: () => findCursorExe,
   findCursorExeDetails: () => findCursorExeDetails,
+  isAgentsWindowTitle: () => isAgentsWindowTitle,
   looksLikePluginRuntimePath: () => looksLikePluginRuntimePath,
   normalizeCodexThreadCwd: () => normalizeCodexThreadCwd,
   normalizeCursorExeCandidate: () => normalizeCursorExeCandidate,
   resolveCodexThreadProjectPath: () => resolveCodexThreadProjectPath,
   resolveProjectPath: () => resolveProjectPath,
+  selectAgentsWindowTarget: () => selectAgentsWindowTarget,
   selectNewCdpTarget: () => selectNewCdpTarget,
+  targetCanServeProject: () => targetCanServeProject,
   targetTitleMatchesProject: () => targetTitleMatchesProject,
   waitForCdp: () => waitForCdp
 });
@@ -542,20 +545,24 @@ async function ensureCursorRunningLocal(options = {}) {
   const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
   const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
   const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve2(String(options.projectPath)) : null : resolveProjectPath();
+  const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
+  const spawnImpl = options.spawnImpl || spawn2;
   if (await cdpUpImpl()) {
     const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
       const cursorPid2 = findCursorPidByPort(CDP_PORT);
       const windowGuard2 = effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
       const presentation2 = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : null;
-      const currentTargets = await listCdpPageTargets();
+      const currentTargets = await listCdpPageTargetsImpl();
       const projectKey = normalizeProjectKey(projectPath);
       let targetId2 = projectKey ? PROJECT_TARGETS.get(projectKey) || null : currentTargets[0] && currentTargets[0].id || null;
       let workspaceAction = projectPath ? "reused-project-target" : "reused-last-workspace";
       const cachedTarget = targetId2 ? currentTargets.find((target2) => target2.id === targetId2) : null;
-      if (targetId2 && (!cachedTarget || projectPath && !targetTitleMatchesProject(cachedTarget.title, projectPath))) {
+      if (targetId2 && (!cachedTarget || projectPath && !targetCanServeProject(cachedTarget.title, projectPath))) {
         PROJECT_TARGETS.delete(projectKey);
         targetId2 = null;
+      } else if (targetId2 && cachedTarget && isAgentsWindowTitle(cachedTarget.title)) {
+        workspaceAction = "reused-agents-window";
       }
       if (projectPath && !targetId2) {
         const existingTarget = currentTargets.find((target2) => targetTitleMatchesProject(target2.title, projectPath));
@@ -563,6 +570,14 @@ async function ensureCursorRunningLocal(options = {}) {
           targetId2 = existingTarget.id;
           PROJECT_TARGETS.set(projectKey, targetId2);
           workspaceAction = "recovered-project-target";
+        }
+      }
+      if (projectPath && !targetId2) {
+        const agentsTarget = selectAgentsWindowTarget(currentTargets);
+        if (agentsTarget) {
+          targetId2 = agentsTarget.id;
+          PROJECT_TARGETS.set(projectKey, targetId2);
+          workspaceAction = "reused-agents-window";
         }
       }
       if (projectPath && existsSync(projectPath) && !targetId2) {
@@ -585,14 +600,14 @@ async function ensureCursorRunningLocal(options = {}) {
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
-        const opener = spawn2(exe2, ["--new-window", projectPath], {
+        const opener = spawnImpl(exe2, ["--new-window", projectPath], {
           detached: true,
           stdio: "ignore",
           windowsHide: effectiveRuntimeMode === "minimal"
         });
         opener.unref();
         workspaceAction = "opened-new-window";
-        const openedTarget2 = await waitForNewCdpTarget(beforeTargetIds, 12e3, projectPath);
+        const openedTarget2 = await waitForNewCdpTarget(beforeTargetIds, 12e3, projectPath, listCdpPageTargetsImpl);
         if (!openedTarget2) {
           return {
             ok: false,
@@ -626,7 +641,7 @@ async function ensureCursorRunningLocal(options = {}) {
         windowGuard: windowGuard2,
         targetId: targetId2,
         workspaceAction,
-        message: `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u76EE\u6807\u5DE5\u4F5C\u533A\u5DF2\u7ED1\u5B9A\u5230 CDP target ${targetId2 || "default"}\u3002`
+        message: workspaceAction === "reused-agents-window" ? `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u5DF2\u590D\u7528 Agents Window\uFF08${targetId2}\uFF09\uFF0C\u4E0D\u4F1A\u518D\u6253\u5F00 IDE \u65B0\u7A97\u53E3\u3002` : `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u76EE\u6807\u5DE5\u4F5C\u533A\u5DF2\u7ED1\u5B9A\u5230 CDP target ${targetId2 || "default"}\u3002`
       };
     }
     return {
@@ -675,7 +690,7 @@ async function ensureCursorRunningLocal(options = {}) {
     );
   }
   if (projectPath && existsSync(projectPath)) args.push(projectPath);
-  const child = spawn2(exe, args, {
+  const child = spawnImpl(exe, args, {
     detached: true,
     stdio: "ignore",
     windowsHide: effectiveRuntimeMode === "minimal"
@@ -702,7 +717,7 @@ async function ensureCursorRunningLocal(options = {}) {
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
-  const openedTarget = await waitForNewCdpTarget(/* @__PURE__ */ new Set(), 12e3, projectPath);
+  const openedTarget = await waitForNewCdpTarget(/* @__PURE__ */ new Set(), 12e3, projectPath, listCdpPageTargetsImpl);
   const targetId = openedTarget && openedTarget.id || null;
   if (projectPath && !targetId) {
     return {
@@ -755,6 +770,17 @@ function targetTitleMatchesProject(title, projectPath) {
   const normalizedTitle = String(title || "").trim().toLowerCase();
   return candidates.some((candidate) => normalizedTitle === candidate || normalizedTitle.startsWith(candidate + " - ") || normalizedTitle.includes(" - " + candidate + " - "));
 }
+function isAgentsWindowTitle(title) {
+  const normalized = String(title || "").trim().toLowerCase();
+  return normalized === "cursor agents" || normalized.startsWith("cursor agents - ");
+}
+function targetCanServeProject(title, projectPath) {
+  if (!projectPath) return true;
+  return targetTitleMatchesProject(title, projectPath) || isAgentsWindowTitle(title);
+}
+function selectAgentsWindowTarget(targets) {
+  return (Array.isArray(targets) ? targets : []).find((target) => target && target.id && isAgentsWindowTitle(target.title)) || null;
+}
 async function listCdpPageTargets(timeoutMs = 1500) {
   return new Promise((done) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
@@ -786,10 +812,10 @@ function selectNewCdpTarget(beforeTargetIds, targets, projectPath = "") {
   const fresh = (targets || []).filter((target) => target && target.id && !before.has(target.id));
   return fresh.find((target) => targetTitleMatchesProject(target.title, projectPath)) || fresh[0] || null;
 }
-async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = "") {
+async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = "", listImpl = listCdpPageTargets) {
   const started = Date.now();
   while (Date.now() - started < maxMs) {
-    const target = selectNewCdpTarget(beforeTargetIds, await listCdpPageTargets(), projectPath);
+    const target = selectNewCdpTarget(beforeTargetIds, await listImpl(), projectPath);
     if (target) return target;
     await new Promise((resolveWait) => setTimeout(resolveWait, 300));
   }
