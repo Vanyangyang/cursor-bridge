@@ -11,7 +11,7 @@
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor 3.16.17, including Grok Build TUI. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.16.17** and **3.7.42**, including Grok Build TUI. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -80,10 +80,10 @@ Supported Cursor versions (Windows 11):
 
 | Cursor | Status |
 |---|---|
-| **3.16.17** | Live-tested. IDE and Agents Window. |
+| **3.16.17** | Live-tested. IDE and Agents Window, including running FIFO cancel when an Agent ID is published. |
 | **3.7.42** | Live-tested. IDE and Agents Window. |
 
-Other Cursor versions have not been tested. If Agents Window is not available, CCE uses the IDE.
+Other Cursor versions have not been tested. If Agents Window is not available, CCE uses the IDE. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
@@ -218,7 +218,7 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 - Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.
 - Provider-error trays are retained as terminal evidence; Bridge does not click Retry automatically.
 - Uncertain post-send work retains its reservation. It is not silently released or resubmitted.
-- `reap` is for a bound orphan, targeted `cancel` requires the exact published Agent ID, and `abandon` requires explicit risk acknowledgement.
+- `reap` is for a bound parallel orphan. Targeted `cancel` requires the exact published Agent ID. FIFO tasks on Agents Window or workbench that publish an Agent ID can be stopped the same way. If no ID is published, Bridge will not guess-click Stop; confirm the Cursor chat is stopped, then `abandon`.
 - Task records are process-local. After an MCP restart, inspect Agent History and workspace changes before starting overlapping work.
 
 </details>

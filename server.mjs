@@ -44,7 +44,7 @@ import {
 } from './workspace-binding.mjs';
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 
-const PLUGIN_VERSION = '5.3.4';
+const PLUGIN_VERSION = '5.3.6';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -409,6 +409,57 @@ function exprClickSelectedAgentStop(agentId) {
     }
     buttons[0].click();
     return JSON.stringify({clicked:true,state:'clicked',selectedId:selected.id,composerId:composer.dataset.composerId,control:generationButtons.length?'stop_generation':'stop_command'});
+  })()`;
+}
+
+const EXPR_VISIBLE_COMPOSER = `(function(){
+  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+    .filter(e=>e.offsetParent!==null&&e.dataset.composerId);
+  if(composers.length!==1){
+    return JSON.stringify({ok:false,state:composers.length?'ambiguous_composers':'composer_missing',count:composers.length});
+  }
+  const composer=composers[0];
+  return JSON.stringify({
+    ok:true,
+    id:'local:'+composer.dataset.composerId,
+    composerId:composer.dataset.composerId,
+    status:composer.dataset.composerStatus||null
+  });
+})()`;
+
+function exprClickBoundComposerStop(agentId) {
+  const expected = JSON.stringify(String(agentId));
+  return `(function(){
+    const expectedComposerId=String(${expected}).replace(/^local:/,'');
+    const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+      .filter(e=>e.offsetParent!==null&&e.dataset.composerId===expectedComposerId);
+    if(composers.length!==1){
+      return JSON.stringify({clicked:false,state:'composer_identity_mismatch',count:composers.length});
+    }
+    const composer=composers[0];
+    if(composer.dataset.composerStatus!=='generating'){
+      return JSON.stringify({clicked:false,state:'composer_not_generating',status:composer.dataset.composerStatus||null,composerId:composer.dataset.composerId});
+    }
+    // Agents Window 的 Stop 可能在 composer-bar 外的输入条里；必须先核对该 composer 身份，
+    // 再要求整页只有一个精确 Stop 控件，禁止模糊点击。
+    const generationButtons=[...document.querySelectorAll('button.ui-prompt-input-submit-button[data-state="stop"][aria-label="Stop generation"]')]
+      .filter(button=>button.offsetParent!==null&&!button.disabled);
+    const commandButtons=[...document.querySelectorAll('button.ui-shell-tool-call__glass-stop[aria-label="Stop command"]')]
+      .filter(button=>button.offsetParent!==null&&!button.disabled);
+    const buttons=[...generationButtons,...commandButtons];
+    if(buttons.length===1){
+      buttons[0].click();
+      return JSON.stringify({clicked:true,state:'clicked',composerId:composer.dataset.composerId,control:generationButtons.length?'stop_generation':'stop_command'});
+    }
+    const iconButtons=[...composer.querySelectorAll('.anysphere-icon-button')]
+      .filter(button=>button.offsetParent!==null&&button.querySelector('.codicon-debug-stop,.codicon-stop'));
+    const toolbarIcons=iconButtons.filter(button=>!button.closest('.composer-messages-container,.composer-react-transcript-root'));
+    const iconPool=toolbarIcons.length?toolbarIcons:iconButtons;
+    if(iconPool.length>=1){
+      iconPool[iconPool.length-1].click();
+      return JSON.stringify({clicked:true,state:'clicked',composerId:composer.dataset.composerId,control:'debug_stop_icon',count:iconPool.length});
+    }
+    return JSON.stringify({clicked:false,state:buttons.length?'ambiguous_stop_controls':'stop_control_missing',count:buttons.length,composerId:composer.dataset.composerId});
   })()`;
 }
 // "New Agent" 新对话钮中心坐标。新版 Cursor Agents 只有可见文本，旧版主要依赖 aria-label。
@@ -1046,6 +1097,7 @@ class CursorBridge {
       execution,
       readOnly,
       allowedPaths,
+      preferLegacyUi: options.preferLegacyUi === true,
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -1093,6 +1145,7 @@ class CursorBridge {
       prompt,
       timeoutMs: options.timeoutMs,
       newChat: options.newChat,
+      preferLegacyUi: options.preferLegacyUi === true,
       execution: options.execution || 'fifo',
       effectiveExecution: options.execution || 'fifo',
       readOnly: options.readOnly === true,
@@ -1419,7 +1472,8 @@ class CursorBridge {
     let page = await findPage({
       targetId: options.targetId || (this._lastLifecycle && this._lastLifecycle.targetId),
       purpose: 'fifo',
-      preferAgentsV2: true,
+      preferAgentsV2: options.preferLegacyUi !== true,
+      preferLegacy: options.preferLegacyUi === true,
     });
     for (let attempt = 0; attempt < 2; attempt++) {
       options.targetId = page.id;
@@ -1429,6 +1483,10 @@ class CursorBridge {
       try {
         this._throwIfCancelledBeforeSend(options);
         await this._ensureChatPanel(c);
+        const historyBefore = this._canBindFifoHistory(options)
+          ? await this._snapshotAgentEntries(c)
+          : null;
+        if (historyBefore) options.historyBeforeEntries = historyBefore;
         if (options.newChat !== false) {
           try {
             await this._newChat(c, {
@@ -1447,6 +1505,8 @@ class CursorBridge {
             throw error;
           }
         }
+        await this._bindFifoAgentAfterComposerReady(c, options, historyBefore);
+        await this._bindFifoComposerIdentity(c, options);
         this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
         if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('填入查询失败（输入框状态异常）');
@@ -1461,6 +1521,10 @@ class CursorBridge {
           await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
           options.sendState = 'sent';
           options.sentAt = options.sentAt || new Date().toISOString();
+          if (!options.agentId) {
+            await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
+            await this._bindFifoComposerIdentity(c, options);
+          }
           return await this._waitComplete(
             c,
             options.timeoutMs || QUERY_TIMEOUT,
@@ -1562,6 +1626,81 @@ class CursorBridge {
       return snapshot.entries || [];
     } finally {
       if (!keepOpen) await this._closeHistory(c);
+    }
+  }
+
+  _canBindFifoHistory(job) {
+    return !!job;
+  }
+
+  async _snapshotAgentEntries(c) {
+    try {
+      return await this._readAgentEntries(c);
+    } catch {
+      return null;
+    }
+  }
+
+  async _resolveNewAgent(c, beforeEntries, options = {}) {
+    if (!Array.isArray(beforeEntries)) return null;
+    try {
+      const candidate = selectNewAgentEntry(beforeEntries, await this._readAgentEntries(c));
+      if (!candidate) return null;
+      if (options.requireActive
+        && !candidate.showSpinner
+        && classifyParallelTerminalIcon(candidate.icon) === 'unknown') {
+        return null;
+      }
+      return candidate;
+    } catch {
+      return null;
+    }
+  }
+
+  _applyAgentIdentity(job, agent) {
+    if (!job || !agent || !agent.id) return;
+    job.agentId = agent.id;
+    job.agentLabel = agent.label || job.agentLabel || null;
+  }
+
+  async _bindFifoComposerIdentity(c, job) {
+    if (!this._canBindFifoHistory(job) || (job && job.agentId)) return;
+    try {
+      const snapshot = JSON.parse(await evalJS(c, EXPR_VISIBLE_COMPOSER) || '{}');
+      if (snapshot && snapshot.ok && snapshot.id) this._applyAgentIdentity(job, { id: snapshot.id });
+    } catch {}
+  }
+
+  async _bindFifoAgentAfterComposerReady(c, job, beforeEntries) {
+    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries)) return;
+    if (job.newChat === false) {
+      const selected = beforeEntries.find((entry) => entry && entry.isSelected && entry.id);
+      if (selected) this._applyAgentIdentity(job, selected);
+      return;
+    }
+    for (let i = 0; i < 5 && !job.agentId; i++) {
+      const agent = await this._resolveNewAgent(c, beforeEntries, { requireActive: false });
+      if (agent) {
+        this._applyAgentIdentity(job, agent);
+        return;
+      }
+      await sleep(350);
+    }
+    if (job.agentId) return;
+    try {
+      const after = await this._readAgentEntries(c);
+      const selected = (after || []).find((entry) => entry && entry.isSelected && entry.id);
+      if (selected) this._applyAgentIdentity(job, selected);
+    } catch {}
+  }
+
+  async _bindFifoAgentAfterSend(c, job, beforeEntries, providerErrorBaseline) {
+    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries) || job.agentId) return;
+    for (let i = 0; i < 24 && !job.agentId; i++) {
+      await sleep(350);
+      await this._throwIfNewProviderError(c, providerErrorBaseline);
+      const candidate = await this._resolveNewAgent(c, beforeEntries, { requireActive: true });
+      if (candidate) this._applyAgentIdentity(job, candidate);
     }
   }
 
@@ -2040,74 +2179,165 @@ class CursorBridge {
     return { changed: false, state: 'idle_unconfirmed', task: this._taskView(job, true) };
   }
 
+  async _readVisibleComposer(c) {
+    try {
+      return JSON.parse(await evalJS(c, EXPR_VISIBLE_COMPOSER) || '{}');
+    } catch {
+      return { ok: false, state: 'composer_evaluate_failed' };
+    }
+  }
+
+  async _stopBoundAgentViaComposer(c, job) {
+    let clickResult;
+    try { clickResult = JSON.parse(await evalJS(c, exprClickBoundComposerStop(job.agentId))); }
+    catch (error) { clickResult = { clicked: false, state: 'stop_evaluate_failed', error: error.message }; }
+    if (!clickResult.clicked) {
+      const snap = await this._readVisibleComposer(c);
+      if (snap.ok && snap.id === job.agentId && snap.status && snap.status !== 'generating') {
+        if (/cancel/.test(String(snap.status))) {
+          return { confirmed: true, clicked: false, state: 'already_cancelled', icon: snap.status };
+        }
+        return { confirmed: false, clicked: false, state: 'target_not_generating', icon: snap.status };
+      }
+      return { confirmed: false, ...clickResult };
+    }
+
+    let stableTerminal = 0;
+    let lastSignature = '';
+    let status = null;
+    for (let i = 0; i < 24; i++) {
+      await sleep(250);
+      const snap = await this._readVisibleComposer(c);
+      if (!snap.ok) status = 'detached';
+      else if (snap.id !== job.agentId) status = 'replaced';
+      else status = snap.status || null;
+      let stopCount = null;
+      try {
+        const pageSnap = JSON.parse(await evalJS(c, EXPR_SNAP) || '{}');
+        stopCount = Number(pageSnap.stop);
+      } catch {}
+      const terminal = (status && status !== 'generating') || stopCount === 0;
+      const signature = terminal ? `${job.agentId}:${status || 'stopped'}:${stopCount}` : '';
+      if (terminal && signature === lastSignature) stableTerminal++; else stableTerminal = terminal ? 1 : 0;
+      lastSignature = signature;
+      if (stableTerminal >= 2) break;
+    }
+    const confirmed = isTargetedStopConfirmed(clickResult, stableTerminal);
+    return {
+      confirmed,
+      clicked: true,
+      state: confirmed ? 'stopped' : status && status !== 'generating' ? 'stop_unconfirmed' : 'composer_missing_after_stop',
+      icon: status,
+      click: clickResult,
+    };
+  }
+
+  async _stopBoundAgentViaHistory(c, job, options = {}) {
+    const restorePrevious = options.restorePrevious === true;
+    let previousSelectedId = null;
+    try {
+      const entries = await this._readAgentEntries(c, true);
+      const target = entries.find((entry) => entry.id === job.agentId);
+      previousSelectedId = (entries.find((entry) => entry.isSelected) || {}).id || null;
+      if (!target) return { confirmed: false, state: 'agent_missing' };
+      if (!target.showSpinner) {
+        const terminalClass = classifyParallelTerminalIcon(target.icon);
+        if (terminalClass === 'cancelled') {
+          return { confirmed: true, clicked: false, state: 'already_cancelled', icon: target.icon || null };
+        }
+        return { confirmed: false, clicked: false, state: 'target_not_generating', icon: target.icon || null };
+      }
+      const opened = await evalJS(c, exprOpenAgent(job.agentId));
+      if (opened !== 'OPENED') return { confirmed: false, state: opened || 'open_failed' };
+      await this._closeHistory(c);
+      await this._waitForSelectedAgent(c, job.agentId);
+      const selectedEntries = await this._readAgentEntries(c, true);
+      const selected = selectedEntries.filter((entry) => entry.isSelected);
+      const selectedTarget = selected.length === 1 && selected[0].id === job.agentId
+        ? selected[0]
+        : null;
+      if (!selectedTarget || !selectedTarget.showSpinner) {
+        return { confirmed: false, clicked: false, state: 'selected_agent_not_generating' };
+      }
+      let clickResult;
+      try { clickResult = JSON.parse(await evalJS(c, exprClickSelectedAgentStop(job.agentId))); }
+      catch (error) { clickResult = { clicked: false, state: 'stop_evaluate_failed', error: error.message }; }
+      await this._closeHistory(c);
+      if (!clickResult.clicked) return { confirmed: false, ...clickResult };
+
+      let stableTerminal = 0;
+      let lastSignature = '';
+      let finalTarget = null;
+      for (let i = 0; i < 24; i++) {
+        await sleep(250);
+        try {
+          const afterEntries = await this._readAgentEntries(c);
+          finalTarget = afterEntries.find((entry) => entry.id === job.agentId) || null;
+        } catch {
+          finalTarget = null;
+        }
+        const icon = String(finalTarget && finalTarget.icon || '');
+        const terminal = !!finalTarget
+          && !finalTarget.showSpinner
+          && /circle-slash|cancel|check-circled|check|error|failed|warning/i.test(icon);
+        const signature = terminal ? `${finalTarget.id}:${icon}` : '';
+        if (terminal && signature === lastSignature) stableTerminal++; else stableTerminal = terminal ? 1 : 0;
+        lastSignature = signature;
+        if (stableTerminal >= 2) break;
+      }
+      const confirmed = isTargetedStopConfirmed(clickResult, stableTerminal);
+      return {
+        confirmed,
+        clicked: true,
+        state: confirmed ? 'stopped' : finalTarget ? 'stop_unconfirmed' : 'agent_missing_after_stop',
+        icon: finalTarget && finalTarget.icon,
+        click: clickResult,
+      };
+    } finally {
+      try {
+        if (restorePrevious && previousSelectedId && previousSelectedId !== job.agentId && await this._ensureHistoryOpen(c)) {
+          await evalJS(c, exprOpenAgent(previousSelectedId));
+          await this._closeHistory(c);
+          await this._waitForSelectedAgent(c, previousSelectedId);
+        }
+      } catch {}
+      await this._closeHistory(c);
+    }
+  }
+
+  async _stopBoundAgentOnClient(c, job, options = {}) {
+    if (!job || !job.agentId) return { confirmed: false, state: 'unbound_agent' };
+    const preferComposer = options.preferComposer === true
+      || job.execution === 'fifo'
+      || job.effectiveExecution === 'fifo';
+    if (preferComposer) {
+      const composerStop = await this._stopBoundAgentViaComposer(c, job);
+      if (composerStop.confirmed || composerStop.clicked) return composerStop;
+    }
+    let historyResult;
+    try {
+      historyResult = await this._stopBoundAgentViaHistory(c, job, options);
+    } catch (error) {
+      historyResult = { confirmed: false, state: 'history_unavailable', error: error.message };
+    }
+    if (historyResult.confirmed
+      || !['adapter_unavailable', 'agent_missing', 'history_unavailable', 'unbound_agent'].includes(historyResult.state)
+        && !/适配器不可用|REACT_ADAPTER|Agent History/.test(String(historyResult.error || ''))) {
+      return historyResult;
+    }
+    if (preferComposer) return historyResult;
+    return this._stopBoundAgentViaComposer(c, job);
+  }
+
   async _stopParallelAgent(job) {
     if (!job.agentId) return { confirmed: false, state: 'unbound_agent' };
     return this._withUiLock(async () => {
       const page = await findPage({ targetId: job.targetId, purpose: 'parallel_agent' });
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
-      let previousSelectedId = null;
       try {
-        const entries = await this._readAgentEntries(c, true);
-        const target = entries.find((entry) => entry.id === job.agentId);
-        previousSelectedId = (entries.find((entry) => entry.isSelected) || {}).id || null;
-        if (!target) return { confirmed: false, state: 'agent_missing' };
-        if (!target.showSpinner) return { confirmed: false, clicked: false, state: 'target_not_generating', icon: target.icon || null };
-        const opened = await evalJS(c, exprOpenAgent(job.agentId));
-        if (opened !== 'OPENED') return { confirmed: false, state: opened || 'open_failed' };
-        await this._closeHistory(c);
-        await this._waitForSelectedAgent(c, job.agentId);
-        const selectedEntries = await this._readAgentEntries(c, true);
-        const selected = selectedEntries.filter((entry) => entry.isSelected);
-        const selectedTarget = selected.length === 1 && selected[0].id === job.agentId
-          ? selected[0]
-          : null;
-        if (!selectedTarget || !selectedTarget.showSpinner) {
-          return { confirmed: false, clicked: false, state: 'selected_agent_not_generating' };
-        }
-        let clickResult;
-        try { clickResult = JSON.parse(await evalJS(c, exprClickSelectedAgentStop(job.agentId))); }
-        catch (error) { clickResult = { clicked: false, state: 'stop_evaluate_failed', error: error.message }; }
-        await this._closeHistory(c);
-        if (!clickResult.clicked) return { confirmed: false, ...clickResult };
-
-        let stableTerminal = 0;
-        let lastSignature = '';
-        let finalTarget = null;
-        for (let i = 0; i < 24; i++) {
-          await sleep(250);
-          try {
-            const afterEntries = await this._readAgentEntries(c);
-            finalTarget = afterEntries.find((entry) => entry.id === job.agentId) || null;
-          } catch {
-            finalTarget = null;
-          }
-          const icon = String(finalTarget && finalTarget.icon || '');
-          const terminal = !!finalTarget
-            && !finalTarget.showSpinner
-            && /circle-slash|cancel|check-circled|check|error|failed|warning/i.test(icon);
-          const signature = terminal ? `${finalTarget.id}:${icon}` : '';
-          if (terminal && signature === lastSignature) stableTerminal++; else stableTerminal = terminal ? 1 : 0;
-          lastSignature = signature;
-          if (stableTerminal >= 2) break;
-        }
-        const confirmed = isTargetedStopConfirmed(clickResult, stableTerminal);
-        return {
-          confirmed,
-          clicked: true,
-          state: confirmed ? 'stopped' : finalTarget ? 'stop_unconfirmed' : 'agent_missing_after_stop',
-          icon: finalTarget && finalTarget.icon,
-          click: clickResult,
-        };
+        return await this._stopBoundAgentOnClient(c, job, { restorePrevious: true });
       } finally {
-        try {
-          if (previousSelectedId && previousSelectedId !== job.agentId && await this._ensureHistoryOpen(c)) {
-            await evalJS(c, exprOpenAgent(previousSelectedId));
-            await this._closeHistory(c);
-            await this._waitForSelectedAgent(c, previousSelectedId);
-          }
-        } catch {}
-        await this._closeHistory(c);
         c.close();
       }
     });
@@ -2148,7 +2378,9 @@ class CursorBridge {
     if (action === 'reap') {
       const result = await this._reapParallelJobLocked(job, { reattach: true });
       if (result.state === 'not_parallel_reservation' && job.phase === 'orphaned') {
-        result.next = 'FIFO 孤儿没有可安全重绑的 agentId；请先在 Cursor UI 人工确认已停止，再显式 abandon。';
+        result.next = job.agentId
+          ? 'FIFO 已绑定 agentId，但 reap 只服务 parallel_agent；请用 cancel 定向停止，或在确认后 abandon。'
+          : 'FIFO 孤儿没有可安全重绑的 agentId；请先在 Cursor UI 人工确认已停止，再显式 abandon。';
       }
       return { found: true, action, ...result };
     }
@@ -2183,7 +2415,7 @@ class CursorBridge {
         task: this._cancelJob(job, options.reason || '排队任务已取消', { underlyingStopConfirmed: true }),
       };
     }
-    if (job.phase === 'orphaned' && (!job.agentId || job.effectiveExecution === 'fifo')) {
+    if (job.phase === 'orphaned' && !job.agentId) {
       job.cancelRequested = false;
       return {
         found: true,
@@ -2208,10 +2440,13 @@ class CursorBridge {
         task: this._taskView(job, true),
       };
     }
-    if (job.execution === 'parallel_agent') {
-      this._invalidateParallelMonitor(job);
-      const reaped = await this._reapParallelJobLocked(job, { reattach: false });
-      if (isTerminalTask(job)) return { found: true, action, ...reaped };
+    const canTargetStop = job.execution === 'parallel_agent' || !!job.agentId;
+    if (canTargetStop && (job.execution === 'parallel_agent' || job.phase === 'orphaned')) {
+      if (job.execution === 'parallel_agent') {
+        this._invalidateParallelMonitor(job);
+        const reaped = await this._reapParallelJobLocked(job, { reattach: false });
+        if (isTerminalTask(job)) return { found: true, action, ...reaped };
+      }
       job.phase = 'cancelling';
       job.recoveryState = 'stopping';
       let stopped;
@@ -2250,6 +2485,18 @@ class CursorBridge {
         state: 'cancel_unconfirmed',
         stop: stopped,
         next: '确认 Cursor UI 已停止后，可再次 cancel；只有明确承担风险时才使用 abandon。',
+        task: this._taskView(job, true),
+      };
+    }
+    if (job.agentId) {
+      job.phase = 'cancelling';
+      job.recoveryState = 'cancel_pending_stop';
+      return {
+        found: true,
+        action,
+        changed: true,
+        state: 'cancel_pending_stop',
+        next: 'Bridge 已锁存取消请求；运行中的 FIFO 将按已绑定的 agentId 定向停止，不会模糊点击 Stop。',
         task: this._taskView(job, true),
       };
     }
@@ -2310,7 +2557,21 @@ class CursorBridge {
     while (Date.now() - start < timeoutMs) {
       await this._throwIfNewProviderError(c, providerErrorBaseline);
       if (job && job.cancelRequested) {
-        // FIFO 没有稳定 agentId；禁止用宽泛 Stop/Cancel 选择器猜测性点击其他会话或工作台控件。
+        if (job.agentId) {
+          let stopped;
+          try {
+            stopped = await this._stopBoundAgentOnClient(c, job, { restorePrevious: false });
+          } catch (error) {
+            stopped = { confirmed: false, state: 'stop_error', error: error.message };
+          }
+          const e = new Error(job.cancelReason || '任务已取消');
+          e.cancelled = true;
+          e.stopConfirmed = stopped.confirmed === true;
+          e.stop = stopped;
+          if (stopped.confirmed) job.terminalEvidence = `targeted_stop:${job.agentId}`;
+          throw e;
+        }
+        // 未绑定身份的 FIFO 禁止用宽泛 Stop/Cancel 选择器猜测性点击其他会话或工作台控件。
         const e = new Error(job.cancelReason || '任务已取消');
         e.cancelled = true;
         e.stopConfirmed = false;
@@ -2402,8 +2663,10 @@ class CursorBridge {
       if (job.recoveryState === 'terminal_result_uncollected') {
         view.attention = 'Agent History 已证明底层任务结束，但最终回复尚未取回；再次 reap 重试，或在接受丢失回复时显式 abandon。';
       } else {
-        view.attention = job.execution === 'parallel_agent' && job.agentId
-          ? '用 cursor_task_control(action=reap) 显式重查原 agentId；需要停止时用 cancel；只有已人工确认且接受残余写入风险时才 abandon。'
+        view.attention = job.agentId
+          ? (job.execution === 'parallel_agent'
+            ? '用 cursor_task_control(action=reap) 显式重查原 agentId；需要停止时用 cancel；只有已人工确认且接受残余写入风险时才 abandon。'
+            : 'FIFO 已绑定 agentId；用 cursor_task_control(action=cancel) 并传入精确 expected_agent_id 定向停止。')
           : '该孤儿没有可安全重绑的 agentId，并全局阻断新委托；请先在 Cursor UI 人工确认已停止，再用 cursor_task_control(action=abandon) 显式释放。';
       }
     }
@@ -2568,7 +2831,7 @@ function buildToolDefinitions(bridgeInstance) {
 
 const bridge = new CursorBridge();
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.3.4' },
+  { name: 'cursor-bridge', version: '5.3.6' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -2756,6 +3019,8 @@ export {
   exprFill,
   exprOpenAgent,
   exprClickSelectedAgentStop,
+  EXPR_VISIBLE_COMPOSER,
+  exprClickBoundComposerStop,
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,

@@ -11,7 +11,7 @@
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor 3.16.17，含 Grok Build TUI。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.16.17** 与 **3.7.42**，含 Grok Build TUI。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -80,10 +80,10 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 | Cursor | 说明 |
 |---|---|
-| **3.16.17** | 已实机验证。workbench 和 Agents Window。 |
+| **3.16.17** | 已实机验证。workbench 和 Agents Window，含已发布 Agent ID 时的运行中 FIFO 取消。 |
 | **3.7.42** | 已实机验证。workbench 和 Agents Window。 |
 
-其他 Cursor 版本尚未测试。打不开 Agents Window 时，会改用 workbench。
+其他 Cursor 版本尚未测试。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
@@ -218,7 +218,7 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 - Bridge 会确认 Cursor 是否接受提示。提示仍留在输入框时只尝试一次精确 Send 控件，仍失败则返回 `submit_not_accepted`，不会静默制造孤儿。
 - provider-error 托盘会被保留为失败证据；Bridge 不会自动点击 Retry。
 - 发送后状态不确定时保留占用，不会静默释放或重投。
-- `reap` 用于已绑定孤儿；定向 `cancel` 需要精确 Agent ID；`abandon` 需要显式确认风险。
+- `reap` 用于已绑定的并行孤儿。定向 `cancel` 需要精确的已发布 Agent ID。Agents Window 或 Workbench 上的 FIFO 若已发布 Agent ID，也走同一条定向停止。未发布时 Bridge 不会猜测点击 Stop；请先在 Cursor 确认已停止，再 `abandon`。
 - 任务记录只存在于当前进程。MCP 重启后，开始重叠工作前应检查 Agent History 与工作区变化。
 
 </details>

@@ -61,7 +61,7 @@ Do not choose parallel execution merely because there are many tasks. When depen
 1. Record the relevant pre-dispatch workspace state so later review can distinguish existing user changes.
 2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md).
 3. Call `cursor_do` with `background=true`; do not invent a chat-selection parameter.
-4. Save each returned `task_id`; also save `agent_id` for `parallel_agent`.
+4. Save each returned `task_id`; also save `agent_id` whenever `cursor_status` publishes one.
 5. If a parallel submission does not return a usable `agent_id`, stop expanding the parallel batch and use `fifo` or report the ambiguous state.
 
 The envelope may contain a small number of local implementation `open_questions`, but it must also provide `fixed_decisions`, `allowed_paths`, prohibitions, and acceptance checks. Cursor may solve local questions; it must stop and report any branch that would change product direction, architecture, or scope.
@@ -80,8 +80,8 @@ Read [delegation-contract.md](references/delegation-contract.md) for state inter
 
 - For `needs_attention`, `orphaned`, ambiguous state, or an unbound session, assume the real Cursor Agent may still be running. Preserve path ownership and never resubmit automatically.
 - For a parallel orphan with a bound `agent_id`, first call `cursor_task_control(action=reap)`. This explicitly rechecks and, when possible, resumes monitoring or collects that exact Agent. `cursor_status` is read-only and does not reap automatically.
-- For a FIFO or unbound orphan, do not call `reap` as if an identity existed. It globally blocks delegation; manually verify Cursor has stopped, then use the explicitly acknowledged `abandon` path.
-- To stop a bound task, use `cursor_task_control(action=cancel, confirm=true, expected_agent_id=<exact id>)`. If Stop cannot be confirmed, the reservation remains held.
+- For an unbound FIFO or any orphan without an `agent_id`, do not call `reap` as if an identity existed. It globally blocks delegation; manually verify Cursor has stopped, then use the explicitly acknowledged `abandon` path.
+- To stop a bound task, use `cursor_task_control(action=cancel, confirm=true, expected_agent_id=<exact id>)`. This includes FIFO tasks that have published an Agent ID. If Stop cannot be confirmed, the reservation remains held.
 - Use `action=abandon` only after manual verification and an explicit user decision to accept the risk. It requires `confirm=true`, a non-empty reason, `acknowledge_may_still_write=true`, and the exact `expected_agent_id` when one is already bound; report that the underlying Agent may still run or write.
 - If Cursor shows a final UI response but Bridge has not collected it, use explicit `reap` against the original bound task. A `terminal_uncollected` result keeps the reservation for retry. Do not add a completion marker, increase a response-length requirement, or submit the same task again.
 - Task identity and reservations are process-local. After an MCP/Codex restart, do not claim the old `task_id` is recoverable; inspect Cursor Agent History and workspace changes manually before overlapping work.

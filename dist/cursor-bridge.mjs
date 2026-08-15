@@ -20648,7 +20648,7 @@ init_workspace_binding();
 init_cursor_ensure_core();
 import http2 from "http";
 import { pathToFileURL as pathToFileURL2 } from "url";
-var PLUGIN_VERSION = "5.3.4";
+var PLUGIN_VERSION = "5.3.6";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -21017,6 +21017,55 @@ function exprClickSelectedAgentStop(agentId) {
     }
     buttons[0].click();
     return JSON.stringify({clicked:true,state:'clicked',selectedId:selected.id,composerId:composer.dataset.composerId,control:generationButtons.length?'stop_generation':'stop_command'});
+  })()`;
+}
+var EXPR_VISIBLE_COMPOSER = `(function(){
+  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+    .filter(e=>e.offsetParent!==null&&e.dataset.composerId);
+  if(composers.length!==1){
+    return JSON.stringify({ok:false,state:composers.length?'ambiguous_composers':'composer_missing',count:composers.length});
+  }
+  const composer=composers[0];
+  return JSON.stringify({
+    ok:true,
+    id:'local:'+composer.dataset.composerId,
+    composerId:composer.dataset.composerId,
+    status:composer.dataset.composerStatus||null
+  });
+})()`;
+function exprClickBoundComposerStop(agentId) {
+  const expected = JSON.stringify(String(agentId));
+  return `(function(){
+    const expectedComposerId=String(${expected}).replace(/^local:/,'');
+    const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+      .filter(e=>e.offsetParent!==null&&e.dataset.composerId===expectedComposerId);
+    if(composers.length!==1){
+      return JSON.stringify({clicked:false,state:'composer_identity_mismatch',count:composers.length});
+    }
+    const composer=composers[0];
+    if(composer.dataset.composerStatus!=='generating'){
+      return JSON.stringify({clicked:false,state:'composer_not_generating',status:composer.dataset.composerStatus||null,composerId:composer.dataset.composerId});
+    }
+    // Agents Window \u7684 Stop \u53EF\u80FD\u5728 composer-bar \u5916\u7684\u8F93\u5165\u6761\u91CC\uFF1B\u5FC5\u987B\u5148\u6838\u5BF9\u8BE5 composer \u8EAB\u4EFD\uFF0C
+    // \u518D\u8981\u6C42\u6574\u9875\u53EA\u6709\u4E00\u4E2A\u7CBE\u786E Stop \u63A7\u4EF6\uFF0C\u7981\u6B62\u6A21\u7CCA\u70B9\u51FB\u3002
+    const generationButtons=[...document.querySelectorAll('button.ui-prompt-input-submit-button[data-state="stop"][aria-label="Stop generation"]')]
+      .filter(button=>button.offsetParent!==null&&!button.disabled);
+    const commandButtons=[...document.querySelectorAll('button.ui-shell-tool-call__glass-stop[aria-label="Stop command"]')]
+      .filter(button=>button.offsetParent!==null&&!button.disabled);
+    const buttons=[...generationButtons,...commandButtons];
+    if(buttons.length===1){
+      buttons[0].click();
+      return JSON.stringify({clicked:true,state:'clicked',composerId:composer.dataset.composerId,control:generationButtons.length?'stop_generation':'stop_command'});
+    }
+    const iconButtons=[...composer.querySelectorAll('.anysphere-icon-button')]
+      .filter(button=>button.offsetParent!==null&&button.querySelector('.codicon-debug-stop,.codicon-stop'));
+    const toolbarIcons=iconButtons.filter(button=>!button.closest('.composer-messages-container,.composer-react-transcript-root'));
+    const iconPool=toolbarIcons.length?toolbarIcons:iconButtons;
+    if(iconPool.length>=1){
+      iconPool[iconPool.length-1].click();
+      return JSON.stringify({clicked:true,state:'clicked',composerId:composer.dataset.composerId,control:'debug_stop_icon',count:iconPool.length});
+    }
+    return JSON.stringify({clicked:false,state:buttons.length?'ambiguous_stop_controls':'stop_control_missing',count:buttons.length,composerId:composer.dataset.composerId});
   })()`;
 }
 var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
@@ -21579,7 +21628,8 @@ var CursorBridge = class {
       newChat: true,
       execution,
       readOnly,
-      allowedPaths
+      allowedPaths,
+      preferLegacyUi: options.preferLegacyUi === true
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -21624,6 +21674,7 @@ var CursorBridge = class {
       prompt,
       timeoutMs: options.timeoutMs,
       newChat: options.newChat,
+      preferLegacyUi: options.preferLegacyUi === true,
       execution: options.execution || "fifo",
       effectiveExecution: options.execution || "fifo",
       readOnly: options.readOnly === true,
@@ -21939,7 +21990,8 @@ var CursorBridge = class {
     let page = await findPage({
       targetId: options.targetId || this._lastLifecycle && this._lastLifecycle.targetId,
       purpose: "fifo",
-      preferAgentsV2: true
+      preferAgentsV2: options.preferLegacyUi !== true,
+      preferLegacy: options.preferLegacyUi === true
     });
     for (let attempt = 0; attempt < 2; attempt++) {
       options.targetId = page.id;
@@ -21949,6 +22001,8 @@ var CursorBridge = class {
       try {
         this._throwIfCancelledBeforeSend(options);
         await this._ensureChatPanel(c);
+        const historyBefore = this._canBindFifoHistory(options) ? await this._snapshotAgentEntries(c) : null;
+        if (historyBefore) options.historyBeforeEntries = historyBefore;
         if (options.newChat !== false) {
           try {
             await this._newChat(c, {
@@ -21967,6 +22021,8 @@ var CursorBridge = class {
             throw error2;
           }
         }
+        await this._bindFifoAgentAfterComposerReady(c, options, historyBefore);
+        await this._bindFifoComposerIdentity(c, options);
         this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
         if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
@@ -21984,6 +22040,10 @@ var CursorBridge = class {
           await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
           options.sendState = "sent";
           options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
+          if (!options.agentId) {
+            await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
+            await this._bindFifoComposerIdentity(c, options);
+          }
           return await this._waitComplete(
             c,
             options.timeoutMs || QUERY_TIMEOUT,
@@ -22083,6 +22143,74 @@ var CursorBridge = class {
       return snapshot.entries || [];
     } finally {
       if (!keepOpen) await this._closeHistory(c);
+    }
+  }
+  _canBindFifoHistory(job) {
+    return !!job;
+  }
+  async _snapshotAgentEntries(c) {
+    try {
+      return await this._readAgentEntries(c);
+    } catch {
+      return null;
+    }
+  }
+  async _resolveNewAgent(c, beforeEntries, options = {}) {
+    if (!Array.isArray(beforeEntries)) return null;
+    try {
+      const candidate = selectNewAgentEntry(beforeEntries, await this._readAgentEntries(c));
+      if (!candidate) return null;
+      if (options.requireActive && !candidate.showSpinner && classifyParallelTerminalIcon(candidate.icon) === "unknown") {
+        return null;
+      }
+      return candidate;
+    } catch {
+      return null;
+    }
+  }
+  _applyAgentIdentity(job, agent) {
+    if (!job || !agent || !agent.id) return;
+    job.agentId = agent.id;
+    job.agentLabel = agent.label || job.agentLabel || null;
+  }
+  async _bindFifoComposerIdentity(c, job) {
+    if (!this._canBindFifoHistory(job) || job && job.agentId) return;
+    try {
+      const snapshot = JSON.parse(await evalJS(c, EXPR_VISIBLE_COMPOSER) || "{}");
+      if (snapshot && snapshot.ok && snapshot.id) this._applyAgentIdentity(job, { id: snapshot.id });
+    } catch {
+    }
+  }
+  async _bindFifoAgentAfterComposerReady(c, job, beforeEntries) {
+    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries)) return;
+    if (job.newChat === false) {
+      const selected = beforeEntries.find((entry) => entry && entry.isSelected && entry.id);
+      if (selected) this._applyAgentIdentity(job, selected);
+      return;
+    }
+    for (let i = 0; i < 5 && !job.agentId; i++) {
+      const agent = await this._resolveNewAgent(c, beforeEntries, { requireActive: false });
+      if (agent) {
+        this._applyAgentIdentity(job, agent);
+        return;
+      }
+      await sleep2(350);
+    }
+    if (job.agentId) return;
+    try {
+      const after = await this._readAgentEntries(c);
+      const selected = (after || []).find((entry) => entry && entry.isSelected && entry.id);
+      if (selected) this._applyAgentIdentity(job, selected);
+    } catch {
+    }
+  }
+  async _bindFifoAgentAfterSend(c, job, beforeEntries, providerErrorBaseline) {
+    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries) || job.agentId) return;
+    for (let i = 0; i < 24 && !job.agentId; i++) {
+      await sleep2(350);
+      await this._throwIfNewProviderError(c, providerErrorBaseline);
+      const candidate = await this._resolveNewAgent(c, beforeEntries, { requireActive: true });
+      if (candidate) this._applyAgentIdentity(job, candidate);
     }
   }
   async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "") {
@@ -22540,74 +22668,161 @@ var CursorBridge = class {
     job.recoveryState = "idle_unconfirmed";
     return { changed: false, state: "idle_unconfirmed", task: this._taskView(job, true) };
   }
+  async _readVisibleComposer(c) {
+    try {
+      return JSON.parse(await evalJS(c, EXPR_VISIBLE_COMPOSER) || "{}");
+    } catch {
+      return { ok: false, state: "composer_evaluate_failed" };
+    }
+  }
+  async _stopBoundAgentViaComposer(c, job) {
+    let clickResult;
+    try {
+      clickResult = JSON.parse(await evalJS(c, exprClickBoundComposerStop(job.agentId)));
+    } catch (error2) {
+      clickResult = { clicked: false, state: "stop_evaluate_failed", error: error2.message };
+    }
+    if (!clickResult.clicked) {
+      const snap = await this._readVisibleComposer(c);
+      if (snap.ok && snap.id === job.agentId && snap.status && snap.status !== "generating") {
+        if (/cancel/.test(String(snap.status))) {
+          return { confirmed: true, clicked: false, state: "already_cancelled", icon: snap.status };
+        }
+        return { confirmed: false, clicked: false, state: "target_not_generating", icon: snap.status };
+      }
+      return { confirmed: false, ...clickResult };
+    }
+    let stableTerminal = 0;
+    let lastSignature = "";
+    let status = null;
+    for (let i = 0; i < 24; i++) {
+      await sleep2(250);
+      const snap = await this._readVisibleComposer(c);
+      if (!snap.ok) status = "detached";
+      else if (snap.id !== job.agentId) status = "replaced";
+      else status = snap.status || null;
+      let stopCount = null;
+      try {
+        const pageSnap = JSON.parse(await evalJS(c, EXPR_SNAP) || "{}");
+        stopCount = Number(pageSnap.stop);
+      } catch {
+      }
+      const terminal = status && status !== "generating" || stopCount === 0;
+      const signature = terminal ? `${job.agentId}:${status || "stopped"}:${stopCount}` : "";
+      if (terminal && signature === lastSignature) stableTerminal++;
+      else stableTerminal = terminal ? 1 : 0;
+      lastSignature = signature;
+      if (stableTerminal >= 2) break;
+    }
+    const confirmed = isTargetedStopConfirmed(clickResult, stableTerminal);
+    return {
+      confirmed,
+      clicked: true,
+      state: confirmed ? "stopped" : status && status !== "generating" ? "stop_unconfirmed" : "composer_missing_after_stop",
+      icon: status,
+      click: clickResult
+    };
+  }
+  async _stopBoundAgentViaHistory(c, job, options = {}) {
+    const restorePrevious = options.restorePrevious === true;
+    let previousSelectedId = null;
+    try {
+      const entries = await this._readAgentEntries(c, true);
+      const target = entries.find((entry) => entry.id === job.agentId);
+      previousSelectedId = (entries.find((entry) => entry.isSelected) || {}).id || null;
+      if (!target) return { confirmed: false, state: "agent_missing" };
+      if (!target.showSpinner) {
+        const terminalClass = classifyParallelTerminalIcon(target.icon);
+        if (terminalClass === "cancelled") {
+          return { confirmed: true, clicked: false, state: "already_cancelled", icon: target.icon || null };
+        }
+        return { confirmed: false, clicked: false, state: "target_not_generating", icon: target.icon || null };
+      }
+      const opened = await evalJS(c, exprOpenAgent(job.agentId));
+      if (opened !== "OPENED") return { confirmed: false, state: opened || "open_failed" };
+      await this._closeHistory(c);
+      await this._waitForSelectedAgent(c, job.agentId);
+      const selectedEntries = await this._readAgentEntries(c, true);
+      const selected = selectedEntries.filter((entry) => entry.isSelected);
+      const selectedTarget = selected.length === 1 && selected[0].id === job.agentId ? selected[0] : null;
+      if (!selectedTarget || !selectedTarget.showSpinner) {
+        return { confirmed: false, clicked: false, state: "selected_agent_not_generating" };
+      }
+      let clickResult;
+      try {
+        clickResult = JSON.parse(await evalJS(c, exprClickSelectedAgentStop(job.agentId)));
+      } catch (error2) {
+        clickResult = { clicked: false, state: "stop_evaluate_failed", error: error2.message };
+      }
+      await this._closeHistory(c);
+      if (!clickResult.clicked) return { confirmed: false, ...clickResult };
+      let stableTerminal = 0;
+      let lastSignature = "";
+      let finalTarget = null;
+      for (let i = 0; i < 24; i++) {
+        await sleep2(250);
+        try {
+          const afterEntries = await this._readAgentEntries(c);
+          finalTarget = afterEntries.find((entry) => entry.id === job.agentId) || null;
+        } catch {
+          finalTarget = null;
+        }
+        const icon = String(finalTarget && finalTarget.icon || "");
+        const terminal = !!finalTarget && !finalTarget.showSpinner && /circle-slash|cancel|check-circled|check|error|failed|warning/i.test(icon);
+        const signature = terminal ? `${finalTarget.id}:${icon}` : "";
+        if (terminal && signature === lastSignature) stableTerminal++;
+        else stableTerminal = terminal ? 1 : 0;
+        lastSignature = signature;
+        if (stableTerminal >= 2) break;
+      }
+      const confirmed = isTargetedStopConfirmed(clickResult, stableTerminal);
+      return {
+        confirmed,
+        clicked: true,
+        state: confirmed ? "stopped" : finalTarget ? "stop_unconfirmed" : "agent_missing_after_stop",
+        icon: finalTarget && finalTarget.icon,
+        click: clickResult
+      };
+    } finally {
+      try {
+        if (restorePrevious && previousSelectedId && previousSelectedId !== job.agentId && await this._ensureHistoryOpen(c)) {
+          await evalJS(c, exprOpenAgent(previousSelectedId));
+          await this._closeHistory(c);
+          await this._waitForSelectedAgent(c, previousSelectedId);
+        }
+      } catch {
+      }
+      await this._closeHistory(c);
+    }
+  }
+  async _stopBoundAgentOnClient(c, job, options = {}) {
+    if (!job || !job.agentId) return { confirmed: false, state: "unbound_agent" };
+    const preferComposer = options.preferComposer === true || job.execution === "fifo" || job.effectiveExecution === "fifo";
+    if (preferComposer) {
+      const composerStop = await this._stopBoundAgentViaComposer(c, job);
+      if (composerStop.confirmed || composerStop.clicked) return composerStop;
+    }
+    let historyResult;
+    try {
+      historyResult = await this._stopBoundAgentViaHistory(c, job, options);
+    } catch (error2) {
+      historyResult = { confirmed: false, state: "history_unavailable", error: error2.message };
+    }
+    if (historyResult.confirmed || !["adapter_unavailable", "agent_missing", "history_unavailable", "unbound_agent"].includes(historyResult.state) && !/适配器不可用|REACT_ADAPTER|Agent History/.test(String(historyResult.error || ""))) {
+      return historyResult;
+    }
+    if (preferComposer) return historyResult;
+    return this._stopBoundAgentViaComposer(c, job);
+  }
   async _stopParallelAgent(job) {
     if (!job.agentId) return { confirmed: false, state: "unbound_agent" };
     return this._withUiLock(async () => {
       const page = await findPage({ targetId: job.targetId, purpose: "parallel_agent" });
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
-      let previousSelectedId = null;
       try {
-        const entries = await this._readAgentEntries(c, true);
-        const target = entries.find((entry) => entry.id === job.agentId);
-        previousSelectedId = (entries.find((entry) => entry.isSelected) || {}).id || null;
-        if (!target) return { confirmed: false, state: "agent_missing" };
-        if (!target.showSpinner) return { confirmed: false, clicked: false, state: "target_not_generating", icon: target.icon || null };
-        const opened = await evalJS(c, exprOpenAgent(job.agentId));
-        if (opened !== "OPENED") return { confirmed: false, state: opened || "open_failed" };
-        await this._closeHistory(c);
-        await this._waitForSelectedAgent(c, job.agentId);
-        const selectedEntries = await this._readAgentEntries(c, true);
-        const selected = selectedEntries.filter((entry) => entry.isSelected);
-        const selectedTarget = selected.length === 1 && selected[0].id === job.agentId ? selected[0] : null;
-        if (!selectedTarget || !selectedTarget.showSpinner) {
-          return { confirmed: false, clicked: false, state: "selected_agent_not_generating" };
-        }
-        let clickResult;
-        try {
-          clickResult = JSON.parse(await evalJS(c, exprClickSelectedAgentStop(job.agentId)));
-        } catch (error2) {
-          clickResult = { clicked: false, state: "stop_evaluate_failed", error: error2.message };
-        }
-        await this._closeHistory(c);
-        if (!clickResult.clicked) return { confirmed: false, ...clickResult };
-        let stableTerminal = 0;
-        let lastSignature = "";
-        let finalTarget = null;
-        for (let i = 0; i < 24; i++) {
-          await sleep2(250);
-          try {
-            const afterEntries = await this._readAgentEntries(c);
-            finalTarget = afterEntries.find((entry) => entry.id === job.agentId) || null;
-          } catch {
-            finalTarget = null;
-          }
-          const icon = String(finalTarget && finalTarget.icon || "");
-          const terminal = !!finalTarget && !finalTarget.showSpinner && /circle-slash|cancel|check-circled|check|error|failed|warning/i.test(icon);
-          const signature = terminal ? `${finalTarget.id}:${icon}` : "";
-          if (terminal && signature === lastSignature) stableTerminal++;
-          else stableTerminal = terminal ? 1 : 0;
-          lastSignature = signature;
-          if (stableTerminal >= 2) break;
-        }
-        const confirmed = isTargetedStopConfirmed(clickResult, stableTerminal);
-        return {
-          confirmed,
-          clicked: true,
-          state: confirmed ? "stopped" : finalTarget ? "stop_unconfirmed" : "agent_missing_after_stop",
-          icon: finalTarget && finalTarget.icon,
-          click: clickResult
-        };
+        return await this._stopBoundAgentOnClient(c, job, { restorePrevious: true });
       } finally {
-        try {
-          if (previousSelectedId && previousSelectedId !== job.agentId && await this._ensureHistoryOpen(c)) {
-            await evalJS(c, exprOpenAgent(previousSelectedId));
-            await this._closeHistory(c);
-            await this._waitForSelectedAgent(c, previousSelectedId);
-          }
-        } catch {
-        }
-        await this._closeHistory(c);
         c.close();
       }
     });
@@ -22643,7 +22858,7 @@ var CursorBridge = class {
     if (action === "reap") {
       const result = await this._reapParallelJobLocked(job, { reattach: true });
       if (result.state === "not_parallel_reservation" && job.phase === "orphaned") {
-        result.next = "FIFO \u5B64\u513F\u6CA1\u6709\u53EF\u5B89\u5168\u91CD\u7ED1\u7684 agentId\uFF1B\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u663E\u5F0F abandon\u3002";
+        result.next = job.agentId ? "FIFO \u5DF2\u7ED1\u5B9A agentId\uFF0C\u4F46 reap \u53EA\u670D\u52A1 parallel_agent\uFF1B\u8BF7\u7528 cancel \u5B9A\u5411\u505C\u6B62\uFF0C\u6216\u5728\u786E\u8BA4\u540E abandon\u3002" : "FIFO \u5B64\u513F\u6CA1\u6709\u53EF\u5B89\u5168\u91CD\u7ED1\u7684 agentId\uFF1B\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u663E\u5F0F abandon\u3002";
       }
       return { found: true, action, ...result };
     }
@@ -22676,7 +22891,7 @@ var CursorBridge = class {
         task: this._cancelJob(job, options.reason || "\u6392\u961F\u4EFB\u52A1\u5DF2\u53D6\u6D88", { underlyingStopConfirmed: true })
       };
     }
-    if (job.phase === "orphaned" && (!job.agentId || job.effectiveExecution === "fifo")) {
+    if (job.phase === "orphaned" && !job.agentId) {
       job.cancelRequested = false;
       return {
         found: true,
@@ -22699,10 +22914,13 @@ var CursorBridge = class {
         task: this._taskView(job, true)
       };
     }
-    if (job.execution === "parallel_agent") {
-      this._invalidateParallelMonitor(job);
-      const reaped = await this._reapParallelJobLocked(job, { reattach: false });
-      if (isTerminalTask(job)) return { found: true, action, ...reaped };
+    const canTargetStop = job.execution === "parallel_agent" || !!job.agentId;
+    if (canTargetStop && (job.execution === "parallel_agent" || job.phase === "orphaned")) {
+      if (job.execution === "parallel_agent") {
+        this._invalidateParallelMonitor(job);
+        const reaped = await this._reapParallelJobLocked(job, { reattach: false });
+        if (isTerminalTask(job)) return { found: true, action, ...reaped };
+      }
       job.phase = "cancelling";
       job.recoveryState = "stopping";
       let stopped;
@@ -22744,6 +22962,18 @@ var CursorBridge = class {
         state: "cancel_unconfirmed",
         stop: stopped,
         next: "\u786E\u8BA4 Cursor UI \u5DF2\u505C\u6B62\u540E\uFF0C\u53EF\u518D\u6B21 cancel\uFF1B\u53EA\u6709\u660E\u786E\u627F\u62C5\u98CE\u9669\u65F6\u624D\u4F7F\u7528 abandon\u3002",
+        task: this._taskView(job, true)
+      };
+    }
+    if (job.agentId) {
+      job.phase = "cancelling";
+      job.recoveryState = "cancel_pending_stop";
+      return {
+        found: true,
+        action,
+        changed: true,
+        state: "cancel_pending_stop",
+        next: "Bridge \u5DF2\u9501\u5B58\u53D6\u6D88\u8BF7\u6C42\uFF1B\u8FD0\u884C\u4E2D\u7684 FIFO \u5C06\u6309\u5DF2\u7ED1\u5B9A\u7684 agentId \u5B9A\u5411\u505C\u6B62\uFF0C\u4E0D\u4F1A\u6A21\u7CCA\u70B9\u51FB Stop\u3002",
         task: this._taskView(job, true)
       };
     }
@@ -22799,6 +23029,20 @@ var CursorBridge = class {
     while (Date.now() - start < timeoutMs) {
       await this._throwIfNewProviderError(c, providerErrorBaseline);
       if (job && job.cancelRequested) {
+        if (job.agentId) {
+          let stopped;
+          try {
+            stopped = await this._stopBoundAgentOnClient(c, job, { restorePrevious: false });
+          } catch (error2) {
+            stopped = { confirmed: false, state: "stop_error", error: error2.message };
+          }
+          const e2 = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
+          e2.cancelled = true;
+          e2.stopConfirmed = stopped.confirmed === true;
+          e2.stop = stopped;
+          if (stopped.confirmed) job.terminalEvidence = `targeted_stop:${job.agentId}`;
+          throw e2;
+        }
         const e = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
         e.cancelled = true;
         e.stopConfirmed = false;
@@ -22889,7 +23133,7 @@ var CursorBridge = class {
       if (job.recoveryState === "terminal_result_uncollected") {
         view.attention = "Agent History \u5DF2\u8BC1\u660E\u5E95\u5C42\u4EFB\u52A1\u7ED3\u675F\uFF0C\u4F46\u6700\u7EC8\u56DE\u590D\u5C1A\u672A\u53D6\u56DE\uFF1B\u518D\u6B21 reap \u91CD\u8BD5\uFF0C\u6216\u5728\u63A5\u53D7\u4E22\u5931\u56DE\u590D\u65F6\u663E\u5F0F abandon\u3002";
       } else {
-        view.attention = job.execution === "parallel_agent" && job.agentId ? "\u7528 cursor_task_control(action=reap) \u663E\u5F0F\u91CD\u67E5\u539F agentId\uFF1B\u9700\u8981\u505C\u6B62\u65F6\u7528 cancel\uFF1B\u53EA\u6709\u5DF2\u4EBA\u5DE5\u786E\u8BA4\u4E14\u63A5\u53D7\u6B8B\u4F59\u5199\u5165\u98CE\u9669\u65F6\u624D abandon\u3002" : "\u8BE5\u5B64\u513F\u6CA1\u6709\u53EF\u5B89\u5168\u91CD\u7ED1\u7684 agentId\uFF0C\u5E76\u5168\u5C40\u963B\u65AD\u65B0\u59D4\u6258\uFF1B\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u7528 cursor_task_control(action=abandon) \u663E\u5F0F\u91CA\u653E\u3002";
+        view.attention = job.agentId ? job.execution === "parallel_agent" ? "\u7528 cursor_task_control(action=reap) \u663E\u5F0F\u91CD\u67E5\u539F agentId\uFF1B\u9700\u8981\u505C\u6B62\u65F6\u7528 cancel\uFF1B\u53EA\u6709\u5DF2\u4EBA\u5DE5\u786E\u8BA4\u4E14\u63A5\u53D7\u6B8B\u4F59\u5199\u5165\u98CE\u9669\u65F6\u624D abandon\u3002" : "FIFO \u5DF2\u7ED1\u5B9A agentId\uFF1B\u7528 cursor_task_control(action=cancel) \u5E76\u4F20\u5165\u7CBE\u786E expected_agent_id \u5B9A\u5411\u505C\u6B62\u3002" : "\u8BE5\u5B64\u513F\u6CA1\u6709\u53EF\u5B89\u5168\u91CD\u7ED1\u7684 agentId\uFF0C\u5E76\u5168\u5C40\u963B\u65AD\u65B0\u59D4\u6258\uFF1B\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u7528 cursor_task_control(action=abandon) \u663E\u5F0F\u91CA\u653E\u3002";
       }
     }
     return view;
@@ -23029,7 +23273,7 @@ function buildToolDefinitions(bridgeInstance) {
 }
 var bridge = new CursorBridge();
 var server = new Server(
-  { name: "cursor-bridge", version: "5.3.4" },
+  { name: "cursor-bridge", version: "5.3.6" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {
@@ -23178,6 +23422,7 @@ export {
   EXPR_PAGE_CAPABILITIES,
   EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
+  EXPR_VISIBLE_COMPOSER,
   PLUGIN_VERSION,
   bridge,
   buildContextEnginePrompt,
@@ -23185,6 +23430,7 @@ export {
   classifyParallelTerminalIcon,
   createProviderError,
   cursorStartupBehavior,
+  exprClickBoundComposerStop,
   exprClickSelectedAgentStop,
   exprCreateAgentForWorkspace,
   exprFill,

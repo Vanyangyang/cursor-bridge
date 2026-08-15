@@ -4,6 +4,22 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [5.3.6] - 2026-08-15
+
+### Fixed
+
+- Workbench FIFO can publish an Agent ID and use targeted cancel when that identity is available. If it is not, cancel stays on the previous unbound FIFO path and does not guess-click Stop.
+
+## [5.3.5] - 2026-08-15
+
+### Fixed
+
+- Running FIFO tasks can publish an Agent ID. `cursor_task_control` cancel then uses that exact ID to Stop. FIFO tasks that never publish an ID still do not guess-click Stop.
+
+### Compatibility
+
+- Live-tested Cursor versions remain **3.16.17** and **3.7.42** (workbench and Agents Window). Other versions have not been tested.
+
 ## [5.3.4] - 2026-08-14
 
 ### Changed
@@ -171,6 +187,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.3.6]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.5...cursor-bridge--v5.3.6
+[5.3.5]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.4...cursor-bridge--v5.3.5
 [5.3.4]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.3...cursor-bridge--v5.3.4
 [5.3.3]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.2...cursor-bridge--v5.3.3
 [5.3.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.1...cursor-bridge--v5.3.2
