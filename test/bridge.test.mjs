@@ -33,6 +33,8 @@ import {
   exprFill,
   exprOpenAgent,
   exprClickSelectedAgentStop,
+  EXPR_VISIBLE_COMPOSER,
+  exprClickBoundComposerStop,
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,
@@ -869,6 +871,102 @@ test('unbound uncertain parallel task becomes a global reservation', async () =>
   assert.equal(bridge._taskView(job).blocksAll, true);
 });
 
+test('composer-bound Stop uses workbench debug-stop icon inside the matching composer', () => {
+  let clicks = 0;
+  const icon = { className: 'codicon codicon-debug-stop' };
+  const iconButton = {
+    offsetParent: {},
+    querySelector(selector) {
+      return selector.includes('codicon-debug-stop') ? icon : null;
+    },
+    closest() { return null; },
+    click() { clicks++; },
+  };
+  const composer = {
+    offsetParent: {},
+    dataset: { composerId: 'wb-composer', composerStatus: 'generating' },
+    querySelectorAll(selector) {
+      return selector.includes('anysphere-icon-button') ? [iconButton] : [];
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.composer-bar[data-composer-id]') return [composer];
+      return [];
+    },
+  };
+  const result = JSON.parse(Function('document', `return ${exprClickBoundComposerStop('local:wb-composer')};`)(document));
+  assert.equal(result.clicked, true);
+  assert.equal(result.control, 'debug_stop_icon');
+  assert.equal(clicks, 1);
+});
+
+test('composer-bound Stop clicks only the matching visible composer', () => {
+  let clicks = 0;
+  const composer = {
+    offsetParent: {},
+    dataset: { composerId: 'fifo-composer', composerStatus: 'generating' },
+    querySelectorAll(selector) {
+      return selector.includes('ui-prompt-input-submit-button') ? [button] : [];
+    },
+  };
+  const other = {
+    offsetParent: {},
+    dataset: { composerId: 'other-composer', composerStatus: 'generating' },
+    querySelectorAll() { return [wrongButton]; },
+  };
+  const button = {
+    offsetParent: {},
+    disabled: false,
+    closest() { return composer; },
+    click() { clicks++; },
+  };
+  const wrongButton = {
+    offsetParent: {},
+    disabled: false,
+    closest() { return other; },
+    click() { clicks += 10; },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.composer-bar[data-composer-id]') return [other, composer];
+      if (selector.includes('ui-prompt-input-submit-button')) return [button];
+      return [];
+    },
+  };
+  const result = JSON.parse(Function('document', `return ${exprClickBoundComposerStop('local:fifo-composer')};`)(document));
+  assert.equal(result.clicked, true);
+  assert.equal(result.composerId, 'fifo-composer');
+  assert.equal(result.control, 'stop_generation');
+  assert.equal(clicks, 1);
+  assert.match(EXPR_VISIBLE_COMPOSER, /data-composer-id/);
+});
+
+test('FIFO composer identity bind does not require History adapter', () => {
+  const bridge = new OfflineBridge();
+  const job = { targetUiFlavor: 'agents_v2', agentId: null };
+  bridge._applyAgentIdentity(job, { id: 'local:composer-only' });
+  assert.equal(job.agentId, 'local:composer-only');
+  assert.equal(bridge._canBindFifoHistory({ targetUiFlavor: 'agents_v2' }), true);
+  assert.equal(bridge._canBindFifoHistory({ targetUiFlavor: 'legacy' }), true);
+});
+
+test('_stopBoundAgentOnClient falls back to composer Stop when History is unavailable', async () => {
+  const bridge = new OfflineBridge();
+  let composerStops = 0;
+  bridge._stopBoundAgentViaHistory = async () => {
+    throw new Error('Cursor Agent 列表适配器不可用');
+  };
+  bridge._stopBoundAgentViaComposer = async (c, job) => {
+    composerStops++;
+    assert.equal(job.agentId, 'local:composer-only');
+    return { confirmed: true, clicked: true, state: 'stopped' };
+  };
+  const stopped = await bridge._stopBoundAgentOnClient({}, { agentId: 'local:composer-only' });
+  assert.equal(stopped.confirmed, true);
+  assert.equal(composerStops, 1);
+});
+
 test('targeted Stop confirmation requires a real click and two stable terminal observations', () => {
   assert.equal(isTargetedStopConfirmed({ clicked: false }, 2), false);
   assert.equal(isTargetedStopConfirmed({ clicked: true }, 1), false);
@@ -1189,6 +1287,132 @@ test('stale monitor finally cannot clear a newer monitor generation', async () =
   await secondPromise;
   assert.equal(job.monitorPromise, null);
   assert.equal(job.monitorAttached, false);
+});
+
+test('FIFO identity bind is attempted on the current editor and stays unbound if none exists', () => {
+  const bridge = new OfflineBridge();
+  assert.equal(bridge._canBindFifoHistory({ targetUiFlavor: 'agents_v2' }), true);
+  assert.equal(bridge._canBindFifoHistory({ targetUiFlavor: 'legacy' }), true);
+  assert.equal(bridge._canBindFifoHistory({ targetUiFlavor: null }), true);
+  assert.equal(bridge._canBindFifoHistory(null), false);
+});
+
+test('unbound running FIFO still latches cancel_pending_fifo without clicking Stop', async () => {
+  const bridge = new OfflineBridge();
+  const view = await bridge.doTask('unbound fifo latch');
+  const job = bridge.tasks.get(view.taskId);
+  job.status = 'running';
+  job.phase = 'running';
+  job.agentId = null;
+  job.targetUiFlavor = 'legacy';
+  const result = await bridge._taskControlLocked(job, 'cancel', { reason: 'stop' });
+  assert.equal(result.state, 'cancel_pending_fifo');
+  assert.match(result.next, /没有可安全定向/);
+});
+
+test('FIFO with bound agentId latches cancel_pending_stop instead of unbound FIFO copy', async () => {
+  const bridge = new OfflineBridge();
+  const view = await bridge.doTask('bound fifo latch');
+  const job = bridge.tasks.get(view.taskId);
+  job.status = 'running';
+  job.phase = 'running';
+  job.agentId = 'local:fifo-bound';
+  job.targetUiFlavor = 'agents_v2';
+  const result = await bridge._taskControlLocked(job, 'cancel', { reason: 'stop' });
+  assert.equal(result.state, 'cancel_pending_stop');
+  assert.equal(job.recoveryState, 'cancel_pending_stop');
+  assert.match(result.next, /定向停止/);
+  assert.doesNotMatch(result.next, /没有可安全定向/);
+});
+
+test('running FIFO cancel with bound agentId uses targeted stop after the waiter yields', async () => {
+  class BoundFifoBridge extends CancellableFifoBridge {
+    constructor() {
+      super();
+      this.stopCalls = 0;
+    }
+    async _run(prompt, job) {
+      job.agentId = 'local:fifo-bound';
+      job.agentLabel = 'fifo-bound';
+      job.targetUiFlavor = 'agents_v2';
+      this._markRunStarted();
+      while (!job.cancelRequested) await new Promise((resolve) => setTimeout(resolve, 1));
+      const error = new Error(job.cancelReason || 'cancelled');
+      error.cancelled = true;
+      error.stopConfirmed = false;
+      error.sent = true;
+      throw error;
+    }
+    async _stopParallelAgent(job) {
+      this.stopCalls++;
+      assert.equal(job.agentId, 'local:fifo-bound');
+      return { confirmed: true, clicked: true, state: 'stopped' };
+    }
+  }
+  const bridge = new BoundFifoBridge();
+  const view = await bridge.doTask('已绑定的 FIFO');
+  await bridge.runStarted;
+  const result = await bridge.taskControl(view.taskId, {
+    action: 'cancel',
+    confirm: true,
+    expectedAgentId: 'local:fifo-bound',
+    reason: '停止已绑定 FIFO',
+  });
+  assert.equal(result.state, 'cancelled');
+  assert.equal(result.task.status, 'cancelled');
+  assert.equal(result.task.underlyingStopConfirmed, true);
+  assert.equal(bridge.stopCalls, 1);
+  assert.equal(bridge.activeParallel.size, 0);
+});
+
+test('_waitComplete with bound agentId stops on the existing client', async () => {
+  class WaitCompleteCancelBridge extends OfflineBridge {
+    constructor() {
+      super();
+      this.stopCalls = 0;
+    }
+    async _throwIfNewProviderError() {}
+    async _stopBoundAgentOnClient(c, job) {
+      this.stopCalls++;
+      assert.equal(job.agentId, 'local:fifo-wait');
+      assert.equal(c, this.client);
+      return { confirmed: true, state: 'stopped' };
+    }
+  }
+  const bridge = new WaitCompleteCancelBridge();
+  bridge.client = { id: 'existing-cdp' };
+  const job = {
+    cancelRequested: true,
+    cancelReason: 'stop now',
+    agentId: 'local:fifo-wait',
+  };
+  await assert.rejects(
+    () => bridge._waitComplete(bridge.client, 5000, 0, job, ''),
+    (error) => error.cancelled === true && error.stopConfirmed === true,
+  );
+  assert.equal(bridge.stopCalls, 1);
+  assert.equal(job.terminalEvidence, 'targeted_stop:local:fifo-wait');
+});
+
+test('_waitComplete unbound FIFO cancel does not click Stop', async () => {
+  class WaitCompleteUnboundBridge extends OfflineBridge {
+    constructor() {
+      super();
+      this.stopCalls = 0;
+    }
+    async _throwIfNewProviderError() {}
+    async _stopBoundAgentOnClient() {
+      this.stopCalls++;
+      return { confirmed: true, state: 'stopped' };
+    }
+  }
+  const bridge = new WaitCompleteUnboundBridge();
+  const job = { cancelRequested: true, cancelReason: 'stop now', agentId: null };
+  await assert.rejects(
+    () => bridge._waitComplete({ id: 'c' }, 5000, 0, job, ''),
+    (error) => error.cancelled === true && error.stopConfirmed === false,
+  );
+  assert.equal(bridge.stopCalls, 0);
 });
 
 test('running FIFO cancel that cannot confirm Stop remains blocked with an explicit abandon path', async () => {

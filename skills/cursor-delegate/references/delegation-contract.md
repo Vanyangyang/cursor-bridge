@@ -65,7 +65,7 @@ For dependent or path-overlapping work, change `execution` to `fifo` and submit 
 ## Identity and collection contract
 
 - `task_id` is the stable identity used by the primary agent to query and summarize a task. Save it immediately after dispatch.
-- `agent_id` binds a `parallel_agent` task to an independent top-level session in the Agents Window. Do not assume safe identity when a parallel task lacks it.
+- `agent_id` binds a task to one specific Agents Window session when Bridge publishes it. `parallel_agent` always needs this identity. FIFO may also publish one; if it does not, do not assume a safe Stop target.
 - Determine task state only through `cursor_status(task_id)`, not the currently selected chat or latest visible response.
 - A collected result should include at least task state, summary, changed files, validation performed, failures or blockers, and the raw Cursor response.
 - Do not require a unique completion marker or minimum response length. Bridge determines completion from Agent state, stopped generation, and response stability.
@@ -78,7 +78,7 @@ For dependent or path-overlapping work, change `execution` to `fifo` and submit 
 | `completed` | Read the raw response, then inspect the real diff, allowed paths, and completion contract. |
 | `failed` | Read the explicit error and determine whether the Cursor Agent actually failed before deciding to rework. |
 | `needs_attention/orphaned` with bound `agent_id` | Preserve path ownership and explicitly call `cursor_task_control(action=reap)` for the same in-memory task. Do not resubmit automatically. |
-| FIFO or unbound orphan | A global reservation blocks all new delegation. Manually verify Cursor has stopped, then use explicitly acknowledged `abandon`; there is no safe `reap` target. |
+| FIFO or unbound orphan | A global reservation blocks all new delegation. If an `agent_id` was published, use targeted `cancel`. Otherwise manually verify Cursor has stopped, then use explicitly acknowledged `abandon`; there is no safe `reap` target. |
 | `terminal_uncollected` | Agent History is stably terminal but the final response extraction failed. Keep the reservation and retry explicit `reap`; do not release on one DOM failure. |
 | `cancelled` | The exact Agent Stop action or an unsent queued cancellation was confirmed; the reservation is released. |
 | `abandoned` | The reservation was explicitly released without proof that the underlying Agent stopped. Treat the warning as live risk and inspect workspace changes before any overlapping write. |
