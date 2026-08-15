@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" role="img" aria-labelledby="title desc">
   <title id="title">cursor-bridge — Star History</title>
-  <desc id="desc">GitHub star observations from Jul 2025 through Aug 2026, latest snapshot 24 stars.</desc>
+  <desc id="desc">GitHub star observations from Jul 2025 through Aug 2026, latest snapshot 26 stars.</desc>
   <style>
     :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --grid: #d8dee4; --line: #1f883d; --dot: #2da44e; --fill: #dafbe1; }
     @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #f0f6fc; --muted: #8b949e; --grid: #30363d; --line: #3fb950; --dot: #56d364; --fill: #12261e; } }
@@ -20,7 +20,7 @@
   </defs>
   <rect width="900" height="500" rx="18" fill="var(--bg)" />
   <text x="62" y="48" font-size="27" font-weight="700">cursor-bridge — Star History</text>
-  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">24 stars</text>
+  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">26 stars</text>
   <g aria-hidden="true">
     <line x1="80" y1="410.00" x2="850" y2="410.00" class="grid" />
     <text x="61" y="416.00" text-anchor="end" font-size="15" class="muted">0</text>
@@ -36,27 +36,28 @@
     <text x="465" y="440" text-anchor="middle" font-size="15" class="muted">Jan 2026</text>
     <text x="850" y="440" text-anchor="end" font-size="15" class="muted">Aug 2026</text>
   </g>
-  <path d="M80 410.00 H93.57 V399.00 H115.13 V388.00 H119.05 V377.00 H121.01 V355.00 H128.85 V344.00 H146.48 V333.00 H463.95 V322.00 H789.25 V289.00 H832.36 V278.00 H834.32 V267.00 H842.16 V245.00 H844.12 V201.00 H846.08 V190.00 H850.00 V146.00 H850 V410 H80 Z" fill="url(#area)" />
-  <path d="M80 410.00 H93.57 V399.00 H115.13 V388.00 H119.05 V377.00 H121.01 V355.00 H128.85 V344.00 H146.48 V333.00 H463.95 V322.00 H789.25 V289.00 H832.36 V278.00 H834.32 V267.00 H842.16 V245.00 H844.12 V201.00 H846.08 V190.00 H850.00 V146.00 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
+  <path d="M80 410.00 H93.54 V399.00 H115.04 V388.00 H118.95 V377.00 H120.90 V355.00 H128.72 V344.00 H146.31 V333.00 H462.97 V322.00 H787.45 V289.00 H830.45 V278.00 H832.41 V267.00 H840.23 V245.00 H842.18 V201.00 H844.14 V190.00 H848.05 V146.00 H850.00 V124.00 H850 V410 H80 Z" fill="url(#area)" />
+  <path d="M80 410.00 H93.54 V399.00 H115.04 V388.00 H118.95 V377.00 H120.90 V355.00 H128.72 V344.00 H146.31 V333.00 H462.97 V322.00 H787.45 V289.00 H830.45 V278.00 H832.41 V267.00 H840.23 V245.00 H842.18 V201.00 H844.14 V190.00 H848.05 V146.00 H850.00 V124.00 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
   <g fill="var(--dot)" stroke="var(--bg)" stroke-width="2">
-    <circle cx="93.57" cy="399.00" r="5" />
-    <circle cx="115.13" cy="388.00" r="5" />
-    <circle cx="119.05" cy="377.00" r="5" />
-    <circle cx="121.01" cy="355.00" r="5" />
-    <circle cx="128.85" cy="344.00" r="5" />
-    <circle cx="146.48" cy="333.00" r="5" />
-    <circle cx="463.95" cy="322.00" r="5" />
-    <circle cx="789.25" cy="289.00" r="5" />
-    <circle cx="832.36" cy="278.00" r="5" />
-    <circle cx="834.32" cy="267.00" r="5" />
-    <circle cx="842.16" cy="245.00" r="5" />
-    <circle cx="844.12" cy="201.00" r="5" />
-    <circle cx="846.08" cy="190.00" r="5" />
-    <circle cx="850.00" cy="146.00" r="6" />
+    <circle cx="93.54" cy="399.00" r="5" />
+    <circle cx="115.04" cy="388.00" r="5" />
+    <circle cx="118.95" cy="377.00" r="5" />
+    <circle cx="120.90" cy="355.00" r="5" />
+    <circle cx="128.72" cy="344.00" r="5" />
+    <circle cx="146.31" cy="333.00" r="5" />
+    <circle cx="462.97" cy="322.00" r="5" />
+    <circle cx="787.45" cy="289.00" r="5" />
+    <circle cx="830.45" cy="278.00" r="5" />
+    <circle cx="832.41" cy="267.00" r="5" />
+    <circle cx="840.23" cy="245.00" r="5" />
+    <circle cx="842.18" cy="201.00" r="5" />
+    <circle cx="844.14" cy="190.00" r="5" />
+    <circle cx="848.05" cy="146.00" r="5" />
+    <circle cx="850.00" cy="124.00" r="6" />
   </g>
   <g transform="translate(814 91)" fill="none" stroke="var(--dot)" stroke-width="2.3" stroke-linejoin="round">
     <path d="M0 -12 L3.6 -3.7 L12 -3.7 L5.2 1.4 L7.8 10 L0 5 L-7.8 10 L-5.2 1.4 L-12 -3.7 L-3.6 -3.7 Z" />
   </g>
-  <text x="830" y="96" font-size="15" class="muted">24</text>
-  <text x="80" y="476" font-size="13" class="muted">Source: GitHub API · automatically updated 2026-08-14</text>
+  <text x="830" y="96" font-size="15" class="muted">26</text>
+  <text x="80" y="476" font-size="13" class="muted">Source: GitHub API · automatically updated 2026-08-15</text>
 </svg>
