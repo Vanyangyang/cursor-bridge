@@ -11,7 +11,7 @@
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.16.17** 与 **3.7.42**，含 Grok Build TUI。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.16.17** 与 **3.7.42**。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
