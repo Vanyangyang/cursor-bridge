@@ -270,6 +270,6 @@ npm run build
 
 ## Star History
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=4e0eb9f6b90d)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=531857c93e10)](https://github.com/Vanyangyang/cursor-bridge)
 
 由 GitHub 仓库 API 自动更新，不依赖外部图表服务，也不需要手工维护 PAT。
