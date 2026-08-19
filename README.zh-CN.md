@@ -16,7 +16,7 @@
 | **Grok Build Supervisor** | 让 Grok Build 持续工作，同时避免重复输出占满上下文 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
 > [!IMPORTANT]
-> Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。Cursor Bridge 5.3.6 及更早版本首次升级到 5.4.0 时有一次 Windows 缓存锁迁移步骤，见下方“更新已有安装”；完成后恢复正常更新流程。
+> Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。如果要在 Windows 上从 Cursor Bridge 5.3.6 或更早版本升级到 5.4.0，请先保存工作，完整退出正在使用这些插件的 Codex、Claude Code 和 Grok Build，并关闭可见的 Grok TUI；然后按照[“更新已有安装”](#windows-update-migration)中的精确 PowerShell 命令清理旧插件进程，再重新执行正常更新命令。这个清理只需做一次，后续版本恢复正常更新流程。
 
 ## Grok Build Supervisor
 
@@ -144,6 +144,8 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 > [!WARNING]
 > Cursor 是 Agent，不是文件系统沙箱。CCE 会强提示只读调查，但提示词与允许路径并不是操作系统级隔离；重要结论和工作区改动仍需核验。
+
+<a id="windows-update-migration"></a>
 
 <details>
 <summary><strong>更新已有安装</strong></summary>
