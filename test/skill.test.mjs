@@ -78,6 +78,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
   assert.match(englishImportant, /fully exit[\s\S]*#windows-update-migration[\s\S]*normal update commands/);
   assert.match(chineseImportant, /完整退出[\s\S]*#windows-update-migration[\s\S]*正常更新命令/);
+  assert.match(englishImportant, /ready-to-copy Agent prompt/);
+  assert.match(chineseImportant, /直接粘贴给 Agent 的提示词/);
   for (const content of [english, chinese]) {
     assert.match(content, /<a id="windows-update-migration"><\/a>/);
     assert.match(content, /5\.4\.0/);
@@ -171,6 +173,29 @@ test('all Grok README surfaces link the recommended context-mode project', () =>
   assert.match(documents[1], /\[context-mode（推荐）\]/);
   assert.match(documents[2], /\[context-mode \(recommended\)\]/);
   assert.match(documents[3], /\[context-mode（推荐）\]/);
+});
+
+test('all update guides include a safe copy-paste Agent cleanup prompt', () => {
+  const englishDocuments = [
+    readProjectFile('README.md'),
+    readProjectFile('plugins/grok-build-supervisor/README.md'),
+  ];
+  const chineseDocuments = [
+    readProjectFile('README.zh-CN.md'),
+    readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md'),
+  ];
+  for (const content of englishDocuments) {
+    assert.match(content, /Copy and paste this prompt/);
+    assert.match(content, /First inspect processes read-only/);
+    assert.match(content, /Never stop every node\.exe, powershell\.exe, or pwsh\.exe/);
+    assert.match(content, /Do not change Windows ACLs/);
+  }
+  for (const content of chineseDocuments) {
+    assert.match(content, /提示词直接粘贴给本地 Coding Agent/);
+    assert.match(content, /先只读检查进程/);
+    assert.match(content, /禁止结束所有 node\.exe、powershell\.exe 或 pwsh\.exe/);
+    assert.match(content, /不要修改 Windows ACL/);
+  }
 });
 
 test('bilingual README promotes the minimal runtime benefit and trade-off', () => {
