@@ -104,6 +104,9 @@ test('Grok README keeps TUI lifecycle internal and presents simple daily control
   const manifest = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.codex-plugin/plugin.json'));
   const english = readProjectFile('plugins/grok-build-supervisor/README.md');
   const chinese = readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md');
+  const executeCommand = readProjectFile('plugins/grok-build-supervisor/commands/grok_execute.md');
+  const supervisorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/SKILL.md');
+  const supervisorMetadata = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/agents/openai.yaml');
 
   for (const content of [english, chinese]) {
     assert.match(content, /\/grok_execute on/);
@@ -115,6 +118,11 @@ test('Grok README keeps TUI lifecycle internal and presents simple daily control
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => /Create a new Grok TUI/i.test(prompt)), false);
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute on')), true);
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute off')), true);
+  assert.match(executeCommand, /Never ask the user to run a separate command or give a separate instruction/);
+  assert.match(executeCommand, /directly tell me the task|直接告诉我任务即可/);
+  assert.match(supervisorSkill, /Session setup is an internal part of dispatching an authorized task/);
+  assert.doesNotMatch(supervisorSkill, /正在通过 Grok Build Supervisor 创建 TUI|Grok TUI 已创建并就绪|新建\/创建一个 Grok TUI/);
+  assert.doesNotMatch(supervisorMetadata, /open or resume a guarded Grok TUI/);
 });
 
 test('bilingual README documents plugin install and update commands', () => {

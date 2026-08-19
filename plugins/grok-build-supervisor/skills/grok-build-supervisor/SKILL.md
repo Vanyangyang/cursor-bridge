@@ -1,6 +1,6 @@
 ---
 name: grok-build-supervisor
-description: Initialize the persistent local proxy, then create, resume, and continuously supervise a Grok Build coding-agent session through a user-level Supervisor daemon when the user explicitly runs /grok_init, asks to open a Windows Terminal PowerShell TUI, sends work to it, waits for completion, reconnects from another host task, or coordinates bounded two-way host-Grok communication without keyboard simulation. Do not use for Grok Imagine/browser generation, ordinary session summarization, or attaching an unrelated non-Supervisor TUI.
+description: Initialize the persistent local proxy, then automatically ensure, reuse, and continuously supervise a Grok Build coding-agent session through a user-level Supervisor daemon when executor mode dispatches work, the user sends work to Grok, waits for completion, reconnects from another host task, or coordinates bounded two-way host-Grok communication without keyboard simulation. Do not use for Grok Imagine/browser generation, ordinary session summarization, or attaching an unrelated non-Supervisor TUI.
 ---
 
 # Grok Build Supervisor
@@ -10,18 +10,19 @@ Use the `grok-build-supervisor` MCP tools as a guarded transport. A user-level d
 ## User-facing messages
 
 - Keep preflight silent. Tool availability, tool counts or names, Supervisor reachability, ACP/Leader state, the working directory, and presentation details are internal unless they block the request or the user explicitly asks for diagnostics.
-- For a simple create or open request, do not send separate preflight and action updates. If a progress update or skill-use notice is required, use one short action line such as `正在通过 Grok Build Supervisor 创建 TUI…`, then stay quiet until the state becomes ready, blocked, needs permission, needs input, completed, or failed.
-- On successful creation, prefer the single-line result `Grok TUI 已创建并就绪。`
-- Do not volunteer that no development prompt was sent. Mention that boundary only when the user asked to send work or could reasonably mistake opening the TUI for submitting a task.
+- Do not ask the user to create, open, show, resume, or select a TUI as a separate step. Session setup is an internal part of dispatching an authorized task. If startup takes long enough to merit an update, say only `正在连接 Grok…`; once ready, continue with the task instead of reporting TUI lifecycle details.
+- A successful automatic connection is not a standalone user-facing result. Report the task state or outcome instead of announcing TUI creation.
+- Do not volunteer that no development prompt was sent. Mention that boundary only when the user explicitly asked to open a session without sending work or could otherwise reasonably mistake connection setup for submitting a task.
 - For blocked or failed states, report only the actionable cause and next step; expose transport diagnostics only on request.
 
 ## Workflow
 
 0. Call `grok_init` only for an exact `/grok_init` command or an explicit request to initialize or reinitialize the Grok Supervisor proxy. Empty initialization performs bounded local discovery; an exact loopback `http://` URL verifies that selection. Initialization never opens a session or sends work. Do not initialize implicitly during ordinary preflight. If more than one verified endpoint is returned, show the bounded candidates and require an exact user choice. A listening port alone is not success: require the persisted `ready` result backed by HTTP CONNECT verification. Reinitialization is refused while the Supervisor owns active work.
 1. Call `grok_session_inspect` with its default `interaction` view for an attached session. It intentionally omits process, socket, journal, and ownership diagnostics. When the user names a prior task naturally, use the explicit `summary` view with the absolute project `cwd` and a short `sessionQuery`; use a candidate only when it is unique.
-2. Translate the user's intent without constructing shell text:
-   - “新建/创建一个 Grok TUI” -> `mode: new` with no `sessionId`.
-   - “打开/恢复某个会话” -> `mode: resume` with the exact candidate UUID.
+2. Select the session mode internally without constructing shell text or asking the user to manage the TUI:
+   - When an authorized executor-mode task needs Grok and no suitable attached session exists for the exact project directory, use `mode: new` with no `sessionId`.
+   - When an exact verified attached or prior session matches the project directory and requested work, use `mode: resume` with its candidate UUID.
+   - Ask the user to choose only when recovery produces multiple genuinely ambiguous candidates; ordinary startup and reuse require no separate user instruction.
 3. Call `grok_session_open` with the absolute project directory and explicit confirmation. Always use the default `presentation: windows_terminal`, which opens a dedicated Windows Terminal PowerShell tab, unless the user explicitly requested headless, invisible, or ACP-only operation. Only that explicit request permits `presentation: none` with `OPEN_GROK_SESSION_HEADLESS`; never select it as a convenience, fallback, or preflight optimization. Visible sessions use `OPEN_GROK_SESSION`. The daemon attempts to roll back only its owned processes on failure. An error response is not proof that rollback completed: preserve the exact `error`, `details.rollback`, and `details.rollbackComplete`, then use explicit diagnostic views before reporting the outcome. It may recover an active TUI only when the exact session, cwd, PID, dedicated Leader, and Supervisor launch record all match; an unrelated TUI is never adopted.
    - If opening reports `GROK_PROXY_NOT_INITIALIZED`, tell the user to run `/grok_init`; do not copy a host environment port into the request or silently initialize it.
 4. Opening a TUI does not authorize a prompt. Call `grok_session_prompt` only when the user has authorized the actual instruction.
