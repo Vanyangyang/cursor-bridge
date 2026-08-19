@@ -9,11 +9,11 @@ Use `$grok-build-supervisor` as the required transport and lifecycle contract. T
 
 ## Activation and lifetime
 
-- Only an exact, case-insensitive `/grok_execute on` activates the mode for the current host task. It does not open a TUI or send work. Reply with a short activation confirmation.
-- The most recent exact `/grok_execute on` or `/grok_execute off` instruction in this task controls the mode. Activation remains a task-local user instruction until `off` or the task ends; never write it to global configuration.
+- Only an exact, case-insensitive `/grok_execute on` may activate the mode for the current host task. First bind the current host task's absolute project directory, inspect Supervisor status, and immediately reuse or open its guarded session with the default visible Windows Terminal TUI. Commit activation only after that session is verified ready; a failed setup leaves the mode off. Opening the TUI is authorized by `on`, but sending a development prompt is not. Reply with one short ready confirmation.
+- The most recent exact `/grok_execute on` or `/grok_execute off` instruction in this task controls the mode. The selected workspace and activation remain task-local until `off` or the task ends; never write either to global proxy configuration and never silently switch directories while active.
 - While active, automatically apply this role contract to every subsequent ordinary user task that requires execution. The user does not repeat a slash command or Skill name for each task.
-- Do not ask the user to create, resume, select, or manage a TUI, session ID, process, Leader, or ACP connection. When the next task needs Grok, reuse or open the correct guarded session automatically. A visible TUI remains the default unless the user explicitly asks not to show it for that task.
-- Only an exact, case-insensitive `/grok_execute off` deactivates the mode. It does not automatically cancel a running prompt, disconnect ACP, or stop the owned Leader; continue any already-required Supervisor monitoring under the normal transport contract and report that work separately.
+- Do not ask the user to create, resume, select, or manage a TUI, session ID, process, Leader, or ACP connection. The `on` flow owns that setup. A visible TUI remains the default unless the user explicitly requested headless operation before activation.
+- Only an exact, case-insensitive `/grok_execute off` deactivates the mode and clears the task-local workspace binding. It does not automatically cancel a running prompt, disconnect ACP, close the visible TUI, or stop the owned Leader; continue any already-required Supervisor monitoring under the normal transport contract and report that work separately.
 - `/grok_execute` with no argument or any argument other than the exact control words changes nothing and returns only the two valid forms.
 - Direct `$grok-executor-mode` invocation may explain or apply the policy only when a prior `/grok_execute on` is active. It never changes mode state itself.
 - Do not infer activation or deactivation from any other wording, including ordinary requests that merely mention Grok.
@@ -37,8 +37,8 @@ The host agent must not use `apply_patch`, file-writing tools, mutating shell co
 
 ## Dispatch and supervision
 
-1. Establish the workspace and task boundaries through read-only inspection. Preserve unrelated dirty work and identify any owner decision that Grok must not make.
-2. Inspect the current Supervisor interaction state. Reuse one exact attached session for this task or open one guarded session in the requested workspace. Never create parallel writers for the same files.
+1. Use the exact workspace bound by the successful `/grok_execute on`. Establish task boundaries through read-only inspection, preserve unrelated dirty work, and identify any owner decision that Grok must not make. Never silently retarget the mode to another directory.
+2. Inspect the current Supervisor interaction state and reuse the guarded session already ensured by `on`. If it was lost, recover or reopen only the exact bound workspace and never create parallel writers for the same files.
 3. Give Grok one execution brief containing the objective, allowed scope, prohibited changes, known dirty files, acceptance criteria, required tests, evidence expectations, and when to stop and ask the host agent.
 4. After `grok_session_prompt`, retain its `runId` and replace the cursor after every bounded `grok_session_inspect` interaction wait until completion, failure, permission, or input is required. Working polls expose liveness metadata, not cumulative Grok prose; a wait timeout is not completion.
    - On completion, accept either one short cursor-delivered `finalText` or a persistent `resultArtifact`. For a long artifact, use context-mode file extraction when that tool is already available; otherwise perform a bounded local read. Do not make context-mode an installation or runtime dependency.

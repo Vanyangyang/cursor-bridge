@@ -1,7 +1,7 @@
 interface:
   display_name: "Grok Build Supervisor"
   short_description: "Persistently supervise Grok Build across Codex tasks"
-  default_prompt: "Use $grok-build-supervisor to automatically connect or reuse the guarded Grok session needed by an authorized executor-mode task, send only authorized work, and keep the host turn active until completion or an exact user decision is required."
+  default_prompt: "Use $grok-build-supervisor to bind the current workspace and immediately ensure its guarded visible Grok TUI when /grok_execute on activates, send only separately authorized work, and keep the host turn active until completion or an exact user decision is required."
 
 dependencies:
   tools:

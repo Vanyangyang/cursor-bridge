@@ -38,10 +38,10 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-首次使用时运行一次 `/grok_init` 设置本地代理。之后日常只需要 `/grok_execute on` 和 `/grok_execute off`。开启后，像平常一样把任务交给 Codex 或 Claude Code，插件会自行找到、复用或打开正确的 Grok 会话，不需要你管理 TUI、会话 ID 或进程。
+首次使用时运行一次 `/grok_init` 设置本地代理。进入要处理的项目后，`/grok_execute on` 会把当前任务绑定到该项目，并立即复用或打开可见的 Grok 终端，但不会发送开发任务。随后像平常一样把任务交给 Codex 或 Claude Code；不再使用时运行 `/grok_execute off`。
 
 > [!TIP]
-> Grok 默认会显示在 Windows Terminal 窗口中。如果某次任务不想看到它，直接说“这次不要显示 Grok 终端”即可。没有你的明确要求，插件不会自己把窗口藏起来。
+> `/grok_execute on` 默认会立即在 Windows Terminal 中显示 Grok。如果这次需要隐藏终端，请在运行 `on` 前先说明。没有你的明确要求，插件不会自己把窗口藏起来。
 
 [阅读 Grok Build Supervisor 中文文档 →](./plugins/grok-build-supervisor/README.zh-CN.md)
 
