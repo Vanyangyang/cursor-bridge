@@ -1,0 +1,13 @@
+interface:
+  display_name: "Grok Executor Mode"
+  short_description: "Plan in Codex and execute through supervised Grok"
+  default_prompt: "Use $grok-executor-mode only after I explicitly run /grok_execute on; stop applying it after /grok_execute off."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "grok-build-supervisor"
+      description: "Open, prompt, monitor, correct, and verify one daemon-owned Grok Build session"
+
+policy:
+  allow_implicit_invocation: false

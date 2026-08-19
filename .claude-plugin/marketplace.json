@@ -1,6 +1,6 @@
 {
   "name": "vanyangyang",
-  "description": "Vanyangyang's developer tools, including Cursor Bridge for evidence-backed CCE search and bounded Cursor Agent execution.",
+  "description": "Vanyangyang's developer tools, including Cursor Bridge and Grok Build Supervisor.",
   "owner": {
     "name": "Vanyangyang"
   },
@@ -10,6 +10,15 @@
       "source": ".",
       "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded Cursor Agent execution from Codex, Claude Code, or Grok Build, with workbench plus Agents Window support through Cursor 3.16.17.",
       "version": "5.3.6",
+      "author": {
+        "name": "Vanyangyang"
+      }
+    },
+    {
+      "name": "grok-build-supervisor",
+      "source": "./plugins/grok-build-supervisor",
+      "description": "Persistent Grok Build Leader and ACP supervision with context-efficient cursor polling, persistent long-result artifacts, verified local-proxy initialization, and a visible Windows Terminal TUI.",
+      "version": "0.1.0",
       "author": {
         "name": "Vanyangyang"
       }

@@ -1,0 +1,10 @@
+{
+  "name": "grok-build-supervisor",
+  "version": "0.1.0",
+  "description": "Persistent Grok Build Leader and ACP supervision with context-efficient cursor polling, persistent long-result artifacts, verified local-proxy initialization, and a guarded visible Windows Terminal TUI.",
+  "author": {
+    "name": "Vanyangyang"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Vanyangyang/cursor-bridge"
+}

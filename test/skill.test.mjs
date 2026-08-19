@@ -41,6 +41,65 @@ test('Codex starter prompts stay user-facing and within manifest limits', () => 
   }
 });
 
+test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an isolated plugin', () => {
+  const marketplace = JSON.parse(readProjectFile('.agents/plugins/marketplace.json'));
+  const cursor = marketplace.plugins.find((plugin) => plugin.name === 'cursor-bridge');
+  const grok = marketplace.plugins.find((plugin) => plugin.name === 'grok-build-supervisor');
+  const grokManifest = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.codex-plugin/plugin.json'));
+  const grokMcp = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.mcp.json'));
+  const grokInitCommand = readProjectFile('plugins/grok-build-supervisor/commands/grok_init.md');
+  const claudeMarketplace = JSON.parse(readProjectFile('.claude-plugin/marketplace.json'));
+  const claudeCursor = claudeMarketplace.plugins.find((plugin) => plugin.name === 'cursor-bridge');
+  const claudeGrok = claudeMarketplace.plugins.find((plugin) => plugin.name === 'grok-build-supervisor');
+  const claudeGrokManifest = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.claude-plugin/plugin.json'));
+
+  assert.deepEqual(cursor?.source, { source: 'url', url: './' });
+  assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
+  assert.equal(grokManifest.name, 'grok-build-supervisor');
+  assert.equal(grokManifest.mcpServers, './.mcp.json');
+  assert.equal(grokManifest.repository, 'https://github.com/Vanyangyang/cursor-bridge');
+  assert.ok(grokManifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_init')));
+  assert.deepEqual(
+    grokMcp.mcpServers['grok-build-supervisor'].args,
+    ['${CLAUDE_PLUGIN_ROOT}/scripts/server.mjs'],
+  );
+  assert.equal(claudeCursor?.source, '.');
+  assert.equal(claudeCursor?.version, '5.3.6');
+  assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
+  assert.equal(claudeGrok?.version, '0.1.0');
+  assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
+  assert.equal(claudeGrokManifest.version, '0.1.0');
+
+  const english = readProjectFile('README.md');
+  const chinese = readProjectFile('README.zh-CN.md');
+  assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
+  assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
+  for (const readme of [
+    'plugins/grok-build-supervisor/README.md',
+    'plugins/grok-build-supervisor/README.zh-CN.md',
+  ]) {
+    const content = readProjectFile(readme);
+    assert.match(content, /claude plugin install grok-build-supervisor@vanyangyang/);
+    assert.match(content, /\/grok_init/);
+  }
+  assert.match(grokInitCommand, /call `grok_init`/);
+  assert.match(grokInitCommand, /must not create or resume a Grok session/);
+});
+
+test('Grok proxy setup requires persistent initialization instead of a fixed listener port', () => {
+  const productionFiles = [
+    'plugins/grok-build-supervisor/scripts/proxy-settings.mjs',
+    'plugins/grok-build-supervisor/scripts/proxy-environment.mjs',
+    'plugins/grok-build-supervisor/scripts/supervisor-core.mjs',
+    'plugins/grok-build-supervisor/scripts/supervisor-transport.mjs',
+    'plugins/grok-build-supervisor/scripts/server.mjs',
+  ].map(readProjectFile);
+
+  for (const content of productionFiles) assert.doesNotMatch(content, /\b7897\b/);
+  assert.match(productionFiles.join('\n'), /GROK_PROXY_NOT_INITIALIZED/);
+  assert.match(readProjectFile('plugins/grok-build-supervisor/commands/grok_init.md'), /HTTP CONNECT/);
+});
+
 test('bilingual README documents plugin install and update commands', () => {
   for (const readme of ['README.md', 'README.zh-CN.md']) {
     const content = readProjectFile(readme);

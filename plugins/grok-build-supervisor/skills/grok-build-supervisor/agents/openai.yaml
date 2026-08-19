@@ -1,0 +1,13 @@
+interface:
+  display_name: "Grok Build Supervisor"
+  short_description: "Persistently supervise Grok Build across Codex tasks"
+  default_prompt: "Use $grok-build-supervisor to connect through the persistent Supervisor daemon, open or resume a guarded Grok TUI, send only authorized work, and keep the Codex turn active until completion or an exact user decision is required."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "grok-build-supervisor"
+      description: "Create, resume, and continuously supervise daemon-owned Grok Build Leader sessions"
+
+policy:
+  allow_implicit_invocation: true

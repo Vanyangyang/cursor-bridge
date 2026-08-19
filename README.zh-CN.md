@@ -1,4 +1,4 @@
-# cursor-bridge
+# Cursor Bridge + Grok Build Supervisor
 
 [English](./README.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
@@ -7,6 +7,42 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
+
+**两个独立安装、互不影响的 Coding Agent MCP 插件；用户只安装自己需要的 Bridge。**
+
+| 插件 | 用途 | 文档 |
+|---|---|---|
+| **Cursor Bridge** | Cursor 项目理解与有边界的 Cursor Agent 执行 | [继续阅读](#cursor-bridge) |
+| **Grok Build Supervisor** | 由宿主 Agent 协调并验收、持久且节省上下文的 Grok Build TUI/ACP 执行 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
+
+> [!IMPORTANT]
+> 现有 Cursor Bridge 用户无需更改安装、配置、工具、运行方式或更新流程。Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。
+
+## Grok Build Supervisor
+
+**让 Codex 或 Claude Code 规划、监督、纠偏并验收持久运行的 Grok Build 任务，不依赖终端键盘模拟。**
+
+Grok Build Supervisor 会在 Windows Terminal 中创建或恢复真实、可见的 Grok Build TUI，同时由用户级 daemon 跨宿主任务退出和插件重载持续持有 Leader、ACP 连接、写租约、进程身份和事件日志。发送端会携带项目工作目录和经过认证的宿主身份，因此 Grok 能收到与 Codex、Claude Code 或中性宿主相匹配的监督合同。
+
+普通轮询从源头控制上下文：运行中只返回状态和小型活动元数据，游标直接推进到最新事件，短结果只交付一次。超过 4000 UTF-8 字节的结果会保存为持久 artifact，并返回路径、字节数、SHA-256、截断状态和短摘要。宿主已安装 context-mode 时可以用它处理这些文件，但本插件不会打包或强制依赖 context-mode。
+
+独立安装：
+
+```bash
+# Codex
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin add grok-build-supervisor@vanyangyang
+
+# Claude Code
+claude plugin marketplace add Vanyangyang/cursor-bridge
+claude plugin install grok-build-supervisor@vanyangyang
+```
+
+首次使用运行一次 `/grok_init`，自动发现、CONNECT 验证并持久化本地代理。普通会话始终打开可见 Windows Terminal TUI；只有明确要求时才使用 headless。可选的 `/grok_execute on` 会在当前任务中启用“宿主 Agent 规划和验收、Grok 负责执行”的分工。
+
+[阅读 Grok Build Supervisor 中文文档 →](./plugins/grok-build-supervisor/README.zh-CN.md)
+
+## Cursor Bridge
 
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
