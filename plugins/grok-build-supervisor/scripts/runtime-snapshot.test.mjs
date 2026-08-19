@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeTuiRuntime, TUI_RUNTIME_FILES } from "./runtime-snapshot.mjs";
+import {
+  DAEMON_RUNTIME_ENTRY,
+  materializeDaemonRuntime,
+  materializeTuiRuntime,
+  TUI_RUNTIME_FILES,
+} from "./runtime-snapshot.mjs";
 
 test("TUI runtime survives deletion of the plugin cache source", (t) => {
   const root = mkdtempSync(join(tmpdir(), "grok-runtime-snapshot-"));
@@ -40,4 +45,27 @@ test("a changed runtime gets a new immutable directory without deleting the old 
   assert.notEqual(first.runtimeRoot, second.runtimeRoot);
   assert.equal(existsSync(first.hostScript), true);
   assert.equal(existsSync(second.hostScript), true);
+});
+
+test("daemon runtime survives deletion of the versioned plugin cache", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-daemon-snapshot-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cacheRoot = join(root, "versioned-plugin-cache");
+  const sourceDirectory = join(cacheRoot, "scripts");
+  const daemonBundle = join(cacheRoot, "dist", DAEMON_RUNTIME_ENTRY);
+  const stateRoot = join(root, "persistent-state");
+  mkdirSync(sourceDirectory, { recursive: true });
+  mkdirSync(join(cacheRoot, "dist"), { recursive: true });
+  writeFileSync(daemonBundle, "daemon:bundle\n", "utf8");
+  for (const name of TUI_RUNTIME_FILES) {
+    writeFileSync(join(sourceDirectory, name), `daemon-runtime:${name}\n`, "utf8");
+  }
+
+  const runtime = materializeDaemonRuntime({ daemonBundle, sourceDirectory, stateRoot });
+  rmSync(cacheRoot, { recursive: true, force: true });
+
+  assert.match(runtime.runtimeRoot, /[\\/]runtime[\\/]daemon-[0-9a-f]{20}$/);
+  assert.equal(existsSync(runtime.daemonScript), true);
+  assert.equal(readFileSync(runtime.daemonScript, "utf8"), "daemon:bundle\n");
+  for (const file of runtime.files) assert.equal(existsSync(file), true);
 });

@@ -64,16 +64,22 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     ['${CLAUDE_PLUGIN_ROOT}/scripts/server.mjs'],
   );
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.3.6');
+  assert.equal(claudeCursor?.version, '5.4.0');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.1.0');
+  assert.equal(claudeGrok?.version, '0.2.0');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.1.0');
+  assert.equal(claudeGrokManifest.version, '0.2.0');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
+  for (const content of [english, chinese]) {
+    assert.match(content, /5\.4\.0/);
+    assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
+    assert.match(content, /Get-CimInstance Win32_Process/);
+    assert.match(content, /grok-build-supervisor@vanyangyang/);
+  }
   for (const readme of [
     'plugins/grok-build-supervisor/README.md',
     'plugins/grok-build-supervisor/README.zh-CN.md',
@@ -81,6 +87,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     const content = readProjectFile(readme);
     assert.match(content, /claude plugin install grok-build-supervisor@vanyangyang/);
     assert.match(content, /\/grok_init/);
+    assert.match(content, /0\.2\.0/);
+    assert.match(content, /Get-CimInstance Win32_Process/);
   }
   assert.match(grokInitCommand, /call `grok_init`/);
   assert.match(grokInitCommand, /must not create or resume a Grok session/);

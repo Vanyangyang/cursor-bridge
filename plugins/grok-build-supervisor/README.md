@@ -36,6 +36,34 @@ Start a new Codex task, or restart Claude Code / run `/reload-plugins`, after in
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
+## Update
+
+> [!WARNING]
+> **Before the first upgrade from Grok Build Supervisor 0.1.0 or earlier to 0.2.0, do one complete shutdown.** Save your work, exit Codex and Claude Code instances using the plugin, and close visible Grok TUI windows. The old daemon, an MCP adapter, or a TUI may still be holding the cache that must be replaced; `cursor-lifecycle-supervisor.mjs` is not the only possible holder. In PowerShell, list and then stop only the residual processes belonging to these two plugins:
+
+```powershell
+$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
+  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
+  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
+}
+$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
+$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+Do not kill every Node process. After this one-time migration, both the daemon and TUI run from persistent user state, so releases after 0.2.0 use the normal update commands:
+
+```powershell
+# Codex
+codex plugin marketplace upgrade vanyangyang
+codex plugin add grok-build-supervisor@vanyangyang
+
+# Claude Code
+claude plugin marketplace update vanyangyang
+claude plugin update grok-build-supervisor@vanyangyang
+```
+
+If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master` once, then retry the commands above. Start a new task or reload plugins afterward; the currently open task remains on its loaded version.
+
 ## Use it
 
 The first time you use the plugin, initialize the local proxy once:

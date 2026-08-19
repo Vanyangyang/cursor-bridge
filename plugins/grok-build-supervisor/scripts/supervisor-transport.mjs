@@ -20,10 +20,11 @@ import {
   persistResultArtifact,
   summarizeResultText,
 } from "./result-artifact.mjs";
+import { materializeDaemonRuntime } from "./runtime-snapshot.mjs";
 
 const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(MODULE_DIRECTORY, "..");
-const DEFAULT_DAEMON_SCRIPT = join(MODULE_DIRECTORY, "supervisor-daemon.mjs");
+const DEFAULT_DAEMON_BUNDLE = join(PLUGIN_ROOT, "dist", "supervisor-daemon.mjs");
 const MAX_MESSAGE_BYTES = 1024 * 1024;
 const DEFAULT_LEASE_MS = 60_000;
 const DEFAULT_START_TIMEOUT_MS = 10_000;
@@ -31,6 +32,7 @@ const CONNECTION_RETRY_MS = 100;
 
 export const DAEMON_PROTOCOL_VERSION = 1;
 export const DAEMON_CAPABILITIES = Object.freeze({
+  cacheIndependentDaemonRuntime: true,
   hostIdentityEnvelope: true,
   interactionDeliveryV2: true,
   persistentTuiRuntime: true,
@@ -264,6 +266,9 @@ export class SupervisorDaemon {
     this.paths = options.paths || daemonPaths(options.stateRoot);
     this.authToken = options.authToken || ensureDaemonAuth(this.paths);
     this.runtimeVersion = options.runtimeVersion || readPluginVersion();
+    this.runtimeFingerprint = options.runtimeFingerprint || null;
+    this.runtimeScript = fileURLToPath(import.meta.url);
+    this.runtimeRoot = dirname(this.runtimeScript);
     this.capabilities = options.capabilities || DAEMON_CAPABILITIES;
     this.supervisor = options.supervisor || new GrokSupervisor({
       stateRoot: this.paths.stateRoot,
@@ -387,6 +392,8 @@ export class SupervisorDaemon {
         daemonInstanceId: this.daemonInstanceId,
         daemonPid: process.pid,
         runtimeVersion: this.runtimeVersion,
+        runtimeFingerprint: this.runtimeFingerprint,
+        runtimeScript: this.runtimeScript,
         capabilities: this.capabilities,
         clientVersion: clientVersion || null,
         writer: this.leaseSnapshot(clientId),
@@ -432,6 +439,8 @@ export class SupervisorDaemon {
           instanceId: this.daemonInstanceId,
           pid: process.pid,
           runtimeVersion: this.runtimeVersion,
+          runtimeFingerprint: this.runtimeFingerprint,
+          runtimeScript: this.runtimeScript,
           capabilities: this.capabilities,
           writer: this.leaseSnapshot(clientId),
         };
@@ -471,8 +480,17 @@ export class SupervisorDaemon {
       if (params.confirmation !== "RESTART_IDLE_SUPERVISOR_DAEMON") {
         throw errorWithCode("Invalid daemon upgrade confirmation", "DAEMON_UPGRADE_REFUSED");
       }
-      if (params.targetVersion === this.runtimeVersion) {
-        return { restarting: false, alreadyCurrent: true, runtimeVersion: this.runtimeVersion };
+      const versionCurrent = params.targetVersion === this.runtimeVersion;
+      const fingerprintCurrent = !params.targetFingerprint
+        || !this.runtimeFingerprint
+        || params.targetFingerprint === this.runtimeFingerprint;
+      if (versionCurrent && fingerprintCurrent) {
+        return {
+          restarting: false,
+          alreadyCurrent: true,
+          runtimeVersion: this.runtimeVersion,
+          runtimeFingerprint: this.runtimeFingerprint,
+        };
       }
       const idle = await this.daemonBusyState();
       if (idle.busy) {
@@ -480,7 +498,9 @@ export class SupervisorDaemon {
           restarting: false,
           busy: true,
           runtimeVersion: this.runtimeVersion,
+          runtimeFingerprint: this.runtimeFingerprint,
           targetVersion: params.targetVersion || null,
+          targetFingerprint: params.targetFingerprint || null,
         };
       }
       await this.supervisor.disconnect().catch(() => {});
@@ -488,7 +508,9 @@ export class SupervisorDaemon {
       return {
         restarting: true,
         runtimeVersion: this.runtimeVersion,
+        runtimeFingerprint: this.runtimeFingerprint,
         targetVersion: params.targetVersion || null,
+        targetFingerprint: params.targetFingerprint || null,
       };
     }
     if (method === "shutdown") {
@@ -598,6 +620,8 @@ export class SupervisorDaemon {
       daemonInstanceId: this.daemonInstanceId,
       pid: process.pid,
       runtimeVersion: this.runtimeVersion,
+      runtimeFingerprint: this.runtimeFingerprint,
+      runtimeScript: this.runtimeScript,
       pipePathHash: createHash("sha256").update(this.paths.pipePath).digest("hex"),
       startedAt: new Date().toISOString(),
     });
@@ -617,6 +641,8 @@ export class SupervisorDaemon {
       daemonInstanceId: this.daemonInstanceId,
       pid: process.pid,
       runtimeVersion: this.runtimeVersion,
+      runtimeFingerprint: this.runtimeFingerprint,
+      runtimeScript: this.runtimeScript,
       capabilities: this.capabilities,
       pipePath: this.paths.pipePath,
     };
@@ -744,7 +770,14 @@ export class SupervisorClient {
     this.resultArtifactRoot = options.resultArtifactRoot || join(this.paths.stateRoot, "results");
     this.inlineResultMaxBytes = options.inlineResultMaxBytes ?? DEFAULT_INLINE_RESULT_MAX_BYTES;
     this.persistResultArtifact = options.persistResultArtifact || persistResultArtifact;
-    this.daemonScript = options.daemonScript || DEFAULT_DAEMON_SCRIPT;
+    this.daemonRuntime = options.daemonRuntime || (options.daemonScript ? null : materializeDaemonRuntime({
+      daemonBundle: options.daemonBundle || DEFAULT_DAEMON_BUNDLE,
+      sourceDirectory: MODULE_DIRECTORY,
+      stateRoot: this.paths.stateRoot,
+    }));
+    this.daemonScript = resolve(options.daemonScript || this.daemonRuntime.daemonScript);
+    this.daemonCwd = resolve(options.daemonCwd || this.daemonRuntime?.runtimeRoot || dirname(this.daemonScript));
+    this.runtimeFingerprint = options.runtimeFingerprint || this.daemonRuntime?.fingerprint || null;
     this.spawnProcess = options.spawnProcess || spawn;
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
     this.leaseToken = null;
@@ -781,8 +814,16 @@ export class SupervisorClient {
   }
 
   launchDaemon() {
-    const child = this.spawnProcess(process.execPath, [this.daemonScript, "--state-root", this.paths.stateRoot], {
-      cwd: PLUGIN_ROOT,
+    const args = [
+      this.daemonScript,
+      "--state-root", this.paths.stateRoot,
+      "--runtime-version", this.clientVersion,
+    ];
+    if (this.runtimeFingerprint) {
+      args.push("--runtime-fingerprint", this.runtimeFingerprint);
+    }
+    const child = this.spawnProcess(process.execPath, args, {
+      cwd: this.daemonCwd,
       detached: true,
       windowsHide: true,
       stdio: "ignore",
@@ -823,7 +864,11 @@ export class SupervisorClient {
 
   async ensureRuntimeVersion(info) {
     this.daemonInfo = info;
-    if (!info || info.runtimeVersion === this.clientVersion
+    const versionCurrent = info?.runtimeVersion === this.clientVersion;
+    const fingerprintCurrent = !info?.runtimeFingerprint
+      || !this.runtimeFingerprint
+      || info.runtimeFingerprint === this.runtimeFingerprint;
+    if (!info || (versionCurrent && fingerprintCurrent)
       || info.runtimeVersion === "unknown" || this.clientVersion === "unknown"
       || Date.now() < this.nextUpgradeCheckAt) {
       return info;
@@ -831,6 +876,7 @@ export class SupervisorClient {
     const upgrade = await this.requestOnce("upgrade_if_idle", {
       confirmation: "RESTART_IDLE_SUPERVISOR_DAEMON",
       targetVersion: this.clientVersion,
+      targetFingerprint: this.runtimeFingerprint,
     }, 5000);
     if (!upgrade.restarting) {
       this.nextUpgradeCheckAt = Date.now() + 60_000;
@@ -849,7 +895,9 @@ export class SupervisorClient {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, CONNECTION_RETRY_MS));
       try {
         const restarted = await this.requestOnce("ping", {}, 1500);
-        if (restarted.runtimeVersion !== this.clientVersion) {
+        if (restarted.runtimeVersion !== this.clientVersion
+          || (restarted.runtimeFingerprint && this.runtimeFingerprint
+            && restarted.runtimeFingerprint !== this.runtimeFingerprint)) {
           continue;
         }
         this.daemonInfo = restarted;

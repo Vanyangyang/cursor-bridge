@@ -17,6 +17,8 @@ export const TUI_RUNTIME_FILES = [
   "tui-presentation.mjs",
 ];
 
+export const DAEMON_RUNTIME_ENTRY = "supervisor-daemon.mjs";
+
 function writeDerivedFile(target, content) {
   if (existsSync(target) && readFileSync(target).equals(content)) {
     return;
@@ -70,6 +72,50 @@ export function materializeTuiRuntime({
     runtimeRoot,
     launcherScript: join(runtimeRoot, "Start-GrokTui.ps1"),
     hostScript: join(runtimeRoot, "tui-host.mjs"),
+    files: contents.map((item) => join(runtimeRoot, item.name)),
+  };
+}
+
+export function materializeDaemonRuntime({
+  daemonBundle,
+  sourceDirectory,
+  stateRoot,
+  files = TUI_RUNTIME_FILES,
+} = {}) {
+  if (!daemonBundle || !sourceDirectory || !stateRoot) {
+    throw new Error("daemonBundle, sourceDirectory, and stateRoot are required to materialize the daemon runtime");
+  }
+  const bundlePath = resolve(daemonBundle);
+  const sourceRoot = resolve(sourceDirectory);
+  const persistentRoot = resolve(stateRoot);
+  if (!existsSync(bundlePath)) {
+    throw new Error(`Required Supervisor daemon bundle is missing: ${bundlePath}`);
+  }
+  const contents = [{ name: DAEMON_RUNTIME_ENTRY, content: readFileSync(bundlePath) }];
+  for (const name of files) {
+    const sourcePath = join(sourceRoot, name);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`Required daemon runtime file is missing: ${sourcePath}`);
+    }
+    contents.push({ name, content: readFileSync(sourcePath) });
+  }
+  const digest = createHash("sha256");
+  for (const item of contents) {
+    digest.update(item.name);
+    digest.update("\0");
+    digest.update(item.content);
+    digest.update("\0");
+  }
+  const fingerprint = digest.digest("hex");
+  const runtimeRoot = join(persistentRoot, "runtime", `daemon-${fingerprint.slice(0, 20)}`);
+  mkdirSync(runtimeRoot, { recursive: true });
+  for (const item of contents) {
+    writeDerivedFile(join(runtimeRoot, item.name), item.content);
+  }
+  return {
+    fingerprint,
+    runtimeRoot,
+    daemonScript: join(runtimeRoot, DAEMON_RUNTIME_ENTRY),
     files: contents.map((item) => join(runtimeRoot, item.name)),
   };
 }

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 import {
@@ -25,6 +25,7 @@ import {
 import {
   listBootEnvFiles,
   ensureSupervisorConnected,
+  materializeLifecycleSupervisorRuntime,
   pingSupervisor,
 } from '../cursor-lifecycle-client.mjs';
 import {
@@ -73,6 +74,29 @@ test('Cursor launch never uses privileged or invalid CDP ports', () => {
   assert.equal(resolveCursorLaunchCdpPort(0), 9223);
   assert.equal(resolveCursorLaunchCdpPort(9223), 9223);
   assert.equal(resolveCursorLaunchCdpPort(9333), 9333);
+});
+
+test('lifecycle supervisor runtime is content-addressed outside the plugin source', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-supervisor-runtime-'));
+  const source = join(root, 'source-supervisor.mjs');
+  const state = join(root, 'state');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(source, 'console.log("v1")\n', 'utf8');
+
+  const first = materializeLifecycleSupervisorRuntime({ sourceScript: source, dir: state });
+  const second = materializeLifecycleSupervisorRuntime({ sourceScript: source, dir: state });
+  assert.equal(first.script, second.script);
+  assert.equal(first.fingerprint, second.fingerprint);
+  assert.equal(readFileSync(first.script, 'utf8'), 'console.log("v1")\n');
+  assert.match(first.script, /[\\/]runtime[\\/]supervisor-/);
+  assert.equal(first.runtimeRoot.startsWith(state), true);
+  assert.notEqual(dirname(first.script), dirname(source));
+  assert.notEqual(first.script, source);
+
+  writeFileSync(source, 'console.log("v2")\n', 'utf8');
+  const changed = materializeLifecycleSupervisorRuntime({ sourceScript: source, dir: state });
+  assert.notEqual(changed.fingerprint, first.fingerprint);
+  assert.notEqual(changed.script, first.script);
 });
 
 test('existing Editor targets can recover a project binding while generic Agents titles cannot', () => {
@@ -340,7 +364,7 @@ function killPid(pid) {
   if (!pid) return;
   try {
     if (process.platform === 'win32') {
-      spawn('taskkill', ['/PID', String(pid), '/F', '/T'], { stdio: 'ignore', windowsHide: true });
+      spawnSync('taskkill', ['/PID', String(pid), '/F', '/T'], { stdio: 'ignore', windowsHide: true });
     } else {
       process.kill(pid, 'SIGTERM');
     }
@@ -475,7 +499,7 @@ test('client best-effort deletes boot-env on spawn failure', async (t) => {
     await withEnv({
       ...process.env,
       CURSOR_BRIDGE_LIFECYCLE_DIR: dir,
-      CURSOR_BRIDGE_SUPERVISOR_SCRIPT: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+      CURSOR_BRIDGE_SUPERVISOR_SCRIPT: join(REPO, 'dist', 'cursor-lifecycle-supervisor.mjs'),
       CURSOR_BRIDGE_ENSURE_MODULE: MOCK_ENSURE,
       CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL: '1',
     }, async () => {
@@ -507,7 +531,7 @@ test('successful supervisor start leaves no boot-env-* files', async () => {
       CURSOR_BRIDGE_ENSURE_MODULE: MOCK_ENSURE,
       CURSOR_BRIDGE_TEST_COUNTER: counter,
       CURSOR_BRIDGE_SUPERVISOR_IDLE_MS: '5000',
-      CURSOR_BRIDGE_SUPERVISOR_SCRIPT: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+      CURSOR_BRIDGE_SUPERVISOR_SCRIPT: join(REPO, 'dist', 'cursor-lifecycle-supervisor.mjs'),
     }, async () => {
       const ready = await pingSupervisor();
       assert.equal(ready.ok, true);

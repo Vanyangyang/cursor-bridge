@@ -44,6 +44,7 @@ import {
   summarizeCdpPages,
   isBlankAgentsWindow,
   shouldRecoverNormalAgentsPresentation,
+  releaseAdapterWorkingDirectory,
   PLUGIN_VERSION,
 } from '../server.mjs';
 
@@ -69,6 +70,18 @@ test('status snapshot lists CDP titles without requiring a live page probe', () 
     title: 'Cursor Settings - cursor-bridge - Cursor',
     probeError: 'ignored',
   }), false);
+});
+
+test('adapter releases the plugin cache cwd into the stable lifecycle directory', (t) => {
+  const target = mkdtempSync(join(tmpdir(), 'cb-adapter-runtime-cwd-'));
+  t.after(() => rmSync(target, { recursive: true, force: true }));
+  let changedTo = null;
+  const released = releaseAdapterWorkingDirectory({
+    targetDir: target,
+    chdir(value) { changedTo = value; },
+  });
+  assert.equal(released, target);
+  assert.equal(changedTo, target);
 });
 
 test('normal Agents reuse requests a bounded non-activating compositor recovery', async () => {

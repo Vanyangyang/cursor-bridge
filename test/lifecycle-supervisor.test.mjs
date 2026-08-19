@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -30,7 +30,7 @@ function envFor(dir, counter) {
     CURSOR_BRIDGE_TEST_COUNTER: counter,
     CURSOR_BRIDGE_TEST_ENSURE_DELAY_MS: '150',
     CURSOR_BRIDGE_SUPERVISOR_IDLE_MS: '5000',
-    CURSOR_BRIDGE_SUPERVISOR_SCRIPT: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+    CURSOR_BRIDGE_SUPERVISOR_SCRIPT: join(REPO, 'dist', 'cursor-lifecycle-supervisor.mjs'),
   };
 }
 
@@ -81,6 +81,8 @@ test('concurrent adapters share one supervisor ensure flight', async () => {
       const ready = await pingSupervisor();
       assert.equal(ready.ok, true);
       assert.ok(ready.supervisorPid);
+      assert.match(ready.runtimeScript, /[\\/]runtime[\\/]supervisor-/);
+      assert.match(ready.runtimeFingerprint, /^[a-f0-9]{64}$/);
 
       const results = await Promise.all([
         ensureCursorViaSupervisor({ reason: 't1', waitMs: 1000 }),
@@ -214,6 +216,43 @@ test('singleton reconnect after supervisor restart', async () => {
   } finally {
     await stopSupervisor(dir);
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('idle lifecycle supervisor rolls to a new content-addressed runtime', async () => {
+  const { dir, counter } = makeLifecycleSandbox();
+  const pluginCache = mkdtempSync(join(tmpdir(), 'cb-versioned-plugin-cache-'));
+  const movedPluginCache = `${pluginCache}-old`;
+  const sourceScript = join(pluginCache, 'source-supervisor.mjs');
+  const bundled = readFileSync(join(REPO, 'dist', 'cursor-lifecycle-supervisor.mjs'), 'utf8');
+  writeFileSync(sourceScript, `${bundled}\n// runtime-a\n`, 'utf8');
+  const env = {
+    ...envFor(dir, counter),
+    CURSOR_BRIDGE_SUPERVISOR_SCRIPT: sourceScript,
+  };
+  try {
+    await withEnv(env, async () => {
+      const first = await pingSupervisor();
+      assert.equal(first.ok, true);
+      assert.ok(first.supervisorPid);
+      assert.match(first.runtimeScript, /[\\/]runtime[\\/]supervisor-/);
+
+      // Windows can rename the old versioned cache while the persistent supervisor is alive.
+      renameSync(pluginCache, movedPluginCache);
+      mkdirSync(pluginCache, { recursive: true });
+      writeFileSync(sourceScript, `${bundled}\n// runtime-b\n`, 'utf8');
+      const second = await pingSupervisor();
+      assert.equal(second.ok, true);
+      assert.notEqual(second.runtimeFingerprint, first.runtimeFingerprint);
+      assert.notEqual(second.runtimeScript, first.runtimeScript);
+      assert.notEqual(second.supervisorPid, first.supervisorPid);
+      assert.equal(second.createdSupervisor, true);
+    });
+  } finally {
+    await stopSupervisor(dir);
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(pluginCache, { recursive: true, force: true });
+    rmSync(movedPluginCache, { recursive: true, force: true });
   }
 });
 

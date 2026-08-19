@@ -43,8 +43,9 @@ import {
   writeWorkspaceBinding,
 } from './workspace-binding.mjs';
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
+import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.3.6';
+const PLUGIN_VERSION = '5.4.0';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -812,8 +813,15 @@ function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
   };
 }
 
+function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
+  const target = ensureLifecycleDir(targetDir);
+  chdir(target);
+  return target;
+}
+
 class CursorBridge {
   constructor(options = {}) {
+    this.adapterStartCwd = resolve(options.adapterStartCwd || process.cwd());
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     this._syncDelegationState();
     this.runtimeFile = options.runtimeFile === null
@@ -1350,6 +1358,7 @@ class CursorBridge {
         const rr = await ensureCursorRunning({
           reason: 'adapter-heal',
           runtimeMode: this.runtimeMode,
+          adapterStartCwd: this.adapterStartCwd,
           ...(this.projectPath ? { projectPath: this.projectPath } : {}),
         });
         this._lastLifecycle = {
@@ -1372,6 +1381,8 @@ class CursorBridge {
           retryable: rr.retryable === true,
           cursorExecutable: rr.cursorExecutable || null,
           cursorExecutableSource: rr.cursorExecutableSource || null,
+          runtimeFingerprint: rr.runtimeFingerprint || null,
+          runtimeScript: rr.runtimeScript || null,
         };
         if (!rr.ok && rr.status === 'workspace-not-ready' && rr.projectPath) {
           const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
@@ -2871,9 +2882,10 @@ function buildToolDefinitions(bridgeInstance) {
   ].filter(Boolean);
 }
 
-const bridge = new CursorBridge();
+const ADAPTER_START_CWD = process.cwd();
+const bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.3.6' },
+  { name: 'cursor-bridge', version: '5.4.0' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -2883,6 +2895,7 @@ async function ensureBridgeCursor(targetBridge, reason) {
   const r = await ensureCursorRunning({
     reason,
     runtimeMode: targetBridge.runtimeMode,
+    adapterStartCwd: targetBridge.adapterStartCwd,
     ...(targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}),
   });
   targetBridge._lastLifecycle = {
@@ -2907,6 +2920,8 @@ async function ensureBridgeCursor(targetBridge, reason) {
     retryable: r.retryable === true,
     cursorExecutable: r.cursorExecutable || null,
     cursorExecutableSource: r.cursorExecutableSource || null,
+    runtimeFingerprint: r.runtimeFingerprint || null,
+    runtimeScript: r.runtimeScript || null,
   };
   if (targetBridge.runtimeMode === 'minimal') {
     targetBridge._lastPresentation = r.presentation
@@ -3000,6 +3015,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   console.error('🚀 启动 cursor-bridge（CDP 直驱 :' + CDP_PORT + '）...');
+  const releasedCwd = releaseAdapterWorkingDirectory();
+  console.error(`🔓 MCP 工作目录已移出插件缓存：${releasedCwd}`);
   // Prewarm both runtime modes before the MCP handshake completes. In minimal mode this claims
   // Cursor's default single-instance slot with CDP enabled, then the PID-scoped guard keeps its
   // windows hidden. That prevents later "Open in Cursor" actions from stealing the slot without 9223.
@@ -3071,5 +3088,6 @@ export {
   promoteAgentsWorkspaceLifecycle,
   isBlankAgentsWindow,
   shouldRecoverNormalAgentsPresentation,
+  releaseAdapterWorkingDirectory,
   PLUGIN_VERSION,
 };

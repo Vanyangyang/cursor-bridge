@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Persistent Grok Build supervision with proxy initialization, task-local workspace binding, immediate visible TUI startup on executor activation, compact polling, and long-result artifacts.",
   "author": {
     "name": "Vanyangyang"
