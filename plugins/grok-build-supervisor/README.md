@@ -50,20 +50,20 @@ The plugin first tries the local proxy settings already on your computer. If non
 /grok_init http://127.0.0.1:<port>
 ```
 
-The choice is saved outside the plugin cache, so plugin updates do not erase it. Run `/grok_init` again if your proxy port changes. Initialization never opens Grok or sends it a task, and it will not change the proxy while Grok is busy.
+The proxy choice is saved outside the plugin cache, so plugin updates do not erase it. Run `/grok_init` again if your proxy port changes. Initialization never opens Grok, chooses a project, or sends a task, and it will not change the proxy while Grok is busy.
 
-Turn supervised execution on:
+Open the project you want to work on, then turn supervised execution on:
 
 ```text
 /grok_execute on
 ```
 
-Then ask for work normally. Codex or Claude Code decides whether to reuse the current Grok session or open the right one for the project, sends the approved task, and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
+At that moment Codex or Claude Code binds executor mode to the current project directory and immediately reuses or starts its visible Grok terminal. Activation does not send a coding task. When the terminal is ready, ask for work normally; the host sends the separately approved task and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
 
-Turning the mode on does not open Grok or send a task by itself; it changes how the next ordinary tasks are handled. The first task that needs Grok causes the plugin to reuse or open the session automatically.
+The project binding lasts only for the current Codex or Claude Code task. Turning the mode off clears that binding but does not close the terminal or cancel work already in progress.
 
 > [!TIP]
-> Grok opens in a visible Windows Terminal window by default. If you do not want to see it for a particular task, say “Run this one without showing the Grok terminal.” The plugin never hides the window unless you ask, and it does not quietly switch to background mode when a visible launch fails.
+> `/grok_execute on` opens Grok in a visible Windows Terminal window by default. If this activation should be headless, say so before running `on`, for example: “Do not show the Grok terminal this time.” The plugin never hides the window unless you ask, and it does not quietly switch to background mode when a visible launch fails.
 
 While the mode is on:
 

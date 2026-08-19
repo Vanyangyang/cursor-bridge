@@ -38,10 +38,10 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-Run `/grok_init` once to set up the local proxy. After that, everyday use needs only `/grok_execute on` and `/grok_execute off`. While the mode is on, give Codex or Claude Code a normal task; the plugin finds, reuses, or opens the right Grok session by itself.
+Run `/grok_init` once to set up the local proxy. In the project you want to use, `/grok_execute on` binds that project for the current task and immediately reuses or opens its visible Grok terminal; it does not send a coding task. Then give Codex or Claude Code work normally. Use `/grok_execute off` to leave the mode.
 
 > [!TIP]
-> Grok opens in a visible Windows Terminal window by default. If you do not want to see it for a particular task, say so plainly, for example: “Run this one without showing the Grok terminal.” The plugin never hides the window unless you ask.
+> `/grok_execute on` opens Grok in a visible Windows Terminal window by default. If this activation should be headless, say so before running `on`. The plugin never hides the window unless you ask.
 
 [Read the Grok Build Supervisor documentation →](./plugins/grok-build-supervisor/README.md)
 

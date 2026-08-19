@@ -84,6 +84,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   }
   assert.match(grokInitCommand, /call `grok_init`/);
   assert.match(grokInitCommand, /must not create or resume a Grok session/);
+  assert.match(grokInitCommand, /only the persistent local proxy configuration/);
+  assert.doesNotMatch(grokInitCommand, /bind(?:s|ing)? the current (?:project|workspace)/i);
 });
 
 test('Grok proxy setup requires persistent initialization instead of a fixed listener port', () => {
@@ -100,11 +102,12 @@ test('Grok proxy setup requires persistent initialization instead of a fixed lis
   assert.match(readProjectFile('plugins/grok-build-supervisor/commands/grok_init.md'), /HTTP CONNECT/);
 });
 
-test('Grok README keeps TUI lifecycle internal and presents simple daily controls', () => {
+test('Grok activation binds the current workspace and immediately ensures the visible TUI', () => {
   const manifest = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.codex-plugin/plugin.json'));
   const english = readProjectFile('plugins/grok-build-supervisor/README.md');
   const chinese = readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md');
   const executeCommand = readProjectFile('plugins/grok-build-supervisor/commands/grok_execute.md');
+  const executorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-executor-mode/SKILL.md');
   const supervisorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/SKILL.md');
   const supervisorMetadata = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/agents/openai.yaml');
 
@@ -115,12 +118,19 @@ test('Grok README keeps TUI lifecycle internal and presents simple daily control
   }
   assert.doesNotMatch(english, /Create a new Grok TUI|Create a guarded visible TUI/);
   assert.doesNotMatch(chinese, /在当前项目创建一个 Grok TUI|用自然语言创建受监督的可见 TUI/);
+  assert.doesNotMatch(english, /Turning the mode on does not open Grok/);
+  assert.doesNotMatch(chinese, /开启模式本身不会立即打开 Grok/);
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => /Create a new Grok TUI/i.test(prompt)), false);
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute on')), true);
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute off')), true);
-  assert.match(executeCommand, /Never ask the user to run a separate command or give a separate instruction/);
-  assert.match(executeCommand, /directly tell me the task|直接告诉我任务即可/);
-  assert.match(supervisorSkill, /Session setup is an internal part of dispatching an authorized task/);
+  assert.match(executeCommand, /bind Grok Executor Mode to the current host task's absolute project directory/);
+  assert.match(executeCommand, /call `grok_session_open`/);
+  assert.match(executeCommand, /OPEN_GROK_SESSION/);
+  assert.match(executeCommand, /must not call `grok_session_prompt`/);
+  assert.match(executeCommand, /must not be written to global proxy settings/);
+  assert.match(executorSkill, /immediately reuse or open its guarded session/);
+  assert.match(executorSkill, /Opening the TUI is authorized by `on`, but sending a development prompt is not/);
+  assert.match(supervisorSkill, /Call `grok_session_open` during `\/grok_execute on`/);
   assert.doesNotMatch(supervisorSkill, /正在通过 Grok Build Supervisor 创建 TUI|Grok TUI 已创建并就绪|新建\/创建一个 Grok TUI/);
   assert.doesNotMatch(supervisorMetadata, /open or resume a guarded Grok TUI/);
 });
