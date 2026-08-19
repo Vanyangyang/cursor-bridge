@@ -177,6 +177,31 @@ function isBlankAgentsWindow(page) {
   return page.capabilities.uiFlavor !== 'agents_v2' && !page.capabilities.hasWritableInput;
 }
 
+const NORMAL_AGENTS_PRESENTATION_REFRESH_MS = 5 * 60 * 1000;
+
+function shouldRecoverNormalAgentsPresentation({
+  runtimeMode,
+  workspaceAction,
+  cursorPid,
+  lastPresentation,
+  platform = process.platform,
+  now = Date.now(),
+  refreshMs = NORMAL_AGENTS_PRESENTATION_REFRESH_MS,
+} = {}) {
+  if (platform !== 'win32' || runtimeMode !== 'normal') return false;
+  if (!['reused-agents-window', 'reused-agents-repository'].includes(workspaceAction)) return false;
+  if (!Number.isInteger(Number(cursorPid)) || Number(cursorPid) <= 0) return false;
+  if (!lastPresentation
+    || lastPresentation.applied !== true
+    || lastPresentation.action !== 'show'
+    || Number(lastPresentation.pid) !== Number(cursorPid)) {
+    return true;
+  }
+  const previousAt = Date.parse(String(lastPresentation.at || ''));
+  if (!Number.isFinite(previousAt)) return true;
+  return Number(now) - previousAt >= Math.max(0, Number(refreshMs) || 0);
+}
+
 async function reloadPageTarget(page, timeoutMs = 5000) {
   if (!page || !page.webSocketDebuggerUrl) return false;
   const c = makeClient(page.webSocketDebuggerUrl);
@@ -1005,6 +1030,21 @@ class CursorBridge {
     return this._lastPresentation;
   }
 
+  async recoverNormalAgentsPresentation(lifecycle = this._lastLifecycle, now = Date.now()) {
+    if (!shouldRecoverNormalAgentsPresentation({
+      runtimeMode: this.runtimeMode,
+      workspaceAction: lifecycle?.workspaceAction,
+      cursorPid: lifecycle?.cursorPid,
+      lastPresentation: this._lastPresentation,
+      now,
+    })) {
+      return null;
+    }
+    const presentation = await this.applyRuntimePresentation('show');
+    if (lifecycle && typeof lifecycle === 'object') lifecycle.presentation = presentation;
+    return presentation;
+  }
+
   async setRuntimeMode(value, scope = 'persistent') {
     const normalizedScope = String(scope || 'persistent').trim().toLowerCase();
     if (!['persistent', 'session'].includes(normalizedScope)) {
@@ -1343,6 +1383,8 @@ class CursorBridge {
           this._lastPresentation = rr.presentation
             ? { ...rr.presentation, at: new Date().toISOString() }
             : await this.applyRuntimePresentation('hide');
+        } else {
+          await this.recoverNormalAgentsPresentation(this._lastLifecycle);
         }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
         if (!rr.ok && this._lastLifecycle.status !== 'agents-workspace-ready') {
@@ -3028,5 +3070,6 @@ export {
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
   isBlankAgentsWindow,
+  shouldRecoverNormalAgentsPresentation,
   PLUGIN_VERSION,
 };

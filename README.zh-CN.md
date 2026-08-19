@@ -232,7 +232,7 @@ Cursor Agent + project index
 - 多个 MCP adapter 共用一个用户级 lifecycle supervisor，并在读取状态或执行生命周期操作前重新同步持久运行模式。
 - workbench 和 Agents Window 同时开着时，Bridge 优先在当前项目的 Agents Window 里工作；只有 workbench 时就用 workbench。不会落到 `Home`。
 - Agents Window 已经打开时，ensure 会复用该 CDP 页，不再执行 `Cursor.exe --new-window`。只有 Cursor 已连接、且既没有 Agents Window、也没有标题匹配的编辑器窗口时，才会再开一个 workbench。
-- `cursor_status` 只列 CDP 页标题，不再探测页面 DOM。Agents Window 白屏时，CCE 会先对该页做一次 reload，再继续。
+- `cursor_status` 只列 CDP 页标题，不再探测页面 DOM。CCE 会对 DOM 确实为空的 Agents 页 reload 一次；Windows normal 模式复用 Agents Window 时还会进行一次有节流、无抢焦点的原生合成器重绘，避免 DOM 正常却只显示 Electron 白色表面。
 - 缓存 target 的窗口标题不再匹配项目时会被拒绝；但 `Cursor Agents` 这个 Agents Window 标题是合法的可复用 target。
 - Cursor 使用旧 UI、新 UI 还是同时开启，仍由用户决定；Bridge 不会改写偏好。
 - Windows 上 supervisor 不会随单个 Codex、Claude Code 或 Grok 会话关闭而退出 Cursor。
