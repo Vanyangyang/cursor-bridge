@@ -41,6 +41,19 @@ Installing Grok Build Supervisor does not install or start Cursor Bridge.
 > [!WARNING]
 > **Before the first upgrade from Grok Build Supervisor 0.1.0 or earlier to 0.2.0, do one complete shutdown.** Save your work, exit Codex and Claude Code instances using the plugin, and close visible Grok TUI windows. The old daemon, an MCP adapter, or a TUI may still be holding the cache that must be replaced; `cursor-lifecycle-supervisor.mjs` is not the only possible holder. In PowerShell, list and then stop only the residual processes belonging to these two plugins:
 
+> [!TIP]
+> You can ask a local coding Agent to perform the migration safely. Copy and paste this prompt:
+
+```text
+Help me perform the one-time Windows cache-lock migration for Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0.
+
+1. First inspect processes read-only. List the PID, process name, and full command line only for exact plugin matches involving cursor-lifecycle-supervisor.mjs, /dist/cursor-bridge.mjs, Grok Build Supervisor server/daemon/TUI scripts, or Start-GrokTui.ps1.
+2. If a matched Grok TUI or Leader may still be doing work, or I have not confirmed that work is saved, stop and ask me to save and close it. Do not terminate active work.
+3. After I confirm, stop only the verified residual plugin processes. Never stop every node.exe, powershell.exe, or pwsh.exe process.
+4. Do not change Windows ACLs and do not manually delete plugin cache directories.
+5. Run the normal marketplace update and plugin install/update commands for my current host. Finally report the installed versions, marketplace source, and whether any matching residual process remains.
+```
+
 ```powershell
 $oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
   $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and

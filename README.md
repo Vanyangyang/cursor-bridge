@@ -16,7 +16,7 @@
 | **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 > [!IMPORTANT]
-> Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge. If you are upgrading Cursor Bridge 5.3.6 or earlier to 5.4.0 on Windows, save your work, fully exit every Codex, Claude Code, or Grok Build instance using these plugins, and close any visible Grok TUI. Then follow the scoped PowerShell cleanup under [Update an existing installation](#windows-update-migration) before rerunning the normal update commands. This cleanup is required only once; later updates use the normal flow.
+> Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge. If you are upgrading Cursor Bridge 5.3.6 or earlier to 5.4.0 on Windows, save your work, fully exit every Codex, Claude Code, or Grok Build instance using these plugins, and close any visible Grok TUI. Then follow the scoped PowerShell cleanup under [Update an existing installation](#windows-update-migration) before rerunning the normal update commands. That section also includes a ready-to-copy Agent prompt if you prefer guided cleanup. This cleanup is required only once; later updates use the normal flow.
 
 ## Grok Build Supervisor
 
@@ -152,6 +152,19 @@ Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installin
 
 > [!WARNING]
 > **Before the first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0, do one complete shutdown.** `cursor-lifecycle-supervisor.mjs` is not the only possible cache holder: a live MCP adapter and the old Grok Build Supervisor daemon may also have the versioned plugin cache as their working directory, which prevents Windows from replacing it. Save your work, exit Codex, Claude Code, and Grok Build instances using these plugins, and close visible Grok TUI windows. Then use PowerShell to remove only the residual plugin processes:
+
+> [!TIP]
+> You can ask a local coding Agent to perform the migration safely. Copy and paste this prompt:
+
+```text
+Help me perform the one-time Windows cache-lock migration for Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0.
+
+1. First inspect processes read-only. List the PID, process name, and full command line only for exact plugin matches involving cursor-lifecycle-supervisor.mjs, /dist/cursor-bridge.mjs, Grok Build Supervisor server/daemon/TUI scripts, or Start-GrokTui.ps1.
+2. If a matched Grok TUI or Leader may still be doing work, or I have not confirmed that work is saved, stop and ask me to save and close it. Do not terminate active work.
+3. After I confirm, stop only the verified residual plugin processes. Never stop every node.exe, powershell.exe, or pwsh.exe process.
+4. Do not change Windows ACLs and do not manually delete plugin cache directories.
+5. Run the normal marketplace update and plugin install/update commands for my current host. Finally report the installed versions, marketplace source, and whether any matching residual process remains.
+```
 
 ```powershell
 $oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
