@@ -4,7 +4,7 @@
 
 **Let Codex or Claude Code plan, supervise, correct, and verify persistent Grok Build execution through MCP.**
 
-Grok Build Supervisor is an independently installable plugin for Codex and Claude Code in the Cursor Bridge + Grok Build Supervisor repository. It opens or resumes a real Grok Build TUI in Windows Terminal, keeps a daemon-owned ACP connection alive across host tasks and plugin reloads, and gives the host agent a bounded control plane for progress, permissions, clarification, cancellation, and final evidence.
+Grok Build Supervisor is a separate plugin for Codex and Claude Code. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when a host task ends or the plugin is reloaded. Codex or Claude Code can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
 
 > [!NOTE]
 > Live-tested on Windows 11 with Windows Terminal, PowerShell, and Grok Build 1.0.6. Other operating systems are not currently claimed as end-to-end supported.
@@ -38,85 +38,77 @@ Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
 ## Use it
 
-Initialize the user-level proxy setting once before opening the first session:
+The first time you use the plugin, initialize the local proxy once:
 
 ```text
 /grok_init
 ```
 
-The Supervisor checks current local proxy candidates first, then performs a bounded loopback listener scan only when necessary. It persists a port only after the endpoint completes an HTTP CONNECT probe; there is no fixed default port. If multiple proxies verify, select one explicitly:
+The plugin first tries the local proxy settings already on your computer. If none works, it checks a limited set of local listening ports. It saves a choice only after proving that the proxy can actually carry an HTTPS connection; an open port by itself is not enough. There is no hard-coded default. If more than one proxy works, choose one:
 
 ```text
 /grok_init http://127.0.0.1:<port>
 ```
 
-The setting lives in the persistent Supervisor state root rather than the plugin cache. Re-run `/grok_init` when the local proxy port changes. Initialization never opens a TUI or sends a prompt, and it is refused while the Supervisor owns active work.
+The choice is saved outside the plugin cache, so plugin updates do not erase it. Run `/grok_init` again if your proxy port changes. Initialization never opens Grok or sends it a task, and it will not change the proxy while Grok is busy.
 
-Create a guarded visible TUI in natural language:
-
-```text
-Create a new Grok TUI in this project.
-```
-
-The host agent can then send an authorized task through ACP and keep waiting until Grok completes, fails, asks for input, or requests an exact permission decision.
-
-Visible Windows Terminal TUI is the default. ACP-only `presentation: none` is permitted only when the user explicitly asks for headless or invisible operation; the plugin requires a separate headless confirmation and never chooses it as a fallback.
-
-### Task-local executor mode
-
-Enable the explicit task-local mode:
+Turn supervised execution on:
 
 ```text
 /grok_execute on
 ```
 
-After it is enabled, ordinary implementation requests in that host task follow this role contract:
+Then ask for work normally. Codex or Claude Code decides whether to reuse the current Grok session or open the right one for the project, sends the approved task, and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
 
-- The host agent plans, decomposes, supervises, corrects, and verifies.
+Turning the mode on does not open Grok or send a task by itself; it changes how the next ordinary tasks are handled. The first task that needs Grok causes the plugin to reuse or open the session automatically.
+
+> [!TIP]
+> Grok opens in a visible Windows Terminal window by default. If you do not want to see it for a particular task, say “Run this one without showing the Grok terminal.” The plugin never hides the window unless you ask, and it does not quietly switch to background mode when a visible launch fails.
+
+While the mode is on:
+
+- Codex or Claude Code plans the work, breaks it down, watches it, corrects course, and checks the result.
 - Grok performs implementation, mutating commands, builds, and tests.
-- The host agent independently checks the resulting workspace evidence before accepting completion.
+- Codex or Claude Code checks the actual files and test evidence before accepting completion.
 
-Disable it explicitly:
+Turn the mode off when you want Codex or Claude Code to handle tasks normally again:
 
 ```text
 /grok_execute off
 ```
 
-Only the exact `on` and `off` forms change the task-local state. Enabling the mode does not itself open a TUI or send a task, and disabling it does not automatically cancel a running Grok prompt or stop the owned Leader.
+Only the exact `on` and `off` forms change the mode. Turning it off does not cancel work that is already running; the plugin finishes supervising that work safely.
 
-## Control plane
+## How it stays connected
 
 ```text
-Host task(s)
-      │ authenticated local Named Pipe
-      ▼
-Persistent Supervisor daemon
-      ├─ owned Grok Leader
-      ├─ long-lived ACP session
-      ├─ bounded event journal
-      └─ verified Windows Terminal TUI process
+Codex or Claude Code
+        ↓
+Background Supervisor
+        ↓
+Grok Build + the Windows Terminal window
 ```
 
-- The daemon survives an individual host frontend exiting or being replaced during a plugin update.
-- Multiple host tasks may inspect the same session; a writer lease and fencing token keep one active writer.
-- ACP continuously records progress, completion, permission, and clarification events. The host agent uses bounded interaction waits while its turn remains active.
-- Operational polls coalesce routine events to one high-water cursor and suppress cumulative Grok prose while work is active. Raw message chunks become throttled activity metadata in the durable journal, and the final response is delivered only when completion is newer than the caller cursor, so advancing that cursor prevents repeated context ingestion.
-- Completed responses over 4000 UTF-8 bytes are atomically stored under the persistent Supervisor state root. The host receives a path, byte size, SHA-256, truncation flag, and short summary instead of the long body. Context-mode may process that file when already installed, but it is neither bundled nor required; bounded local reading remains the fallback.
-- Each MCP frontend carries its actual host identity in the authenticated daemon envelope, so Grok sees a Codex, Claude Code, or neutral host supervision contract matching the sender.
-- TUI launcher files are content-addressed into the persistent Supervisor runtime directory before use; a plugin-cache refresh cannot remove the script underneath a live daemon.
-- When a pre-capability daemon is still busy during an update, the new frontend keeps safe observation/control available but refuses new initialization, session opens, or a host-mislabeled prompt. Exit the visible TUI normally and retry so the daemon can roll forward.
-- Windows Terminal is presentation only. Leader ownership, ACP, process fingerprints, and the active-session registry are the authority layer.
+The Supervisor handles the connection details. Users do not manage the underlying Leader, ACP connection, process IDs, or event cursor.
 
-## Safety
+- Closing one Codex or Claude Code task, or updating the plugin, does not immediately disconnect the background Supervisor.
+- More than one host can view the same Grok session, but only one can send commands at a time. This prevents two agents from writing over each other.
+- Status checks return small updates while Grok is working. They do not keep returning the full answer accumulated so far.
+- Short final answers are returned once. A longer report is saved as a local file, and the plugin returns its location, size, checksum, truncation status, and a short summary. Context-mode can process that file when already installed, but it is optional.
+- Grok is told whether the sender is Codex, Claude Code, or another host, instead of always being told that Codex sent the task.
+- The scripts needed by an already-running session are copied to persistent storage, so refreshing the plugin cache cannot remove them mid-session.
+- A newer plugin waits until an older busy Supervisor is idle before replacing it. Existing work stays connected during the transition.
+- Before reusing or stopping a process, the plugin checks the session, project, process identity, Grok's active-session record, and its own ownership record. A matching process number alone is not enough.
 
-- No `--yolo`, `--always-approve`, or silent permission selection.
-- No keyboard simulation and no adoption or termination of unrelated Grok processes.
-- No silent headless fallback; normal sessions always use a visible Windows Terminal TUI.
-- No remote proxy, stored proxy credentials, fixed port, or TCP-listener-only acceptance; initialization requires a verified loopback HTTP CONNECT endpoint.
-- No model-supplied host identity; the daemon trusts only the bounded identity attached by the MCP frontend.
-- PID liveness alone is never ownership proof; rollback requires a matching durable process fingerprint.
-- Grok completion text is an agent claim. The host agent must verify files, diffs, tests, and other requested evidence.
-- The plugin does not broaden authorization for destructive commands, publication, external messages, secrets, or product decisions.
+## Safety rules
+
+- The plugin never turns on approve-everything modes or chooses a permission for you.
+- It does not type into the terminal, take over an unrelated Grok process, or stop a process it cannot prove it owns.
+- It does not hide the terminal unless you explicitly ask for no visible window.
+- It accepts only a local proxy that can actually carry the required connection. It does not store proxy passwords or assume one fixed port.
+- Grok cannot choose its own sender label; the local MCP connection supplies it.
+- “Grok says it is done” is not proof. Codex or Claude Code still checks the files, diff, tests, and other evidence you requested.
+- Installing the plugin does not grant permission to delete data, publish code, send outside messages, read secrets, or make product decisions.
 
 ## Compatibility note
 

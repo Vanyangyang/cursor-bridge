@@ -12,6 +12,7 @@ Use `$grok-build-supervisor` as the required transport and lifecycle contract. T
 - Only an exact, case-insensitive `/grok_execute on` activates the mode for the current host task. It does not open a TUI or send work. Reply with a short activation confirmation.
 - The most recent exact `/grok_execute on` or `/grok_execute off` instruction in this task controls the mode. Activation remains a task-local user instruction until `off` or the task ends; never write it to global configuration.
 - While active, automatically apply this role contract to every subsequent ordinary user task that requires execution. The user does not repeat a slash command or Skill name for each task.
+- Do not ask the user to create, resume, select, or manage a TUI, session ID, process, Leader, or ACP connection. When the next task needs Grok, reuse or open the correct guarded session automatically. A visible TUI remains the default unless the user explicitly asks not to show it for that task.
 - Only an exact, case-insensitive `/grok_execute off` deactivates the mode. It does not automatically cancel a running prompt, disconnect ACP, or stop the owned Leader; continue any already-required Supervisor monitoring under the normal transport contract and report that work separately.
 - `/grok_execute` with no argument or any argument other than the exact control words changes nothing and returns only the two valid forms.
 - Direct `$grok-executor-mode` invocation may explain or apply the policy only when a prior `/grok_execute on` is active. It never changes mode state itself.

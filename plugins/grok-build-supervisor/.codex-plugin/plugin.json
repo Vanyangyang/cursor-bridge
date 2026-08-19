@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.1.0+codex.20260819151428",
+  "version": "0.1.0+codex.20260819153020",
   "description": "Persistent Grok Build Leader/ACP supervision with verified local-proxy initialization and visible Windows Terminal TUI control.",
   "author": {
     "name": "Vanyangyang",
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Grok Build Supervisor",
     "shortDescription": "Keep guarded Grok TUI sessions connected across host tasks and plugin reloads.",
-    "longDescription": "Initialize and persist one CONNECT-verified local proxy without a fixed port, then run a user-level Supervisor daemon that owns Grok Leader, ACP, visible TUI records, event history, and writer fencing independently of any one host task. Thin MCP clients can observe the same session across task exits or plugin reloads while a capability-authenticated lease keeps exactly one writer. Interaction polling coalesces routine stream events, suppresses cumulative prose while Grok is working, cursor-delivers short final responses once, and hands long results off as persistent path, size, hash, and summary metadata. The optional /grok_execute on and off toggle keeps the host agent in a planning, supervision, correction, and verification role while Grok performs implementation. Context-mode can optionally process long result files but is not bundled or required. The plugin never enables always-approve, never adopts an unrelated plain TUI, and only stops processes owned by the persistent Supervisor.",
+    "longDescription": "Run /grok_init once, then use /grok_execute on and /grok_execute off for everyday control. While enabled, Codex or Claude Code automatically reuses or opens the right Grok Build session, plans and checks the work, and lets Grok handle implementation. Grok is visible in Windows Terminal unless the user explicitly asks to hide it. Status checks stay small instead of repeating a growing answer, and long reports are saved as local result files with a path, size, checksum, and short summary. Context-mode can optionally process those files but is not required. The plugin never enables approve-everything modes, adopts an unrelated Grok process, or stops a process it cannot prove it owns.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,9 +28,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Run /grok_init to discover, verify, and persist the local proxy.",
-      "Create a new Grok TUI in Windows Terminal PowerShell without sending a prompt.",
-      "Run /grok_execute on to enable task-local supervised Grok execution."
+      "Run /grok_init once to find, verify, and remember the local proxy.",
+      "Run /grok_execute on to let Grok handle implementation under supervision.",
+      "Run /grok_execute off to return to normal host execution."
     ],
     "websiteURL": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor"
   },

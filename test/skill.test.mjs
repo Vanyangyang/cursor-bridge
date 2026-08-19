@@ -100,6 +100,23 @@ test('Grok proxy setup requires persistent initialization instead of a fixed lis
   assert.match(readProjectFile('plugins/grok-build-supervisor/commands/grok_init.md'), /HTTP CONNECT/);
 });
 
+test('Grok README keeps TUI lifecycle internal and presents simple daily controls', () => {
+  const manifest = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.codex-plugin/plugin.json'));
+  const english = readProjectFile('plugins/grok-build-supervisor/README.md');
+  const chinese = readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md');
+
+  for (const content of [english, chinese]) {
+    assert.match(content, /\/grok_execute on/);
+    assert.match(content, /\/grok_execute off/);
+    assert.doesNotMatch(content, /presentation:\s*none/);
+  }
+  assert.doesNotMatch(english, /Create a new Grok TUI|Create a guarded visible TUI/);
+  assert.doesNotMatch(chinese, /在当前项目创建一个 Grok TUI|用自然语言创建受监督的可见 TUI/);
+  assert.equal(manifest.interface.defaultPrompt.some((prompt) => /Create a new Grok TUI/i.test(prompt)), false);
+  assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute on')), true);
+  assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute off')), true);
+});
+
 test('bilingual README documents plugin install and update commands', () => {
   for (const readme of ['README.md', 'README.zh-CN.md']) {
     const content = readProjectFile(readme);

@@ -13,18 +13,18 @@
 | Plugin | Use it for | Documentation |
 |---|---|---|
 | **Cursor Bridge** | Cursor project intelligence and bounded Cursor Agent execution | [Continue below](#cursor-bridge) |
-| **Grok Build Supervisor** | Persistent, context-efficient Grok Build TUI/ACP execution coordinated and verified by the host agent | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
+| **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 > [!IMPORTANT]
 > Existing Cursor Bridge users do not need to change their installation, configuration, tools, runtime, or update workflow. Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge.
 
 ## Grok Build Supervisor
 
-**Let Codex or Claude Code plan, supervise, correct, and verify persistent Grok Build execution without terminal keyboard automation.**
+**Let Codex or Claude Code manage a real Grok Build session while Grok does the hands-on work.**
 
-Grok Build Supervisor opens or resumes a real, visible Grok Build TUI in Windows Terminal while a user-level daemon owns the Leader, ACP connection, writer lease, process identity, and event journal across host-task exits and plugin reloads. The sending host supplies the project working directory and its authenticated host identity, so Grok receives the correct Codex, Claude Code, or neutral supervision contract.
+The plugin opens or resumes Grok in a visible Windows Terminal window and keeps the connection alive in the background. Closing one Codex or Claude Code task, or reloading the plugin, does not make the Grok session disappear. It also keeps the project folder and sender identity matched, and prevents two hosts from sending commands at the same time.
 
-Operational polling is bounded at the source: working calls return state and small activity metadata instead of cumulative prose, cursors advance to the latest event, and short final responses are delivered once. Results over 4000 UTF-8 bytes are stored as persistent artifacts with a path, byte size, SHA-256, truncation state, and short summary. If context-mode is already available it can process those files, but it is neither bundled nor required.
+The plugin does not send the same growing answer back on every status check. While Grok is working, it returns only a small status update. Short answers are returned once; long reports are saved to a local file and represented by the file location, size, checksum, and a short summary. If context-mode is already installed, it can extract the useful parts of that file, but it is optional.
 
 Install it independently:
 
@@ -38,7 +38,10 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-Run `/grok_init` once to discover, CONNECT-verify, and persist the local proxy. Normal sessions open a visible Windows Terminal TUI; headless operation is used only after an explicit request. `/grok_execute on` optionally enables the task-local contract where the host agent plans and verifies while Grok executes.
+Run `/grok_init` once to set up the local proxy. After that, everyday use needs only `/grok_execute on` and `/grok_execute off`. While the mode is on, give Codex or Claude Code a normal task; the plugin finds, reuses, or opens the right Grok session by itself.
+
+> [!TIP]
+> Grok opens in a visible Windows Terminal window by default. If you do not want to see it for a particular task, say so plainly, for example: “Run this one without showing the Grok terminal.” The plugin never hides the window unless you ask.
 
 [Read the Grok Build Supervisor documentation →](./plugins/grok-build-supervisor/README.md)
 
