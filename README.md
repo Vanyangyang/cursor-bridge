@@ -24,7 +24,7 @@
 
 The plugin opens or resumes Grok in a visible Windows Terminal window and keeps the connection alive in the background. Closing one Codex or Claude Code task, or reloading the plugin, does not make the Grok session disappear. It also keeps the project folder and sender identity matched, and prevents two hosts from sending commands at the same time.
 
-The plugin does not send the same growing answer back on every status check. While Grok is working, it returns only a small status update. Short answers are returned once; long reports are saved to a local file and represented by the file location, size, checksum, and a short summary. If context-mode is already installed, it can extract the useful parts of that file, but it is optional.
+The plugin does not send the same growing answer back on every status check. While Grok is working, it returns only a small status update. Short answers are returned once; long reports are saved to a local file and represented by the file location, size, checksum, and a short summary. If [context-mode (recommended)](https://github.com/mksglu/context-mode) is installed, it can extract the useful parts of that file; the Supervisor also works without it.
 
 Install it independently:
 
