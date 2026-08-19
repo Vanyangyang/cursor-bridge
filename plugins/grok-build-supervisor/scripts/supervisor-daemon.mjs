@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+import { resolve } from "node:path";
+import { SupervisorDaemon, writeDaemonStartupError } from "./supervisor-transport.mjs";
+
+function parseArgs(argv) {
+  const values = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument !== "--state-root") {
+      throw new Error(`Unknown daemon argument: ${argument}`);
+    }
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) {
+      throw new Error("--state-root requires a value");
+    }
+    values.stateRoot = resolve(value);
+    index += 1;
+  }
+  return values;
+}
+
+const options = parseArgs(process.argv.slice(2));
+const daemon = new SupervisorDaemon({ stateRoot: options.stateRoot });
+
+async function stopDaemon() {
+  await daemon.stop().catch(() => {});
+}
+
+process.once("SIGINT", () => stopDaemon().finally(() => process.exit(0)));
+process.once("SIGTERM", () => stopDaemon().finally(() => process.exit(0)));
+
+try {
+  await daemon.start();
+} catch (error) {
+  if (error?.code === "EADDRINUSE") {
+    process.exit(0);
+  }
+  writeDaemonStartupError(options.stateRoot, error);
+  process.exitCode = 1;
+}

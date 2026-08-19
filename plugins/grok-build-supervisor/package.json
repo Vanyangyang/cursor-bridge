@@ -1,0 +1,20 @@
+{
+  "name": "grok-build-supervisor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistent user-level Supervisor daemon with verified local-proxy initialization for guarded Grok Leader/ACP sessions.",
+  "scripts": {
+    "test": "node --test scripts/*.test.mjs",
+    "test:coverage": "node --experimental-test-coverage --test scripts/*.test.mjs",
+    "smoke:mcp": "node scripts/mcp-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.3.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.4.3"
+  }
+}

@@ -1,4 +1,4 @@
-# cursor-bridge
+# Cursor Bridge + Grok Build Supervisor
 
 [简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
@@ -7,6 +7,42 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
+
+**Two independently installable MCP plugins for supervised coding-agent workflows. Install only the bridge you need.**
+
+| Plugin | Use it for | Documentation |
+|---|---|---|
+| **Cursor Bridge** | Cursor project intelligence and bounded Cursor Agent execution | [Continue below](#cursor-bridge) |
+| **Grok Build Supervisor** | Persistent, context-efficient Grok Build TUI/ACP execution coordinated and verified by the host agent | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
+
+> [!IMPORTANT]
+> Existing Cursor Bridge users do not need to change their installation, configuration, tools, runtime, or update workflow. Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge.
+
+## Grok Build Supervisor
+
+**Let Codex or Claude Code plan, supervise, correct, and verify persistent Grok Build execution without terminal keyboard automation.**
+
+Grok Build Supervisor opens or resumes a real, visible Grok Build TUI in Windows Terminal while a user-level daemon owns the Leader, ACP connection, writer lease, process identity, and event journal across host-task exits and plugin reloads. The sending host supplies the project working directory and its authenticated host identity, so Grok receives the correct Codex, Claude Code, or neutral supervision contract.
+
+Operational polling is bounded at the source: working calls return state and small activity metadata instead of cumulative prose, cursors advance to the latest event, and short final responses are delivered once. Results over 4000 UTF-8 bytes are stored as persistent artifacts with a path, byte size, SHA-256, truncation state, and short summary. If context-mode is already available it can process those files, but it is neither bundled nor required.
+
+Install it independently:
+
+```bash
+# Codex
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin add grok-build-supervisor@vanyangyang
+
+# Claude Code
+claude plugin marketplace add Vanyangyang/cursor-bridge
+claude plugin install grok-build-supervisor@vanyangyang
+```
+
+Run `/grok_init` once to discover, CONNECT-verify, and persist the local proxy. Normal sessions open a visible Windows Terminal TUI; headless operation is used only after an explicit request. `/grok_execute on` optionally enables the task-local contract where the host agent plans and verifies while Grok executes.
+
+[Read the Grok Build Supervisor documentation →](./plugins/grok-build-supervisor/README.md)
+
+## Cursor Bridge
 
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 

@@ -1,0 +1,38 @@
+{
+  "name": "grok-build-supervisor",
+  "version": "0.1.0+codex.20260819151428",
+  "description": "Persistent Grok Build Leader/ACP supervision with verified local-proxy initialization and visible Windows Terminal TUI control.",
+  "author": {
+    "name": "Vanyangyang",
+    "url": "https://github.com/Vanyangyang"
+  },
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor",
+  "repository": "https://github.com/Vanyangyang/cursor-bridge",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "codex",
+    "grok-build",
+    "coding-agent",
+    "agent-orchestration"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Grok Build Supervisor",
+    "shortDescription": "Keep guarded Grok TUI sessions connected across host tasks and plugin reloads.",
+    "longDescription": "Initialize and persist one CONNECT-verified local proxy without a fixed port, then run a user-level Supervisor daemon that owns Grok Leader, ACP, visible TUI records, event history, and writer fencing independently of any one host task. Thin MCP clients can observe the same session across task exits or plugin reloads while a capability-authenticated lease keeps exactly one writer. Interaction polling coalesces routine stream events, suppresses cumulative prose while Grok is working, cursor-delivers short final responses once, and hands long results off as persistent path, size, hash, and summary metadata. The optional /grok_execute on and off toggle keeps the host agent in a planning, supervision, correction, and verification role while Grok performs implementation. Context-mode can optionally process long result files but is not bundled or required. The plugin never enables always-approve, never adopts an unrelated plain TUI, and only stops processes owned by the persistent Supervisor.",
+    "developerName": "Vanyangyang",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Run /grok_init to discover, verify, and persist the local proxy.",
+      "Create a new Grok TUI in Windows Terminal PowerShell without sending a prompt.",
+      "Run /grok_execute on to enable task-local supervised Grok execution."
+    ],
+    "websiteURL": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor"
+  },
+  "mcpServers": "./.mcp.json"
+}
