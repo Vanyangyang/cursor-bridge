@@ -72,9 +72,14 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
+  const englishImportant = english.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
+  const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
   assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
+  assert.match(englishImportant, /fully exit[\s\S]*#windows-update-migration[\s\S]*normal update commands/);
+  assert.match(chineseImportant, /完整退出[\s\S]*#windows-update-migration[\s\S]*正常更新命令/);
   for (const content of [english, chinese]) {
+    assert.match(content, /<a id="windows-update-migration"><\/a>/);
     assert.match(content, /5\.4\.0/);
     assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
     assert.match(content, /Get-CimInstance Win32_Process/);

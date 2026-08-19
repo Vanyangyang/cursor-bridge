@@ -16,7 +16,7 @@
 | **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 > [!IMPORTANT]
-> Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge. The first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0 has a one-time Windows cache-lock migration step under “Update an existing installation”; normal updates resume afterward.
+> Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge. If you are upgrading Cursor Bridge 5.3.6 or earlier to 5.4.0 on Windows, save your work, fully exit every Codex, Claude Code, or Grok Build instance using these plugins, and close any visible Grok TUI. Then follow the scoped PowerShell cleanup under [Update an existing installation](#windows-update-migration) before rerunning the normal update commands. This cleanup is required only once; later updates use the normal flow.
 
 ## Grok Build Supervisor
 
@@ -144,6 +144,8 @@ Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installin
 
 > [!WARNING]
 > Cursor is an Agent, not a filesystem sandbox. CCE strongly prompts read-only investigation, but prompts and allowed paths are not OS-level isolation. Verify consequential anchors and workspace changes.
+
+<a id="windows-update-migration"></a>
 
 <details>
 <summary><strong>Update an existing installation</strong></summary>
