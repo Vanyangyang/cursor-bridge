@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   coalesceInteractionResult,
@@ -104,6 +104,35 @@ class FakeSupervisor {
 function noSpawn() {
   throw new Error("test client unexpectedly tried to spawn a daemon");
 }
+
+test("daemon launch uses the persistent content-addressed runtime instead of the plugin cache", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-launch-runtime-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const runtimeRoot = join(root, "runtime", "daemon-0123456789abcdef0123");
+  const daemonScript = join(runtimeRoot, "supervisor-daemon.mjs");
+  let launch = null;
+  const client = new SupervisorClient({
+    stateRoot: root,
+    clientVersion: "0.1.1-test",
+    daemonRuntime: {
+      runtimeRoot,
+      daemonScript,
+      fingerprint: "0123456789abcdef".repeat(4),
+    },
+    spawnProcess(command, args, options) {
+      launch = { command, args, options };
+      return { pid: 4242, unref() {} };
+    },
+  });
+
+  assert.equal(client.launchDaemon(), 4242);
+  assert.equal(launch.command, process.execPath);
+  assert.equal(launch.args[0], daemonScript);
+  assert.equal(launch.options.cwd, dirname(daemonScript));
+  assert.deepEqual(launch.args.slice(1, 5), ["--state-root", root, "--runtime-version", "0.1.1-test"]);
+  assert.deepEqual(launch.args.slice(5), ["--runtime-fingerprint", client.runtimeFingerprint]);
+  assert.equal(launch.options.detached, true);
+});
 
 test("MCP frontend derives a bounded host identity without trusting prompt arguments", () => {
   assert.equal(resolveHostKind({ CODEX_THREAD_ID: "thread-1" }), "codex");

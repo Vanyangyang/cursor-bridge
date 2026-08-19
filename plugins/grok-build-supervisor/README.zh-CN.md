@@ -36,6 +36,34 @@ claude plugin install grok-build-supervisor@vanyangyang
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 
+## 更新
+
+> [!WARNING]
+> **从 Grok Build Supervisor 0.1.0 或更早版本首次升级到 0.2.0 时，请先完整退出一次。** 保存工作，退出正在使用插件的 Codex 和 Claude Code，并关闭可见的 Grok TUI。旧版 daemon、MCP 适配器或 TUI 仍可能占着待替换的缓存目录；`cursor-lifecycle-supervisor.mjs` 不是唯一可能的占用者。可在 PowerShell 中先列出、再停止这两个插件留下的进程：
+
+```powershell
+$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
+  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
+  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
+}
+$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
+$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+不要结束所有 Node 进程。完成这次迁移后，daemon 和 TUI 都从用户级持久目录运行，0.2.0 之后可直接使用正常更新命令：
+
+```powershell
+# Codex
+codex plugin marketplace upgrade vanyangyang
+codex plugin add grok-build-supervisor@vanyangyang
+
+# Claude Code
+claude plugin marketplace update vanyangyang
+claude plugin update grok-build-supervisor@vanyangyang
+```
+
+如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master`，再执行上面的更新命令。更新后仍需新建任务或重新加载插件，当前任务不会变成新版本。
+
 ## 使用
 
 第一次使用插件时，先初始化一次本地代理：

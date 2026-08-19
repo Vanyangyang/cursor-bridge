@@ -46,7 +46,7 @@ export async function ensureCursorRunning(options = {}) {
   const projectPath = Object.hasOwn(options, 'projectPath')
     ? options.projectPath
     : resolveProjectPath(persistedBinding && persistedBinding.projectPath || process.env.CURSOR_PROJECT_PATH, {
-      cwd: hostProjectPath || process.cwd(),
+      cwd: hostProjectPath || options.adapterStartCwd || process.cwd(),
     });
   const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === '1' || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === '1') {

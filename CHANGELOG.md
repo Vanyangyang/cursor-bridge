@@ -6,9 +6,17 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-08-20
+
 ### Fixed
 
 - Windows normal runtime now applies a throttled, non-activating compositor refresh when it reuses Cursor Agents. This covers the white Electron surface case where CDP, the workbench DOM, and the prompt input are all healthy, so a DOM reload would not trigger.
+- Cursor Bridge now runs its persistent lifecycle supervisor from a content-addressed user runtime and moves the MCP adapter out of the versioned plugin cache after startup. After the one-time migration from 5.3.6 or earlier, a running supervisor no longer blocks normal plugin cache replacement on Windows.
+- Grok Build Supervisor 0.2.0 applies the same cache-independent lifecycle to its daemon while preserving its already persistent TUI runtime. Idle daemons roll forward by version and runtime fingerprint; active Grok work is left alone until it is safe to switch.
+
+### Upgrade note
+
+- The first upgrade from Cursor Bridge 5.3.6 or earlier, or Grok Build Supervisor 0.1.0 or earlier, can still require fully closing plugin hosts and stopping the old cache-resident supervisors once. Future updates use the normal marketplace commands; open tasks still need a reload or a new task before they consume newly installed MCP and Skill code.
 
 ## [5.3.6] - 2026-08-15
 
@@ -193,6 +201,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.4.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.6...cursor-bridge--v5.4.0
 [5.3.6]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.5...cursor-bridge--v5.3.6
 [5.3.5]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.4...cursor-bridge--v5.3.5
 [5.3.4]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.3...cursor-bridge--v5.3.4

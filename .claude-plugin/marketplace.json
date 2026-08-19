@@ -9,7 +9,7 @@
       "name": "cursor-bridge",
       "source": ".",
       "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded Cursor Agent execution from Codex, Claude Code, or Grok Build, with workbench plus Agents Window support through Cursor 3.16.17.",
-      "version": "5.3.6",
+      "version": "5.4.0",
       "author": {
         "name": "Vanyangyang"
       }
@@ -18,7 +18,7 @@
       "name": "grok-build-supervisor",
       "source": "./plugins/grok-build-supervisor",
       "description": "Persistent Grok Build Leader and ACP supervision with context-efficient cursor polling, persistent long-result artifacts, verified local-proxy initialization, and a visible Windows Terminal TUI.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Vanyangyang"
       }

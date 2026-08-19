@@ -55,11 +55,20 @@ try {
     throw new Error("Status did not confirm the persistent Supervisor daemon transport");
   }
   if (daemonStatus.status.daemon.capabilities?.hostIdentityEnvelope !== true
+    || daemonStatus.status.daemon.capabilities?.cacheIndependentDaemonRuntime !== true
     || daemonStatus.status.daemon.capabilities?.interactionDeliveryV2 !== true
     || daemonStatus.status.daemon.capabilities?.persistentTuiRuntime !== true
     || daemonStatus.status.daemon.capabilities?.proxyInitialization !== true
     || daemonStatus.status.daemon.capabilities?.resultArtifacts !== true) {
     throw new Error("Status did not expose the required Supervisor capability gates");
+  }
+  const daemonRuntime = daemonStatus.status.daemon;
+  const expectedDaemonRuntimeRoot = join(smokeStateRoot, "runtime", "daemon-");
+  if (typeof daemonRuntime.runtimeFingerprint !== "string"
+    || daemonRuntime.runtimeFingerprint.length !== 64
+    || typeof daemonRuntime.runtimeScript !== "string"
+    || !daemonRuntime.runtimeScript.toLowerCase().startsWith(expectedDaemonRuntimeRoot.toLowerCase())) {
+    throw new Error("Supervisor daemon is not running from the persistent content-addressed runtime");
   }
   const persistentRuntime = daemonStatus.status.tuiRuntime;
   if (persistentRuntime?.persistent !== true
@@ -105,6 +114,10 @@ try {
     statusCallPassed: true,
     daemonProtocolVersion: daemonStatus.status.daemon.protocolVersion,
     daemonCapabilities: daemonStatus.status.daemon.capabilities,
+    persistentDaemonRuntime: {
+      fingerprint: daemonStatus.status.daemon.runtimeFingerprint,
+      script: daemonStatus.status.daemon.runtimeScript,
+    },
     persistentTuiRuntime: {
       persistent: persistentRuntime.persistent,
       fingerprint: persistentRuntime.fingerprint,

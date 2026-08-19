@@ -1,5 +1,5 @@
-// Bundle MCP adapter + standalone lifecycle supervisor for plugin installs.
-// Plugins do not npm install; both entrypoints must be zero-dependency ESM.
+// Bundle MCP adapters + standalone supervisors for plugin installs.
+// Plugins do not npm install; persistent entrypoints must be cache-independent ESM.
 // 用法：npm install && npm run build
 import { build } from 'esbuild';
 
@@ -19,6 +19,16 @@ await build({
 });
 
 await build({
+  entryPoints: ['plugins/grok-build-supervisor/scripts/supervisor-daemon.mjs'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  outfile: 'plugins/grok-build-supervisor/dist/supervisor-daemon.mjs',
+  external,
+  banner,
+});
+
+await build({
   entryPoints: ['cursor-lifecycle-supervisor.mjs'],
   bundle: true,
   platform: 'node',
@@ -30,3 +40,4 @@ await build({
 
 console.log('✅ built dist/cursor-bridge.mjs');
 console.log('✅ built dist/cursor-lifecycle-supervisor.mjs');
+console.log('✅ built plugins/grok-build-supervisor/dist/supervisor-daemon.mjs');

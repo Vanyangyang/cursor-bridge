@@ -3,7 +3,17 @@
  * Creates the singleton on first use (job-breakaway on Windows), then reuses IPC.
  */
 import net from 'node:net';
-import { existsSync, readFileSync, unlinkSync, writeFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -29,16 +39,49 @@ export function resolveSupervisorScript() {
   const candidates = [];
   if (typeof process.argv[1] === 'string') {
     const entryDir = dirname(resolve(process.argv[1]));
+    candidates.push(join(entryDir, 'dist', 'cursor-lifecycle-supervisor.mjs'));
     candidates.push(join(entryDir, 'cursor-lifecycle-supervisor.mjs'));
   }
   candidates.push(
-    join(here, 'cursor-lifecycle-supervisor.mjs'),
     join(here, 'dist', 'cursor-lifecycle-supervisor.mjs'),
+    join(here, 'cursor-lifecycle-supervisor.mjs'),
   );
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
   return join(here, 'cursor-lifecycle-supervisor.mjs');
+}
+
+function writeRuntimeFile(target, content) {
+  if (existsSync(target) && readFileSync(target).equals(content)) return;
+  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporary, content);
+  try {
+    renameSync(temporary, target);
+  } catch (error) {
+    if (!existsSync(target)) {
+      rmSync(temporary, { force: true });
+      throw error;
+    }
+    if (readFileSync(target).equals(content)) {
+      rmSync(temporary, { force: true });
+      return;
+    }
+    rmSync(target, { force: true });
+    renameSync(temporary, target);
+  }
+}
+
+export function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
+  const source = resolve(sourceScript || resolveSupervisorScript());
+  if (!existsSync(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
+  const content = readFileSync(source);
+  const fingerprint = createHash('sha256').update(content).digest('hex');
+  const runtimeRoot = join(ensureLifecycleDir(dir), 'runtime', `supervisor-${fingerprint.slice(0, 20)}`);
+  mkdirSync(runtimeRoot, { recursive: true });
+  const script = join(runtimeRoot, 'cursor-lifecycle-supervisor.mjs');
+  writeRuntimeFile(script, content);
+  return { sourceScript: source, script, runtimeRoot, fingerprint };
 }
 
 function isProcessAlive(pid) {
@@ -175,19 +218,55 @@ export async function ensureSupervisorConnected(options = {}) {
   const pidPath = options.pidPath || supervisorPidPath(dir);
   const lockPath = options.lockPath || supervisorLockPath(dir);
   const createWaitMs = Number(options.createWaitMs || DEFAULT_CREATE_WAIT_MS);
+  const sourceScript = options.supervisorScript || resolveSupervisorScript();
+  const runtime = options.persistSupervisorRuntime === false
+    ? {
+        sourceScript: resolve(sourceScript),
+        script: resolve(sourceScript),
+        runtimeRoot: dirname(resolve(sourceScript)),
+        fingerprint: null,
+      }
+    : materializeLifecycleSupervisorRuntime({ sourceScript, dir });
 
   let socket = await tryConnect(sock);
   if (socket) {
     const pid = readPidFile(pidPath);
-    return {
-      socket,
-      sock,
-      dir,
-      supervisorPid: pid,
-      reusedSupervisor: true,
-      createdSupervisor: false,
-      spawnMethod: null,
-    };
+    let current = null;
+    try { current = await request(socket, { type: 'ping' }, 5000); } catch {}
+    const mismatch = Boolean(runtime.fingerprint
+      && current?.runtimeFingerprint
+      && current.runtimeFingerprint !== runtime.fingerprint);
+    if (mismatch) {
+      let upgrade = null;
+      try {
+        upgrade = await request(socket, {
+          type: 'shutdown_if_idle',
+          confirmation: 'ROLL_CURSOR_LIFECYCLE_SUPERVISOR',
+          targetRuntimeFingerprint: runtime.fingerprint,
+        }, 5000);
+      } catch {}
+      if (upgrade?.restarting === true) {
+        try { socket.end(); } catch {}
+        try { socket.destroy(); } catch {}
+        socket = null;
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline && isProcessAlive(pid)) await sleep(50);
+      }
+    }
+    if (socket) {
+      return {
+        socket,
+        sock,
+        dir,
+        supervisorPid: pid,
+        reusedSupervisor: true,
+        createdSupervisor: false,
+        spawnMethod: null,
+        runtimeFingerprint: current?.runtimeFingerprint || null,
+        runtimeScript: current?.runtimeScript || null,
+        targetRuntimeFingerprint: runtime.fingerprint,
+      };
+    }
   }
 
   const stalePid = readPidFile(pidPath);
@@ -199,7 +278,7 @@ export async function ensureSupervisorConnected(options = {}) {
     }
   }
 
-  const script = options.supervisorScript || resolveSupervisorScript();
+  const script = runtime.script;
   if (!existsSync(script)) {
     throw new Error(`lifecycle supervisor script missing: ${script}`);
   }
@@ -211,6 +290,7 @@ export async function ensureSupervisorConnected(options = {}) {
       `--lifecycle-dir=${dir}`,
       `--sock=${sock}`,
       `--boot-env=${bootEnvPath}`,
+      ...(runtime.fingerprint ? [`--runtime-fingerprint=${runtime.fingerprint}`] : []),
     ];
     if (process.env.CURSOR_BRIDGE_ENSURE_MODULE) {
       scriptArgs.push(`--ensure-module=${process.env.CURSOR_BRIDGE_ENSURE_MODULE}`);
@@ -229,7 +309,7 @@ export async function ensureSupervisorConnected(options = {}) {
     };
 
     const spawned = spawnNodeOutsideJob(script, scriptArgs, {
-      cwd: options.cwd || dirname(script),
+      cwd: options.cwd || runtime.runtimeRoot,
       env: childEnv,
     });
     if (!spawned.ok) {
@@ -252,6 +332,9 @@ export async function ensureSupervisorConnected(options = {}) {
           spawnPid: spawned.pid,
           degraded: !!spawned.degraded,
           unsafe: !!spawned.unsafe,
+          runtimeFingerprint: runtime.fingerprint,
+          runtimeScript: script,
+          targetRuntimeFingerprint: runtime.fingerprint,
         };
       }
       await sleep(100);
@@ -292,6 +375,8 @@ export async function ensureCursorViaSupervisor(options = {}) {
         createdSupervisor: conn.createdSupervisor,
         launchReason: 'supervisor-error',
         spawnMethod: conn.spawnMethod,
+        runtimeFingerprint: conn.runtimeFingerprint || null,
+        runtimeScript: conn.runtimeScript || null,
       };
     }
 
@@ -318,6 +403,8 @@ export async function ensureCursorViaSupervisor(options = {}) {
         : (response.launchReason || (response.status === 'launched' ? 'reused-supervisor-spawned-cursor' : 'reused-supervisor')),
       spawnMethod: conn.spawnMethod,
       ensureCount: response.ensureCount,
+      runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
+      runtimeScript: response.runtimeScript || conn.runtimeScript || null,
     };
   } finally {
     try { conn.socket.end(); } catch {}
@@ -335,6 +422,8 @@ export async function pingSupervisor(options = {}) {
       createdSupervisor: conn.createdSupervisor,
       spawnMethod: conn.spawnMethod,
       adapterPid: process.pid,
+      runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
+      runtimeScript: response.runtimeScript || conn.runtimeScript || null,
     };
   } finally {
     try { conn.socket.end(); } catch {}

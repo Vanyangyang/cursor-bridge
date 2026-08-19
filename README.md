@@ -16,7 +16,7 @@
 | **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 > [!IMPORTANT]
-> Existing Cursor Bridge users do not need to change their installation, configuration, tools, runtime, or update workflow. Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge.
+> Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge. The first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0 has a one-time Windows cache-lock migration step under “Update an existing installation”; normal updates resume afterward.
 
 ## Grok Build Supervisor
 
@@ -148,12 +148,28 @@ Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installin
 <details>
 <summary><strong>Update an existing installation</strong></summary>
 
+> [!WARNING]
+> **Before the first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0, do one complete shutdown.** `cursor-lifecycle-supervisor.mjs` is not the only possible cache holder: a live MCP adapter and the old Grok Build Supervisor daemon may also have the versioned plugin cache as their working directory, which prevents Windows from replacing it. Save your work, exit Codex, Claude Code, and Grok Build instances using these plugins, and close visible Grok TUI windows. Then use PowerShell to remove only the residual plugin processes:
+
+```powershell
+$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
+  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
+  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
+}
+$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
+$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+The command lists the exact matches before stopping them; do not replace it with a blanket “kill every Node process.” After this one-time migration, Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0 run their persistent components outside the plugin cache, so later updates do not require a special shutdown for cache locks.
+
 Codex:
 
 ```bash
 codex plugin marketplace upgrade vanyangyang
 codex plugin add cursor-bridge@vanyangyang
 ```
+
+If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master` once, then retry the two commands above.
 
 Claude Code:
 
@@ -169,7 +185,7 @@ grok plugin marketplace update cursor-bridge
 grok plugin update cursor-bridge
 ```
 
-Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, or in Grok open `/plugins` and press `r` / start a new session.
+Updating the cache no longer requires stopping post-5.4.0 persistent runtimes, but an already open task does not hot-load new MCP, Skill, or command code. Start a new Codex task, restart Claude Code / run `/reload-plugins`, or in Grok open `/plugins` and press `r` / start a new session.
 
 </details>
 

@@ -16,7 +16,7 @@
 | **Grok Build Supervisor** | 让 Grok Build 持续工作，同时避免重复输出占满上下文 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
 > [!IMPORTANT]
-> 现有 Cursor Bridge 用户无需更改安装、配置、工具、运行方式或更新流程。Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。
+> Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。Cursor Bridge 5.3.6 及更早版本首次升级到 5.4.0 时有一次 Windows 缓存锁迁移步骤，见下方“更新已有安装”；完成后恢复正常更新流程。
 
 ## Grok Build Supervisor
 
@@ -148,12 +148,28 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 <details>
 <summary><strong>更新已有安装</strong></summary>
 
+> [!WARNING]
+> **从 Cursor Bridge 5.3.6 或更早版本首次升级到 5.4.0 时，请先完整退出一次。** 旧版不只是 `cursor-lifecycle-supervisor.mjs`：仍在运行的 MCP 适配器，以及 Grok Build Supervisor 的旧 daemon，也可能正站在待替换的插件缓存目录里，Windows 会因此拒绝更新。先保存工作，退出正在使用这些插件的 Codex、Claude Code 和 Grok Build，并关闭可见的 Grok TUI。然后在 PowerShell 中只清理这些残留插件进程：
+
+```powershell
+$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
+  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
+  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
+}
+$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
+$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+上面先列出再停止，范围只包含这两个插件的旧进程；不要用“结束所有 Node 进程”代替。完成这次迁移后，Cursor Bridge 5.4.0 和 Grok Build Supervisor 0.2.0 的常驻程序都从插件缓存之外运行，后续更新无需再为缓存锁专门关闭它们。
+
 Codex：
 
 ```bash
 codex plugin marketplace upgrade vanyangyang
 codex plugin add cursor-bridge@vanyangyang
 ```
+
+如果提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master`，再重试上面的两条命令。
 
 Claude Code：
 
@@ -169,7 +185,7 @@ grok plugin marketplace update cursor-bridge
 grok plugin update cursor-bridge
 ```
 
-更新后请重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，或在 Grok 打开 `/plugins` 按 `r` / 新开会话。
+更新缓存可以不关闭 5.4.0 之后的常驻程序，但已经打开的任务不会热加载新 MCP、Skill 或命令。更新后请新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或在 Grok 打开 `/plugins` 按 `r` / 新开会话。
 
 </details>
 

@@ -22,7 +22,7 @@ import {
   renameSync,
   statSync,
 } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   defaultLifecycleDir,
   ensureLifecycleDir,
@@ -49,6 +49,8 @@ function parseArgs(argv = process.argv.slice(2)) {
     else if (a === '--ensure-module') out.ensureModule = argv[++i];
     else if (a.startsWith('--idle-ms=')) out.idleMs = Number(a.slice('--idle-ms='.length));
     else if (a === '--idle-ms') out.idleMs = Number(argv[++i]);
+    else if (a.startsWith('--runtime-fingerprint=')) out.runtimeFingerprint = a.slice('--runtime-fingerprint='.length);
+    else if (a === '--runtime-fingerprint') out.runtimeFingerprint = argv[++i];
   }
   return out;
 }
@@ -186,6 +188,8 @@ export async function startSupervisor(options = {}) {
     ?? 5 * 60 * 1000,
   );
   const ensureModule = options.ensureModule || cli.ensureModule || process.env.CURSOR_BRIDGE_ENSURE_MODULE;
+  const runtimeFingerprint = String(options.runtimeFingerprint || cli.runtimeFingerprint || 'unknown');
+  const runtimeScript = fileURLToPath(import.meta.url);
 
   writeSupervisorDiag(logPath, 'start', { dir, sock, reason: 'startSupervisor' });
 
@@ -276,7 +280,16 @@ export async function startSupervisor(options = {}) {
         buffer = buffer.slice(idx + 1);
         if (!line) continue;
         Promise.resolve()
-          .then(() => handleLine(socket, line, { runEnsure, ensureCount: () => ensureCount, lastEnsure: () => lastEnsure, clients }))
+          .then(() => handleLine(socket, line, {
+            runEnsure,
+            ensureCount: () => ensureCount,
+            lastEnsure: () => lastEnsure,
+            clients,
+            isEnsureInflight: () => Boolean(ensureInflight),
+            shutdown,
+            runtimeFingerprint,
+            runtimeScript,
+          }))
           .catch((error) => {
             try {
               socket.write(`${JSON.stringify({
@@ -344,6 +357,8 @@ async function handleLine(socket, line, ctx) {
         supervisorPid: process.pid,
         clients: ctx.clients.size,
         ensureCount: ctx.ensureCount(),
+        runtimeFingerprint: ctx.runtimeFingerprint,
+        runtimeScript: ctx.runtimeScript,
       })}\n`);
       return;
     }
@@ -356,6 +371,8 @@ async function handleLine(socket, line, ctx) {
         clients: ctx.clients.size,
         ensureCount: ctx.ensureCount(),
         lastEnsure: ctx.lastEnsure(),
+        runtimeFingerprint: ctx.runtimeFingerprint,
+        runtimeScript: ctx.runtimeScript,
       })}\n`);
       return;
     }
@@ -370,7 +387,27 @@ async function handleLine(socket, line, ctx) {
           ? 'supervisor-spawned-cursor'
           : (result.status === 'already' ? 'supervisor-cursor-already' : `supervisor-${result.status}`),
         ...result,
+        runtimeFingerprint: ctx.runtimeFingerprint,
+        runtimeScript: ctx.runtimeScript,
       })}\n`);
+      return;
+    }
+    if (msg.type === 'shutdown_if_idle') {
+      if (msg.confirmation !== 'ROLL_CURSOR_LIFECYCLE_SUPERVISOR') {
+        socket.write(`${JSON.stringify({ type: 'error', id, ok: false, error: 'invalid-shutdown-confirmation' })}\n`);
+        return;
+      }
+      const busy = ctx.isEnsureInflight() || ctx.clients.size > 1;
+      socket.write(`${JSON.stringify({
+        type: 'shutdown-result',
+        id,
+        ok: true,
+        restarting: !busy,
+        busy,
+        runtimeFingerprint: ctx.runtimeFingerprint,
+        targetRuntimeFingerprint: msg.targetRuntimeFingerprint || null,
+      })}\n`);
+      if (!busy) setTimeout(() => ctx.shutdown(0), 25);
       return;
     }
     socket.write(`${JSON.stringify({ type: 'error', id, ok: false, error: `unknown-type:${msg.type}` })}\n`);

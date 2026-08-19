@@ -6,21 +6,27 @@ function parseArgs(argv) {
   const values = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument !== "--state-root") {
+    if (!["--state-root", "--runtime-version", "--runtime-fingerprint"].includes(argument)) {
       throw new Error(`Unknown daemon argument: ${argument}`);
     }
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) {
-      throw new Error("--state-root requires a value");
+      throw new Error(`${argument} requires a value`);
     }
-    values.stateRoot = resolve(value);
+    if (argument === "--state-root") values.stateRoot = resolve(value);
+    if (argument === "--runtime-version") values.runtimeVersion = value;
+    if (argument === "--runtime-fingerprint") values.runtimeFingerprint = value;
     index += 1;
   }
   return values;
 }
 
 const options = parseArgs(process.argv.slice(2));
-const daemon = new SupervisorDaemon({ stateRoot: options.stateRoot });
+const daemon = new SupervisorDaemon({
+  stateRoot: options.stateRoot,
+  runtimeVersion: options.runtimeVersion,
+  runtimeFingerprint: options.runtimeFingerprint,
+});
 
 async function stopDaemon() {
   await daemon.stop().catch(() => {});
