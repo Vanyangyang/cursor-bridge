@@ -3,7 +3,7 @@
     "grok-build-supervisor": {
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/scripts/server.mjs"
+        "${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs"
       ],
       "default_tools_approval_mode": "approve"
     }

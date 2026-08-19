@@ -12,6 +12,7 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 - `/grok_execute on` binds the current workspace and immediately reuses or opens its visible Windows Terminal TUI; `off` leaves executor mode without cancelling work.
 - Compact cursor-based progress delivery suppresses cumulative output. Long terminal results are persisted as artifacts with a path, byte size, SHA-256, and short summary.
 - Host identity, writer leases, process identity checks, and durable session ownership prevent unrelated Codex, Claude Code, or Grok processes from being adopted or mislabeled.
+- The installed MCP frontend and persistent daemon are bundled entrypoints; Codex and Claude Code do not need to run `npm install` inside the plugin cache.
 
 ### Fixed
 
