@@ -13,18 +13,18 @@
 | 插件 | 用途 | 文档 |
 |---|---|---|
 | **Cursor Bridge** | Cursor 项目理解与有边界的 Cursor Agent 执行 | [继续阅读](#cursor-bridge) |
-| **Grok Build Supervisor** | 由宿主 Agent 协调并验收、持久且节省上下文的 Grok Build TUI/ACP 执行 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
+| **Grok Build Supervisor** | 让 Grok Build 持续工作，同时避免重复输出占满上下文 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
 > [!IMPORTANT]
 > 现有 Cursor Bridge 用户无需更改安装、配置、工具、运行方式或更新流程。Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。
 
 ## Grok Build Supervisor
 
-**让 Codex 或 Claude Code 规划、监督、纠偏并验收持久运行的 Grok Build 任务，不依赖终端键盘模拟。**
+**让 Codex 或 Claude Code 管理任务，让 Grok Build 专心动手执行。**
 
-Grok Build Supervisor 会在 Windows Terminal 中创建或恢复真实、可见的 Grok Build TUI，同时由用户级 daemon 跨宿主任务退出和插件重载持续持有 Leader、ACP 连接、写租约、进程身份和事件日志。发送端会携带项目工作目录和经过认证的宿主身份，因此 Grok 能收到与 Codex、Claude Code 或中性宿主相匹配的监督合同。
+插件会在 Windows Terminal 中打开或恢复一个真正的 Grok Build 窗口，并在后台保持连接。关闭一个 Codex / Claude Code 任务或重新加载插件，不会让 Grok 会话凭空消失。它还会记住正确的项目目录和发送者，并避免两个宿主同时给同一个会话下指令。
 
-普通轮询从源头控制上下文：运行中只返回状态和小型活动元数据，游标直接推进到最新事件，短结果只交付一次。超过 4000 UTF-8 字节的结果会保存为持久 artifact，并返回路径、字节数、SHA-256、截断状态和短摘要。宿主已安装 context-mode 时可以用它处理这些文件，但本插件不会打包或强制依赖 context-mode。
+插件不会在每次查看进度时，把同一段越来越长的回答反复塞回上下文。Grok 工作时只返回简短状态；短答案只返回一次；长报告会保存成文件，只告诉你文件位置、大小、校验值和摘要。已经安装 context-mode 时可以用它提取文件里的重点，但不安装也能正常使用。
 
 独立安装：
 
@@ -38,7 +38,10 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-首次使用运行一次 `/grok_init`，自动发现、CONNECT 验证并持久化本地代理。普通会话始终打开可见 Windows Terminal TUI；只有明确要求时才使用 headless。可选的 `/grok_execute on` 会在当前任务中启用“宿主 Agent 规划和验收、Grok 负责执行”的分工。
+首次使用时运行一次 `/grok_init` 设置本地代理。之后日常只需要 `/grok_execute on` 和 `/grok_execute off`。开启后，像平常一样把任务交给 Codex 或 Claude Code，插件会自行找到、复用或打开正确的 Grok 会话，不需要你管理 TUI、会话 ID 或进程。
+
+> [!TIP]
+> Grok 默认会显示在 Windows Terminal 窗口中。如果某次任务不想看到它，直接说“这次不要显示 Grok 终端”即可。没有你的明确要求，插件不会自己把窗口藏起来。
 
 [阅读 Grok Build Supervisor 中文文档 →](./plugins/grok-build-supervisor/README.zh-CN.md)
 
