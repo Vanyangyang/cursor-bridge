@@ -43,6 +43,7 @@ import {
   promoteAgentsWorkspaceLifecycle,
   summarizeCdpPages,
   isBlankAgentsWindow,
+  shouldRecoverNormalAgentsPresentation,
   PLUGIN_VERSION,
 } from '../server.mjs';
 
@@ -68,6 +69,61 @@ test('status snapshot lists CDP titles without requiring a live page probe', () 
     title: 'Cursor Settings - cursor-bridge - Cursor',
     probeError: 'ignored',
   }), false);
+});
+
+test('normal Agents reuse requests a bounded non-activating compositor recovery', async () => {
+  const now = Date.parse('2026-08-20T00:00:00.000Z');
+  const base = {
+    runtimeMode: 'normal',
+    workspaceAction: 'reused-agents-window',
+    cursorPid: 27324,
+    platform: 'win32',
+    now,
+  };
+  assert.equal(shouldRecoverNormalAgentsPresentation(base), true);
+  assert.equal(shouldRecoverNormalAgentsPresentation({ ...base, runtimeMode: 'minimal' }), false);
+  assert.equal(shouldRecoverNormalAgentsPresentation({ ...base, workspaceAction: 'reused-project-target' }), false);
+  assert.equal(shouldRecoverNormalAgentsPresentation({ ...base, platform: 'linux' }), false);
+  assert.equal(shouldRecoverNormalAgentsPresentation({
+    ...base,
+    lastPresentation: {
+      applied: true,
+      action: 'show',
+      pid: 27324,
+      at: '2026-08-19T23:59:00.000Z',
+    },
+  }), false);
+  assert.equal(shouldRecoverNormalAgentsPresentation({
+    ...base,
+    lastPresentation: {
+      applied: true,
+      action: 'show',
+      pid: 27324,
+      at: '2026-08-19T23:54:59.000Z',
+    },
+  }), true);
+
+  const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, runtimeMode: 'normal' });
+  let showCalls = 0;
+  bridge.applyRuntimePresentation = async (action) => {
+    showCalls += 1;
+    bridge._lastPresentation = {
+      supported: true,
+      applied: true,
+      action,
+      pid: 27324,
+      changedWindows: 1,
+      at: new Date(now).toISOString(),
+    };
+    return bridge._lastPresentation;
+  };
+  const lifecycle = { workspaceAction: 'reused-agents-window', cursorPid: 27324, presentation: null };
+  const recovered = await bridge.recoverNormalAgentsPresentation(lifecycle, now);
+  assert.equal(recovered.action, 'show');
+  assert.equal(lifecycle.presentation.changedWindows, 1);
+  assert.equal(showCalls, 1);
+  assert.equal(await bridge.recoverNormalAgentsPresentation(lifecycle, now + 1000), null);
+  assert.equal(showCalls, 1);
 });
 
 test('page capability scoring prefers Cursor Agents and pins an existing target', () => {

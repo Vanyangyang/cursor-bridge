@@ -4,6 +4,12 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Windows normal runtime now applies a throttled, non-activating compositor refresh when it reuses Cursor Agents. This covers the white Electron surface case where CDP, the workbench DOM, and the prompt input are all healthy, so a DOM reload would not trigger.
+
 ## [5.3.6] - 2026-08-15
 
 ### Fixed

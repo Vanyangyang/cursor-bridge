@@ -232,7 +232,7 @@ Cursor Agent + project index
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
 - When the Agents Window and the workbench are both open, Bridge prefers the Agents Window for the current project. If only the workbench is available, it uses that. It does not create work in `Home`.
 - If Agents Window is already open, ensure reuses that CDP page and does not spawn `Cursor.exe --new-window`. A new workbench window is opened only when Cursor is connected and neither Agents Window nor a matching editor title exists.
-- `cursor_status` lists CDP page titles only. It does not inspect page DOM. If Agents Window is white, CCE reloads that page once, then continues.
+- `cursor_status` lists CDP page titles only. It does not inspect page DOM. CCE reloads a DOM-blank Agents page once. On Windows normal runtime, reusing an Agents Window also performs a throttled, non-activating native compositor refresh so a healthy DOM cannot remain behind a white Electron surface.
 - Stale target IDs are rejected when the title no longer matches the requested project, except for the Agents Window title `Cursor Agents`, which is a valid reusable target.
 - Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
 - On Windows, the supervisor survives an individual Codex, Claude Code, or Grok session closing.
