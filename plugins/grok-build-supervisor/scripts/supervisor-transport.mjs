@@ -772,7 +772,7 @@ export class SupervisorClient {
     this.persistResultArtifact = options.persistResultArtifact || persistResultArtifact;
     this.daemonRuntime = options.daemonRuntime || (options.daemonScript ? null : materializeDaemonRuntime({
       daemonBundle: options.daemonBundle || DEFAULT_DAEMON_BUNDLE,
-      sourceDirectory: MODULE_DIRECTORY,
+      sourceDirectory: options.daemonSourceDirectory || join(PLUGIN_ROOT, "scripts"),
       stateRoot: this.paths.stateRoot,
     }));
     this.daemonScript = resolve(options.daemonScript || this.daemonRuntime.daemonScript);

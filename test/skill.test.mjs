@@ -61,7 +61,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.ok(grokManifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_init')));
   assert.deepEqual(
     grokMcp.mcpServers['grok-build-supervisor'].args,
-    ['${CLAUDE_PLUGIN_ROOT}/scripts/server.mjs'],
+    ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
   assert.equal(claudeCursor?.source, '.');
   assert.equal(claudeCursor?.version, '5.4.0');

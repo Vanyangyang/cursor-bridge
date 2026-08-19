@@ -13,6 +13,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - Windows normal runtime now applies a throttled, non-activating compositor refresh when it reuses Cursor Agents. This covers the white Electron surface case where CDP, the workbench DOM, and the prompt input are all healthy, so a DOM reload would not trigger.
 - Cursor Bridge now runs its persistent lifecycle supervisor from a content-addressed user runtime and moves the MCP adapter out of the versioned plugin cache after startup. After the one-time migration from 5.3.6 or earlier, a running supervisor no longer blocks normal plugin cache replacement on Windows.
 - Grok Build Supervisor 0.2.0 applies the same cache-independent lifecycle to its daemon while preserving its already persistent TUI runtime. Idle daemons roll forward by version and runtime fingerprint; active Grok work is left alone until it is safe to switch.
+- Grok Build Supervisor now ships bundled MCP and daemon entrypoints, so a marketplace install does not depend on `node_modules` being present inside the plugin cache.
 
 ### Upgrade note
 

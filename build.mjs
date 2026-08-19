@@ -19,6 +19,16 @@ await build({
 });
 
 await build({
+  entryPoints: ['plugins/grok-build-supervisor/scripts/server.mjs'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  outfile: 'plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs',
+  external,
+  banner,
+});
+
+await build({
   entryPoints: ['plugins/grok-build-supervisor/scripts/supervisor-daemon.mjs'],
   bundle: true,
   platform: 'node',
@@ -40,4 +50,5 @@ await build({
 
 console.log('✅ built dist/cursor-bridge.mjs');
 console.log('✅ built dist/cursor-lifecycle-supervisor.mjs');
+console.log('✅ built plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs');
 console.log('✅ built plugins/grok-build-supervisor/dist/supervisor-daemon.mjs');
