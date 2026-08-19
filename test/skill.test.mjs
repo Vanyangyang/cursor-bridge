@@ -152,6 +152,22 @@ test('bilingual README documents plugin install and update commands', () => {
   }
 });
 
+test('all Grok README surfaces link the recommended context-mode project', () => {
+  const documents = [
+    readProjectFile('README.md'),
+    readProjectFile('README.zh-CN.md'),
+    readProjectFile('plugins/grok-build-supervisor/README.md'),
+    readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md'),
+  ];
+  for (const content of documents) {
+    assert.match(content, /https:\/\/github\.com\/mksglu\/context-mode/);
+  }
+  assert.match(documents[0], /\[context-mode \(recommended\)\]/);
+  assert.match(documents[1], /\[context-mode（推荐）\]/);
+  assert.match(documents[2], /\[context-mode \(recommended\)\]/);
+  assert.match(documents[3], /\[context-mode（推荐）\]/);
+});
+
 test('bilingual README promotes the minimal runtime benefit and trade-off', () => {
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
