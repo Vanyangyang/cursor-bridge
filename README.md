@@ -4,7 +4,7 @@
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
-<p align="center"><strong>✨ 30 stars—thank you! Cursor Bridge is here for the long run and will keep pace with the latest Cursor releases. ✨</strong></p>
+<p align="center"><strong>✨ 30 stars—thank you! Cursor Bridge is here for the long run and will keep pace with the latest Cursor releases. If this project helps you, please consider <a href="https://github.com/Vanyangyang/cursor-bridge">lighting up a ⭐ Star</a>—thank you for your support! ✨</strong></p>
 
 <p align="center"><sub><strong>Compatibility policy:</strong> Cursor Bridge maintains only the latest Cursor release; previous Cursor releases are not actively supported. If you need a historical Cursor version, first open the <a href="./COMPATIBILITY.md">Cursor Bridge compatibility and update history</a> and switch precisely to its matching archived release when one is listed. Archived releases receive no maintenance. If no historical release meets your needs, use <strong>Fork</strong> in the top-right corner and maintain the required adaptation in your own fork.</sub></p>
 
@@ -328,5 +328,3 @@ Advanced lifecycle overrides are compatibility controls. Bypassing the Windows s
 ## Star History
 
 [![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=899248358ccd)](https://github.com/Vanyangyang/cursor-bridge)
-
-Updated automatically from GitHub's repository API. No external chart service or manually managed PAT is required.
