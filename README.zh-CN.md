@@ -1,3 +1,13 @@
+<p align="center">
+  <a href="https://github.com/Vanyangyang/cursor-bridge"><img alt="30 Star milestone" src="https://img.shields.io/badge/30_STAR_MILESTONE-THANK_YOU!-FFD700?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;labelColor=181717" /></a>
+  <a href="https://github.com/Vanyangyang/cursor-bridge/commits/master"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
+  <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
+</p>
+
+<p align="center"><strong>✨ 30 Stars 达成，感谢每一位关注者！Cursor Bridge 将长期维护，并持续跟进 Cursor 最新版本。✨</strong></p>
+
+<p align="center"><sub><strong>版本兼容说明：</strong>如果遇到版本兼容问题，请升级到本项目当前支持的最新 Cursor 版本。如果需要支持特定 Cursor 版本，请点击仓库右上角的 <strong>Fork</strong>，并在自己的 Fork 中自行适配。</sub></p>
+
 # Cursor Bridge + Grok Build Supervisor
 
 [English](./README.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
@@ -16,7 +26,7 @@
 | **Grok Build Supervisor** | 让 Grok Build 持续工作，同时避免重复输出占满上下文 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
 > [!IMPORTANT]
-> Grok Build Supervisor 是独立的可选插件，不会随 Cursor Bridge 一起安装。如果要在 Windows 上从 Cursor Bridge 5.3.6 或更早版本升级到 5.4.0，请先保存工作，完整退出正在使用这些插件的 Codex、Claude Code 和 Grok Build，并关闭可见的 Grok TUI；然后按照[“更新已有安装”](#windows-update-migration)中的精确 PowerShell 命令清理旧插件进程，再重新执行正常更新命令。如果不想手动处理，该章节还提供可直接粘贴给 Agent 的提示词。这个清理只需做一次，后续版本恢复正常更新流程。
+> Grok Build Supervisor 是独立的可选插件。首次在 Windows 上从 Cursor Bridge 5.3.6 或更早版本升级到 5.4.0 时，请先保存工作，再按照[“更新已有安装”](#windows-update-migration)操作。其中的 Agent 指令已经授权清理经核验的旧缓存进程，无需再次确认；后续版本恢复正常更新流程。
 
 ## Grok Build Supervisor
 
@@ -50,7 +60,7 @@ claude plugin install grok-build-supervisor@vanyangyang
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.16.17** 与 **3.7.42**。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.16.29**（IDE/workbench），以及 Cursor **3.16.17** 与 **3.7.42**（IDE 和 Agents Window）。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -119,6 +129,7 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 | Cursor | 说明 |
 |---|---|
+| **3.16.29** | 已实机验证 IDE/workbench：CCE、FIFO、parallel Agent、任务状态/控制终态门禁及 normal/minimal 显示切换。已对安装包扫描 Agents Window 选择器，但 3.16.29 Agents Window 尚未完成实机验收。 |
 | **3.16.17** | 已实机验证。workbench 和 Agents Window，含已发布 Agent ID 时的运行中 FIFO 取消。 |
 | **3.7.42** | 已实机验证。workbench 和 Agents Window。 |
 
@@ -147,35 +158,15 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 <a id="windows-update-migration"></a>
 
-<details>
-<summary><strong>更新已有安装</strong></summary>
+## 更新已有安装
 
 > [!WARNING]
-> **从 Cursor Bridge 5.3.6 或更早版本首次升级到 5.4.0 时，请先完整退出一次。** 旧版不只是 `cursor-lifecycle-supervisor.mjs`：仍在运行的 MCP 适配器，以及 Grok Build Supervisor 的旧 daemon，也可能正站在待替换的插件缓存目录里，Windows 会因此拒绝更新。先保存工作，退出正在使用这些插件的 Codex、Claude Code 和 Grok Build，并关闭可见的 Grok TUI。然后在 PowerShell 中只清理这些残留插件进程：
+> **从 Cursor Bridge 5.3.6 或更早版本首次升级到 5.4.0 时，需要做一次 Windows 清理。** 旧插件进程可能仍占用带版本号的缓存目录，导致 Windows 无法替换它。这不是 ACL 权限问题，也不需要手工删除插件缓存。
 
 > [!TIP]
-> 也可以把下面这段提示词直接粘贴给本地 Coding Agent，让它协助完成迁移：
+> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。请将 Cursor Bridge 升级到 5.4.0、Grok Build Supervisor 升级到 0.2.0，并检查从旧缓存运行的 `cursor-lifecycle-supervisor.mjs`、`dist/cursor-bridge.mjs`，以及 Grok 旧版的 `server.mjs`、`supervisor-daemon.mjs`、`tui-host.mjs` 或 `Start-GrokTui.ps1`。核验归属和旧缓存路径后直接停止，无需再次询问；保留新版持久运行时和无关进程。禁止批量结束 Node 或 PowerShell、修改 ACL 或删除缓存。完成正常更新后，报告版本、marketplace 来源和仍存在的旧缓存进程。”
 
-```text
-请帮我完成 Cursor Bridge 5.4.0 和 Grok Build Supervisor 0.2.0 的一次性 Windows 缓存锁迁移。
-
-1. 先只读检查进程。只列出命令行明确涉及 cursor-lifecycle-supervisor.mjs、/dist/cursor-bridge.mjs、Grok Build Supervisor 的 server/daemon/TUI 脚本或 Start-GrokTui.ps1 的进程，并显示 PID、进程名和完整命令行。
-2. 如果匹配到的 Grok TUI 或 Leader 可能仍在工作，或者我还没有确认工作已保存，请先停下来让我保存并关闭；不要终止正在执行的任务。
-3. 得到我确认后，只停止已经核验属于这些插件的残留进程。禁止结束所有 node.exe、powershell.exe 或 pwsh.exe。
-4. 不要修改 Windows ACL，也不要手工删除插件缓存目录。
-5. 根据我当前使用的宿主执行正常的 marketplace 更新和插件安装/更新命令。最后报告已安装版本、marketplace 来源，以及是否还有匹配的残留进程。
-```
-
-```powershell
-$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
-  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
-}
-$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
-$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-```
-
-上面先列出再停止，范围只包含这两个插件的旧进程；不要用“结束所有 Node 进程”代替。完成这次迁移后，Cursor Bridge 5.4.0 和 Grok Build Supervisor 0.2.0 的常驻程序都从插件缓存之外运行，后续更新无需再为缓存锁专门关闭它们。
+完成这次迁移后，Cursor Bridge 5.4.0 和 Grok Build Supervisor 0.2.0 的常驻程序都会在插件缓存之外运行，后续更新不再需要特殊清理。
 
 Codex：
 
@@ -201,8 +192,6 @@ grok plugin update cursor-bridge
 ```
 
 更新缓存可以不关闭 5.4.0 之后的常驻程序，但已经打开的任务不会热加载新 MCP、Skill 或命令。更新后请新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或在 Grok 打开 `/plugins` 按 `r` / 新开会话。
-
-</details>
 
 <details>
 <summary><strong>CCE 如何搜索，以及返回什么证据</strong></summary>

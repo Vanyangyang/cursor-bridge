@@ -39,31 +39,12 @@ claude plugin install grok-build-supervisor@vanyangyang
 ## 更新
 
 > [!WARNING]
-> **从 Grok Build Supervisor 0.1.0 或更早版本首次升级到 0.2.0 时，请先完整退出一次。** 保存工作，退出正在使用插件的 Codex 和 Claude Code，并关闭可见的 Grok TUI。旧版 daemon、MCP 适配器或 TUI 仍可能占着待替换的缓存目录；`cursor-lifecycle-supervisor.mjs` 不是唯一可能的占用者。可在 PowerShell 中先列出、再停止这两个插件留下的进程：
+> **从 Grok Build Supervisor 0.1.0 或更早版本首次升级到 0.2.0 时，需要做一次 Windows 清理。** 旧插件进程可能仍占用带版本号的缓存目录，导致 Windows 无法替换它。这不是 ACL 权限问题，也不需要手工删除插件缓存。
 
 > [!TIP]
-> 也可以把下面这段提示词直接粘贴给本地 Coding Agent，让它协助完成迁移：
+> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。请将 Cursor Bridge 升级到 5.4.0、Grok Build Supervisor 升级到 0.2.0，并检查从旧缓存运行的 `cursor-lifecycle-supervisor.mjs`、`dist/cursor-bridge.mjs`，以及 Grok 旧版的 `server.mjs`、`supervisor-daemon.mjs`、`tui-host.mjs` 或 `Start-GrokTui.ps1`。核验归属和旧缓存路径后直接停止，无需再次询问；保留新版持久运行时和无关进程。禁止批量结束 Node 或 PowerShell、修改 ACL 或删除缓存。完成正常更新后，报告版本、marketplace 来源和仍存在的旧缓存进程。”
 
-```text
-请帮我完成 Cursor Bridge 5.4.0 和 Grok Build Supervisor 0.2.0 的一次性 Windows 缓存锁迁移。
-
-1. 先只读检查进程。只列出命令行明确涉及 cursor-lifecycle-supervisor.mjs、/dist/cursor-bridge.mjs、Grok Build Supervisor 的 server/daemon/TUI 脚本或 Start-GrokTui.ps1 的进程，并显示 PID、进程名和完整命令行。
-2. 如果匹配到的 Grok TUI 或 Leader 可能仍在工作，或者我还没有确认工作已保存，请先停下来让我保存并关闭；不要终止正在执行的任务。
-3. 得到我确认后，只停止已经核验属于这些插件的残留进程。禁止结束所有 node.exe、powershell.exe 或 pwsh.exe。
-4. 不要修改 Windows ACL，也不要手工删除插件缓存目录。
-5. 根据我当前使用的宿主执行正常的 marketplace 更新和插件安装/更新命令。最后报告已安装版本、marketplace 来源，以及是否还有匹配的残留进程。
-```
-
-```powershell
-$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
-  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
-}
-$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
-$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-```
-
-不要结束所有 Node 进程。完成这次迁移后，daemon 和 TUI 都从用户级持久目录运行，0.2.0 之后可直接使用正常更新命令：
+完成这次迁移后，daemon 和 TUI 都从用户级持久目录运行，0.2.0 之后可直接使用正常更新命令：
 
 ```powershell
 # Codex

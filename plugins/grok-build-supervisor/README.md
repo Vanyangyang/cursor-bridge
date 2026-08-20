@@ -39,31 +39,12 @@ Installing Grok Build Supervisor does not install or start Cursor Bridge.
 ## Update
 
 > [!WARNING]
-> **Before the first upgrade from Grok Build Supervisor 0.1.0 or earlier to 0.2.0, do one complete shutdown.** Save your work, exit Codex and Claude Code instances using the plugin, and close visible Grok TUI windows. The old daemon, an MCP adapter, or a TUI may still be holding the cache that must be replaced; `cursor-lifecycle-supervisor.mjs` is not the only possible holder. In PowerShell, list and then stop only the residual processes belonging to these two plugins:
+> **The first upgrade from Grok Build Supervisor 0.1.0 or earlier to 0.2.0 needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
 
 > [!TIP]
-> You can ask a local coding Agent to perform the migration safely. Copy and paste this prompt:
+> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade Cursor Bridge to 5.4.0 and Grok Build Supervisor to 0.2.0. Check for old-cache instances of `cursor-lifecycle-supervisor.mjs`, `dist/cursor-bridge.mjs`, and Grok's old `server.mjs`, `supervisor-daemon.mjs`, `tui-host.mjs`, or `Start-GrokTui.ps1`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report versions, marketplace source, and any old-cache process that remains.”
 
-```text
-Help me perform the one-time Windows cache-lock migration for Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0.
-
-1. First inspect processes read-only. List the PID, process name, and full command line only for exact plugin matches involving cursor-lifecycle-supervisor.mjs, /dist/cursor-bridge.mjs, Grok Build Supervisor server/daemon/TUI scripts, or Start-GrokTui.ps1.
-2. If a matched Grok TUI or Leader may still be doing work, or I have not confirmed that work is saved, stop and ask me to save and close it. Do not terminate active work.
-3. After I confirm, stop only the verified residual plugin processes. Never stop every node.exe, powershell.exe, or pwsh.exe process.
-4. Do not change Windows ACLs and do not manually delete plugin cache directories.
-5. Run the normal marketplace update and plugin install/update commands for my current host. Finally report the installed versions, marketplace source, and whether any matching residual process remains.
-```
-
-```powershell
-$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
-  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
-}
-$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
-$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-```
-
-Do not kill every Node process. After this one-time migration, both the daemon and TUI run from persistent user state, so releases after 0.2.0 use the normal update commands:
+After this migration, both the daemon and TUI run from persistent user state, so releases after 0.2.0 use the normal update commands:
 
 ```powershell
 # Codex
