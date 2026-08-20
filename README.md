@@ -8,7 +8,7 @@
 
 <p align="center"><sub><strong>Compatibility policy:</strong> Cursor Bridge maintains only the latest Cursor release; previous Cursor releases are not actively supported. If you need a historical Cursor version, first open the <a href="./COMPATIBILITY.md">Cursor Bridge compatibility and update history</a> and switch precisely to its matching archived release when one is listed. Archived releases receive no maintenance. If no historical release meets your needs, use <strong>Fork</strong> in the top-right corner and maintain the required adaptation in your own fork.</sub></p>
 
-# Cursor Bridge + Grok Build Supervisor
+# Cursor Bridge + Grok Build Supervisor（New）
 
 [简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
@@ -28,7 +28,7 @@
 > [!IMPORTANT]
 > Grok Build Supervisor is a separate optional plugin. For the first Windows upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0, save your work and follow [Update an existing installation](#windows-update-migration). Its Agent instruction authorizes verified old-cache cleanup without a second confirmation. Later updates use the normal flow.
 
-## Grok Build Supervisor
+## Grok Build Supervisor（New）
 
 **Let Codex or Claude Code manage a real Grok Build session while Grok does the hands-on work.**
 
