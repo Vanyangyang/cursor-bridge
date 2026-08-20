@@ -20740,7 +20740,7 @@ init_cursor_ensure_core();
 init_lifecycle_paths();
 import http2 from "http";
 import { pathToFileURL as pathToFileURL2 } from "url";
-var PLUGIN_VERSION = "5.4.0";
+var PLUGIN_VERSION = "5.4.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -21078,17 +21078,19 @@ var EXPR_EXTRACT = `(function(){
   return texts[texts.length-1]||'';
 })()`;
 var EXPR_PROVIDER_ERROR = `(function(){
-  const trays=[...document.querySelectorAll('.ui-tray.ui-notification-tray[data-visible="true"]')];
-  const tray=trays.find(node=>{
-    const titleNode=node.querySelector('.ui-tray-header__title');
-    const title=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'').trim();
-    return /^LLM provider error$/i.test(title);
-  });
-  if(!tray)return JSON.stringify({found:false});
-  const titleNode=tray.querySelector('.ui-tray-header__title');
-  const title=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'LLM provider error').trim();
-  const lines=String(tray.innerText||tray.textContent||'').split(/\\r?\\n/)
+  const readLines=node=>String(node&&(node.innerText||node.textContent)||'').split(/\\r?\\n/)
     .map(line=>line.trim()).filter(Boolean);
+  const readTitle=node=>{
+    const titleNode=node&&node.querySelector('.ui-tray-header__title');
+    const stableTitle=String(titleNode&&(titleNode.innerText||titleNode.textContent)||'').trim();
+    if(stableTitle)return stableTitle;
+    return readLines(node).find(line=>/^LLM provider error$/i.test(line))||'';
+  };
+  const trays=[...document.querySelectorAll('.ui-tray.ui-notification-tray[data-visible="true"]')];
+  const tray=trays.find(node=>/^LLM provider error$/i.test(readTitle(node)));
+  if(!tray)return JSON.stringify({found:false});
+  const title=readTitle(tray)||'LLM provider error';
+  const lines=readLines(tray);
   const message=lines.find(line=>line!==title&&!/^(Copy ID|Try again)$/i.test(line))||'';
   const match=message.match(/Request ID:\\s*([^\\s]+)/i);
   const requestId=match?match[1]:null;
@@ -23411,7 +23413,7 @@ function buildToolDefinitions(bridgeInstance) {
 var ADAPTER_START_CWD = process.cwd();
 var bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 var server = new Server(
-  { name: "cursor-bridge", version: "5.4.0" },
+  { name: "cursor-bridge", version: "5.4.1" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {

@@ -370,6 +370,40 @@ test('provider error tray expression extracts terminal evidence without clicking
   assert.match(error.terminalEvidence, /provider_error_tray:0238f19d/);
 });
 
+test('provider error tray expression supports Cursor 3.16 hashed header classes', () => {
+  const buttons = [
+    { innerText: 'Copy ID' },
+    { innerText: 'Try again' },
+  ];
+  const tray = {
+    innerText: [
+      'LLM provider error',
+      'Connection error. Request ID: cursor-3-16-request',
+      'Copy ID',
+      'Try again',
+    ].join('\n'),
+    querySelector() {
+      return null;
+    },
+    querySelectorAll(selector) {
+      return selector === 'button' ? buttons : [];
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      return selector === '.ui-tray.ui-notification-tray[data-visible="true"]' ? [tray] : [];
+    },
+  };
+
+  const result = JSON.parse(Function('document', `return ${EXPR_PROVIDER_ERROR};`)(document));
+  assert.equal(result.found, true);
+  assert.equal(result.title, 'LLM provider error');
+  assert.equal(result.message, 'Connection error. Request ID: cursor-3-16-request');
+  assert.equal(result.requestId, 'cursor-3-16-request');
+  assert.equal(result.retryAvailable, true);
+  assert.doesNotMatch(EXPR_PROVIDER_ERROR, /\.click\(/);
+});
+
 test('Agents workspace recovery clears stale failure guidance before reporting ready', () => {
   const promoted = promoteAgentsWorkspaceLifecycle({
     status: 'workspace-not-ready',

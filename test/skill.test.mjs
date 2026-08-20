@@ -11,7 +11,7 @@ test('cce-routing skill exposes shared implicit routing with explicit boundaries
   const skill = readProjectFile('skills/cce-routing/SKILL.md');
   const metadata = readProjectFile('skills/cce-routing/agents/openai.yaml');
 
-  assert.match(skill, /^---\nname: cce-routing\ndescription: /);
+  assert.match(skill, /^---\r?\nname: cce-routing\r?\ndescription: /);
   assert.match(skill, /cursor_context_engine/);
   assert.match(skill, /implementation location is unknown/);
   assert.match(skill, /callers and callees/);
@@ -48,6 +48,10 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   const grokManifest = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.codex-plugin/plugin.json'));
   const grokMcp = JSON.parse(readProjectFile('plugins/grok-build-supervisor/.mcp.json'));
   const grokInitCommand = readProjectFile('plugins/grok-build-supervisor/commands/grok_init.md');
+  const rootPackage = JSON.parse(readProjectFile('package.json'));
+  const codexCursorManifest = JSON.parse(readProjectFile('.codex-plugin/plugin.json'));
+  const claudeCursorManifest = JSON.parse(readProjectFile('.claude-plugin/plugin.json'));
+  const serverSource = readProjectFile('server.mjs');
   const claudeMarketplace = JSON.parse(readProjectFile('.claude-plugin/marketplace.json'));
   const claudeCursor = claudeMarketplace.plugins.find((plugin) => plugin.name === 'cursor-bridge');
   const claudeGrok = claudeMarketplace.plugins.find((plugin) => plugin.name === 'grok-build-supervisor');
@@ -63,8 +67,12 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
+  assert.equal(rootPackage.version, '5.4.1');
+  assert.match(codexCursorManifest.version, /^5\.4\.1\+codex\./);
+  assert.equal(claudeCursorManifest.version, '5.4.1');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.4\.1';/);
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.4.0');
+  assert.equal(claudeCursor?.version, '5.4.1');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.2.0');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
@@ -233,4 +241,38 @@ test('bilingual compatibility docs keep Cursor 3.16.29 acceptance evidence scope
   assert.match(chinese, /3\.16\.29[\s\S]*IDE\/workbench[\s\S]*Agents Window 尚未完成实机验收/);
   assert.match(changelog, /3\.16\.29 provider-error trays[\s\S]*removed `\.ui-tray-header__title` class/);
   assert.match(changelog, /Agents Window[\s\S]*has not yet completed live acceptance/);
+});
+
+test('compatibility history maps 5.4.0 to Cursor 3.16.17 and keeps 5.4.1 current for 3.16.29', () => {
+  const englishReadme = readProjectFile('README.md');
+  const chineseReadme = readProjectFile('README.zh-CN.md');
+  const english = readProjectFile('COMPATIBILITY.md');
+  const chinese = readProjectFile('COMPATIBILITY.zh-CN.md');
+  const data = JSON.parse(readProjectFile('compatibility.json'));
+
+  assert.equal(data.policy, 'latest-only');
+  assert.equal(data.current.cursorVersion, '3.16.29');
+  assert.equal(data.current.cursorBridgeVersion, '5.4.1');
+  assert.equal(data.current.sourceRef, 'master');
+  assert.equal(data.current.status, 'current');
+  assert.equal(data.current.acceptance.ideWorkbench, 'live-tested');
+  assert.equal(data.current.acceptance.agentsWindow, 'pending-live-acceptance');
+  assert.deepEqual(data.history, [{
+    cursorVersion: '3.16.17',
+    cursorBridgeVersion: '5.4.0',
+    gitRef: 'cursor-bridge--v5.4.0',
+    status: 'archived',
+  }]);
+
+  assert.match(englishReadme, /href="\.\/COMPATIBILITY\.md"/);
+  assert.match(chineseReadme, /href="\.\/COMPATIBILITY\.zh-CN\.md"/);
+  assert.match(english, /maintains only the latest Cursor release/);
+  assert.match(chinese, /只维护 Cursor 最新版本/);
+  assert.doesNotMatch(english, /Install the current version/);
+  assert.doesNotMatch(chinese, /安装当前版本/);
+  assert.match(english, /Cursor Bridge 5\.4\.0 — Cursor 3\.16\.17/);
+  assert.match(chinese, /Cursor Bridge 5\.4\.0 — Cursor 3\.16\.17/);
+  assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.4\.0/);
+  assert.match(chinese, /grok plugin install Vanyangyang\/cursor-bridge@cursor-bridge--v5\.4\.0 --trust/);
+  assert.doesNotMatch(english + chinese + JSON.stringify(data), /5\.3\.|5\.1\.0|4\.0\.0|3\.2\.0/);
 });

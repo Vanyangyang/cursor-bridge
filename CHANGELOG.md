@@ -6,6 +6,16 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.4.1] - 2026-08-20
+
+### Fixed
+
+- Cursor 3.16.29 provider-error trays no longer depend solely on the removed `.ui-tray-header__title` class. Cursor Bridge now falls back to the visible tray title text while preserving the earlier selector path, and still never clicks `Try again` or dismisses the tray.
+
+### Compatibility
+
+- Live-tested Cursor **3.16.29** on Windows 11 through the IDE/workbench for CCE, FIFO, parallel Agent execution, task status/control terminal guards, and normal/minimal presentation. Agents Window selector contracts were checked against the installed 3.16.29 bundle, but Agents Window has not yet completed live acceptance on this patch.
+
 ## [5.4.0] - 2026-08-20
 
 ### Fixed
@@ -202,6 +212,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.4.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.0...cursor-bridge--v5.4.1
 [5.4.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.6...cursor-bridge--v5.4.0
 [5.3.6]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.5...cursor-bridge--v5.3.6
 [5.3.5]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.4...cursor-bridge--v5.3.5
