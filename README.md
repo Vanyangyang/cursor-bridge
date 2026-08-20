@@ -1,3 +1,13 @@
+<p align="center">
+  <a href="https://github.com/Vanyangyang/cursor-bridge"><img alt="30 Star milestone" src="https://img.shields.io/badge/30_STAR_MILESTONE-THANK_YOU!-FFD700?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;labelColor=181717" /></a>
+  <a href="https://github.com/Vanyangyang/cursor-bridge/commits/master"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
+  <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
+</p>
+
+<p align="center"><strong>✨ 30 stars—thank you! Cursor Bridge is here for the long run and will keep pace with the latest Cursor releases. ✨</strong></p>
+
+<p align="center"><sub><strong>Compatibility policy:</strong> If you encounter a version compatibility issue, upgrade to the latest Cursor version currently supported by this project. If you need support for a specific Cursor version, use <strong>Fork</strong> in the top-right corner and maintain the required adaptation in your own fork.</sub></p>
+
 # Cursor Bridge + Grok Build Supervisor
 
 [简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
@@ -16,7 +26,7 @@
 | **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 > [!IMPORTANT]
-> Grok Build Supervisor is a separate optional plugin and is not installed with Cursor Bridge. If you are upgrading Cursor Bridge 5.3.6 or earlier to 5.4.0 on Windows, save your work, fully exit every Codex, Claude Code, or Grok Build instance using these plugins, and close any visible Grok TUI. Then follow the scoped PowerShell cleanup under [Update an existing installation](#windows-update-migration) before rerunning the normal update commands. That section also includes a ready-to-copy Agent prompt if you prefer guided cleanup. This cleanup is required only once; later updates use the normal flow.
+> Grok Build Supervisor is a separate optional plugin. For the first Windows upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0, save your work and follow [Update an existing installation](#windows-update-migration). Its Agent instruction authorizes verified old-cache cleanup without a second confirmation. Later updates use the normal flow.
 
 ## Grok Build Supervisor
 
@@ -50,7 +60,7 @@ Run `/grok_init` once to set up the local proxy. In the project you want to use,
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.16.17** and **3.7.42**. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.16.29** (IDE/workbench), plus Cursor **3.16.17** and **3.7.42** (IDE and Agents Window). Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -119,6 +129,7 @@ Supported Cursor versions (Windows 11):
 
 | Cursor | Status |
 |---|---|
+| **3.16.29** | Live-tested on the IDE/workbench: CCE, FIFO, parallel Agent, task status/control terminal guards, and normal/minimal presentation. Agents Window selectors were checked against the installed bundle, but 3.16.29 Agents Window has not completed live acceptance. |
 | **3.16.17** | Live-tested. IDE and Agents Window, including running FIFO cancel when an Agent ID is published. |
 | **3.7.42** | Live-tested. IDE and Agents Window. |
 
@@ -147,35 +158,15 @@ Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installin
 
 <a id="windows-update-migration"></a>
 
-<details>
-<summary><strong>Update an existing installation</strong></summary>
+## Update an existing installation
 
 > [!WARNING]
-> **Before the first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0, do one complete shutdown.** `cursor-lifecycle-supervisor.mjs` is not the only possible cache holder: a live MCP adapter and the old Grok Build Supervisor daemon may also have the versioned plugin cache as their working directory, which prevents Windows from replacing it. Save your work, exit Codex, Claude Code, and Grok Build instances using these plugins, and close visible Grok TUI windows. Then use PowerShell to remove only the residual plugin processes:
+> **The first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0 needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
 
 > [!TIP]
-> You can ask a local coding Agent to perform the migration safely. Copy and paste this prompt:
+> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade Cursor Bridge to 5.4.0 and Grok Build Supervisor to 0.2.0. Check for old-cache instances of `cursor-lifecycle-supervisor.mjs`, `dist/cursor-bridge.mjs`, and Grok's old `server.mjs`, `supervisor-daemon.mjs`, `tui-host.mjs`, or `Start-GrokTui.ps1`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report versions, marketplace source, and any old-cache process that remains.”
 
-```text
-Help me perform the one-time Windows cache-lock migration for Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0.
-
-1. First inspect processes read-only. List the PID, process name, and full command line only for exact plugin matches involving cursor-lifecycle-supervisor.mjs, /dist/cursor-bridge.mjs, Grok Build Supervisor server/daemon/TUI scripts, or Start-GrokTui.ps1.
-2. If a matched Grok TUI or Leader may still be doing work, or I have not confirmed that work is saved, stop and ask me to save and close it. Do not terminate active work.
-3. After I confirm, stop only the verified residual plugin processes. Never stop every node.exe, powershell.exe, or pwsh.exe process.
-4. Do not change Windows ACLs and do not manually delete plugin cache directories.
-5. Run the normal marketplace update and plugin install/update commands for my current host. Finally report the installed versions, marketplace source, and whether any matching residual process remains.
-```
-
-```powershell
-$oldPluginProcesses = Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -in @('node.exe', 'powershell.exe', 'pwsh.exe') -and
-  $_.CommandLine -match '(?i)(cursor-lifecycle-supervisor\.mjs|[\\/]dist[\\/]cursor-bridge\.mjs|grok-build-supervisor[\\/].*(server|supervisor-daemon|tui-host)\.mjs|grok-build-supervisor[\\/].*Start-GrokTui\.ps1)'
-}
-$oldPluginProcesses | Select-Object ProcessId, Name, CommandLine
-$oldPluginProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-```
-
-The command lists the exact matches before stopping them; do not replace it with a blanket “kill every Node process.” After this one-time migration, Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0 run their persistent components outside the plugin cache, so later updates do not require a special shutdown for cache locks.
+After this migration, Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0 run their persistent components outside the plugin cache, so later updates do not need special cleanup.
 
 Codex:
 
@@ -201,8 +192,6 @@ grok plugin update cursor-bridge
 ```
 
 Updating the cache no longer requires stopping post-5.4.0 persistent runtimes, but an already open task does not hot-load new MCP, Skill, or command code. Start a new Codex task, restart Claude Code / run `/reload-plugins`, or in Grok open `/plugins` and press `r` / start a new session.
-
-</details>
 
 <details>
 <summary><strong>How CCE searches and returns evidence</strong></summary>

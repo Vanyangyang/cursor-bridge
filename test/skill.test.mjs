@@ -76,16 +76,18 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
   assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
-  assert.match(englishImportant, /fully exit[\s\S]*#windows-update-migration[\s\S]*normal update commands/);
-  assert.match(chineseImportant, /完整退出[\s\S]*#windows-update-migration[\s\S]*正常更新命令/);
-  assert.match(englishImportant, /ready-to-copy Agent prompt/);
-  assert.match(chineseImportant, /直接粘贴给 Agent 的提示词/);
+  assert.match(englishImportant, /#windows-update-migration[\s\S]*Agent instruction[\s\S]*without a second confirmation/);
+  assert.match(chineseImportant, /#windows-update-migration[\s\S]*Agent 指令[\s\S]*无需再次确认/);
+  assert.match(english, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## Update an existing installation/);
+  assert.match(chinese, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## 更新已有安装/);
+  assert.doesNotMatch(english, /<summary><strong>Update an existing installation<\/strong><\/summary>/);
+  assert.doesNotMatch(chinese, /<summary><strong>更新已有安装<\/strong><\/summary>/);
   for (const content of [english, chinese]) {
     assert.match(content, /<a id="windows-update-migration"><\/a>/);
     assert.match(content, /5\.4\.0/);
     assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
-    assert.match(content, /Get-CimInstance Win32_Process/);
     assert.match(content, /grok-build-supervisor@vanyangyang/);
+    assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
   for (const readme of [
     'plugins/grok-build-supervisor/README.md',
@@ -95,7 +97,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     assert.match(content, /claude plugin install grok-build-supervisor@vanyangyang/);
     assert.match(content, /\/grok_init/);
     assert.match(content, /0\.2\.0/);
-    assert.match(content, /Get-CimInstance Win32_Process/);
+    assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
   assert.match(grokInitCommand, /call `grok_init`/);
   assert.match(grokInitCommand, /must not create or resume a Grok session/);
@@ -175,7 +177,7 @@ test('all Grok README surfaces link the recommended context-mode project', () =>
   assert.match(documents[3], /\[context-mode（推荐）\]/);
 });
 
-test('all update guides include a safe copy-paste Agent cleanup prompt', () => {
+test('all update guides use a compact, authorized Agent cleanup instruction without process scripts', () => {
   const englishDocuments = [
     readProjectFile('README.md'),
     readProjectFile('plugins/grok-build-supervisor/README.md'),
@@ -185,16 +187,22 @@ test('all update guides include a safe copy-paste Agent cleanup prompt', () => {
     readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md'),
   ];
   for (const content of englishDocuments) {
-    assert.match(content, /Copy and paste this prompt/);
-    assert.match(content, /First inspect processes read-only/);
-    assert.match(content, /Never stop every node\.exe, powershell\.exe, or pwsh\.exe/);
-    assert.match(content, /Do not change Windows ACLs/);
+    assert.match(content, /Recommended — copy this to your local coding Agent/);
+    assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
+    assert.match(content, /supervisor-daemon\.mjs/);
+    assert.match(content, /without asking (?:me )?again/);
+    assert.match(content, /Do not mass-stop Node or PowerShell/);
+    assert.match(content, /change ACLs, or delete caches/);
+    assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
   for (const content of chineseDocuments) {
-    assert.match(content, /提示词直接粘贴给本地 Coding Agent/);
-    assert.match(content, /先只读检查进程/);
-    assert.match(content, /禁止结束所有 node\.exe、powershell\.exe 或 pwsh\.exe/);
-    assert.match(content, /不要修改 Windows ACL/);
+    assert.match(content, /推荐把这句话交给本地 Coding Agent/);
+    assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
+    assert.match(content, /supervisor-daemon\.mjs/);
+    assert.match(content, /无需再次询问/);
+    assert.match(content, /(?:不要|禁止)批量结束 Node 或 PowerShell/);
+    assert.match(content, /修改 ACL 或删除缓存/);
+    assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
 });
 
@@ -214,4 +222,15 @@ test('bilingual README promotes the minimal runtime benefit and trade-off', () =
     assert.ok(content.indexOf('> [!TIP]') < content.indexOf('<details>'));
     assert.doesNotMatch(content, /<summary><strong>(?:Minimal runtime details|极简运行时细节)<\/strong><\/summary>/);
   }
+});
+
+test('bilingual compatibility docs keep Cursor 3.16.29 acceptance evidence scoped', () => {
+  const english = readProjectFile('README.md');
+  const chinese = readProjectFile('README.zh-CN.md');
+  const changelog = readProjectFile('CHANGELOG.md');
+
+  assert.match(english, /3\.16\.29[\s\S]*IDE\/workbench[\s\S]*Agents Window has not completed live acceptance/);
+  assert.match(chinese, /3\.16\.29[\s\S]*IDE\/workbench[\s\S]*Agents Window 尚未完成实机验收/);
+  assert.match(changelog, /3\.16\.29 provider-error trays[\s\S]*removed `\.ui-tray-header__title` class/);
+  assert.match(changelog, /Agents Window[\s\S]*has not yet completed live acceptance/);
 });
