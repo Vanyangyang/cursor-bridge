@@ -4,7 +4,7 @@
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
-<p align="center"><strong>✨ 30 Stars 达成，感谢每一位关注者！Cursor Bridge 将长期维护，并持续跟进 Cursor 最新版本。✨</strong></p>
+<p align="center"><strong>✨ 30 Stars 达成，感谢每一位关注者！Cursor Bridge 将长期维护，并持续跟进 Cursor 最新版本。如果这个项目对您有帮助，欢迎<a href="https://github.com/Vanyangyang/cursor-bridge">点亮一个 ⭐ Star</a>，感谢您的支持！✨</strong></p>
 
 <p align="center"><sub><strong>版本兼容说明：</strong>Cursor Bridge 只维护 Cursor 最新版本，不再主动兼容上一版本。如果需要使用历史 Cursor 版本，请先前往 <a href="./COMPATIBILITY.zh-CN.md">Cursor Bridge 兼容与更新历史</a>，精确切换到已列出的对应版本；历史版本不再维护。如果历史版本仍不能满足您的需求，请点击仓库右上角的 <strong>Fork</strong>，并在自己的 Fork 中自行适配。</sub></p>
 
@@ -328,5 +328,3 @@ npm run build
 ## Star History
 
 [![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=899248358ccd)](https://github.com/Vanyangyang/cursor-bridge)
-
-由 GitHub 仓库 API 自动更新，不依赖外部图表服务，也不需要手工维护 PAT。
