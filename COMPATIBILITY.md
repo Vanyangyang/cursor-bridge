@@ -1,0 +1,46 @@
+# Cursor Bridge compatibility and update history
+
+[简体中文](./COMPATIBILITY.zh-CN.md) · [README](./README.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases)
+
+> [!IMPORTANT]
+> Cursor Bridge maintains only the latest Cursor release. A version enters the historical list only after a newer maintained Cursor Bridge version replaces it. Historical versions receive no fixes, compatibility work, or support. If no listed historical version meets your needs, fork the repository and maintain the adaptation in your own fork.
+
+The machine-readable source for this page is [`compatibility.json`](./compatibility.json).
+
+## Current maintained baseline
+
+| Cursor | Cursor Bridge | Source | Status |
+|---|---|---|---|
+| **3.16.29** | **5.4.1** | `master` | Current maintained version. Windows 11 IDE/workbench is live-tested; Agents Window live acceptance is still pending. |
+
+## Historical versions
+
+### Cursor Bridge 5.4.0 — Cursor 3.16.17
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.4.0`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.4.0
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.4.0 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.4.0
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.4.0
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.4.0 --trust
+grok plugin enable cursor-bridge
+```
+
+Save your work and fully exit plugin hosts before switching. Versions earlier than 5.4.0 are intentionally not backfilled. If this archived pairing does not meet your needs, fork the repository and maintain the adaptation in your own fork.

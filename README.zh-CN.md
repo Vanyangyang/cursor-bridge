@@ -6,7 +6,7 @@
 
 <p align="center"><strong>✨ 30 Stars 达成，感谢每一位关注者！Cursor Bridge 将长期维护，并持续跟进 Cursor 最新版本。✨</strong></p>
 
-<p align="center"><sub><strong>版本兼容说明：</strong>如果遇到版本兼容问题，请升级到本项目当前支持的最新 Cursor 版本。如果需要支持特定 Cursor 版本，请点击仓库右上角的 <strong>Fork</strong>，并在自己的 Fork 中自行适配。</sub></p>
+<p align="center"><sub><strong>版本兼容说明：</strong>Cursor Bridge 只维护 Cursor 最新版本，不再主动兼容上一版本。如果需要使用历史 Cursor 版本，请先前往 <a href="./COMPATIBILITY.zh-CN.md">Cursor Bridge 兼容与更新历史</a>，精确切换到已列出的对应版本；历史版本不再维护。如果历史版本仍不能满足您的需求，请点击仓库右上角的 <strong>Fork</strong>，并在自己的 Fork 中自行适配。</sub></p>
 
 # Cursor Bridge + Grok Build Supervisor
 
@@ -60,7 +60,7 @@ claude plugin install grok-build-supervisor@vanyangyang
 **把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.16.29**（IDE/workbench），以及 Cursor **3.16.17** 与 **3.7.42**（IDE 和 Agents Window）。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.16.29**（IDE/workbench）。Agents Window 实机验收仍未完成。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -125,15 +125,13 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 ## 兼容性
 
-支持的 Cursor 版本（Windows 11）：
+当前 Cursor 兼容目标（Windows 11）：
 
-| Cursor | 说明 |
-|---|---|
-| **3.16.29** | 已实机验证 IDE/workbench：CCE、FIFO、parallel Agent、任务状态/控制终态门禁及 normal/minimal 显示切换。已对安装包扫描 Agents Window 选择器，但 3.16.29 Agents Window 尚未完成实机验收。 |
-| **3.16.17** | 已实机验证。workbench 和 Agents Window，含已发布 Agent ID 时的运行中 FIFO 取消。 |
-| **3.7.42** | 已实机验证。workbench 和 Agents Window。 |
+| Cursor | Cursor Bridge | 说明 |
+|---|---|---|
+| **3.16.29** | **5.4.1**（`master`，当前版本） | 已实机验证 IDE/workbench：CCE、FIFO、parallel Agent、任务状态/控制终态门禁及 normal/minimal 显示切换。已对安装包扫描 Agents Window 选择器，但 3.16.29 Agents Window 尚未完成实机验收。 |
 
-其他 Cursor 版本尚未测试。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 

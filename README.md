@@ -6,7 +6,7 @@
 
 <p align="center"><strong>✨ 30 stars—thank you! Cursor Bridge is here for the long run and will keep pace with the latest Cursor releases. ✨</strong></p>
 
-<p align="center"><sub><strong>Compatibility policy:</strong> If you encounter a version compatibility issue, upgrade to the latest Cursor version currently supported by this project. If you need support for a specific Cursor version, use <strong>Fork</strong> in the top-right corner and maintain the required adaptation in your own fork.</sub></p>
+<p align="center"><sub><strong>Compatibility policy:</strong> Cursor Bridge maintains only the latest Cursor release; previous Cursor releases are not actively supported. If you need a historical Cursor version, first open the <a href="./COMPATIBILITY.md">Cursor Bridge compatibility and update history</a> and switch precisely to its matching archived release when one is listed. Archived releases receive no maintenance. If no historical release meets your needs, use <strong>Fork</strong> in the top-right corner and maintain the required adaptation in your own fork.</sub></p>
 
 # Cursor Bridge + Grok Build Supervisor
 
@@ -60,7 +60,7 @@ Run `/grok_init` once to set up the local proxy. In the project you want to use,
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.16.29** (IDE/workbench), plus Cursor **3.16.17** and **3.7.42** (IDE and Agents Window). Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.16.29** (IDE/workbench). Agents Window live acceptance is still pending. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -125,15 +125,13 @@ Initialization is persistent. Repeat the initialization sentence with another ab
 
 ## Compatibility
 
-Supported Cursor versions (Windows 11):
+Current Cursor compatibility target (Windows 11):
 
-| Cursor | Status |
-|---|---|
-| **3.16.29** | Live-tested on the IDE/workbench: CCE, FIFO, parallel Agent, task status/control terminal guards, and normal/minimal presentation. Agents Window selectors were checked against the installed bundle, but 3.16.29 Agents Window has not completed live acceptance. |
-| **3.16.17** | Live-tested. IDE and Agents Window, including running FIFO cancel when an Agent ID is published. |
-| **3.7.42** | Live-tested. IDE and Agents Window. |
+| Cursor | Cursor Bridge | Status |
+|---|---|---|
+| **3.16.29** | **5.4.1** (`master`, current) | Live-tested on the IDE/workbench: CCE, FIFO, parallel Agent, task status/control terminal guards, and normal/minimal presentation. Agents Window selectors were checked against the installed bundle, but 3.16.29 Agents Window has not completed live acceptance. |
 
-Other Cursor versions have not been tested. If Agents Window is not available, CCE uses the IDE. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.0 / Cursor 3.16.17 pairing and exact installation commands. If Agents Window is not available, CCE uses the IDE. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
