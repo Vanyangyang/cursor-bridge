@@ -25,9 +25,9 @@
 | **Cursor Bridge** | Cursor project intelligence and bounded Cursor Agent execution | [Continue below](#cursor-bridge) |
 | **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
-## Grok Build Supervisor
+## Grok Build Supervisor (New)
 
-**A separate optional plugin that lets Codex or Claude Code coordinate task execution through Grok Build.**
+**A new plugin that lets Codex or Claude Code coordinate task execution through Grok Build.**
 
 It is installed and updated independently from Cursor Bridge.
 
@@ -41,7 +41,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.16.29** (IDE/workbench). Agents Window live acceptance is still pending. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.16.29** (IDE/workbench and Agents Window). Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
