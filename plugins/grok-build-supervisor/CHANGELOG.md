@@ -13,6 +13,8 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [0.3.3] - 2026-08-21
 
+> Development milestone included in the 0.3.4 release; no standalone 0.3.3 tag was published.
+
 ### Added
 
 - The ACP client now advertises Grok's structured `x.ai/folderTrust.interactive` capability for visible sessions and handles both the logical `x.ai/folder_trust/request` method and its ACP-prefixed `_x.ai/folder_trust/request` wire form. Payloads contain the session, cwd, workspace, and gated config kinds.
@@ -83,8 +85,8 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 - The first upgrade from 0.1.0 or earlier may still require fully exiting plugin hosts and stopping old cache-resident processes once. See the README update section for the scoped PowerShell command.
 
 [0.2.0]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/cursor-bridge--v5.4.0
-[0.3.0]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.0/plugins/grok-build-supervisor
-[0.3.1]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.1/plugins/grok-build-supervisor
-[0.3.2]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.2/plugins/grok-build-supervisor
-[0.3.3]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.3/plugins/grok-build-supervisor
-[0.3.4]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.4/plugins/grok-build-supervisor
+[0.3.0]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.0
+[0.3.1]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.1
+[0.3.2]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.2
+[0.3.3]: https://github.com/Vanyangyang/cursor-bridge/compare/grok-build-supervisor--v0.3.2...grok-build-supervisor--v0.3.4
+[0.3.4]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.4
