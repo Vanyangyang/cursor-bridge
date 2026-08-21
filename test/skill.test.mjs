@@ -74,9 +74,9 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.equal(claudeCursor?.source, '.');
   assert.equal(claudeCursor?.version, '5.4.1');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.2.0');
+  assert.equal(claudeGrok?.version, '0.3.0');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.2.0');
+  assert.equal(claudeGrokManifest.version, '0.3.0');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');

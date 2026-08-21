@@ -115,7 +115,7 @@ The Supervisor handles the connection details. Users do not manage the underlyin
 
 - Closing one Codex or Claude Code task, or updating the plugin, does not immediately disconnect the background Supervisor.
 - More than one host can view the same Grok session, but only one can send commands at a time. This prevents two agents from writing over each other.
-- Status checks return small updates while Grok is working. They do not keep returning the full answer accumulated so far.
+- Status checks return compact stages such as locating, modifying, and verifying, with bounded file and tool counts. Silent Supervisor heartbeats do not pretend that Grok made progress, and raw tool logs or the answer accumulated so far are not repeated.
 - Short final answers are returned once. A longer report is saved as a local file, and the plugin returns its location, size, checksum, truncation status, and a short summary. [context-mode (recommended)](https://github.com/mksglu/context-mode) can process that file when installed, but the Supervisor does not require it.
 - Grok is told whether the sender is Codex, Claude Code, or another host, instead of always being told that Codex sent the task.
 - The scripts needed by an already-running session are copied to persistent storage, so refreshing the plugin cache cannot remove them mid-session.

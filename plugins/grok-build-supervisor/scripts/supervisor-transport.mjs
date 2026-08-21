@@ -153,15 +153,22 @@ export function coalesceInteractionResult(result, params = {}, options = {}) {
     run.artifactError = artifactError;
   }
   const working = result.state === "working";
+  const terminalProgress = new Set(["completed", "failed"]).has(result.state)
+    && (terminalSequence === null || terminalSequence > afterSequence);
+  const sourceProgress = result.progress && typeof result.progress === "object" && !Array.isArray(result.progress)
+    ? result.progress
+    : null;
   return {
     ...result,
     run,
     progress: working ? {
+      ...(sourceProgress || {}),
       status: "streaming",
       newActivity: latestSequence > afterSequence,
       contentSuppressed: true,
-      coalesced: originalCursor.hasMore === true,
-    } : null,
+      coalesced: true,
+      eventsCollapsed: originalCursor.hasMore === true,
+    } : terminalProgress ? sourceProgress : null,
     delivery: {
       mode: "terminal_cursor_once",
       finalTextAvailable,
