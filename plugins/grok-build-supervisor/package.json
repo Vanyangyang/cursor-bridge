@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Persistent user-level Supervisor daemon with verified local-proxy initialization for guarded Grok Leader/ACP sessions.",
