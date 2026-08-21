@@ -25,9 +25,9 @@
 | **Cursor Bridge** | Cursor 项目理解与有边界的 Cursor Agent 执行 | [继续阅读](#cursor-bridge) |
 | **Grok Build Supervisor** | 让 Grok Build 持续工作，同时避免重复输出占满上下文 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
-## Grok Build Supervisor
+## Grok Build Supervisor（New）
 
-**一个让 Codex 或 Claude Code 协调 Grok Build 执行任务的独立可选插件。**
+**一个让 Codex 或 Claude Code 协调 Grok Build 执行任务的全新插件。**
 
 它与 Cursor Bridge 分别安装、分别更新。
 
@@ -41,7 +41,7 @@
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.16.29**（IDE/workbench）。Agents Window 实机验收仍未完成。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.16.29**（IDE/workbench 与 Agents Window）。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
