@@ -90,10 +90,18 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   const chinese = readProjectFile('README.zh-CN.md');
   const englishImportant = english.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
   const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
+  const englishGrokSection = english.match(/## Grok Build Supervisor\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
+  const chineseGrokSection = chinese.match(/## Grok Build Supervisor\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
+  const englishMigration = english.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n## |$)/)?.[0] || '';
+  const chineseMigration = chinese.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n## |$)/)?.[0] || '';
   assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
-  assert.match(englishImportant, /#windows-update-migration[\s\S]*Agent instruction[\s\S]*without a second confirmation/);
-  assert.match(chineseImportant, /#windows-update-migration[\s\S]*Agent 指令[\s\S]*无需再次确认/);
+  assert.match(englishImportant, /Cursor Bridge[\s\S]*5\.3\.6 or earlier[\s\S]*5\.4\.0 or any later release[\s\S]*#windows-update-migration/);
+  assert.match(chineseImportant, /Cursor Bridge[\s\S]*5\.3\.6 或更早版本[\s\S]*5\.4\.0 或任何后续版本[\s\S]*#windows-update-migration/);
+  assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
+  assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
+  assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
+  assert.doesNotMatch(chineseMigration, /Grok Build Supervisor|grok-build-supervisor/);
   assert.match(english, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## Update an existing installation/);
   assert.match(chinese, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## 更新已有安装/);
   assert.doesNotMatch(english, /<summary><strong>Update an existing installation<\/strong><\/summary>/);
@@ -102,7 +110,6 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     assert.match(content, /<a id="windows-update-migration"><\/a>/);
     assert.match(content, /5\.4\.0/);
     assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
-    assert.match(content, /grok-build-supervisor@vanyangyang/);
     assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
   for (const readme of [
@@ -177,10 +184,8 @@ test('bilingual README documents plugin install and update commands', () => {
   }
 });
 
-test('all Grok README surfaces link the recommended context-mode project', () => {
+test('Grok plugin READMEs link the recommended context-mode project', () => {
   const documents = [
-    readProjectFile('README.md'),
-    readProjectFile('README.zh-CN.md'),
     readProjectFile('plugins/grok-build-supervisor/README.md'),
     readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md'),
   ];
@@ -189,37 +194,35 @@ test('all Grok README surfaces link the recommended context-mode project', () =>
   }
   assert.match(documents[0], /\[context-mode \(recommended\)\]/);
   assert.match(documents[1], /\[context-mode（推荐）\]/);
-  assert.match(documents[2], /\[context-mode \(recommended\)\]/);
-  assert.match(documents[3], /\[context-mode（推荐）\]/);
 });
 
-test('all update guides use a compact, authorized Agent cleanup instruction without process scripts', () => {
-  const englishDocuments = [
-    readProjectFile('README.md'),
-    readProjectFile('plugins/grok-build-supervisor/README.md'),
-  ];
-  const chineseDocuments = [
-    readProjectFile('README.zh-CN.md'),
-    readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md'),
-  ];
-  for (const content of englishDocuments) {
+test('each update guide limits cleanup instructions to its own plugin', () => {
+  const englishCursor = readProjectFile('README.md');
+  const chineseCursor = readProjectFile('README.zh-CN.md');
+  const englishGrok = readProjectFile('plugins/grok-build-supervisor/README.md');
+  const chineseGrok = readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md');
+  for (const content of [englishCursor, englishGrok]) {
     assert.match(content, /Recommended — copy this to your local coding Agent/);
-    assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
-    assert.match(content, /supervisor-daemon\.mjs/);
     assert.match(content, /without asking (?:me )?again/);
     assert.match(content, /Do not mass-stop Node or PowerShell/);
     assert.match(content, /change ACLs, or delete caches/);
     assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
-  for (const content of chineseDocuments) {
+  for (const content of [chineseCursor, chineseGrok]) {
     assert.match(content, /推荐把这句话交给本地 Coding Agent/);
-    assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
-    assert.match(content, /supervisor-daemon\.mjs/);
     assert.match(content, /无需再次询问/);
     assert.match(content, /(?:不要|禁止)批量结束 Node 或 PowerShell/);
     assert.match(content, /修改 ACL 或删除缓存/);
     assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
+  assert.match(englishCursor, /cursor-lifecycle-supervisor\.mjs/);
+  assert.match(chineseCursor, /cursor-lifecycle-supervisor\.mjs/);
+  assert.doesNotMatch(englishCursor, /supervisor-daemon\.mjs|Start-GrokTui\.ps1/);
+  assert.doesNotMatch(chineseCursor, /supervisor-daemon\.mjs|Start-GrokTui\.ps1/);
+  assert.match(englishGrok, /supervisor-daemon\.mjs/);
+  assert.match(chineseGrok, /supervisor-daemon\.mjs/);
+  assert.doesNotMatch(englishGrok, /cursor-lifecycle-supervisor\.mjs|dist\/cursor-bridge\.mjs/);
+  assert.doesNotMatch(chineseGrok, /cursor-lifecycle-supervisor\.mjs|dist\/cursor-bridge\.mjs/);
 });
 
 test('bilingual README promotes the minimal runtime benefit and trade-off', () => {

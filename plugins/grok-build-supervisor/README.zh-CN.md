@@ -39,12 +39,12 @@ claude plugin install grok-build-supervisor@vanyangyang
 ## 更新
 
 > [!WARNING]
-> **从 Grok Build Supervisor 0.1.0 或更早版本首次升级到 0.2.0 时，需要做一次 Windows 清理。** 旧插件进程可能仍占用带版本号的缓存目录，导致 Windows 无法替换它。这不是 ACL 权限问题，也不需要手工删除插件缓存。
+> **从 Grok Build Supervisor 0.1.0 或更早版本首次升级到 0.2.0 或任何后续版本时，需要做一次 Windows 清理。** 旧插件进程可能仍占用带版本号的缓存目录，导致 Windows 无法替换它。这不是 ACL 权限问题，也不需要手工删除插件缓存。
 
 > [!TIP]
-> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。请将 Cursor Bridge 升级到 5.4.0、Grok Build Supervisor 升级到 0.2.0，并检查从旧缓存运行的 `cursor-lifecycle-supervisor.mjs`、`dist/cursor-bridge.mjs`，以及 Grok 旧版的 `server.mjs`、`supervisor-daemon.mjs`、`tui-host.mjs` 或 `Start-GrokTui.ps1`。核验归属和旧缓存路径后直接停止，无需再次询问；保留新版持久运行时和无关进程。禁止批量结束 Node 或 PowerShell、修改 ACL 或删除缓存。完成正常更新后，报告版本、marketplace 来源和仍存在的旧缓存进程。”
+> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。请把已安装的 Grok Build Supervisor 升级到 marketplace 当前最新版。先核对当前版本；如果是 0.1.0 或更早版本，检查从旧插件缓存运行的 `server.mjs`、`supervisor-daemon.mjs`、`tui-host.mjs` 或 `Start-GrokTui.ps1`。核验归属和旧缓存路径后直接停止，无需再次询问；保留新版持久运行时和无关进程。禁止批量结束 Node 或 PowerShell、修改 ACL 或删除缓存。完成正常更新后，报告版本、marketplace 来源和仍存在的旧缓存进程。”
 
-完成这次迁移后，daemon 和 TUI 都从用户级持久目录运行，0.2.0 之后可直接使用正常更新命令：
+完成这次迁移后，daemon 和 TUI 都从用户级持久目录运行，0.2.0 及后续版本可直接使用正常更新命令：
 
 ```powershell
 # Codex

@@ -25,39 +25,20 @@
 | **Cursor Bridge** | Cursor project intelligence and bounded Cursor Agent execution | [Continue below](#cursor-bridge) |
 | **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
-> [!IMPORTANT]
-> Grok Build Supervisor is a separate optional plugin. For the first Windows upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0, save your work and follow [Update an existing installation](#windows-update-migration). Its Agent instruction authorizes verified old-cache cleanup without a second confirmation. Later updates use the normal flow.
+## Grok Build Supervisor
 
-## Grok Build Supervisor（New）
+**A separate optional plugin that lets Codex or Claude Code coordinate task execution through Grok Build.**
 
-**Let Codex or Claude Code manage a real Grok Build session while Grok does the hands-on work.**
+It is installed and updated independently from Cursor Bridge.
 
-The plugin opens or resumes Grok in a visible Windows Terminal window and keeps the connection alive in the background. Closing one Codex or Claude Code task, or reloading the plugin, does not make the Grok session disappear. It also keeps the project folder and sender identity matched, and prevents two hosts from sending commands at the same time.
-
-The plugin does not send the same growing answer back on every status check. While Grok is working, it returns only a small status update. Short answers are returned once; long reports are saved to a local file and represented by the file location, size, checksum, and a short summary. If [context-mode (recommended)](https://github.com/mksglu/context-mode) is installed, it can extract the useful parts of that file; the Supervisor also works without it.
-
-Install it independently:
-
-```bash
-# Codex
-codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
-codex plugin add grok-build-supervisor@vanyangyang
-
-# Claude Code
-claude plugin marketplace add Vanyangyang/cursor-bridge
-claude plugin install grok-build-supervisor@vanyangyang
-```
-
-Run `/grok_init` once to set up the local proxy. In the project you want to use, `/grok_execute on` binds that project for the current task and immediately reuses or opens its visible Grok terminal; it does not send a coding task. Then give Codex or Claude Code work normally. Use `/grok_execute off` to leave the mode.
-
-> [!TIP]
-> `/grok_execute on` opens Grok in a visible Windows Terminal window by default. If this activation should be headless, say so before running `on`. The plugin never hides the window unless you ask.
-
-[Read the Grok Build Supervisor documentation →](./plugins/grok-build-supervisor/README.md)
+[Read the introduction, installation, and usage guide →](./plugins/grok-build-supervisor/README.md)
 
 ## Cursor Bridge
 
 **Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
+
+> [!IMPORTANT]
+> **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
 > **Live-tested environment:** Windows 11 + Cursor **3.16.29** (IDE/workbench). Agents Window live acceptance is still pending. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
@@ -159,12 +140,12 @@ Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installin
 ## Update an existing installation
 
 > [!WARNING]
-> **The first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0 needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
+> **The first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0 or any later release needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
 
 > [!TIP]
-> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade Cursor Bridge to 5.4.0 and Grok Build Supervisor to 0.2.0. Check for old-cache instances of `cursor-lifecycle-supervisor.mjs`, `dist/cursor-bridge.mjs`, and Grok's old `server.mjs`, `supervisor-daemon.mjs`, `tui-host.mjs`, or `Start-GrokTui.ps1`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report versions, marketplace source, and any old-cache process that remains.”
+> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade the installed Cursor Bridge plugin to the latest version currently available from its marketplace. Check its current version first; if it is 5.3.6 or earlier, inspect old-cache instances of `cursor-lifecycle-supervisor.mjs` and `dist/cursor-bridge.mjs`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report the installed version, marketplace source, and any old-cache process that remains.”
 
-After this migration, Cursor Bridge 5.4.0 and Grok Build Supervisor 0.2.0 run their persistent components outside the plugin cache, so later updates do not need special cleanup.
+After this migration, Cursor Bridge 5.4.0 and later releases run their persistent components outside the plugin cache, so later updates do not need special cleanup.
 
 Codex:
 
