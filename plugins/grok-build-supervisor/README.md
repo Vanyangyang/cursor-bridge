@@ -82,6 +82,8 @@ Open the project you want to work on, then turn supervised execution on:
 
 At that moment Codex or Claude Code binds executor mode to the current project directory and immediately reuses or starts its visible Grok terminal. Activation does not send a coding task. When the terminal is ready, ask for work normally; the host sends the separately approved task and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
 
+The first time Grok sees a project containing local automation, its own terminal may ask whether you trust that directory. The Supervisor recognizes this exact screen, keeps the same terminal and session, and tells you to confirm there; do not run `/grok_execute on` again. It never presses `y` or adds `--trust` for you. After you answer in Grok, activation continues automatically.
+
 The project binding lasts only for the current Codex or Claude Code task. Turning the mode off clears that binding but does not close the terminal or cancel work already in progress.
 
 > [!TIP]
@@ -125,6 +127,7 @@ The Supervisor handles the connection details. Users do not manage the underlyin
 ## Safety rules
 
 - The plugin never turns on approve-everything modes or chooses a permission for you.
+- It never trusts a workspace for you; Grok's native directory-trust choice remains yours.
 - It does not type into the terminal, take over an unrelated Grok process, or stop a process it cannot prove it owns.
 - It does not hide the terminal unless you explicitly ask for no visible window.
 - It accepts only a local proxy that can actually carry the required connection. It does not store proxy passwords or assume one fixed port.

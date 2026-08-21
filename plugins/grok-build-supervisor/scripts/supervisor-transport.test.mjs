@@ -464,6 +464,30 @@ test("daemon busy state blocks shutdown for a fully verified live TUI", async ()
   assert.equal(state.liveTuiCount, 1);
 });
 
+test("daemon busy state preserves a verified trust-pending TUI before registry activation", async () => {
+  const fake = new FakeSupervisor();
+  fake.status = async () => ({
+    acpConnected: false,
+    attachedSessionId: null,
+    activeRun: null,
+    pendingPermissions: [],
+    pendingElicitations: [],
+    pendingWorkspaceTrust: [],
+    ownedVisibleTuiPids: [],
+    recordedTuis: [{
+      status: "awaiting_workspace_trust",
+      processAlive: true,
+      processIdentityMatch: true,
+      activeRegistryMatch: false,
+      leaderOwnershipMatch: true,
+    }],
+  });
+  const daemon = new SupervisorDaemon({ supervisor: fake, runtimeVersion: "test" });
+  const state = await daemon.daemonBusyState();
+  assert.equal(state.busy, true);
+  assert.equal(state.liveTuiCount, 1);
+});
+
 test("detached daemon survives the launching client and accepts a fresh client", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "grok-supervisor-daemon-process-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

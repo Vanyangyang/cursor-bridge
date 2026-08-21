@@ -31,6 +31,8 @@
 
 It is installed and updated independently from Cursor Bridge.
 
+Its visible TUI recognizes Grok's native workspace-trust gate, keeps one terminal while you decide there, and never trusts a directory on your behalf.
+
 [Read the introduction, installation, and usage guide →](./plugins/grok-build-supervisor/README.md)
 
 ## Cursor Bridge
