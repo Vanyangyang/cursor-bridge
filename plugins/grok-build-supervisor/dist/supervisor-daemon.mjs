@@ -19748,6 +19748,12 @@ var MAX_INTERACTION_WAIT_MS = 25e3;
 var MAX_FINAL_TEXT_CHARS = 512 * 1024;
 var DEFAULT_PROGRESS_HEARTBEAT_INTERVAL_MS = 2e4;
 var MAX_PROGRESS_TITLE_CHARS = 160;
+var MAX_ACCEPTANCE_PATHS = 50;
+var MAX_ACCEPTANCE_PATH_CHARS = 1200;
+var MAX_ACCEPTANCE_COMMANDS = 20;
+var MAX_ACCEPTANCE_COMMAND_CHARS = 600;
+var VERIFY_TITLE_RE = /(?:\btests?\b|\btesting\b|\bchecks?\b|\bchecked\b|\bchecking\b|\bverif\w*\b|\bvalidat\w*\b|\blint\w*\b|\bdiff\s+--check\b|测试|验证|检查)/i;
+var DIFF_TITLE_RE = /(?:\bgit\s+diff\b|\bdiff\b)/i;
 var CRITICAL_EVENT_KINDS = /* @__PURE__ */ new Set([
   "permission_requested",
   "elicitation_requested",
@@ -20146,6 +20152,35 @@ function compactProgressTitle(value) {
   }
   return compacted.length > MAX_PROGRESS_TITLE_CHARS ? `${compacted.slice(0, MAX_PROGRESS_TITLE_CHARS - 1)}\u2026` : compacted;
 }
+function boundedUniqueStrings(values, { limit, maxChars, itemMaxChars }) {
+  const unique = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    const compacted = value.replace(/\s+/g, " ").trim();
+    if (!compacted || seen.has(compacted)) {
+      continue;
+    }
+    seen.add(compacted);
+    unique.push(compacted);
+  }
+  const result = [];
+  let chars = 0;
+  for (const compacted of unique) {
+    const bounded = compacted.length > itemMaxChars ? `${compacted.slice(0, itemMaxChars - 1)}\u2026` : compacted;
+    if (result.length >= limit || chars + bounded.length > maxChars) {
+      break;
+    }
+    result.push(bounded);
+    chars += bounded.length;
+  }
+  return {
+    values: result,
+    truncated: result.length < unique.length
+  };
+}
 function progressPhaseForToolCall(toolCall = {}) {
   const kind = typeof toolCall.kind === "string" ? toolCall.kind : "other";
   const title = String(toolCall.title || "").toLowerCase();
@@ -20156,18 +20191,24 @@ function progressPhaseForToolCall(toolCall = {}) {
     return "locating";
   }
   if (kind === "execute") {
-    return /(?:test|check|verify|validat|lint|diff|测试|验证|检查)/i.test(title) ? "verifying" : "executing";
+    if (VERIFY_TITLE_RE.test(title)) {
+      return "verifying";
+    }
+    return DIFF_TITLE_RE.test(title) ? "locating" : "executing";
   }
   if (["think", "switch_mode"].includes(kind)) {
     return "planning";
   }
-  if (/(?:test|check|verify|validat|lint|diff|测试|验证|检查)/i.test(title)) {
+  if (VERIFY_TITLE_RE.test(title)) {
     return "verifying";
   }
   if (/(?:edit|write|modify|patch|delete|move|修改|写入|删除|移动)/i.test(title)) {
     return "modifying";
   }
   if (/(?:read|search|find|locat|inspect|读取|搜索|查找|定位)/i.test(title)) {
+    return "locating";
+  }
+  if (DIFF_TITLE_RE.test(title)) {
     return "locating";
   }
   return "working";
@@ -20196,13 +20237,13 @@ function progressMessage(progress) {
       return `Working:${suffix || " progressing through the task"}.`;
   }
 }
-function runProgressSnapshot(run) {
+function runProgressSnapshot(run, { includeAcceptance = run?.status !== "running" } = {}) {
   if (!run?.progress) {
     return null;
   }
   const progress = run.progress;
   const toolCalls = [...run.toolCalls.values()];
-  return {
+  const snapshot = {
     phase: progress.phase,
     message: progressMessage(progress),
     filesRead: progress.filesRead.size,
@@ -20220,7 +20261,32 @@ function runProgressSnapshot(run) {
     updatedAt: progress.updatedAt,
     heartbeatAt: progress.heartbeatAt,
     responseChars: run.totalMessageChars,
+    messageCount: run.messageCount || 0,
     lastChunkAt: progress.lastChunkAt
+  };
+  if (!includeAcceptance) {
+    return snapshot;
+  }
+  const changedFiles = boundedUniqueStrings([...progress.filesChanged], {
+    limit: MAX_ACCEPTANCE_PATHS,
+    maxChars: MAX_ACCEPTANCE_PATH_CHARS,
+    itemMaxChars: 500
+  });
+  const commandsRun = boundedUniqueStrings(
+    toolCalls.filter((toolCall) => toolCall.kind === "execute").map((toolCall) => toolCall.title),
+    {
+      limit: MAX_ACCEPTANCE_COMMANDS,
+      maxChars: MAX_ACCEPTANCE_COMMAND_CHARS,
+      itemMaxChars: MAX_PROGRESS_TITLE_CHARS
+    }
+  );
+  return {
+    ...snapshot,
+    changedFiles: changedFiles.values,
+    changedFilesTruncated: changedFiles.truncated || progress.filesChanged.size > changedFiles.values.length,
+    commandsRun: commandsRun.values,
+    commandsRunTruncated: commandsRun.truncated,
+    needsHostVerification: true
   };
 }
 function capabilitySnapshot(commands) {
@@ -20390,6 +20456,7 @@ var GrokSupervisor = class {
     this.pendingElicitations = /* @__PURE__ */ new Map();
     this.activeRun = null;
     this.availableCommandsSnapshots = /* @__PURE__ */ new Map();
+    this.inactiveRunActivity = /* @__PURE__ */ new Map();
     this.progressHeartbeatIntervalMs = Math.max(1, Number(options2.progressHeartbeatIntervalMs) || DEFAULT_PROGRESS_HEARTBEAT_INTERVAL_MS);
     this.changeWaiters = /* @__PURE__ */ new Set();
     this.stderrTail = [];
@@ -20585,6 +20652,35 @@ var GrokSupervisor = class {
       return phaseChanged ? this.recordRunProgress(run) : null;
     }
     return null;
+  }
+  recordInactiveRunActivity(sessionId, update) {
+    const relatedRun = this.activeRun?.sessionId === sessionId ? this.activeRun : null;
+    const runId = relatedRun?.runId || null;
+    const key = `${sessionId}:${runId || "none"}`;
+    const previous = this.inactiveRunActivity.get(key) || { count: 0, lastRecordedCount: 0 };
+    const count = previous.count + 1;
+    const status = typeof update?.status === "string" ? update.status : null;
+    const terminalToolUpdate = status === "completed" || status === "failed";
+    const shouldRecord = count === 1 || terminalToolUpdate || count - previous.lastRecordedCount >= 10;
+    this.inactiveRunActivity.set(key, {
+      count,
+      lastRecordedCount: shouldRecord ? count : previous.lastRecordedCount
+    });
+    if (!shouldRecord) {
+      return null;
+    }
+    return this.record("inactive_run_activity", {
+      sessionId,
+      runId,
+      runStatus: relatedRun?.status || "missing",
+      count,
+      updateKind: typeof update?.sessionUpdate === "string" ? update.sessionUpdate : "unknown",
+      toolCallId: typeof update?.toolCallId === "string" ? update.toolCallId : null,
+      toolKind: typeof update?.kind === "string" ? update.kind : null,
+      toolTitle: compactProgressTitle(update?.title),
+      toolStatus: status,
+      payloadSuppressed: true
+    });
   }
   handleAvailableCommandsUpdate(sessionId, commands) {
     const next = capabilitySnapshot(commands);
@@ -20903,6 +20999,7 @@ var GrokSupervisor = class {
         terminalSequence: this.activeRun.terminalSequence,
         stopReason: typeof this.activeRun.result?.stopReason === "string" ? this.activeRun.result.stopReason : null,
         responseChars: this.activeRun.totalMessageChars,
+        messageCount: this.activeRun.messageCount || 0,
         responseTruncated: this.activeRun.finalTextTruncated === true,
         error: this.activeRun.error
       } : null,
@@ -20952,6 +21049,7 @@ var GrokSupervisor = class {
         resultArtifact: active.resultArtifact || null,
         resultSummary: active.resultSummary || null,
         artifactError: active.artifactError || null,
+        messageCount: active.messageCount || 0,
         responseTruncated: active.finalTextTruncated === true,
         progress: runProgressSnapshot(active),
         question: active.question || null,
@@ -21000,6 +21098,7 @@ var GrokSupervisor = class {
       resultArtifact: latest.resultArtifact && typeof latest.resultArtifact === "object" ? latest.resultArtifact : null,
       resultSummary: typeof latest.resultSummary === "string" ? latest.resultSummary : null,
       artifactError: typeof latest.artifactError === "string" ? latest.artifactError : null,
+      messageCount: Number.isInteger(latest.messageCount) ? latest.messageCount : null,
       responseTruncated: latest.responseTruncated === true,
       progress: latest.progress && typeof latest.progress === "object" ? latest.progress : null,
       question: latest.question || null,
@@ -21064,6 +21163,7 @@ var GrokSupervisor = class {
       resultArtifact: resultArtifactIncluded ? run.resultArtifact : null,
       resultSummary: terminalDelivery ? run.resultSummary : null,
       artifactError: run.artifactError,
+      messageCount: run.messageCount,
       responseTruncated: run.responseTruncated === true,
       question: run.question,
       error: run.error
@@ -21830,9 +21930,22 @@ var GrokSupervisor = class {
   handleSessionUpdate(params) {
     const text = agentMessageText(params.update);
     if (text && this.activeRun?.status === "running" && this.activeRun.sessionId === params.sessionId) {
+      const messageId = typeof params.update.messageId === "string" && params.update.messageId ? params.update.messageId : "__implicit__";
+      const newMessage = messageId !== this.activeRun.latestMessageId;
+      if (newMessage) {
+        this.activeRun.messageCount += 1;
+      }
       this.activeRun.totalMessageChars += text.length;
       this.activeRun.progress.lastChunkAt = (/* @__PURE__ */ new Date()).toISOString();
       this.activeRun.progress.dirtySinceLastRecord = true;
+      if (newMessage && this.activeRun.finalText) {
+        const separator = "\n\n";
+        const separatorRemaining = Math.max(0, MAX_FINAL_TEXT_CHARS - this.activeRun.finalText.length);
+        this.activeRun.finalText += separator.slice(0, separatorRemaining);
+        if (separator.length > separatorRemaining) {
+          this.activeRun.finalTextTruncated = true;
+        }
+      }
       const remaining = Math.max(0, MAX_FINAL_TEXT_CHARS - this.activeRun.finalText.length);
       if (remaining > 0) {
         this.activeRun.finalText += text.slice(0, remaining);
@@ -21840,7 +21953,6 @@ var GrokSupervisor = class {
       if (text.length > remaining) {
         this.activeRun.finalTextTruncated = true;
       }
-      const messageId = typeof params.update.messageId === "string" ? params.update.messageId : null;
       if (messageId && messageId !== this.activeRun.latestMessageId) {
         this.activeRun.latestMessageId = messageId;
         this.activeRun.latestMessage = "";
@@ -21861,7 +21973,8 @@ var GrokSupervisor = class {
       return this.handleAvailableCommandsUpdate(params.sessionId, params.update.availableCommands);
     }
     if (["tool_call", "tool_call_update", "plan"].includes(params.update?.sessionUpdate)) {
-      return this.updateRunProgress(params.sessionId, params.update);
+      const activeRunMatches = this.activeRun?.status === "running" && this.activeRun.sessionId === params.sessionId;
+      return activeRunMatches ? this.updateRunProgress(params.sessionId, params.update) : this.recordInactiveRunActivity(params.sessionId, params.update);
     }
     return this.record("session_update", { sessionId: params.sessionId, update: params.update });
   }
@@ -22011,6 +22124,7 @@ var GrokSupervisor = class {
       latestMessageId: null,
       latestMessage: "",
       latestMessageTruncated: false,
+      messageCount: 0,
       totalMessageChars: 0,
       toolCalls: /* @__PURE__ */ new Map(),
       progress: {
@@ -22030,6 +22144,7 @@ var GrokSupervisor = class {
       question: null,
       error: null
     };
+    this.inactiveRunActivity.clear();
     this.activeRun = run;
     const startedEvent = this.record("prompt_started", { runId, sessionId, hostKind: normalizedHostKind, promptLength: prompt.length });
     const progressEvent = this.recordRunProgress(run);
@@ -22045,11 +22160,22 @@ var GrokSupervisor = class {
       run.progress.current = null;
       run.progress.updatedAt = run.completedAt;
       run.result = compactForTransport(result);
-      if (run.latestMessage) {
+      run.messageCount ||= run.totalMessageChars > 0 ? 1 : 0;
+      const aggregateText = run.finalText;
+      const aggregateTextTruncated = run.finalTextTruncated;
+      const terminalMessage = run.latestMessage || aggregateText;
+      const terminalQuestion = parseSupervisorQuestion(terminalMessage);
+      if (terminalQuestion && terminalMessage) {
+        run.finalText = terminalMessage;
+        run.finalTextTruncated = run.latestMessage ? run.latestMessageTruncated : aggregateTextTruncated;
+      } else if (run.messageCount <= 1 && run.latestMessage) {
         run.finalText = run.latestMessage;
         run.finalTextTruncated = run.latestMessageTruncated;
+      } else {
+        run.finalText = aggregateText;
+        run.finalTextTruncated = aggregateTextTruncated;
       }
-      run.question = parseSupervisorQuestion(run.finalText);
+      run.question = terminalQuestion;
       if (!run.question && run.finalText) {
         try {
           run.resultArtifact = this.persistResultArtifact({
@@ -22089,6 +22215,7 @@ var GrokSupervisor = class {
         resultSummary: run.resultSummary,
         artifactError: run.artifactError,
         responseTruncated: run.finalTextTruncated,
+        messageCount: run.messageCount,
         progress: runProgressSnapshot(run),
         question: run.question
       });
@@ -22202,6 +22329,7 @@ var GrokSupervisor = class {
     this.attachedSessionId = null;
     this.attachedCwd = null;
     this.availableCommandsSnapshots.clear();
+    this.inactiveRunActivity.clear();
     this.record("session_disconnected", { sessionId: previous });
     return { disconnected: true, sessionId: previous };
   }

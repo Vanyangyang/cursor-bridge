@@ -4,6 +4,23 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-21
+
+### Added
+
+- Terminal progress now exposes bounded `changedFiles` and `commandsRun` candidate lists, matching truncation flags, and `needsHostVerification` for targeted host acceptance.
+- Completed runs report the number of distinct ACP agent messages captured. Split multi-message responses are preserved in order before the existing inline-versus-artifact handoff.
+- Tool and plan updates that arrive after cancellation, completion, or without a matching active run leave throttled `inactive_run_activity` metadata without journaling raw payloads.
+
+### Changed
+
+- The host skill and supervision data-flow reference now define `phase`, `responseChars`, `messageCount`, `lastChunkAt`, `heartbeatAt`, `newActivity`, terminal acceptance hints, and the structured journal events.
+- Plain diff inspection is classified as locating, while `diff --check` remains verifying; `checkout` no longer matches the check verifier heuristic.
+
+### Fixed
+
+- Completion no longer replaces a multi-message response with only its last `messageId`, preventing earlier report sections from being silently discarded.
+
 ## [0.3.1] - 2026-08-21
 
 ### Fixed
@@ -49,3 +66,4 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 [0.2.0]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/cursor-bridge--v5.4.0
 [0.3.0]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.0/plugins/grok-build-supervisor
 [0.3.1]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.1/plugins/grok-build-supervisor
+[0.3.2]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.2/plugins/grok-build-supervisor

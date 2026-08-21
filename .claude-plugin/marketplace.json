@@ -18,7 +18,7 @@
       "name": "grok-build-supervisor",
       "source": "./plugins/grok-build-supervisor",
       "description": "Persistent Grok Build Leader and ACP supervision with structured progress, context-efficient cursor polling, long-result artifacts, verified local-proxy initialization, and a visible Windows Terminal TUI.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "author": {
         "name": "Vanyangyang"
       }
