@@ -364,7 +364,6 @@ export class SupervisorDaemon {
     const status = await this.supervisor.status();
     const liveTuis = (status.recordedTuis || []).filter((item) =>
       item.processAlive === true
-      && item.activeRegistryMatch === true
       && item.leaderOwnershipMatch === true
       && item.processIdentityMatch !== false);
     const ownedLiveTuiCount = Array.isArray(status.ownedVisibleTuiPids)
@@ -377,6 +376,7 @@ export class SupervisorDaemon {
         || status.activeRun?.status === "running"
         || status.pendingPermissions?.length
         || status.pendingElicitations?.length
+        || status.pendingWorkspaceTrust?.length
         || liveTuis.length
         || ownedLiveTuiCount
       ),

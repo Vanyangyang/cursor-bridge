@@ -34780,6 +34780,10 @@ var execFileAsync3 = promisify3(execFile3);
 var MAX_EVENT_BYTES = 8 * 1024;
 var MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 var MAX_FINAL_TEXT_CHARS = 512 * 1024;
+var WORKSPACE_TRUST_ACP_METHODS = Object.freeze([
+  "x.ai/folder_trust/request",
+  "_x.ai/folder_trust/request"
+]);
 function normalizeHostKind(value) {
   return (/* @__PURE__ */ new Set(["codex", "claude_code"])).has(value) ? value : "unknown";
 }
@@ -35264,7 +35268,7 @@ var SupervisorClient = class {
 // plugins/grok-build-supervisor/scripts/server.mjs
 var supervisor = new SupervisorClient();
 process.chdir(supervisor.paths.stateRoot);
-var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.2" });
+var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.4" });
 function toolResult(data, isError = false) {
   return {
     content: [{ type: "text", text: JSON.stringify(data) }],
@@ -35295,7 +35299,7 @@ register("grok_init", {
   annotations: { readOnlyHint: false, destructiveHint: false }
 }, (args) => supervisor.initializeProxy(args));
 register("grok_session_inspect", {
-  description: "Read cursor-coalesced state from the persistent Grok Supervisor daemon, optionally waiting up to 25 seconds for completion, failure, permission, or clarification. Working polls suppress message bodies and return progress.phase plus cursor-relative newActivity, responseChars, lastChunkAt, and heartbeatAt liveness metadata. A short completed response is cursor-delivered once; multiple ACP messages are preserved in order; and a long response is persisted as resultArtifact metadata. Terminal progress includes bounded changedFiles and commandsRun hints with needsHostVerification. Diagnostic views remain explicit.",
+  description: "Read cursor-coalesced state from the persistent Grok Supervisor daemon, including exact workspace-trust requests, optionally waiting up to 25 seconds for completion, failure, permission, or clarification. A workspace-trust request is confirmed only in the visible Grok terminal; do not answer it as a tool permission or rerun session open. Working polls suppress message bodies and return progress.phase plus cursor-relative newActivity, responseChars, lastChunkAt, and heartbeatAt liveness metadata. A short completed response is cursor-delivered once; multiple ACP messages are preserved in order; and a long response is persisted as resultArtifact metadata. Terminal progress includes bounded changedFiles and commandsRun hints with needsHostVerification. Diagnostic views remain explicit.",
   inputSchema: {
     view: external_exports.enum(["interaction", "status", "summary", "delta", "evidence"]).optional().default("interaction"),
     afterSequence: external_exports.number().int().nonnegative().optional(),
@@ -35311,7 +35315,7 @@ register("grok_session_inspect", {
   annotations: { readOnlyHint: true, destructiveHint: false }
 }, (args) => supervisor.inspect(args));
 register("grok_session_open", {
-  description: "Transactionally create or resume one daemon-owned Grok session. The default and normal presentation is a visible Windows Terminal PowerShell TUI. Headless ACP-only presentation is allowed only after an explicit user request and the separate OPEN_GROK_SESSION_HEADLESS confirmation. Attempts rollback of owned processes on failure and reports whether cleanup completed.",
+  description: "Transactionally create or resume one daemon-owned Grok session. The default and normal presentation is a visible Windows Terminal PowerShell TUI. If Grok requires workspace trust, returns needs_workspace_trust while preserving and reusing the same visible terminal until the user confirms there; repeated open never launches a duplicate. Headless ACP-only presentation is allowed only after an explicit user request and the separate OPEN_GROK_SESSION_HEADLESS confirmation. Attempts rollback of owned processes on failure and reports whether cleanup completed.",
   inputSchema: {
     mode: external_exports.enum(["new", "resume"]),
     sessionId: external_exports.string().max(64).optional().describe("Exact Grok session UUID; required for resume and omitted for new"),

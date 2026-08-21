@@ -4,6 +4,25 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-22
+
+### Fixed
+
+- Grok Leader's gateway-wrapped `_x.ai/folder_trust/request` now unwraps its nested logical method and `params` before validation, so a real native trust screen is reported as `needs_workspace_trust` instead of the compatibility fallback `awaiting_session_registration`.
+- Interaction waits flush pending dirty progress before blocking, preventing an unreferenced heartbeat timer from leaving fresh agent activity invisible until a later poll.
+
+## [0.3.3] - 2026-08-21
+
+### Added
+
+- The ACP client now advertises Grok's structured `x.ai/folderTrust.interactive` capability for visible sessions and handles both the logical `x.ai/folder_trust/request` method and its ACP-prefixed `_x.ai/folder_trust/request` wire form. Payloads contain the session, cwd, workspace, and gated config kinds.
+- Interaction and status views expose `needs_workspace_trust` separately from ordinary tool permissions and form elicitation.
+
+### Fixed
+
+- A visible TUI waiting at Grok's workspace-trust screen is persisted as a live activation state, remains busy across daemon/frontend restarts, and is reused by repeated `/grok_execute on` calls instead of opening duplicate terminals.
+- Supervisor never auto-trusts a workspace: it answers the ACP trust request only after the owned visible TUI registers the session, proving the user passed Grok's native confirmation screen.
+
 ## [0.3.2] - 2026-08-21
 
 ### Added
@@ -67,3 +86,5 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 [0.3.0]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.0/plugins/grok-build-supervisor
 [0.3.1]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.1/plugins/grok-build-supervisor
 [0.3.2]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.2/plugins/grok-build-supervisor
+[0.3.3]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.3/plugins/grok-build-supervisor
+[0.3.4]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.4/plugins/grok-build-supervisor

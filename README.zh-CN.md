@@ -31,6 +31,8 @@
 
 它与 Cursor Bridge 分别安装、分别更新。
 
+可见 TUI 遇到 Grok 原生的工作区信任界面时会准确识别并保留同一个终端，等你在 Grok 中作出选择；插件不会替你信任目录。
+
 [查看介绍、安装方法和使用说明 →](./plugins/grok-build-supervisor/README.zh-CN.md)
 
 ## Cursor Bridge

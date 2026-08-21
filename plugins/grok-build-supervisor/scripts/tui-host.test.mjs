@@ -28,6 +28,7 @@ test("buildGrokTuiArgs creates or resumes without a shell command", () => {
   assert.ok(created.includes("--fullscreen"));
   assert.deepEqual(created.slice(0, 2), ["--permission-mode", "default"]);
   assert.equal(created.includes("--always-approve"), false);
+  assert.equal(created.includes("--trust"), false);
   assert.equal(created.includes("--subagents"), false);
   assert.equal(created.includes("--no-subagents"), false);
   assert.throws(() => buildGrokTuiArgs({ leaderSocket: socket, cwd, mode: "resume", sessionId: "short" }), /exact UUID/);

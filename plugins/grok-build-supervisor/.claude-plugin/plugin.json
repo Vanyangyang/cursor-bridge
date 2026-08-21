@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.3.2",
+  "version": "0.3.4",
   "description": "Persistent Grok Build supervision with proxy initialization, visible TUI startup, structured progress, compact polling, and long-result artifacts.",
   "author": {
     "name": "Vanyangyang"

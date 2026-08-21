@@ -7,6 +7,7 @@ import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import {
   agentMessageText,
+  buildAcpClientCapabilities,
   buildSupervisedPrompt,
   collectActiveSessions,
   compactForTransport,
@@ -14,9 +15,12 @@ import {
   GrokSupervisor,
   parseLeaderPid,
   parseSupervisorQuestion,
+  parseWorkspaceTrustGatewayRequest,
+  parseWorkspaceTrustRequest,
   progressPhaseForToolCall,
   validateSessionId,
   validateWorkingDirectory,
+  WORKSPACE_TRUST_ACP_METHODS,
 } from "./supervisor-core.mjs";
 
 const SESSION_ID = "01a010fc-7377-7330-b20f-9089aa5d93b6";
@@ -105,6 +109,57 @@ test("Leader JSON parsing and ACP arguments preserve verified ownership and safe
   assert.equal(args.includes("--always-approve"), false);
 });
 
+test("workspace trust ACP capability is explicit and its structured request is validated", () => {
+  assert.deepEqual(WORKSPACE_TRUST_ACP_METHODS, [
+    "x.ai/folder_trust/request",
+    "_x.ai/folder_trust/request",
+  ]);
+  assert.deepEqual(buildAcpClientCapabilities(), { elicitation: { form: {} } });
+  assert.deepEqual(buildAcpClientCapabilities({ interactiveWorkspaceTrust: true }), {
+    elicitation: { form: {} },
+    _meta: { "x.ai/folderTrust": { interactive: true } },
+  });
+  const parsed = parseWorkspaceTrustRequest({
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    workspace: process.cwd(),
+    configKinds: ["mcp", "hooks", "mcp"],
+  });
+  assert.equal(parsed.sessionId, SESSION_ID);
+  assert.equal(parsed.cwd, process.cwd());
+  assert.deepEqual(parsed.configKinds, ["mcp", "hooks"]);
+  const wrapped = parseWorkspaceTrustGatewayRequest({
+    method: "x.ai/folder_trust/request",
+    params: {
+      sessionId: SESSION_ID,
+      cwd: process.cwd(),
+      workspace: process.cwd(),
+      configKinds: ["mcp", "hooks"],
+    },
+  });
+  assert.deepEqual(wrapped, {
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    workspace: process.cwd(),
+    configKinds: ["mcp", "hooks"],
+  });
+  assert.throws(() => parseWorkspaceTrustGatewayRequest({
+    method: "x.ai/different/request",
+    params: {
+      sessionId: SESSION_ID,
+      cwd: process.cwd(),
+      workspace: process.cwd(),
+      configKinds: [],
+    },
+  }), /logical folder-trust method/);
+  assert.throws(() => parseWorkspaceTrustRequest({
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    workspace: ".",
+    configKinds: [],
+  }), /absolute path/);
+});
+
 test("supervision prompt and fallback question keep clarification narrowly scoped", () => {
   const codexPrompt = buildSupervisedPrompt("Inspect the failing build.", "codex");
   const claudePrompt = buildSupervisedPrompt("Inspect the failing build.", "claude_code");
@@ -171,10 +226,19 @@ test("durable supervision marks interrupted runs and permissions unknown after r
     toolTitle: "Run command",
     requestedAt: "2026-08-19T00:00:00Z",
   });
+  first.record("workspace_trust_requested", {
+    trustRequestId: "01900000-0000-7000-8000-000000000002",
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    workspace: process.cwd(),
+    configKinds: ["hooks"],
+    requestedAt: "2026-08-19T00:00:00Z",
+  });
   const recovered = new GrokSupervisor({ stateRoot: root, maxSegmentEvents: 2 });
   assert.equal(recovered.recovery.interruptedRun.status, "unknown_after_restart");
   assert.equal(recovered.recovery.interruptedRun.runId, "run-before-restart");
   assert.equal(recovered.recovery.orphanedPermissions.length, 1);
+  assert.equal(recovered.recovery.orphanedWorkspaceTrust.length, 1);
   assert.equal(recovered.permissionSummaries().length, 0);
   recovered.acpContext = { notify: async () => {} };
   recovered.acpConnection = { signal: { aborted: false } };
@@ -801,6 +865,139 @@ test("openSession safely recovers an exact active plugin-recorded TUI without cl
   assert.equal(opened.tui.pid, process.pid);
   assert.equal(opened.tui.ownedByCurrentMcp, false);
   assert.deepEqual(supervisor.tuiProcesses.size, 0);
+});
+
+test("workspace trust remains a distinct interaction state until the visible TUI registers", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-workspace-trust-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  const stateRoot = join(root, "state");
+  const tuiStateRoot = join(stateRoot, "tuis");
+  const statePath = join(tuiStateRoot, "launch.json");
+  mkdirSync(cwd);
+  mkdirSync(tuiStateRoot, { recursive: true });
+  writeFileSync(statePath, JSON.stringify({
+    schemaVersion: 1,
+    launchId: "launch-trust",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd,
+    hostPid: process.pid,
+    grokPid: process.pid,
+    grokProcessFingerprint: "current-process",
+  }));
+  const supervisor = createSupervisor({
+    stateRoot,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    tuiPollIntervalMs: 60_000,
+    inspectProcessIdentity: () => ({ fingerprint: "current-process", executablePath: process.execPath }),
+  });
+  t.after(() => {
+    for (const monitor of supervisor.tuiActivationMonitors.values()) clearTimeout(monitor.timer);
+  });
+  supervisor.readLeaderOwnership = () => ({ valid: true, record: { ownerToken: OWNER_TOKEN } });
+  supervisor.readActiveSessions = () => [];
+  supervisor.pendingAttachCwd = cwd;
+  supervisor.tuiProcesses.set(process.pid, {
+    launchId: "launch-trust",
+    sessionId: SESSION_ID,
+    cwd,
+    statePath,
+    processFingerprint: "current-process",
+  });
+  const trustResponse = supervisor.handleWorkspaceTrustRequest(parseWorkspaceTrustRequest({
+    sessionId: SESSION_ID,
+    cwd,
+    workspace: cwd,
+    configKinds: ["mcp", "hooks"],
+  }));
+  const pending = await supervisor.waitForTuiSession({ sessionId: SESSION_ID, pid: process.pid, timeoutMs: 1 });
+  assert.equal(pending.ready, false);
+  assert.equal(pending.state, "needs_workspace_trust");
+  assert.equal(pending.needsTerminalConfirmation, true);
+  assert.equal(JSON.parse(readFileSync(statePath, "utf8")).status, "awaiting_workspace_trust");
+
+  const interaction = await supervisor.inspect({ sessionId: SESSION_ID });
+  assert.equal(interaction.state, "needs_workspace_trust");
+  assert.equal(interaction.request.kind, "workspace_trust");
+  assert.deepEqual(interaction.request.configKinds, ["mcp", "hooks"]);
+  supervisor.acpContext = {};
+  supervisor.acpConnection = { signal: { aborted: false } };
+  supervisor.attachedSessionId = SESSION_ID;
+  supervisor.attachedCwd = cwd;
+  assert.throws(() => supervisor.startPrompt({
+    sessionId: SESSION_ID,
+    prompt: "Do not start yet.",
+    confirmation: "SEND_TO_GROK",
+  }), /waiting for workspace trust confirmation/);
+
+  supervisor.readActiveSessions = () => [{ session_id: SESSION_ID, pid: process.pid, cwd }];
+  const ready = supervisor.markTuiSessionReady({ sessionId: SESSION_ID, pid: process.pid, statePath });
+  assert.equal(ready.ready, true);
+  assert.deepEqual(await trustResponse, { outcome: "trust" });
+  assert.equal(JSON.parse(readFileSync(statePath, "utf8")).status, "running");
+});
+
+test("openSession reuses one persisted trust-pending TUI instead of launching another", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-trust-reuse-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  const stateRoot = join(root, "state");
+  const tuiStateRoot = join(stateRoot, "tuis");
+  mkdirSync(cwd);
+  mkdirSync(tuiStateRoot, { recursive: true });
+  writeFileSync(join(tuiStateRoot, "pending.json"), JSON.stringify({
+    schemaVersion: 1,
+    launchId: "pending-launch",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "awaiting_workspace_trust",
+    sessionId: SESSION_ID,
+    cwd,
+    workspace: cwd,
+    configKinds: ["hooks"],
+    trustRequestId: "01900000-0000-7000-8000-000000000003",
+    hostPid: process.pid,
+    grokPid: process.pid,
+    grokProcessFingerprint: "current-process",
+  }));
+  const supervisor = createSupervisor({
+    stateRoot,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    tuiPollIntervalMs: 60_000,
+    inspectProcessIdentity: () => ({ fingerprint: "current-process", executablePath: process.execPath }),
+  });
+  t.after(() => {
+    for (const monitor of supervisor.tuiActivationMonitors.values()) clearTimeout(monitor.timer);
+  });
+  supervisor.leaderInfo = async () => ({ running: true });
+  supervisor.readLeaderOwnership = () => ({ valid: true, record: { ownerToken: OWNER_TOKEN } });
+  supervisor.readActiveSessions = () => [];
+  supervisor.startLeader = async () => ({ started: false, managed: true, reason: "managed_leader_recovered" });
+  supervisor.launchTui = async () => { throw new Error("must not launch a duplicate TUI"); };
+  supervisor.attachSession = async ({ mode, sessionId, interactiveWorkspaceTrust }) => {
+    assert.equal(mode, "resume");
+    assert.equal(sessionId, SESSION_ID);
+    assert.equal(interactiveWorkspaceTrust, true);
+    return { attached: true, sessionId };
+  };
+
+  const status = await supervisor.status();
+  assert.equal(status.recordedTuis[0].status, "awaiting_workspace_trust");
+  assert.equal(status.recordedTuis[0].processAlive, true);
+  const opened = await supervisor.openSession({
+    mode: "new",
+    cwd,
+    presentation: "windows_terminal",
+    confirmation: "OPEN_GROK_SESSION",
+  });
+  assert.equal(opened.recovered, true);
+  assert.equal(opened.ready, false);
+  assert.equal(opened.state, "needs_workspace_trust");
+  assert.equal(opened.needsTerminalConfirmation, true);
+  assert.equal(opened.tui.pid, process.pid);
 });
 
 test("openSession still refuses an active plain TUI without a matching plugin launch record", async (t) => {

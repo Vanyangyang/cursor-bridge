@@ -29,7 +29,7 @@ import { fileURLToPath as fileURLToPath2 } from "node:url";
 import { spawn, execFile as execFile3, execFileSync as execFileSync4 } from "node:child_process";
 import { promisify as promisify3 } from "node:util";
 import { Readable, Writable } from "node:stream";
-import { existsSync as existsSync7, mkdirSync as mkdirSync6, readFileSync as readFileSync7, statSync as statSync2, unlinkSync as unlinkSync2 } from "node:fs";
+import { existsSync as existsSync7, mkdirSync as mkdirSync6, readFileSync as readFileSync7, realpathSync, statSync as statSync2, unlinkSync as unlinkSync2 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { dirname as dirname3, isAbsolute as isAbsolute3, join as join6, resolve as resolve7 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19752,11 +19752,18 @@ var MAX_ACCEPTANCE_PATHS = 50;
 var MAX_ACCEPTANCE_PATH_CHARS = 1200;
 var MAX_ACCEPTANCE_COMMANDS = 20;
 var MAX_ACCEPTANCE_COMMAND_CHARS = 600;
+var WORKSPACE_TRUST_ACP_METHODS = Object.freeze([
+  "x.ai/folder_trust/request",
+  "_x.ai/folder_trust/request"
+]);
+var LIVE_TUI_STATUSES = /* @__PURE__ */ new Set(["running", "awaiting_workspace_trust", "awaiting_session_registration"]);
+var PENDING_TUI_STATUSES = /* @__PURE__ */ new Set(["awaiting_workspace_trust", "awaiting_session_registration"]);
 var VERIFY_TITLE_RE = /(?:\btests?\b|\btesting\b|\bchecks?\b|\bchecked\b|\bchecking\b|\bverif\w*\b|\bvalidat\w*\b|\blint\w*\b|\bdiff\s+--check\b|测试|验证|检查)/i;
 var DIFF_TITLE_RE = /(?:\bgit\s+diff\b|\bdiff\b)/i;
 var CRITICAL_EVENT_KINDS = /* @__PURE__ */ new Set([
   "permission_requested",
   "elicitation_requested",
+  "workspace_trust_requested",
   "prompt_failed",
   "leader_exit",
   "acp_exit",
@@ -19903,6 +19910,8 @@ function interactionMessage(state) {
     working: "Grok is working.",
     needs_permission: "Grok needs user permission.",
     needs_input: "Grok needs input from the supervising host agent to continue.",
+    needs_workspace_trust: "Grok is waiting for workspace trust confirmation in the visible terminal.",
+    awaiting_session_registration: "The visible Grok terminal is open and still starting.",
     completed: "Grok completed the task.",
     failed: "Grok failed the task.",
     cancelling: "Grok cancellation is pending.",
@@ -20119,8 +20128,19 @@ function inspectTerminalPresentation({ hostPid, launcherPid }) {
   }
 }
 function samePath(left, right) {
-  const normalizedLeft = resolve7(left);
-  const normalizedRight = resolve7(right);
+  if (typeof left !== "string" || typeof right !== "string") {
+    return false;
+  }
+  const canonical = (value) => {
+    const normalized = resolve7(value);
+    try {
+      return realpathSync.native(normalized);
+    } catch {
+      return normalized;
+    }
+  };
+  const normalizedLeft = canonical(left);
+  const normalizedRight = canonical(right);
   return process.platform === "win32" ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase() : normalizedLeft === normalizedRight;
 }
 function conciseError(error51) {
@@ -20141,6 +20161,47 @@ function codedError3(code, message, details = void 0) {
   error51.code = code;
   if (details !== void 0) error51.details = details;
   return error51;
+}
+function buildAcpClientCapabilities({ interactiveWorkspaceTrust = false } = {}) {
+  const capabilities = { elicitation: { form: {} } };
+  if (interactiveWorkspaceTrust) {
+    capabilities._meta = {
+      "x.ai/folderTrust": { interactive: true }
+    };
+  }
+  return capabilities;
+}
+function parseWorkspaceTrustRequest(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("workspace trust request must be an object");
+  }
+  const sessionId = validateSessionId(value.sessionId);
+  const cwd = validateWorkingDirectory(value.cwd);
+  if (typeof value.workspace !== "string" || value.workspace.trim() === "" || !isAbsolute3(value.workspace)) {
+    throw new Error("workspace trust request workspace must be an absolute path");
+  }
+  const workspace = resolve7(value.workspace);
+  if (!existsSync7(workspace) || !statSync2(workspace).isDirectory()) {
+    throw new Error(`workspace trust request workspace is not an existing directory: ${workspace}`);
+  }
+  if (!Array.isArray(value.configKinds) || value.configKinds.length > 32 || value.configKinds.some((item) => typeof item !== "string" || item.length < 1 || item.length > 64)) {
+    throw new Error("workspace trust request configKinds must be a bounded array of strings");
+  }
+  return {
+    sessionId,
+    cwd,
+    workspace,
+    configKinds: [...new Set(value.configKinds)]
+  };
+}
+function parseWorkspaceTrustGatewayRequest(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("workspace trust gateway request must be an object");
+  }
+  if (value.method !== WORKSPACE_TRUST_ACP_METHODS[0]) {
+    throw new Error("workspace trust gateway request must name the logical folder-trust method");
+  }
+  return parseWorkspaceTrustRequest(value.params);
 }
 function compactProgressTitle(value) {
   if (typeof value !== "string") {
@@ -20316,7 +20377,7 @@ function eventDigest(event) {
     const serialized = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
     digest.preview = serialized.length > 700 ? `${serialized.slice(0, 700)}\u2026` : serialized;
   }
-  for (const key of ["runId", "sessionId", "permissionId", "toolTitle", "action", "pid", "code", "signal"]) {
+  for (const key of ["runId", "sessionId", "permissionId", "elicitationId", "trustRequestId", "toolTitle", "action", "pid", "code", "signal"]) {
     if (event[key] !== void 0) {
       digest[key] = event[key];
     }
@@ -20364,6 +20425,16 @@ function deriveRecoveryState(events) {
     requestedAt: event.requestedAt,
     status: "orphaned_after_restart"
   }));
+  const resolvedWorkspaceTrust = new Set(events.filter((event) => event.kind === "workspace_trust_resolved").map((event) => event.trustRequestId));
+  const orphanedWorkspaceTrust = events.filter((event) => event.kind === "workspace_trust_requested" && !resolvedWorkspaceTrust.has(event.trustRequestId)).slice(-20).map((event) => ({
+    trustRequestId: event.trustRequestId,
+    sessionId: event.sessionId,
+    cwd: event.cwd,
+    workspace: event.workspace,
+    configKinds: event.configKinds,
+    requestedAt: event.requestedAt,
+    status: "orphaned_after_restart"
+  }));
   return {
     interruptedRun: interruptedRun ? {
       runId: interruptedRun.runId,
@@ -20372,7 +20443,8 @@ function deriveRecoveryState(events) {
       status: "unknown_after_restart"
     } : null,
     orphanedPermissions,
-    orphanedElicitations
+    orphanedElicitations,
+    orphanedWorkspaceTrust
   };
 }
 var GrokSupervisor = class {
@@ -20454,6 +20526,9 @@ var GrokSupervisor = class {
     this.nextSequence = this.journal.nextSequence;
     this.pendingPermissions = /* @__PURE__ */ new Map();
     this.pendingElicitations = /* @__PURE__ */ new Map();
+    this.pendingWorkspaceTrust = /* @__PURE__ */ new Map();
+    this.tuiActivationMonitors = /* @__PURE__ */ new Map();
+    this.pendingAttachCwd = null;
     this.activeRun = null;
     this.availableCommandsSnapshots = /* @__PURE__ */ new Map();
     this.inactiveRunActivity = /* @__PURE__ */ new Map();
@@ -20912,6 +20987,119 @@ var GrokSupervisor = class {
       };
     }
   }
+  workspaceTrustSummaries() {
+    return [...this.pendingWorkspaceTrust.values()].map((entry) => entry.summary);
+  }
+  workspaceTrustForSession(sessionId) {
+    return this.workspaceTrustSummaries().find((entry) => entry.sessionId === sessionId) || null;
+  }
+  readyRecordedTui(sessionId, cwd) {
+    const ownership = this.readLeaderOwnership();
+    if (!ownership.valid) {
+      return null;
+    }
+    const activeSessions = this.readActiveSessions();
+    const record2 = [...listTuiStateRecords(this.tuiStateRoot)].reverse().find(({ value }) => {
+      if (value.status !== "running" || value.sessionId !== sessionId || typeof value.cwd !== "string" || !samePath(value.cwd, cwd) || value.leaderOwnerToken !== ownership.record.ownerToken) {
+        return false;
+      }
+      const assessment = this.assessRecordedTui(value, activeSessions, ownership);
+      return assessment.processAlive && assessment.activeRegistryMatch;
+    });
+    return record2 || null;
+  }
+  handleWorkspaceTrustRequest(params) {
+    const expectedCwd = this.pendingAttachCwd || this.attachedCwd;
+    if (expectedCwd && !samePath(params.cwd, expectedCwd)) {
+      this.record("workspace_trust_rejected", {
+        sessionId: params.sessionId,
+        cwd: params.cwd,
+        workspace: params.workspace,
+        reason: "request cwd does not match the ACP attachment"
+      });
+      return { outcome: "reject" };
+    }
+    if (this.readyRecordedTui(params.sessionId, params.cwd)) {
+      this.record("workspace_trust_already_confirmed", {
+        sessionId: params.sessionId,
+        cwd: params.cwd,
+        workspace: params.workspace
+      });
+      return { outcome: "trust" };
+    }
+    const existing = [...this.pendingWorkspaceTrust.values()].find((entry) => samePath(entry.summary.workspace, params.workspace));
+    if (existing) {
+      return new Promise((resolveTrust) => {
+        existing.resolvers.push(resolveTrust);
+      });
+    }
+    const trustRequestId = randomUUID2();
+    const summary = {
+      trustRequestId,
+      sessionId: params.sessionId,
+      cwd: params.cwd,
+      workspace: params.workspace,
+      configKinds: params.configKinds,
+      requestedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      confirmationSurface: "visible_tui"
+    };
+    this.recovery.orphanedWorkspaceTrust = this.recovery.orphanedWorkspaceTrust.filter((entry) => !samePath(entry.workspace, params.workspace));
+    this.record("workspace_trust_requested", summary);
+    this.tagPendingTuiWithWorkspaceTrust(summary);
+    return new Promise((resolveTrust) => {
+      this.pendingWorkspaceTrust.set(trustRequestId, {
+        params,
+        summary,
+        resolvers: [resolveTrust]
+      });
+    });
+  }
+  tagPendingTuiWithWorkspaceTrust(summary) {
+    const record2 = [...listTuiStateRecords(this.tuiStateRoot)].reverse().find(({ value }) => PENDING_TUI_STATUSES.has(value.status) && value.sessionId === summary.sessionId && typeof value.cwd === "string" && samePath(value.cwd, summary.cwd));
+    if (!record2) {
+      return false;
+    }
+    return this.writeTuiActivationState({
+      sessionId: summary.sessionId,
+      pid: record2.value.grokPid,
+      statePath: record2.path
+    }, {
+      status: "awaiting_workspace_trust",
+      trustRequestId: summary.trustRequestId,
+      workspace: summary.workspace,
+      configKinds: summary.configKinds,
+      activationPendingAt: record2.value.activationPendingAt || (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  resolveWorkspaceTrust({ sessionId, workspace = null, outcome, reason, tuiPid = null }) {
+    if (!(/* @__PURE__ */ new Set(["trust", "reject"])).has(outcome)) {
+      throw new Error("workspace trust outcome must be trust or reject");
+    }
+    let resolvedCount = 0;
+    for (const [trustRequestId, pending] of this.pendingWorkspaceTrust) {
+      if (pending.summary.sessionId !== sessionId && (!workspace || !samePath(pending.summary.workspace, workspace))) {
+        continue;
+      }
+      for (const resolveTrust of pending.resolvers) {
+        resolveTrust({ outcome });
+      }
+      this.pendingWorkspaceTrust.delete(trustRequestId);
+      this.record("workspace_trust_resolved", {
+        trustRequestId,
+        sessionId: pending.summary.sessionId,
+        cwd: pending.summary.cwd,
+        workspace: pending.summary.workspace,
+        outcome,
+        reason,
+        tuiPid
+      });
+      resolvedCount += 1;
+    }
+    if (workspace) {
+      this.recovery.orphanedWorkspaceTrust = this.recovery.orphanedWorkspaceTrust.filter((entry) => !samePath(entry.workspace, workspace));
+    }
+    return resolvedCount;
+  }
   async status() {
     for (const [pid, owned] of this.tuiProcesses) {
       if (!this.ownedTuiIdentityMatches(pid, owned)) {
@@ -20929,7 +21117,8 @@ var GrokSupervisor = class {
     }));
     const recordedTuis = listTuiStateRecords(this.tuiStateRoot).map(({ path, value }) => {
       const assessment = this.assessRecordedTui(value, rawActiveSessions, leaderOwnership);
-      const effectiveStatus = value.status === "running" && !assessment.pidAlive ? "stale" : value.status === "running" && !assessment.processIdentityMatch ? "stale_pid_reused_or_unverified" : value.status === "running" && !assessment.leaderOwnershipMatch ? "stale_leader_ownership" : value.status === "running" && !assessment.activeRegistryMatch ? "registry_pending" : value.status;
+      const liveStatus = LIVE_TUI_STATUSES.has(value.status);
+      const effectiveStatus = liveStatus && !assessment.pidAlive ? "stale" : liveStatus && !assessment.processIdentityMatch ? "stale_pid_reused_or_unverified" : liveStatus && !assessment.leaderOwnershipMatch ? "stale_leader_ownership" : value.status === "running" && !assessment.activeRegistryMatch ? "registry_pending" : value.status;
       return {
         statePath: path,
         launchId: value.launchId,
@@ -21005,6 +21194,7 @@ var GrokSupervisor = class {
       } : null,
       pendingPermissions: this.permissionSummaries(),
       pendingElicitations: this.elicitationSummaries(),
+      pendingWorkspaceTrust: this.workspaceTrustSummaries(),
       activeSessions,
       recordedTuis
     };
@@ -21020,7 +21210,7 @@ var GrokSupervisor = class {
     const processIdentityMatch = Boolean(pidAlive && identity && executablePathMatch && (processFingerprintRecorded ? fingerprintMatch : activeRegistryMatch && leaderOwnershipMatch));
     return {
       pidAlive,
-      processAlive: Boolean(value.status === "running" && processIdentityMatch && activeRegistryMatch && leaderOwnershipMatch),
+      processAlive: Boolean(LIVE_TUI_STATUSES.has(value.status) && processIdentityMatch && (value.status !== "running" || activeRegistryMatch) && leaderOwnershipMatch),
       processIdentityMatch,
       processFingerprintRecorded,
       activeRegistryMatch,
@@ -21105,15 +21295,65 @@ var GrokSupervisor = class {
       error: latest.kind === "prompt_failed" ? latest.message || "Grok prompt failed" : null
     };
   }
+  sessionActivationSnapshot(sessionId, cwd = null) {
+    if (!sessionId) {
+      return null;
+    }
+    const trust = this.workspaceTrustForSession(sessionId);
+    if (trust) {
+      return {
+        state: "needs_workspace_trust",
+        sessionId,
+        cwd: trust.cwd,
+        workspace: trust.workspace,
+        configKinds: trust.configKinds,
+        trustRequestId: trust.trustRequestId,
+        confirmationSurface: "visible_tui"
+      };
+    }
+    const ownership = this.readLeaderOwnership();
+    if (!ownership.valid) {
+      return null;
+    }
+    const activeSessions = this.readActiveSessions();
+    const record2 = [...listTuiStateRecords(this.tuiStateRoot)].reverse().find(({ value }) => {
+      if (!PENDING_TUI_STATUSES.has(value.status) || value.sessionId !== sessionId || value.leaderOwnerToken !== ownership.record.ownerToken || cwd && (typeof value.cwd !== "string" || !samePath(value.cwd, cwd))) {
+        return false;
+      }
+      const assessment = this.assessRecordedTui(value, activeSessions, ownership);
+      return assessment.processAlive;
+    });
+    if (!record2) {
+      return null;
+    }
+    return {
+      state: record2.value.status === "awaiting_workspace_trust" ? "needs_workspace_trust" : "awaiting_session_registration",
+      sessionId,
+      cwd: record2.value.cwd,
+      workspace: record2.value.workspace ?? null,
+      configKinds: Array.isArray(record2.value.configKinds) ? record2.value.configKinds : [],
+      trustRequestId: record2.value.trustRequestId ?? null,
+      tuiPid: record2.value.grokPid,
+      statePath: record2.path,
+      confirmationSurface: record2.value.status === "awaiting_workspace_trust" ? "visible_tui" : null
+    };
+  }
   interactionSnapshot(options2 = {}) {
     const requestedRunId = options2.runId ? validateSessionId(options2.runId) : null;
     const sessionId = options2.sessionId ? validateSessionId(options2.sessionId) : this.attachedSessionId || this.activeRun?.sessionId || this.recovery.interruptedRun?.sessionId || null;
     const permission = this.permissionSummaries().find((item) => !sessionId || item.sessionId === sessionId) || null;
     const elicitation = this.elicitationSummaries().find((item) => !sessionId || item.sessionId === sessionId) || null;
+    const activation = this.sessionActivationSnapshot(sessionId, sessionId === this.attachedSessionId ? this.attachedCwd : null);
     const run = this.latestRunSnapshot({ sessionId, runId: requestedRunId });
     let state;
     let request = null;
-    if (elicitation) {
+    if (activation?.state === "needs_workspace_trust") {
+      state = "needs_workspace_trust";
+      request = { kind: "workspace_trust", ...activation };
+    } else if (activation?.state === "awaiting_session_registration") {
+      state = "awaiting_session_registration";
+      request = { kind: "terminal_confirmation", ...activation };
+    } else if (elicitation) {
       state = "needs_input";
       request = { kind: "input", ...elicitation };
     } else if (permission) {
@@ -21188,6 +21428,7 @@ var GrokSupervisor = class {
       run: publicRun,
       progress,
       request,
+      activation,
       delivery: {
         mode: "terminal_cursor_once",
         finalTextAvailable,
@@ -21209,6 +21450,11 @@ var GrokSupervisor = class {
   async inspectInteraction(options2 = {}) {
     const waitMs = Math.max(0, Math.min(Number(options2.waitMs) || 0, MAX_INTERACTION_WAIT_MS));
     const startedWaitingAt = Date.now();
+    const requestedSessionId = options2.sessionId || this.attachedSessionId;
+    const requestedRunId = options2.runId || this.activeRun?.runId;
+    if (this.activeRun?.status === "running" && this.activeRun.sessionId === requestedSessionId && this.activeRun.runId === requestedRunId && this.activeRun.progress?.dirtySinceLastRecord) {
+      this.recordRunProgress(this.activeRun, { heartbeat: true });
+    }
     let snapshot = this.interactionSnapshot(options2);
     while (waitMs > 0 && ["working", "cancelling"].includes(snapshot.state)) {
       const remaining = waitMs - (Date.now() - startedWaitingAt);
@@ -21607,7 +21853,7 @@ var GrokSupervisor = class {
       activePids = matching.map((entry) => entry.pid).filter(Number.isInteger);
       const active = matching.find((entry) => entry.pid === pid);
       if (active) {
-        return { observed: true, pid };
+        return this.markTuiSessionReady({ sessionId, pid });
       }
       const owned = this.tuiProcesses.get(pid);
       if (!this.ownedTuiIdentityMatches(pid, owned)) {
@@ -21615,13 +21861,199 @@ var GrokSupervisor = class {
       }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
     }
+    const pending = this.markTuiActivationPending({ sessionId, pid });
     this.record("tui_session_registry_pending", {
       sessionId,
       pid,
       timeoutMs,
-      otherActivePids: activePids
+      otherActivePids: activePids,
+      activationState: pending.state
     });
-    return { observed: false, pid };
+    return pending;
+  }
+  writeTuiActivationState({ sessionId, pid, statePath }, patch) {
+    const state = readJsonFile(statePath);
+    if (!state || state.sessionId !== sessionId || state.grokPid !== pid || !LIVE_TUI_STATUSES.has(state.status)) {
+      return false;
+    }
+    writeJsonAtomic(statePath, {
+      ...state,
+      ...patch,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    return true;
+  }
+  markTuiSessionReady({ sessionId, pid, statePath = null }) {
+    const owned = this.tuiProcesses.get(pid);
+    const resolvedStatePath = statePath || owned?.statePath || null;
+    if (resolvedStatePath) {
+      this.writeTuiActivationState({ sessionId, pid, statePath: resolvedStatePath }, {
+        status: "running",
+        sessionReadyAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    this.resolveWorkspaceTrust({
+      sessionId,
+      outcome: "trust",
+      reason: "visible_tui_session_registered",
+      tuiPid: pid
+    });
+    const monitor = this.tuiActivationMonitors.get(pid);
+    if (monitor?.timer) {
+      clearTimeout(monitor.timer);
+    }
+    this.tuiActivationMonitors.delete(pid);
+    this.record("tui_session_registered", { sessionId, pid, statePath: resolvedStatePath });
+    return {
+      observed: true,
+      ready: true,
+      state: "ready",
+      pid,
+      needsTerminalConfirmation: false
+    };
+  }
+  markTuiActivationPending({ sessionId, pid }) {
+    const owned = this.tuiProcesses.get(pid);
+    if (!owned) {
+      throw new Error(`TUI PID ${pid} is not owned while activation remains pending`);
+    }
+    const trust = this.workspaceTrustForSession(sessionId);
+    const state = trust ? "needs_workspace_trust" : "awaiting_session_registration";
+    const storedStatus = trust ? "awaiting_workspace_trust" : "awaiting_session_registration";
+    this.writeTuiActivationState({ sessionId, pid, statePath: owned.statePath }, {
+      status: storedStatus,
+      trustRequestId: trust?.trustRequestId ?? null,
+      workspace: trust?.workspace ?? null,
+      configKinds: trust?.configKinds ?? [],
+      activationPendingAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    this.startTuiActivationMonitor({
+      sessionId,
+      pid,
+      cwd: owned.cwd,
+      statePath: owned.statePath
+    });
+    return {
+      observed: false,
+      ready: false,
+      state,
+      pid,
+      needsTerminalConfirmation: true,
+      trustRequest: trust
+    };
+  }
+  startTuiActivationMonitor({ sessionId, pid, cwd, statePath }) {
+    if (this.tuiActivationMonitors.has(pid)) {
+      return;
+    }
+    const monitor = { sessionId, pid, cwd, statePath, timer: null };
+    const poll = () => {
+      const current = this.tuiActivationMonitors.get(pid);
+      if (current !== monitor) {
+        return;
+      }
+      const state = readJsonFile(statePath);
+      const ownership = this.readLeaderOwnership();
+      const stateMatches = state && LIVE_TUI_STATUSES.has(state.status) && state.sessionId === sessionId && state.grokPid === pid && typeof state.cwd === "string" && samePath(state.cwd, cwd) && ownership.valid && state.leaderOwnerToken === ownership.record.ownerToken;
+      if (!stateMatches) {
+        this.resolveWorkspaceTrust({
+          sessionId,
+          outcome: "reject",
+          reason: "tui_activation_ownership_lost",
+          tuiPid: pid
+        });
+        this.tuiActivationMonitors.delete(pid);
+        this.record("tui_activation_stopped", { sessionId, pid, reason: "ownership_lost", statePath });
+        return;
+      }
+      const activeSessions = this.readActiveSessions();
+      const assessment = this.assessRecordedTui(state, activeSessions, ownership);
+      if (assessment.activeRegistryMatch && assessment.processIdentityMatch && assessment.leaderOwnershipMatch) {
+        this.markTuiSessionReady({ sessionId, pid, statePath });
+        return;
+      }
+      if (!assessment.pidAlive || !assessment.processIdentityMatch || !assessment.leaderOwnershipMatch) {
+        this.resolveWorkspaceTrust({
+          sessionId,
+          outcome: "reject",
+          reason: "visible_tui_exited_before_session_registration",
+          tuiPid: pid
+        });
+        this.tuiProcesses.delete(pid);
+        this.tuiActivationMonitors.delete(pid);
+        this.record("tui_activation_stopped", { sessionId, pid, reason: "tui_exited", statePath });
+        return;
+      }
+      monitor.timer = setTimeout(poll, Math.max(100, this.tuiPollIntervalMs));
+      monitor.timer.unref?.();
+    };
+    this.tuiActivationMonitors.set(pid, monitor);
+    monitor.timer = setTimeout(poll, Math.max(100, this.tuiPollIntervalMs));
+    monitor.timer.unref?.();
+  }
+  async findPendingTui({ sessionId = null, cwd }) {
+    if (sessionId) {
+      validateSessionId(sessionId);
+    }
+    const fullCwd = validateWorkingDirectory(cwd);
+    const leader = await this.leaderInfo();
+    if (!leader.running) {
+      return null;
+    }
+    const ownership = this.readLeaderOwnership();
+    if (!ownership.valid) {
+      return null;
+    }
+    const activeSessions = this.readActiveSessions();
+    const candidates = [...listTuiStateRecords(this.tuiStateRoot)].reverse().filter(({ value }) => {
+      if (!PENDING_TUI_STATUSES.has(value.status) || sessionId && value.sessionId !== sessionId || value.leaderOwnerToken !== ownership.record.ownerToken || typeof value.cwd !== "string" || !samePath(value.cwd, fullCwd)) {
+        return false;
+      }
+      const assessment2 = this.assessRecordedTui(value, activeSessions, ownership);
+      return assessment2.pidAlive && assessment2.processIdentityMatch && assessment2.leaderOwnershipMatch;
+    });
+    if (candidates.length > 1) {
+      throw codedError3(
+        "GROK_TUI_ACTIVATION_AMBIGUOUS",
+        `Multiple Supervisor TUI launches are still awaiting activation for ${fullCwd}; refusing another launch`,
+        { sessionIds: candidates.map(({ value }) => value.sessionId), pids: candidates.map(({ value }) => value.grokPid) }
+      );
+    }
+    const record2 = candidates[0];
+    if (!record2) {
+      return null;
+    }
+    const assessment = this.assessRecordedTui(record2.value, activeSessions, ownership);
+    if (assessment.activeRegistryMatch) {
+      this.markTuiSessionReady({
+        sessionId: record2.value.sessionId,
+        pid: record2.value.grokPid,
+        statePath: record2.path
+      });
+    } else {
+      this.startTuiActivationMonitor({
+        sessionId: record2.value.sessionId,
+        pid: record2.value.grokPid,
+        cwd: fullCwd,
+        statePath: record2.path
+      });
+    }
+    return {
+      launched: false,
+      recovered: true,
+      ownedByCurrentMcp: this.tuiProcesses.has(record2.value.grokPid),
+      pid: record2.value.grokPid,
+      hostPid: record2.value.hostPid ?? null,
+      sessionId: record2.value.sessionId,
+      cwd: fullCwd,
+      mode: "resume",
+      presentation: "windows_terminal",
+      statePath: record2.path,
+      launchId: record2.value.launchId,
+      ready: assessment.activeRegistryMatch,
+      state: assessment.activeRegistryMatch ? "ready" : record2.value.status === "awaiting_workspace_trust" ? "needs_workspace_trust" : "awaiting_session_registration",
+      needsTerminalConfirmation: !assessment.activeRegistryMatch
+    };
   }
   async findRecoverableTui({ sessionId, cwd, activeSession }) {
     validateSessionId(sessionId);
@@ -21717,9 +22149,10 @@ var GrokSupervisor = class {
       throw new Error(`confirmation must equal ${requiredConfirmation} for presentation ${presentation}`);
     }
     const requestedSessionId = mode === "resume" ? sessionId : void 0;
+    const pendingTui = presentation === "windows_terminal" ? await this.findPendingTui({ sessionId: requestedSessionId || null, cwd: fullCwd }) : null;
     const active = mode === "resume" ? this.readActiveSessions().find((entry) => entry.session_id === requestedSessionId) : null;
     const recoverableTui = active ? await this.findRecoverableTui({ sessionId: requestedSessionId, cwd: fullCwd, activeSession: active }) : null;
-    if (active && !recoverableTui) {
+    if (active && !recoverableTui && !pendingTui) {
       throw new Error(`Session is already active in PID ${active.pid}; refusing a concurrent open`);
     }
     let startedLeader = false;
@@ -21733,11 +22166,51 @@ var GrokSupervisor = class {
       if (!startedLeader && leader.managed !== true) {
         throw new Error(`Existing Leader is not backed by a verified plugin ownership record or matching proxy record (${leader.reason})`);
       }
+      if (pendingTui) {
+        finalSessionId = pendingTui.sessionId;
+        const attachment2 = await this.attachSession({
+          mode: "resume",
+          sessionId: finalSessionId,
+          cwd: fullCwd,
+          interactiveWorkspaceTrust: true
+        });
+        const activation2 = this.sessionActivationSnapshot(finalSessionId, fullCwd) || {
+          state: pendingTui.state,
+          sessionId: finalSessionId,
+          cwd: fullCwd,
+          tuiPid: pendingTui.pid,
+          confirmationSurface: pendingTui.needsTerminalConfirmation ? "visible_tui" : null
+        };
+        this.record("session_activation_recovered", {
+          sessionId: finalSessionId,
+          cwd: fullCwd,
+          tuiPid: pendingTui.pid,
+          statePath: pendingTui.statePath,
+          activationState: activation2.state
+        });
+        return {
+          opened: true,
+          recovered: true,
+          ready: pendingTui.ready === true,
+          state: pendingTui.ready === true ? "ready" : activation2.state,
+          needsTerminalConfirmation: pendingTui.needsTerminalConfirmation === true,
+          mode,
+          sessionId: finalSessionId,
+          cwd: fullCwd,
+          presentation: "windows_terminal",
+          requestedPresentation: presentation,
+          leader,
+          tui: pendingTui,
+          attachment: attachment2,
+          activation: activation2
+        };
+      }
       if (recoverableTui) {
         const attachment2 = await this.attachSession({
           mode: "resume",
           sessionId: finalSessionId,
-          cwd: fullCwd
+          cwd: fullCwd,
+          interactiveWorkspaceTrust: true
         });
         this.record("session_recovered", {
           sessionId: finalSessionId,
@@ -21748,6 +22221,9 @@ var GrokSupervisor = class {
         return {
           opened: true,
           recovered: true,
+          ready: true,
+          state: "ready",
+          needsTerminalConfirmation: false,
           mode,
           sessionId: finalSessionId,
           cwd: fullCwd,
@@ -21760,11 +22236,13 @@ var GrokSupervisor = class {
       }
       let tui = null;
       let attachment = null;
+      let activation = null;
       if (presentation === "windows_terminal") {
         attachment = await this.attachSession({
           mode,
           sessionId: finalSessionId,
-          cwd: fullCwd
+          cwd: fullCwd,
+          interactiveWorkspaceTrust: true
         });
         finalSessionId = attachment.sessionId;
         if (mode === "new") {
@@ -21777,25 +22255,36 @@ var GrokSupervisor = class {
           confirmation: "LAUNCH_VISIBLE_TUI"
         });
         tuiPid = tui.pid;
-        await this.waitForTuiSession({ sessionId: finalSessionId, pid: tuiPid });
+        activation = await this.waitForTuiSession({ sessionId: finalSessionId, pid: tuiPid });
       } else {
         attachment = await this.attachSession({
           mode,
           sessionId: finalSessionId,
-          cwd: fullCwd
+          cwd: fullCwd,
+          interactiveWorkspaceTrust: false
         });
         finalSessionId = attachment.sessionId;
+        activation = {
+          observed: true,
+          ready: true,
+          state: "ready",
+          needsTerminalConfirmation: false
+        };
       }
       this.record("session_opened", {
         mode,
         sessionId: finalSessionId,
         cwd: fullCwd,
         presentation,
-        tuiPid
+        tuiPid,
+        activationState: activation.state
       });
       return {
         opened: true,
         recovered: false,
+        ready: activation.ready === true,
+        state: activation.state,
+        needsTerminalConfirmation: activation.needsTerminalConfirmation === true,
         mode,
         sessionId: finalSessionId,
         cwd: fullCwd,
@@ -21803,7 +22292,8 @@ var GrokSupervisor = class {
         leader,
         tui,
         attachment,
-        bootstrapAttachment
+        bootstrapAttachment,
+        activation
       };
     } catch (error51) {
       await this.disconnect().then(() => rollback.push("acp_disconnected")).catch((rollbackError) => rollback.push(`acp_disconnect_failed:${conciseError(rollbackError)}`));
@@ -21841,7 +22331,7 @@ var GrokSupervisor = class {
       throw openError;
     }
   }
-  async attachSession({ mode = "resume", sessionId, cwd }) {
+  async attachSession({ mode = "resume", sessionId, cwd, interactiveWorkspaceTrust = false }) {
     if (!(/* @__PURE__ */ new Set(["new", "resume"])).has(mode)) {
       throw new Error("mode must be new or resume");
     }
@@ -21850,7 +22340,7 @@ var GrokSupervisor = class {
     }
     const fullCwd = validateWorkingDirectory(cwd);
     if (this.acpConnection && !this.acpConnection.signal.aborted) {
-      if (mode === "resume" && this.attachedSessionId === sessionId && this.attachedCwd === fullCwd) {
+      if (mode === "resume" && this.attachedSessionId === sessionId && samePath(this.attachedCwd, fullCwd)) {
         return { attached: false, reason: "already_attached", sessionId, cwd: fullCwd };
       }
       throw new Error(`ACP is already attached to ${this.attachedSessionId}; disconnect first`);
@@ -21874,17 +22364,32 @@ var GrokSupervisor = class {
     child.stderr?.on("data", (chunk) => this.captureDiagnostic("acp_stderr", chunk));
     child.once("exit", (code, signal) => {
       this.record("acp_exit", { pid: child.pid, code, signal });
+      for (const pending of this.workspaceTrustSummaries().filter((entry) => samePath(entry.cwd, fullCwd))) {
+        this.resolveWorkspaceTrust({
+          sessionId: pending.sessionId,
+          workspace: pending.workspace,
+          outcome: "reject",
+          reason: "acp_process_exited"
+        });
+      }
       if (this.acpProcess === child) {
         this.acpProcess = null;
       }
     });
-    const app = client({ name: "grok-build-supervisor" }).onRequest(methods.client.session.requestPermission, (ctx) => this.handlePermission(ctx.params)).onRequest(methods.client.elicitation.create, (ctx) => this.handleElicitation(ctx.params)).onNotification(methods.client.session.update, (ctx) => this.handleSessionUpdate(ctx.params));
+    this.pendingAttachCwd = fullCwd;
+    const app = client({ name: "grok-build-supervisor" }).onRequest(methods.client.session.requestPermission, (ctx) => this.handlePermission(ctx.params)).onRequest(methods.client.elicitation.create, (ctx) => this.handleElicitation(ctx.params));
+    for (const method of WORKSPACE_TRUST_ACP_METHODS) {
+      const parseRequest = method.startsWith("_") ? parseWorkspaceTrustGatewayRequest : parseWorkspaceTrustRequest;
+      app.onRequest(method, parseRequest, (ctx) => this.handleWorkspaceTrustRequest(ctx.params));
+    }
+    app.onNotification(methods.client.session.update, (ctx) => this.handleSessionUpdate(ctx.params));
     const stream = ndJsonStream2(Writable.toWeb(child.stdin), Readable.toWeb(child.stdout));
     const connection = app.connect(stream);
     try {
+      const clientCapabilities = buildAcpClientCapabilities({ interactiveWorkspaceTrust });
       const initialized = await connection.agent.request(methods.agent.initialize, {
         protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: { elicitation: { form: {} } }
+        clientCapabilities
       });
       await this.ensureLeaderProxyRouteVerified();
       let finalSessionId = sessionId;
@@ -21911,6 +22416,7 @@ var GrokSupervisor = class {
       this.acpContext = connection.agent;
       this.attachedSessionId = finalSessionId;
       this.attachedCwd = fullCwd;
+      this.pendingAttachCwd = null;
       this.record("session_attached", { sessionId: finalSessionId, cwd: fullCwd, pid: child.pid, created });
       return {
         attached: true,
@@ -21921,9 +22427,18 @@ var GrokSupervisor = class {
         protocolVersion: initialized.protocolVersion
       };
     } catch (error51) {
+      for (const pending of this.workspaceTrustSummaries().filter((entry) => samePath(entry.cwd, fullCwd))) {
+        this.resolveWorkspaceTrust({
+          sessionId: pending.sessionId,
+          workspace: pending.workspace,
+          outcome: "reject",
+          reason: "acp_attachment_failed"
+        });
+      }
       connection.close(error51);
       child.kill();
       this.acpProcess = null;
+      this.pendingAttachCwd = null;
       throw error51;
     }
   }
@@ -22093,6 +22608,21 @@ var GrokSupervisor = class {
     }
     if (this.attachedSessionId !== sessionId) {
       throw new Error(`ACP is attached to ${this.attachedSessionId}, not ${sessionId}`);
+    }
+    const activation = this.sessionActivationSnapshot(sessionId, this.attachedCwd);
+    if (activation?.state === "needs_workspace_trust") {
+      throw codedError3(
+        "GROK_WORKSPACE_TRUST_PENDING",
+        "The visible Grok terminal is waiting for workspace trust confirmation; confirm it there before sending work",
+        activation
+      );
+    }
+    if (activation?.state === "awaiting_session_registration") {
+      throw codedError3(
+        "GROK_TUI_ACTIVATION_PENDING",
+        "The visible Grok terminal is still starting; wait for it to become ready before sending work",
+        activation
+      );
     }
     if (this.activeRun?.status === "running") {
       throw new Error(`Prompt ${this.activeRun.runId} is still running`);
@@ -22307,6 +22837,14 @@ var GrokSupervisor = class {
       this.pendingElicitations.delete(elicitationId);
       this.record("elicitation_answered", { elicitationId, action: "cancel", reason: "disconnect" });
     }
+    for (const pending of this.workspaceTrustSummaries()) {
+      this.resolveWorkspaceTrust({
+        sessionId: pending.sessionId,
+        workspace: pending.workspace,
+        outcome: "reject",
+        reason: "disconnect"
+      });
+    }
     if (this.activeRun?.status === "running" && this.acpContext && this.attachedSessionId) {
       await this.acpContext.notify(methods.agent.session.cancel, { sessionId: this.attachedSessionId }).catch(() => {
       });
@@ -22328,6 +22866,7 @@ var GrokSupervisor = class {
     this.acpContext = null;
     this.attachedSessionId = null;
     this.attachedCwd = null;
+    this.pendingAttachCwd = null;
     this.availableCommandsSnapshots.clear();
     this.inactiveRunActivity.clear();
     this.record("session_disconnected", { sessionId: previous });
@@ -22344,7 +22883,7 @@ var GrokSupervisor = class {
     }
     const ownerToken = ownership.valid ? ownership.record.ownerToken : null;
     const activeSessions = this.readActiveSessions();
-    const recordedLiveTuis = listTuiStateRecords(this.tuiStateRoot).filter(({ value }) => value.status === "running" && (!ownerToken || value.leaderOwnerToken === ownerToken) && this.assessRecordedTui(value, activeSessions, ownership).processAlive).map(({ value }) => value.grokPid);
+    const recordedLiveTuis = listTuiStateRecords(this.tuiStateRoot).filter(({ value }) => LIVE_TUI_STATUSES.has(value.status) && (!ownerToken || value.leaderOwnerToken === ownerToken) && this.assessRecordedTui(value, activeSessions, ownership).processAlive).map(({ value }) => value.grokPid);
     const liveTuis = [.../* @__PURE__ */ new Set([
       ...[...this.tuiProcesses.entries()].filter(([pid2, owned]) => this.ownedTuiIdentityMatches(pid2, owned)).map(([pid2]) => pid2),
       ...recordedLiveTuis
@@ -22591,11 +23130,11 @@ var SupervisorDaemon = class {
   }
   async daemonBusyState() {
     const status = await this.supervisor.status();
-    const liveTuis = (status.recordedTuis || []).filter((item) => item.processAlive === true && item.activeRegistryMatch === true && item.leaderOwnershipMatch === true && item.processIdentityMatch !== false);
+    const liveTuis = (status.recordedTuis || []).filter((item) => item.processAlive === true && item.leaderOwnershipMatch === true && item.processIdentityMatch !== false);
     const ownedLiveTuiCount = Array.isArray(status.ownedVisibleTuiPids) ? status.ownedVisibleTuiPids.length : 0;
     return {
       busy: Boolean(
-        status.acpConnected || status.attachedSessionId || status.activeRun?.status === "running" || status.pendingPermissions?.length || status.pendingElicitations?.length || liveTuis.length || ownedLiveTuiCount
+        status.acpConnected || status.attachedSessionId || status.activeRun?.status === "running" || status.pendingPermissions?.length || status.pendingElicitations?.length || status.pendingWorkspaceTrust?.length || liveTuis.length || ownedLiveTuiCount
       ),
       status,
       liveTuiCount: liveTuis.length,
