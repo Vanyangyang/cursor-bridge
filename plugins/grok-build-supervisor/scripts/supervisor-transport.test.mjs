@@ -168,9 +168,29 @@ test("new MCP frontend coalesces and artifacts cumulative payloads from a legacy
   assert.equal(working.run.finalText, null);
   assert.equal("latestMessage" in working.run, false);
   assert.equal(working.progress.contentSuppressed, true);
+  assert.equal(working.progress.coalesced, true);
+  assert.equal(working.progress.eventsCollapsed, true);
+  assert.equal(working.progress.newActivity, true);
+  assert.equal("phase" in working.progress, false);
   assert.equal(working.cursor.nextAfterSequence, 240);
   assert.equal(working.cursor.hasMore, false);
   assert.doesNotMatch(JSON.stringify(working), /LEGACY_CUMULATIVE_TEXT/);
+
+  const structured = coalesceInteractionResult({
+    view: "interaction",
+    state: "working",
+    run: { runId: SESSION_ID, sessionId: SESSION_ID, status: "running" },
+    progress: {
+      phase: "modifying",
+      message: "Modifying: 1 file touched.",
+      filesRead: 2,
+      filesChanged: 1,
+    },
+    cursor: { latestSequence: 241, nextAfterSequence: 241, hasMore: false },
+  }, { afterSequence: 240 });
+  assert.equal(structured.progress.phase, "modifying");
+  assert.equal(structured.progress.filesChanged, 1);
+  assert.equal(structured.progress.eventsCollapsed, false);
 
   const completed = coalesceInteractionResult({
     ...working,
@@ -186,6 +206,14 @@ test("new MCP frontend coalesces and artifacts cumulative payloads from a legacy
   assert.equal(completed.delivery.resultArtifactIncluded, true);
   assert.equal(readFileSync(completed.run.resultArtifact.path, "utf8"), cumulative);
   assert.ok(Buffer.byteLength(JSON.stringify(completed)) < 4_000);
+  const legacyTerminal = coalesceInteractionResult({
+    view: "interaction",
+    state: "completed",
+    run: { runId: SESSION_ID, sessionId: SESSION_ID, status: "completed", finalText: "done" },
+    progress: "legacy cumulative progress",
+    cursor: { latestSequence: 242, nextAfterSequence: 242, hasMore: false },
+  }, { afterSequence: 241 });
+  assert.equal(legacyTerminal.progress, null);
   const repeated = coalesceInteractionResult({
     view: "interaction",
     state: "completed",

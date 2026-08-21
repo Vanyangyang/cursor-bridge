@@ -34882,15 +34882,19 @@ function coalesceInteractionResult(result, params = {}, options = {}) {
     run.artifactError = artifactError;
   }
   const working = result.state === "working";
+  const terminalProgress = (/* @__PURE__ */ new Set(["completed", "failed"])).has(result.state) && (terminalSequence === null || terminalSequence > afterSequence);
+  const sourceProgress = result.progress && typeof result.progress === "object" && !Array.isArray(result.progress) ? result.progress : null;
   return {
     ...result,
     run,
     progress: working ? {
+      ...sourceProgress || {},
       status: "streaming",
       newActivity: latestSequence > afterSequence,
       contentSuppressed: true,
-      coalesced: originalCursor.hasMore === true
-    } : null,
+      coalesced: true,
+      eventsCollapsed: originalCursor.hasMore === true
+    } : terminalProgress ? sourceProgress : null,
     delivery: {
       mode: "terminal_cursor_once",
       finalTextAvailable,
@@ -35260,7 +35264,7 @@ var SupervisorClient = class {
 // plugins/grok-build-supervisor/scripts/server.mjs
 var supervisor = new SupervisorClient();
 process.chdir(supervisor.paths.stateRoot);
-var server = new McpServer({ name: "grok-build-supervisor", version: "0.2.0" });
+var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.0" });
 function toolResult(data, isError = false) {
   return {
     content: [{ type: "text", text: JSON.stringify(data) }],

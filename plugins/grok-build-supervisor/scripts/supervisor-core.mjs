@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "node:
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import * as acp from "@agentclientprotocol/sdk";
 import { listSessionCandidates, readSessionSummary, defaultSessionRoot } from "./session-catalog.mjs";
 import { DurableEventJournal, MemoryEventJournal } from "./event-journal.mjs";
@@ -45,8 +45,8 @@ const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const INSPECT_VIEWS = new Set(["interaction", "status", "summary", "delta", "evidence"]);
 const MAX_INTERACTION_WAIT_MS = 25_000;
 const MAX_FINAL_TEXT_CHARS = 512 * 1024;
-const ACTIVITY_HEARTBEAT_INTERVAL_MS = 5_000;
-const ACTIVITY_HEARTBEAT_CHARS = 4_096;
+const DEFAULT_PROGRESS_HEARTBEAT_INTERVAL_MS = 20_000;
+const MAX_PROGRESS_TITLE_CHARS = 160;
 const CRITICAL_EVENT_KINDS = new Set([
   "permission_requested",
   "elicitation_requested",
@@ -473,6 +473,124 @@ function codedError(code, message, details = undefined) {
   return error;
 }
 
+function compactProgressTitle(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const compacted = value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compacted) {
+    return null;
+  }
+  return compacted.length > MAX_PROGRESS_TITLE_CHARS
+    ? `${compacted.slice(0, MAX_PROGRESS_TITLE_CHARS - 1)}…`
+    : compacted;
+}
+
+export function progressPhaseForToolCall(toolCall = {}) {
+  const kind = typeof toolCall.kind === "string" ? toolCall.kind : "other";
+  const title = String(toolCall.title || "").toLowerCase();
+  if (["edit", "delete", "move"].includes(kind)) {
+    return "modifying";
+  }
+  if (["read", "search", "fetch"].includes(kind)) {
+    return "locating";
+  }
+  if (kind === "execute") {
+    return /(?:test|check|verify|validat|lint|diff|测试|验证|检查)/i.test(title)
+      ? "verifying"
+      : "executing";
+  }
+  if (["think", "switch_mode"].includes(kind)) {
+    return "planning";
+  }
+  if (/(?:test|check|verify|validat|lint|diff|测试|验证|检查)/i.test(title)) {
+    return "verifying";
+  }
+  if (/(?:edit|write|modify|patch|delete|move|修改|写入|删除|移动)/i.test(title)) {
+    return "modifying";
+  }
+  if (/(?:read|search|find|locat|inspect|读取|搜索|查找|定位)/i.test(title)) {
+    return "locating";
+  }
+  return "working";
+}
+
+function progressMessage(progress) {
+  const title = progress.current?.title;
+  const suffix = title ? ` ${title}` : "";
+  switch (progress.phase) {
+    case "starting":
+      return "Starting: preparing the delegated task.";
+    case "planning":
+      return `Planning:${suffix || " deciding the next bounded step"}.`;
+    case "locating":
+      return `Locating: ${progress.filesRead.size} file${progress.filesRead.size === 1 ? "" : "s"} inspected.${suffix}`.trim();
+    case "modifying":
+      return `Modifying: ${progress.filesChanged.size} file${progress.filesChanged.size === 1 ? "" : "s"} touched.${suffix}`.trim();
+    case "verifying":
+      return `Verifying:${suffix || " running targeted checks"}.`;
+    case "executing":
+      return `Executing:${suffix || " running the current project step"}.`;
+    case "completed":
+      return "Completed.";
+    case "failed":
+      return "Failed: see the terminal result.";
+    default:
+      return `Working:${suffix || " progressing through the task"}.`;
+  }
+}
+
+function runProgressSnapshot(run) {
+  if (!run?.progress) {
+    return null;
+  }
+  const progress = run.progress;
+  const toolCalls = [...run.toolCalls.values()];
+  return {
+    phase: progress.phase,
+    message: progressMessage(progress),
+    filesRead: progress.filesRead.size,
+    filesChanged: progress.filesChanged.size,
+    toolCalls: {
+      total: toolCalls.length,
+      completed: toolCalls.filter((toolCall) => toolCall.status === "completed").length,
+      failed: toolCalls.filter((toolCall) => toolCall.status === "failed").length,
+    },
+    current: progress.current ? {
+      kind: progress.current.kind || "other",
+      title: progress.current.title,
+      status: progress.current.status || null,
+    } : null,
+    updatedAt: progress.updatedAt,
+    heartbeatAt: progress.heartbeatAt,
+    responseChars: run.totalMessageChars,
+    lastChunkAt: progress.lastChunkAt,
+  };
+}
+
+function capabilitySnapshot(commands) {
+  const descriptors = (Array.isArray(commands) ? commands : [])
+    .filter((command) => command && typeof command.name === "string")
+    .map((command) => ({
+      name: command.name,
+      description: typeof command.description === "string" ? command.description : "",
+      inputHint: typeof command.input?.hint === "string" ? command.input.hint : null,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const entryHashes = new Map(descriptors.map((descriptor) => [
+    descriptor.name,
+    createHash("sha256").update(JSON.stringify(descriptor)).digest("hex"),
+  ]));
+  return {
+    hash: createHash("sha256").update(JSON.stringify(descriptors)).digest("hex"),
+    count: descriptors.length,
+    entryHashes,
+  };
+}
+
 function eventDigest(event) {
   const digest = {
     sequence: event.sequence,
@@ -651,6 +769,8 @@ export class GrokSupervisor {
     this.pendingPermissions = new Map();
     this.pendingElicitations = new Map();
     this.activeRun = null;
+    this.availableCommandsSnapshots = new Map();
+    this.progressHeartbeatIntervalMs = Math.max(1, Number(options.progressHeartbeatIntervalMs) || DEFAULT_PROGRESS_HEARTBEAT_INTERVAL_MS);
     this.changeWaiters = new Set();
     this.stderrTail = [];
     this.recovery = deriveRecoveryState(this.events);
@@ -755,6 +875,138 @@ export class GrokSupervisor {
       };
       const timer = setTimeout(() => finish(null), Math.max(1, timeoutMs));
       this.changeWaiters.add(finish);
+    });
+  }
+
+  recordRunProgress(run, { heartbeat = false } = {}) {
+    if (!run?.progress) {
+      return null;
+    }
+    run.progress.heartbeatAt = new Date().toISOString();
+    const event = this.record("run_progress", {
+      sessionId: run.sessionId,
+      runId: run.runId,
+      heartbeat,
+      ...runProgressSnapshot(run),
+    });
+    run.progress.dirtySinceLastRecord = false;
+    return event;
+  }
+
+  startRunProgressHeartbeat(run) {
+    this.stopRunProgressHeartbeat(run);
+    run.progressTimer = setInterval(() => {
+      if (run.status !== "running") {
+        this.stopRunProgressHeartbeat(run);
+        return;
+      }
+      run.progress.heartbeatAt = new Date().toISOString();
+      if (run.progress.dirtySinceLastRecord) {
+        this.recordRunProgress(run, { heartbeat: true });
+      }
+    }, this.progressHeartbeatIntervalMs);
+    run.progressTimer.unref?.();
+  }
+
+  stopRunProgressHeartbeat(run) {
+    if (run?.progressTimer) {
+      clearInterval(run.progressTimer);
+      run.progressTimer = null;
+    }
+  }
+
+  updateRunProgress(sessionId, update) {
+    const run = this.activeRun;
+    if (!run || run.status !== "running" || run.sessionId !== sessionId || !update) {
+      return null;
+    }
+    const updateKind = update.sessionUpdate;
+    if (updateKind === "tool_call" || updateKind === "tool_call_update") {
+      const toolCallId = typeof update.toolCallId === "string" ? update.toolCallId : null;
+      if (!toolCallId) {
+        return null;
+      }
+      const previous = run.toolCalls.get(toolCallId) || { toolCallId };
+      const current = {
+        ...previous,
+        ...(typeof update.kind === "string" ? { kind: update.kind } : {}),
+        ...(typeof update.title === "string" ? { title: compactProgressTitle(update.title) } : {}),
+        ...(typeof update.status === "string" ? { status: update.status } : {}),
+        ...(Array.isArray(update.locations) ? { locations: update.locations } : {}),
+      };
+      run.toolCalls.set(toolCallId, current);
+      const phase = progressPhaseForToolCall(current);
+      for (const location of current.locations || []) {
+        if (typeof location?.path !== "string") {
+          continue;
+        }
+        if (["edit", "delete", "move"].includes(current.kind)) {
+          run.progress.filesChanged.add(location.path);
+        } else if (["read", "search", "fetch"].includes(current.kind)) {
+          run.progress.filesRead.add(location.path);
+        }
+      }
+      const phaseChanged = phase !== run.progress.phase;
+      run.progress.phase = phase;
+      run.progress.current = {
+        kind: current.kind || "other",
+        title: current.title || null,
+        status: current.status || null,
+      };
+      run.progress.updatedAt = new Date().toISOString();
+      run.progress.dirtySinceLastRecord = true;
+      return phaseChanged || current.status === "failed"
+        ? this.recordRunProgress(run)
+        : null;
+    }
+    if (updateKind === "plan") {
+      const currentEntry = Array.isArray(update.entries)
+        ? update.entries.find((entry) => entry?.status === "in_progress") || update.entries.find((entry) => entry?.status === "pending")
+        : null;
+      if (!currentEntry) {
+        return null;
+      }
+      const title = compactProgressTitle(currentEntry.content);
+      const inferredPhase = progressPhaseForToolCall({ title });
+      const phase = inferredPhase === "working" ? "planning" : inferredPhase;
+      const phaseChanged = phase !== run.progress.phase;
+      run.progress.phase = phase;
+      run.progress.current = { kind: "plan", title, status: currentEntry.status || null };
+      run.progress.updatedAt = new Date().toISOString();
+      run.progress.dirtySinceLastRecord = true;
+      return phaseChanged ? this.recordRunProgress(run) : null;
+    }
+    return null;
+  }
+
+  handleAvailableCommandsUpdate(sessionId, commands) {
+    const next = capabilitySnapshot(commands);
+    const previous = this.availableCommandsSnapshots.get(sessionId);
+    if (previous?.hash === next.hash) {
+      return null;
+    }
+    const previousEntries = previous?.entryHashes || new Map();
+    const added = [...next.entryHashes.keys()].filter((name) => !previousEntries.has(name));
+    const removed = [...previousEntries.keys()].filter((name) => !next.entryHashes.has(name));
+    const changed = [...next.entryHashes.entries()]
+      .filter(([name, hash]) => previousEntries.has(name) && previousEntries.get(name) !== hash)
+      .map(([name]) => name);
+    this.availableCommandsSnapshots.set(sessionId, next);
+    return this.record("available_commands_changed", {
+      sessionId,
+      hash: next.hash,
+      previousHash: previous?.hash || null,
+      count: next.count,
+      addedCount: added.length,
+      removedCount: removed.length,
+      changedCount: changed.length,
+      added: added.slice(0, 20),
+      removed: removed.slice(0, 20),
+      changed: changed.slice(0, 20),
+      addedTruncated: added.length > 20,
+      removedTruncated: removed.length > 20,
+      changedTruncated: changed.length > 20,
+      payloadSuppressed: true,
     });
   }
 
@@ -1143,11 +1395,11 @@ export class GrokSupervisor {
         terminalSequence: active.terminalSequence ?? null,
         stopReason: typeof active.result?.stopReason === "string" ? active.result.stopReason : null,
         finalText: active.finalText || null,
-        latestMessage: active.latestMessage || null,
         resultArtifact: active.resultArtifact || null,
         resultSummary: active.resultSummary || null,
         artifactError: active.artifactError || null,
         responseTruncated: active.finalTextTruncated === true,
+        progress: runProgressSnapshot(active),
         question: active.question || null,
         error: active.error || null,
       };
@@ -1194,13 +1446,13 @@ export class GrokSupervisor {
       terminalSequence: latest.kind === "prompt_started" ? null : latest.sequence,
       stopReason: typeof latest.result?.stopReason === "string" ? latest.result.stopReason : null,
       finalText: typeof latest.finalText === "string" ? latest.finalText : null,
-      latestMessage: typeof latest.finalText === "string" ? latest.finalText : null,
       resultArtifact: latest.resultArtifact && typeof latest.resultArtifact === "object"
         ? latest.resultArtifact
         : null,
       resultSummary: typeof latest.resultSummary === "string" ? latest.resultSummary : null,
       artifactError: typeof latest.artifactError === "string" ? latest.artifactError : null,
       responseTruncated: latest.responseTruncated === true,
+      progress: latest.progress && typeof latest.progress === "object" ? latest.progress : null,
       question: latest.question || null,
       error: latest.kind === "prompt_failed" ? latest.message || "Grok prompt failed" : null,
     };
@@ -1275,6 +1527,14 @@ export class GrokSupervisor {
       question: run.question,
       error: run.error,
     } : null;
+    const progress = run?.progress && (run.status === "running" || terminalDelivery) ? {
+      ...run.progress,
+      status: run.status === "running" ? "streaming" : run.status,
+      newActivity: stream.latestSequence > afterSequence,
+      contentSuppressed: true,
+      coalesced: true,
+      eventsCollapsed: stream.hasMore,
+    } : null;
     return {
       view: "interaction",
       state,
@@ -1285,12 +1545,7 @@ export class GrokSupervisor {
         attached: Boolean(this.acpConnection && !this.acpConnection.signal.aborted && this.attachedSessionId === sessionId),
       },
       run: publicRun,
-      progress: run?.status === "running" ? {
-        status: "streaming",
-        newActivity: stream.events.length > 0,
-        contentSuppressed: true,
-        coalesced: stream.hasMore,
-      } : null,
+      progress,
       request,
       delivery: {
         mode: "terminal_cursor_once",
@@ -2113,10 +2368,10 @@ export class GrokSupervisor {
 
   handleSessionUpdate(params) {
     const text = agentMessageText(params.update);
-    let activityEvent = null;
     if (text && this.activeRun?.status === "running" && this.activeRun.sessionId === params.sessionId) {
       this.activeRun.totalMessageChars += text.length;
-      this.activeRun.pendingActivityChars += text.length;
+      this.activeRun.progress.lastChunkAt = new Date().toISOString();
+      this.activeRun.progress.dirtySinceLastRecord = true;
       const remaining = Math.max(0, MAX_FINAL_TEXT_CHARS - this.activeRun.finalText.length);
       if (remaining > 0) {
         this.activeRun.finalText += text.slice(0, remaining);
@@ -2137,25 +2392,16 @@ export class GrokSupervisor {
       if (text.length > messageRemaining) {
         this.activeRun.latestMessageTruncated = true;
       }
-      const now = Date.now();
-      if (this.activeRun.lastActivityRecordedAt === null
-        || this.activeRun.pendingActivityChars >= ACTIVITY_HEARTBEAT_CHARS
-        || now - this.activeRun.lastActivityRecordedAt >= ACTIVITY_HEARTBEAT_INTERVAL_MS) {
-        activityEvent = this.record("session_activity", {
-          sessionId: params.sessionId,
-          runId: this.activeRun.runId,
-          updateKind: "agent_message_chunk",
-          newChars: this.activeRun.pendingActivityChars,
-          totalChars: this.activeRun.totalMessageChars,
-          responseTruncated: this.activeRun.finalTextTruncated,
-        });
-        this.activeRun.pendingActivityChars = 0;
-        this.activeRun.lastActivityRecordedAt = now;
-      }
     }
     if (params.update?.sessionUpdate === "agent_message_chunk"
       || params.update?.sessionUpdate === "agent_thought_chunk") {
-      return activityEvent;
+      return null;
+    }
+    if (params.update?.sessionUpdate === "available_commands_update") {
+      return this.handleAvailableCommandsUpdate(params.sessionId, params.update.availableCommands);
+    }
+    if (["tool_call", "tool_call_update", "plan"].includes(params.update?.sessionUpdate)) {
+      return this.updateRunProgress(params.sessionId, params.update);
     }
     return this.record("session_update", { sessionId: params.sessionId, update: params.update });
   }
@@ -2315,8 +2561,18 @@ export class GrokSupervisor {
       latestMessage: "",
       latestMessageTruncated: false,
       totalMessageChars: 0,
-      pendingActivityChars: 0,
-      lastActivityRecordedAt: null,
+      toolCalls: new Map(),
+      progress: {
+        phase: "starting",
+        current: null,
+        filesRead: new Set(),
+        filesChanged: new Set(),
+        updatedAt: startedAt,
+        heartbeatAt: null,
+        lastChunkAt: null,
+        dirtySinceLastRecord: true,
+      },
+      progressTimer: null,
       resultArtifact: null,
       resultSummary: null,
       artifactError: null,
@@ -2325,12 +2581,18 @@ export class GrokSupervisor {
     };
     this.activeRun = run;
     const startedEvent = this.record("prompt_started", { runId, sessionId, hostKind: normalizedHostKind, promptLength: prompt.length });
+    const progressEvent = this.recordRunProgress(run);
+    this.startRunProgressHeartbeat(run);
     run.promise = this.acpContext.request(acp.methods.agent.session.prompt, {
       sessionId,
       prompt: [{ type: "text", text: supervisedPrompt }],
     }).then((result) => {
+      this.stopRunProgressHeartbeat(run);
       run.status = "completed";
       run.completedAt = new Date().toISOString();
+      run.progress.phase = "completed";
+      run.progress.current = null;
+      run.progress.updatedAt = run.completedAt;
       run.result = compactForTransport(result);
       if (run.latestMessage) {
         run.finalText = run.latestMessage;
@@ -2376,17 +2638,34 @@ export class GrokSupervisor {
         resultSummary: run.resultSummary,
         artifactError: run.artifactError,
         responseTruncated: run.finalTextTruncated,
+        progress: runProgressSnapshot(run),
         question: run.question,
       });
       run.terminalSequence = completedEvent.sequence;
     }).catch((error) => {
+      this.stopRunProgressHeartbeat(run);
       run.status = "failed";
       run.completedAt = new Date().toISOString();
+      run.progress.phase = "failed";
+      run.progress.current = null;
+      run.progress.updatedAt = run.completedAt;
       run.error = conciseError(error);
-      const failedEvent = this.record("prompt_failed", { runId, sessionId, message: run.error });
+      const failedEvent = this.record("prompt_failed", {
+        runId,
+        sessionId,
+        message: run.error,
+        progress: runProgressSnapshot(run),
+      });
       run.terminalSequence = failedEvent.sequence;
     });
-    return { started: true, runId, sessionId, hostKind: normalizedHostKind, startedAt, nextAfterSequence: startedEvent.sequence };
+    return {
+      started: true,
+      runId,
+      sessionId,
+      hostKind: normalizedHostKind,
+      startedAt,
+      nextAfterSequence: progressEvent?.sequence || startedEvent.sequence,
+    };
   }
 
   updates({ afterSequence = 0, limit = DEFAULT_EVENT_LIMIT, sessionId = null } = {}) {
@@ -2415,6 +2694,7 @@ export class GrokSupervisor {
     }
     const runId = this.activeRun?.runId ?? this.recovery.interruptedRun?.runId ?? null;
     if (this.activeRun?.status === "running") {
+      this.stopRunProgressHeartbeat(this.activeRun);
       this.activeRun.status = "cancel_requested";
     }
     this.record("prompt_cancel_requested", { sessionId, runId });
@@ -2457,6 +2737,7 @@ export class GrokSupervisor {
     }
     if (this.activeRun?.status === "running" && this.acpContext && this.attachedSessionId) {
       await this.acpContext.notify(acp.methods.agent.session.cancel, { sessionId: this.attachedSessionId }).catch(() => {});
+      this.stopRunProgressHeartbeat(this.activeRun);
       this.activeRun.status = "cancel_requested";
       this.record("prompt_cancel_requested", {
         sessionId: this.attachedSessionId,
@@ -2474,6 +2755,7 @@ export class GrokSupervisor {
     this.acpContext = null;
     this.attachedSessionId = null;
     this.attachedCwd = null;
+    this.availableCommandsSnapshots.clear();
     this.record("session_disconnected", { sessionId: previous });
     return { disconnected: true, sessionId: previous };
   }
