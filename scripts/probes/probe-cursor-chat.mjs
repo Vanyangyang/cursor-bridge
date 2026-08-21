@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** probe-cursor-chat.mjs — 打开 Cursor AI chat/agent 面板，广谱 dump 结构（输入/发送钮/回复区/停止钮），为建 cursor-console 注入器铺路。
- *  用法：node probe-cursor-chat.mjs [openKey] [port]  openKey: L(Ctrl+L,默认) / I(Ctrl+I) / none ; port 默认 9223 */
+ *  用法：node scripts/probes/probe-cursor-chat.mjs [openKey] [port]  openKey: L(Ctrl+L,默认) / I(Ctrl+I) / none ; port 默认 9223 */
 import http from 'http';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
@@ -9,6 +9,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { WebSocket } = require('ws');
 const __dir = dirname(fileURLToPath(import.meta.url));
+const artifactDir = join(__dir, '..', '..', '.artifacts');
 const OPENKEY = (process.argv[2] || 'L').toUpperCase();
 const PORT = Number(process.argv[3] || 9223);
 const ORIGIN = `http://localhost:${PORT}`;
@@ -52,13 +53,13 @@ const DUMP = `(function(){
   await sleep(1400);
   const r=JSON.parse(await evalJS(c,DUMP));
   c.close();
-  const cacheDir=join(__dir,'..','..','cache'); try{mkdirSync(cacheDir,{recursive:true});}catch{}
-  writeFileSync(join(cacheDir,'cursor_chat_dump.json'),JSON.stringify(r,null,2),'utf8');
+  try{mkdirSync(artifactDir,{recursive:true});}catch{}
+  writeFileSync(join(artifactDir,'cursor_chat_dump.json'),JSON.stringify(r,null,2),'utf8');
   console.log('\n=== 输入候选 (' + r.editables.length + ') ===');
   for(const e of r.editables) console.log('  ['+e.tag+'] ph="'+e.ph+'" focused='+e.focused+' lexical='+e.lexical+' cls='+e.cls.slice(0,60));
   console.log('\n=== 按钮候选 (' + r.buttons.length + ') ===');
   for(const b of r.buttons) console.log('  aria="'+b.aria+'" title="'+b.title+'" text="'+b.text+'" dis='+b.dis+' svg='+b.svg+' cls='+b.cls.slice(0,55));
   console.log('\n=== 回复/消息容器候选 (' + r.containers.length + ') ===');
   for(const x of r.containers) console.log('  ['+x.tag+'] textLen='+x.textLen+' cls='+x.cls);
-  console.log('\n[chat] 全量: .claude/cache/cursor_chat_dump.json');
+  console.log('\n[chat] 全量: .artifacts/cursor_chat_dump.json');
 })().catch(e=>{console.error('FAIL: '+e.message);process.exit(1);});

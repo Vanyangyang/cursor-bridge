@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** probe-cursor-targets.mjs — 只读：验证 CDP 端口上是哪个 IDE + 列出 page targets。
- *  用法：node probe-cursor-targets.mjs [port]  （默认 9222） */
+ *  用法：node scripts/probes/probe-cursor-targets.mjs [port]  （默认 9222） */
 import http from 'http';
 const PORT = Number(process.argv[2] || 9222);
 function httpJson(path) {
