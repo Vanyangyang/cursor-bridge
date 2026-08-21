@@ -39,12 +39,12 @@ Installing Grok Build Supervisor does not install or start Cursor Bridge.
 ## Update
 
 > [!WARNING]
-> **The first upgrade from Grok Build Supervisor 0.1.0 or earlier to 0.2.0 needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
+> **The first upgrade from Grok Build Supervisor 0.1.0 or earlier to 0.2.0 or any later release needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
 
 > [!TIP]
-> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade Cursor Bridge to 5.4.0 and Grok Build Supervisor to 0.2.0. Check for old-cache instances of `cursor-lifecycle-supervisor.mjs`, `dist/cursor-bridge.mjs`, and Grok's old `server.mjs`, `supervisor-daemon.mjs`, `tui-host.mjs`, or `Start-GrokTui.ps1`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report versions, marketplace source, and any old-cache process that remains.”
+> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade the installed Grok Build Supervisor plugin to the latest version currently available from its marketplace. Check its current version first; if it is 0.1.0 or earlier, inspect old-cache instances of `server.mjs`, `supervisor-daemon.mjs`, `tui-host.mjs`, or `Start-GrokTui.ps1`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report the installed version, marketplace source, and any old-cache process that remains.”
 
-After this migration, both the daemon and TUI run from persistent user state, so releases after 0.2.0 use the normal update commands:
+After this migration, both the daemon and TUI run from persistent user state, so 0.2.0 and later releases use the normal update commands:
 
 ```powershell
 # Codex
