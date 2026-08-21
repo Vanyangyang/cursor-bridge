@@ -8,7 +8,7 @@ const supervisor = new SupervisorClient();
 // Release the versioned plugin cache immediately. Persistent work runs from the
 // content-addressed daemon/TUI snapshots under the user-level state directory.
 process.chdir(supervisor.paths.stateRoot);
-const server = new McpServer({ name: "grok-build-supervisor", version: "0.3.1" });
+const server = new McpServer({ name: "grok-build-supervisor", version: "0.3.2" });
 
 function toolResult(data, isError = false) {
   return {
@@ -43,7 +43,7 @@ register("grok_init", {
 }, (args) => supervisor.initializeProxy(args));
 
 register("grok_session_inspect", {
-  description: "Read cursor-coalesced state from the persistent Grok Supervisor daemon, optionally waiting up to 25 seconds for completion, failure, permission, or clarification. Working polls suppress cumulative message bodies; a short completed response is cursor-delivered once, while a long response is persisted and cursor-delivered as resultArtifact metadata (path, size, SHA-256, and short summary). Diagnostic views remain explicit.",
+  description: "Read cursor-coalesced state from the persistent Grok Supervisor daemon, optionally waiting up to 25 seconds for completion, failure, permission, or clarification. Working polls suppress message bodies and return progress.phase plus cursor-relative newActivity, responseChars, lastChunkAt, and heartbeatAt liveness metadata. A short completed response is cursor-delivered once; multiple ACP messages are preserved in order; and a long response is persisted as resultArtifact metadata. Terminal progress includes bounded changedFiles and commandsRun hints with needsHostVerification. Diagnostic views remain explicit.",
   inputSchema: {
     view: z.enum(["interaction", "status", "summary", "delta", "evidence"]).optional().default("interaction"),
     afterSequence: z.number().int().nonnegative().optional(),

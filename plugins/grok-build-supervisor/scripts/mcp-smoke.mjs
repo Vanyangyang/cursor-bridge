@@ -9,6 +9,7 @@ import { SupervisorClient } from "./supervisor-transport.mjs";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = dirname(scriptDirectory);
 const mcpManifest = JSON.parse(readFileSync(join(pluginRoot, ".mcp.json"), "utf8"));
+const codexPluginManifest = JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin", "plugin.json"), "utf8"));
 const configured = mcpManifest.mcpServers?.["grok-build-supervisor"];
 if (!configured || typeof configured.command !== "string" || !Array.isArray(configured.args)) {
   throw new Error("Plugin MCP manifest does not define grok-build-supervisor");
@@ -63,6 +64,9 @@ try {
     throw new Error("Status did not expose the required Supervisor capability gates");
   }
   const daemonRuntime = daemonStatus.status.daemon;
+  if (daemonRuntime.runtimeVersion !== codexPluginManifest.version) {
+    throw new Error(`Expected daemon runtime ${codexPluginManifest.version}, received ${daemonRuntime.runtimeVersion}`);
+  }
   const expectedDaemonRuntimeRoot = join(smokeStateRoot, "runtime", "daemon-");
   if (typeof daemonRuntime.runtimeFingerprint !== "string"
     || daemonRuntime.runtimeFingerprint.length !== 64
@@ -115,6 +119,7 @@ try {
     daemonProtocolVersion: daemonStatus.status.daemon.protocolVersion,
     daemonCapabilities: daemonStatus.status.daemon.capabilities,
     persistentDaemonRuntime: {
+      version: daemonStatus.status.daemon.runtimeVersion,
       fingerprint: daemonStatus.status.daemon.runtimeFingerprint,
       script: daemonStatus.status.daemon.runtimeScript,
     },

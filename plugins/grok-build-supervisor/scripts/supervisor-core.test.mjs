@@ -137,6 +137,9 @@ test("progress phases use ACP tool metadata without exposing raw tool output", (
   assert.equal(progressPhaseForToolCall({ kind: "read", title: "Read target" }), "locating");
   assert.equal(progressPhaseForToolCall({ kind: "edit", title: "Patch target" }), "modifying");
   assert.equal(progressPhaseForToolCall({ kind: "execute", title: "Run targeted tests" }), "verifying");
+  assert.equal(progressPhaseForToolCall({ kind: "execute", title: "git diff --check" }), "verifying");
+  assert.equal(progressPhaseForToolCall({ kind: "execute", title: "git diff HEAD" }), "locating");
+  assert.equal(progressPhaseForToolCall({ kind: "execute", title: "git checkout feature" }), "executing");
   assert.equal(progressPhaseForToolCall({ kind: "execute", title: "Build the release bundle" }), "executing");
   assert.equal(progressPhaseForToolCall({ kind: "execute", title: "Generate fixture" }), "executing");
   assert.equal(progressPhaseForToolCall({ kind: "think", title: "Choose next step" }), "planning");
@@ -882,6 +885,72 @@ test("interaction view waits for prompt completion and returns only the final re
   assert.doesNotMatch(JSON.stringify(repeated), /Task complete\./);
 });
 
+test("terminal progress exposes bounded host-verification fields", async () => {
+  const supervisor = createSupervisor();
+  let resolvePrompt;
+  supervisor.acpConnection = { signal: { aborted: false } };
+  supervisor.acpContext = {
+    request: () => new Promise((resolve) => { resolvePrompt = resolve; }),
+  };
+  supervisor.attachedSessionId = SESSION_ID;
+  supervisor.attachedCwd = process.cwd();
+  const started = supervisor.startPrompt({
+    sessionId: SESSION_ID,
+    prompt: "Edit and verify the bounded target.",
+    confirmation: "SEND_TO_GROK",
+  });
+  const changedPaths = Array.from({ length: 55 }, (_, index) => join(process.cwd(), `target-${index}.mjs`));
+  supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "tool_call",
+      toolCallId: "edit-1",
+      title: "Patch target.mjs",
+      kind: "edit",
+      status: "completed",
+      locations: changedPaths.map((path) => ({ path })),
+    },
+  });
+  for (let index = 0; index < 25; index += 1) {
+    supervisor.handleSessionUpdate({
+      sessionId: SESSION_ID,
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: `execute-${index}`,
+        title: `command-${index}`,
+        kind: "execute",
+        status: "completed",
+      },
+    });
+  }
+  supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      messageId: "final-1",
+      content: { type: "text", text: `Done:${"d".repeat(3_900)}` },
+    },
+  });
+  resolvePrompt({ stopReason: "end_turn" });
+  await supervisor.activeRun.promise;
+  const interaction = await supervisor.inspect({
+    sessionId: SESSION_ID,
+    runId: started.runId,
+    afterSequence: started.nextAfterSequence,
+  });
+  assert.ok(interaction.progress.changedFiles.length > 0);
+  assert.ok(interaction.progress.changedFiles.length <= 50);
+  assert.equal(interaction.progress.changedFiles[0], changedPaths[0]);
+  assert.equal(interaction.progress.changedFilesTruncated, true);
+  assert.equal(interaction.progress.commandsRun.length, 20);
+  assert.equal(interaction.progress.commandsRun[0], "command-0");
+  assert.equal(interaction.progress.commandsRunTruncated, true);
+  assert.equal(interaction.progress.needsHostVerification, true);
+  const completedEvent = supervisor.events.find((event) => event.kind === "prompt_completed");
+  assert.notEqual(completedEvent?.truncated, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(completedEvent)) <= 8 * 1024);
+});
+
 test("long completed response is cursor-delivered as one persistent result artifact", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "grok-result-handoff-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -938,6 +1007,62 @@ test("long completed response is cursor-delivered as one persistent result artif
   assert.equal(repeated.delivery.resultArtifactAvailable, true);
   assert.equal(repeated.delivery.resultArtifactIncluded, false);
   assert.doesNotMatch(JSON.stringify(repeated), /LONG_RESULT_UNIQUE/);
+});
+
+test("multiple ACP message IDs preserve the complete terminal response as one artifact", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-multi-message-result-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const supervisor = createSupervisor({
+    stateRoot: join(root, "state"),
+    resultArtifactRoot: join(root, "results"),
+  });
+  let resolvePrompt;
+  supervisor.acpConnection = { signal: { aborted: false } };
+  supervisor.acpContext = {
+    request: () => new Promise((resolve) => { resolvePrompt = resolve; }),
+  };
+  supervisor.attachedSessionId = SESSION_ID;
+  supervisor.attachedCwd = process.cwd();
+  const started = supervisor.startPrompt({
+    sessionId: SESSION_ID,
+    prompt: "Return a report split across messages.",
+    confirmation: "SEND_TO_GROK",
+  });
+  const first = `FIRST_MESSAGE_UNIQUE:${"a".repeat(2_500)}`;
+  const second = `SECOND_MESSAGE_UNIQUE:${"b".repeat(2_500)}`;
+  supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      messageId: "report-1",
+      content: { type: "text", text: first },
+    },
+  });
+  supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      messageId: "report-2",
+      content: { type: "text", text: second },
+    },
+  });
+  resolvePrompt({ stopReason: "end_turn" });
+  await supervisor.activeRun.promise;
+
+  const interaction = await supervisor.inspect({
+    sessionId: SESSION_ID,
+    runId: started.runId,
+    afterSequence: started.nextAfterSequence,
+  });
+  assert.equal(interaction.run.messageCount, 2);
+  assert.equal(interaction.progress.messageCount, 2);
+  assert.equal(interaction.run.finalText, null);
+  assert.equal(interaction.delivery.resultArtifactIncluded, true);
+  assert.equal(readFileSync(interaction.run.resultArtifact.path, "utf8"), `${first}\n\n${second}`);
+  assert.equal(interaction.run.resultArtifact.sourceChars, `${first}\n\n${second}`.length);
+  const completed = supervisor.events.find((event) => event.kind === "prompt_completed" && event.runId === started.runId);
+  assert.equal(completed.messageCount, 2);
+  assert.equal(completed.progress.messageCount, 2);
 });
 
 test("artifact persistence failure suppresses the long body and returns only a bounded fallback", async () => {
@@ -1141,6 +1266,61 @@ test("failed and cancelled prompts stop their progress timers", async () => {
   assert.equal(cancelled.events.filter((event) => event.kind === "run_progress").length, count);
 });
 
+test("tool activity after cancellation is journaled only as bounded metadata", async () => {
+  const supervisor = createSupervisor();
+  supervisor.acpConnection = { signal: { aborted: false } };
+  supervisor.acpContext = {
+    request: () => new Promise(() => {}),
+    notify: async () => {},
+  };
+  supervisor.attachedSessionId = SESSION_ID;
+  supervisor.startPrompt({
+    sessionId: SESSION_ID,
+    prompt: "Cancel while a tool is active.",
+    confirmation: "SEND_TO_GROK",
+  });
+  await supervisor.cancelPrompt({ sessionId: SESSION_ID, confirmation: "CANCEL_GROK_PROMPT" });
+  const first = supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "late-tool",
+      title: "Continue after cancellation",
+      kind: "execute",
+      status: "in_progress",
+      rawOutput: `POST_CANCEL_RAW:${"x".repeat(4_000)}`,
+    },
+  });
+  const throttled = supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "late-tool",
+      title: "Continue after cancellation",
+      kind: "execute",
+      status: "in_progress",
+    },
+  });
+  const completed = supervisor.handleSessionUpdate({
+    sessionId: SESSION_ID,
+    update: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "late-tool",
+      title: "Continue after cancellation",
+      kind: "execute",
+      status: "completed",
+    },
+  });
+  assert.equal(first.kind, "inactive_run_activity");
+  assert.equal(first.runStatus, "cancel_requested");
+  assert.equal(first.payloadSuppressed, true);
+  assert.equal(throttled, null);
+  assert.equal(completed.kind, "inactive_run_activity");
+  assert.equal(completed.count, 3);
+  assert.doesNotMatch(JSON.stringify(supervisor.events), /POST_CANCEL_RAW/);
+  assert.equal(supervisor.events.some((event) => event.kind === "session_update"), false);
+});
+
 test("available command updates are hash-coalesced and never journal the full capability payload", () => {
   const supervisor = createSupervisor();
   const marker = `CAPABILITY_DESCRIPTION_PAYLOAD:${"z".repeat(5_000)}`;
@@ -1178,6 +1358,30 @@ test("available command updates are hash-coalesced and never journal the full ca
   assert.equal(changed.payloadSuppressed, true);
   assert.doesNotMatch(JSON.stringify(supervisor.events), /CAPABILITY_DESCRIPTION_PAYLOAD/);
   assert.equal(supervisor.events.some((event) => event.kind === "session_update"), false);
+});
+
+test("available command snapshots bound names and remain isolated by session and restart", () => {
+  const commands = Array.from({ length: 25 }, (_, index) => ({
+    name: `command-${String(index).padStart(2, "0")}`,
+    description: `Capability ${index}`,
+  }));
+  const supervisor = createSupervisor();
+  const first = supervisor.handleAvailableCommandsUpdate(SESSION_ID, commands);
+  assert.equal(first.previousHash, null);
+  assert.equal(first.count, 25);
+  assert.equal(first.added.length, 20);
+  assert.equal(first.addedTruncated, true);
+  assert.equal(supervisor.handleAvailableCommandsUpdate(SESSION_ID, commands), null);
+
+  const secondSessionId = "01a010fc-7377-7330-b20f-9089aa5d93b7";
+  const secondSession = supervisor.handleAvailableCommandsUpdate(secondSessionId, commands);
+  assert.equal(secondSession.previousHash, null);
+  assert.equal(secondSession.addedCount, 25);
+
+  const restarted = createSupervisor();
+  const afterRestart = restarted.handleAvailableCommandsUpdate(SESSION_ID, commands);
+  assert.equal(afterRestart.previousHash, null);
+  assert.equal(afterRestart.addedTruncated, true);
 });
 
 test("ACP form elicitation is distinct from permission and validates the exact answer", async () => {

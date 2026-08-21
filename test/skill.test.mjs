@@ -60,7 +60,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.deepEqual(cursor?.source, { source: 'url', url: './' });
   assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
   assert.equal(grokManifest.name, 'grok-build-supervisor');
-  assert.match(grokManifest.version, /^0\.3\.1\+codex\./);
+  assert.match(grokManifest.version, /^0\.3\.2\+codex\./);
   assert.deepEqual(grokManifest.mcpServers, {
     'grok-build-supervisor': {
       command: 'node',
@@ -82,9 +82,9 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.equal(claudeCursor?.source, '.');
   assert.equal(claudeCursor?.version, '5.4.1');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.3.1');
+  assert.equal(claudeGrok?.version, '0.3.2');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.3.1');
+  assert.equal(claudeGrokManifest.version, '0.3.2');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
@@ -157,6 +157,7 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   const executeCommand = readProjectFile('plugins/grok-build-supervisor/commands/grok_execute.md');
   const executorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-executor-mode/SKILL.md');
   const supervisorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/SKILL.md');
+  const supervisionFlow = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/references/supervision-data-flow.md');
   const supervisorMetadata = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/agents/openai.yaml');
 
   for (const content of [english, chinese]) {
@@ -179,6 +180,12 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   assert.match(executorSkill, /immediately reuse or open its guarded session/);
   assert.match(executorSkill, /Opening the TUI is authorized by `on`, but sending a development prompt is not/);
   assert.match(supervisorSkill, /Call `grok_session_open` during `\/grok_execute on`/);
+  assert.match(supervisorSkill, /`progress\.phase`/);
+  assert.match(supervisorSkill, /three consecutive full waits/);
+  assert.match(supervisorSkill, /`progress\.changedFiles`/);
+  assert.match(supervisionFlow, /`run_progress`/);
+  assert.match(supervisionFlow, /`available_commands_changed`/);
+  assert.match(supervisionFlow, /`inactive_run_activity`/);
   assert.doesNotMatch(supervisorSkill, /正在通过 Grok Build Supervisor 创建 TUI|Grok TUI 已创建并就绪|新建\/创建一个 Grok TUI/);
   assert.doesNotMatch(supervisorMetadata, /open or resume a guarded Grok TUI/);
 });

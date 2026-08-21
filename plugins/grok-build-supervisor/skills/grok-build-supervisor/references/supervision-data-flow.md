@@ -38,10 +38,19 @@ Host MCP client(s) -> authenticated user-local Named Pipe -> Supervisor daemon -
 
 If `cursorGap` is true, do not silently claim continuity. Use the journal metadata or exact evidence requests and state that older events were outside the recent in-memory window.
 
+## Structured progress and liveness
+
+- `progress.phase` is one of `starting`, `planning`, `locating`, `modifying`, `verifying`, `executing`, `working`, `completed`, or `failed`. It is inferred from bounded ACP plan and tool-call metadata, so it is useful routing state rather than proof that the named work succeeded.
+- `responseChars` counts agent-message characters observed so far while the bodies remain suppressed. `messageCount` counts distinct ACP message IDs captured for the run.
+- `lastChunkAt` changes only when agent text arrives. `heartbeatAt` is the last liveness evaluation, including a quiet evaluation that does not create a journal event.
+- `newActivity` is relative to the caller's supplied `afterSequence`. `false` means no newer durable event was available for that cursor; one quiet wait is normal. Three consecutive full waits with both `newActivity: false` and an unchanged `lastChunkAt` are a suspected stall, not proof of failure and not authority to cancel automatically.
+- Terminal progress adds bounded `changedFiles` and `commandsRun` lists with matching truncation flags. They are Grok-derived targeting hints. `needsHostVerification` remains true until the host checks the files, Git state, commands, and tests itself.
+- `run_progress` journal events contain throttled progress snapshots. `available_commands_changed` records only bounded capability names, counts, and hashes. `inactive_run_activity` records throttled metadata for tool or plan updates received after cancellation, completion, or without a matching active run; raw payloads remain suppressed.
+
 ## Prompt continuity and reverse questions
 
 - `grok_session_prompt` starts one turn and returns its exact `runId` and event cursor. The supervising host turn must repeatedly call the bounded `interaction` wait while state remains `working` or `cancelling`, replacing `afterSequence` with every returned high-water cursor.
-- ACP `agent_message_chunk` updates are accumulated inside the daemon but are not returned during working polls. Raw message and thought chunks are not appended one-by-one to the durable journal; it stores throttled activity metadata and the terminal event instead. On completion, the bounded final response is included only when the terminal event sequence is newer than the caller cursor; advancing the returned cursor suppresses later redelivery. Tool calls, thoughts, process records, and raw journal data are not mixed into the normal user-facing result.
+- ACP `agent_message_chunk` updates are accumulated inside the daemon but are not returned during working polls. Chunks sharing a `messageId` form one message; multiple message IDs are retained in order and separated before terminal delivery, so a split report is not silently reduced to only its final message. Raw message and thought chunks are not appended one-by-one to the durable journal; it stores throttled activity metadata and the terminal event instead. On completion, the bounded final response is included only when the terminal event sequence is newer than the caller cursor; advancing the returned cursor suppresses later redelivery. Tool calls, thoughts, process records, and raw journal data are not mixed into the normal user-facing result.
 - A new MCP frontend also applies this coalescing policy to responses from an older busy daemon, so plugin updates do not reintroduce cumulative text while waiting for an idle daemon rollover.
 
 ## Result artifact handoff
