@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.3.0+codex.20260821042551",
+  "version": "0.3.1+codex.20260821045224",
   "description": "Persistent Grok Build Leader/ACP supervision with verified local-proxy initialization and visible Windows Terminal TUI control.",
   "author": {
     "name": "Vanyangyang",
@@ -34,5 +34,14 @@
     ],
     "websiteURL": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor"
   },
-  "mcpServers": "./.mcp.json"
+  "mcpServers": {
+    "grok-build-supervisor": {
+      "command": "node",
+      "args": [
+        "./dist/grok-build-supervisor.mjs"
+      ],
+      "cwd": ".",
+      "default_tools_approval_mode": "approve"
+    }
+  }
 }

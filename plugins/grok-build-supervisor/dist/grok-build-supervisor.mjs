@@ -35264,7 +35264,7 @@ var SupervisorClient = class {
 // plugins/grok-build-supervisor/scripts/server.mjs
 var supervisor = new SupervisorClient();
 process.chdir(supervisor.paths.stateRoot);
-var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.0" });
+var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.1" });
 function toolResult(data, isError = false) {
   return {
     content: [{ type: "text", text: JSON.stringify(data) }],

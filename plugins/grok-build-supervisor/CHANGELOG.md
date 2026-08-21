@@ -4,6 +4,12 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-21
+
+### Fixed
+
+- Codex now receives the Supervisor MCP server through an inline plugin-manifest entry with a plugin-relative bundled entrypoint. The separate `.mcp.json` remains unchanged for Claude Code, so both hosts resolve the same server in their native format.
+
 ## [0.3.0] - 2026-08-21
 
 ### Added
@@ -42,3 +48,4 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 [0.2.0]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/cursor-bridge--v5.4.0
 [0.3.0]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.0/plugins/grok-build-supervisor
+[0.3.1]: https://github.com/Vanyangyang/cursor-bridge/tree/grok-build-supervisor--v0.3.1/plugins/grok-build-supervisor
