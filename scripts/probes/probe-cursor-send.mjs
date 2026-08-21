@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** probe-cursor-send.mjs — 端到端：确保chat开→填只读检索查询→Enter发送→采样40s观察回复区+生成/完成信号。
- *  一次拿全建 cursor-console 需要的信息：发送方式/回复容器/完成信号。用法：node probe-cursor-send.mjs [port] 默认9223 */
+ *  一次拿全建 cursor-console 需要的信息：发送方式/回复容器/完成信号。用法：node scripts/probes/probe-cursor-send.mjs [port] 默认9223 */
 import http from 'http';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
@@ -9,6 +9,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { WebSocket } = require('ws');
 const __dir = dirname(fileURLToPath(import.meta.url));
+const artifactDir = join(__dir, '..', '..', '.artifacts');
 const PORT = Number(process.argv[2] || 9223);
 const ORIGIN = `http://localhost:${PORT}`;
 function httpJson(path){return new Promise((res,rej)=>{const r=http.get({host:'localhost',port:PORT,path},(s)=>{let d='';s.on('data',c=>d+=c);s.on('end',()=>{try{res(JSON.parse(d));}catch{rej(new Error('非JSON'));}});});r.on('error',rej);r.setTimeout(4000,()=>r.destroy(new Error('无响应')));});}
@@ -49,8 +50,8 @@ const SNAP=`(function(){
     const t=Math.round((Date.now()-start)/100)/10; samples.push({t,...s});
     console.log('  '+String(t).padStart(5)+' | '+String(s.paneLen).padStart(7)+' | '+String(s.mdMax).padStart(5)+' | '+String(s.stop).padStart(4)+' | '+String(s.loading).padStart(4));
   }
-  const cacheDir=join(__dir,'..','..','cache'); try{mkdirSync(cacheDir,{recursive:true});}catch{}
-  writeFileSync(join(cacheDir,'cursor_send_timeline.json'),JSON.stringify(samples,null,2),'utf8');
+  try{mkdirSync(artifactDir,{recursive:true});}catch{}
+  writeFileSync(join(artifactDir,'cursor_send_timeline.json'),JSON.stringify(samples,null,2),'utf8');
   c.close();
-  console.log('[send] 时间线: .claude/cache/cursor_send_timeline.json');
+  console.log('[send] 时间线: .artifacts/cursor_send_timeline.json');
 })().catch(e=>{console.error('FAIL: '+e.message);process.exit(1);});

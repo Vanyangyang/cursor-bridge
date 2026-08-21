@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-/** test-cursor-batch.mjs — 连续跑多个 query（每个自动开新对话），结果写 .claude/cache/cursor_batch_results.json。 */
-import { bridge } from './server.mjs';
+/** test-cursor-batch.mjs — 连续跑多个 query（每个自动开新对话），结果写 .artifacts/cursor_batch_results.json。 */
+import { bridge } from '../../server.mjs';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
+const artifactDir = join(__dir, '..', '..', '.artifacts');
 const queries = [
   '行动条战斗回合顺序怎么驱动',
   '灵宠进化路线和天赋系统在哪实现',
@@ -23,8 +24,8 @@ const queries = [
       console.log('[batch] ✗ ' + q + ' : ' + e.message);
     }
   }
-  const cacheDir = join(__dir, '..', '..', 'cache'); try { mkdirSync(cacheDir, { recursive: true }); } catch {}
-  writeFileSync(join(cacheDir, 'cursor_batch_results.json'), JSON.stringify(out, null, 2), 'utf8');
-  console.log('[batch] 全部完成，写入 cursor_batch_results.json');
+  try { mkdirSync(artifactDir, { recursive: true }); } catch {}
+  writeFileSync(join(artifactDir, 'cursor_batch_results.json'), JSON.stringify(out, null, 2), 'utf8');
+  console.log('[batch] 全部完成，写入 .artifacts/cursor_batch_results.json');
   process.exit(0);
 })();

@@ -61,6 +61,7 @@ gh release create cursor-bridge--vX.Y.Z \
 
 - Commit `dist/cursor-bridge.mjs`. Plugin installation runs this file directly after cloning the repository; Claude Code and Codex do not automatically install runtime npm dependencies. The runtime dependencies must therefore be bundled.
 - Do not commit `node_modules/` or `package-lock.json`; `.gitignore` excludes them because they are build-time inputs, not plugin runtime requirements.
+- Keep per-version GitHub release-note drafts outside the repository checkout (for example, in a temporary directory). Published history belongs in `CHANGELOG.md` and GitHub Releases, not in root-level `release-notes-v*.md` files.
 - Always run `npm run build` after changing `server.mjs` or `launch-cursor.mjs`; otherwise `dist/` remains stale.
 - Claude Code users can receive updates through `/reload-plugins`, a restart, or `claude plugin update cursor-bridge`.
 - Codex users can run `codex plugin marketplace upgrade vanyangyang`, then start a new task or restart Codex.

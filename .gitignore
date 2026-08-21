@@ -3,3 +3,4 @@ package-lock.json
 !plugins/grok-build-supervisor/package-lock.json
 .autopilot.on
 __pycache__/
+.artifacts/
