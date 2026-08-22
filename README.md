@@ -22,22 +22,20 @@
 
 | Plugin | Use it for | Documentation |
 |---|---|---|
-| **Cursor Bridge** | Cursor project intelligence and bounded Cursor Agent execution | [Continue below](#cursor-bridge) |
-| **Grok Build Supervisor** | Keep Grok Build running without repeatedly filling the host's context | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
+| **Cursor Bridge** | Let Codex, Claude Code, or Grok Build use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks | [Continue below](#cursor-bridge) |
+| **Grok Build Supervisor** | Let Codex or Claude Code plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 ## Grok Build Supervisor (New)
 
-**A new plugin that lets Codex or Claude Code coordinate task execution through Grok Build.**
+**Let Codex or Claude Code plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
 
 It is installed and updated independently from Cursor Bridge.
-
-Its visible TUI recognizes Grok's native workspace-trust gate, keeps one terminal while you decide there, and never trusts a directory on your behalf.
 
 [Read the introduction, installation, and usage guide →](./plugins/grok-build-supervisor/README.md)
 
 ## Cursor Bridge
 
-**Bring the project understanding in your real, signed-in Cursor session to Codex, Claude Code, and Grok Build.**
+**Let Codex, Claude Code, or Grok Build use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks.**
 
 > [!IMPORTANT]
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.

@@ -2,7 +2,7 @@
 
 [简体中文](./README.zh-CN.md) · [Repository overview](../../README.md)
 
-**Let Codex or Claude Code plan, supervise, correct, and verify persistent Grok Build execution through MCP.**
+**Let Codex or Claude Code plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
 
 Grok Build Supervisor is a separate plugin for Codex and Claude Code. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when a host task ends or the plugin is reloaded. Codex or Claude Code can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
 

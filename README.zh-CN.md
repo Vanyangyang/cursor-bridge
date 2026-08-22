@@ -22,22 +22,20 @@
 
 | 插件 | 用途 | 文档 |
 |---|---|---|
-| **Cursor Bridge** | Cursor 项目理解与有边界的 Cursor Agent 执行 | [继续阅读](#cursor-bridge) |
-| **Grok Build Supervisor** | 让 Grok Build 持续工作，同时避免重复输出占满上下文 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
+| **Cursor Bridge** | 让 Codex / Claude Code / Grok Build 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
+| **Grok Build Supervisor** | 让 Codex / Claude Code 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
 ## Grok Build Supervisor（New）
 
-**一个让 Codex 或 Claude Code 协调 Grok Build 执行任务的全新插件。**
+**让 Codex 或 Claude Code 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
 
 它与 Cursor Bridge 分别安装、分别更新。
-
-可见 TUI 遇到 Grok 原生的工作区信任界面时会准确识别并保留同一个终端，等你在 Grok 中作出选择；插件不会替你信任目录。
 
 [查看介绍、安装方法和使用说明 →](./plugins/grok-build-supervisor/README.zh-CN.md)
 
 ## Cursor Bridge
 
-**把你真实、已登录的 Cursor 会话所拥有的项目理解能力，直接交给 Codex / Claude Code / Grok Build。**
+**让 Codex / Claude Code / Grok Build 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务。**
 
 > [!IMPORTANT]
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
