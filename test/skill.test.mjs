@@ -261,8 +261,8 @@ test('bilingual compatibility docs keep Cursor 3.17.8 acceptance evidence scoped
   const chinese = readProjectFile('README.zh-CN.md');
   const changelog = readProjectFile('CHANGELOG.md');
 
-  assert.match(english, /3\.17\.8[\s\S]*IDE\/workbench and Agents Window[\s\S]*independent parallel Agent/);
-  assert.match(chinese, /3\.17\.8[\s\S]*IDE\/workbench 与 Agents Window[\s\S]*独立 parallel Agent/);
+  assert.match(english, /3\.17\.8[\s\S]*IDE and Agents Window[\s\S]*Project understanding and task execution work as expected/);
+  assert.match(chinese, /3\.17\.8[\s\S]*IDE 和 Agents Window[\s\S]*项目理解和任务执行正常/);
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 

@@ -110,7 +110,7 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.8** | **5.4.2** (`master`, current) | Live-tested on Windows 11 IDE/workbench and Agents Window: Bridge launch and workspace binding, CCE, FIFO, independent parallel Agent execution, task status/control terminal guards, and CCE through normal/minimal presentation changes. |
+| **3.17.8** | **5.4.2** (`master`, current) | Live-tested on Windows 11 in both the IDE and Agents Window. Project understanding and task execution work as expected. |
 
 Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.1 / Cursor 3.16.29 and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
