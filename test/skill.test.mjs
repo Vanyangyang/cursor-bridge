@@ -75,12 +75,12 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '5.4.1');
-  assert.match(codexCursorManifest.version, /^5\.4\.1\+codex\./);
-  assert.equal(claudeCursorManifest.version, '5.4.1');
-  assert.match(serverSource, /const PLUGIN_VERSION = '5\.4\.1';/);
+  assert.equal(rootPackage.version, '5.4.2');
+  assert.match(codexCursorManifest.version, /^5\.4\.2\+codex\./);
+  assert.equal(claudeCursorManifest.version, '5.4.2');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.4\.2';/);
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.4.1');
+  assert.equal(claudeCursor?.version, '5.4.2');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.3.4');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
@@ -98,14 +98,12 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
   assert.match(englishImportant, /Cursor Bridge[\s\S]*5\.3\.6 or earlier[\s\S]*5\.4\.0 or any later release[\s\S]*#windows-update-migration/);
   assert.match(chineseImportant, /Cursor Bridge[\s\S]*5\.3\.6 或更早版本[\s\S]*5\.4\.0 或任何后续版本[\s\S]*#windows-update-migration/);
-  assert.match(englishGrokSection, /A new plugin/);
-  assert.match(chineseGrokSection, /全新插件/);
+  assert.match(englishGrokSection, /plan and review the work[\s\S]*automatically coordinating Grok Build[\s\S]*execute tasks[\s\S]*track progress[\s\S]*verify results/i);
+  assert.match(chineseGrokSection, /负责规划和把关[\s\S]*自动调度 Grok Build[\s\S]*执行任务[\s\S]*跟进过程[\s\S]*核验结果/);
   assert.doesNotMatch(englishGrokSection, /optional/i);
   assert.doesNotMatch(chineseGrokSection, /可选/);
-  assert.match(english, /Cursor \*\*3\.16\.29\*\* \(IDE\/workbench and Agents Window\)/);
-  assert.match(chinese, /Cursor \*\*3\.16\.29\*\*（IDE\/workbench 与 Agents Window）/);
-  assert.doesNotMatch(english, /Agents Window live acceptance is still pending/);
-  assert.doesNotMatch(chinese, /Agents Window 实机验收仍未完成/);
+  assert.match(english, /Cursor \*\*3\.17\.8\*\* \(IDE\/workbench and Agents Window\)/);
+  assert.match(chinese, /Cursor \*\*3\.17\.8\*\*（IDE\/workbench 与 Agents Window）/);
   assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
@@ -258,18 +256,17 @@ test('bilingual README promotes the minimal runtime benefit and trade-off', () =
   }
 });
 
-test('bilingual compatibility docs keep Cursor 3.16.29 acceptance evidence scoped', () => {
+test('bilingual compatibility docs keep Cursor 3.17.8 acceptance evidence scoped', () => {
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   const changelog = readProjectFile('CHANGELOG.md');
 
-  assert.match(english, /3\.16\.29[\s\S]*IDE\/workbench[\s\S]*Agents Window has not completed live acceptance/);
-  assert.match(chinese, /3\.16\.29[\s\S]*IDE\/workbench[\s\S]*Agents Window 尚未完成实机验收/);
-  assert.match(changelog, /3\.16\.29 provider-error trays[\s\S]*removed `\.ui-tray-header__title` class/);
-  assert.match(changelog, /Agents Window[\s\S]*has not yet completed live acceptance/);
+  assert.match(english, /3\.17\.8[\s\S]*IDE\/workbench and Agents Window[\s\S]*independent parallel Agent/);
+  assert.match(chinese, /3\.17\.8[\s\S]*IDE\/workbench 与 Agents Window[\s\S]*独立 parallel Agent/);
+  assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history maps 5.4.0 to Cursor 3.16.17 and keeps 5.4.1 current for 3.16.29', () => {
+test('compatibility history archives 5.4.1 and keeps 5.4.2 current for Cursor 3.17.8', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -277,18 +274,26 @@ test('compatibility history maps 5.4.0 to Cursor 3.16.17 and keeps 5.4.1 current
   const data = JSON.parse(readProjectFile('compatibility.json'));
 
   assert.equal(data.policy, 'latest-only');
-  assert.equal(data.current.cursorVersion, '3.16.29');
-  assert.equal(data.current.cursorBridgeVersion, '5.4.1');
+  assert.equal(data.current.cursorVersion, '3.17.8');
+  assert.equal(data.current.cursorBridgeVersion, '5.4.2');
   assert.equal(data.current.sourceRef, 'master');
   assert.equal(data.current.status, 'current');
   assert.equal(data.current.acceptance.ideWorkbench, 'live-tested');
-  assert.equal(data.current.acceptance.agentsWindow, 'pending-live-acceptance');
-  assert.deepEqual(data.history, [{
-    cursorVersion: '3.16.17',
-    cursorBridgeVersion: '5.4.0',
-    gitRef: 'cursor-bridge--v5.4.0',
-    status: 'archived',
-  }]);
+  assert.equal(data.current.acceptance.agentsWindow, 'live-tested');
+  assert.deepEqual(data.history, [
+    {
+      cursorVersion: '3.16.29',
+      cursorBridgeVersion: '5.4.1',
+      gitRef: 'cursor-bridge--v5.4.1',
+      status: 'archived',
+    },
+    {
+      cursorVersion: '3.16.17',
+      cursorBridgeVersion: '5.4.0',
+      gitRef: 'cursor-bridge--v5.4.0',
+      status: 'archived',
+    },
+  ]);
 
   assert.match(englishReadme, /href="\.\/COMPATIBILITY\.md"/);
   assert.match(chineseReadme, /href="\.\/COMPATIBILITY\.zh-CN\.md"/);
@@ -296,6 +301,9 @@ test('compatibility history maps 5.4.0 to Cursor 3.16.17 and keeps 5.4.1 current
   assert.match(chinese, /只维护 Cursor 最新版本/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
+  assert.match(english, /Cursor Bridge 5\.4\.1 — Cursor 3\.16\.29/);
+  assert.match(chinese, /Cursor Bridge 5\.4\.1 — Cursor 3\.16\.29/);
+  assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.4\.1/);
   assert.match(english, /Cursor Bridge 5\.4\.0 — Cursor 3\.16\.17/);
   assert.match(chinese, /Cursor Bridge 5\.4\.0 — Cursor 3\.16\.17/);
   assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.4\.0/);

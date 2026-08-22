@@ -4,3 +4,6 @@ package-lock.json
 .autopilot.on
 __pycache__/
 .artifacts/
+
+# Local-only repository guidance for coding agents; read before maintenance work.
+LOCAL_MAINTENANCE.md

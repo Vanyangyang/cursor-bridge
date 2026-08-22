@@ -328,6 +328,109 @@ test('Cursor Agents v2 React adapter normalizes headers and opens by header iden
   assert.equal(selected[0], headers[1]);
 });
 
+test('Cursor Agents v2 React adapter supports Cursor 3.17 split row handlers', () => {
+  const selected = [];
+  class ReactiveValue {
+    constructor(value) { this._value = value; }
+    get value() { return this._value; }
+  }
+  const headers = [
+    {
+      id: new ReactiveValue('agent-317-a'),
+      name: new ReactiveValue('Cursor 3.17 Alpha'),
+      status: new ReactiveValue('completed'),
+      lastUpdatedAt: new ReactiveValue(31700),
+    },
+    {
+      id: new ReactiveValue('agent-317-b'),
+      name: new ReactiveValue('Cursor 3.17 Beta'),
+      status: new ReactiveValue('in_progress'),
+      lastUpdatedAt: new ReactiveValue(31701),
+    },
+  ];
+  const root = {
+    parentElement: null,
+    '__reactProps$test': {
+      section: { id: 'workspace:cursor-bridge', headers },
+      committedSelectedAgentId: new ReactiveValue('agent-317-a'),
+      rowHandlers: {
+        onSelect(header, event) { selected.push([header, event]); },
+      },
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.glass-sidebar-agent-list-container') return [root];
+      if (selector === '.compact-agent-history-react-menu-label') return [];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.kind, 'agents_v2');
+  assert.deepEqual(
+    snapshot.entries.map((entry) => [entry.id, entry.label, entry.isSelected]),
+    [
+      ['local:agent-317-a', 'Cursor 3.17 Alpha', true],
+      ['local:agent-317-b', 'Cursor 3.17 Beta', false],
+    ],
+  );
+  assert.equal(Function('document', `return ${exprOpenAgent('local:agent-317-b')};`)(document), 'OPENED');
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0][0], headers[1]);
+  assert.equal(selected[0][1], undefined);
+});
+
+test('Cursor Agents v2 React adapter exposes a selected 3.17 draft before History inserts it', () => {
+  const selected = [];
+  const headers = [
+    {
+      id: 'existing-agent',
+      name: 'Existing Agent',
+      status: 'completed',
+      lastUpdatedAt: 100,
+    },
+  ];
+  const composer = {
+    dataset: {
+      composerId: 'draft-agent',
+      composerStatus: 'completed',
+    },
+    offsetParent: {},
+  };
+  const root = {
+    parentElement: null,
+    '__reactProps$test': {
+      section: { id: 'workspace:cursor-bridge', headers },
+      selectedAgentId: 'draft-agent',
+      rowHandlers: {
+        onSelect(header) { selected.push(header); },
+      },
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.glass-sidebar-agent-list-container') return [root];
+      if (selector === '.composer-bar[data-composer-id]') return [composer];
+      if (selector === '.compact-agent-history-react-menu-label') return [];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.equal(snapshot.ok, true);
+  assert.deepEqual(
+    snapshot.entries.map((entry) => [entry.id, entry.isSelected, entry.showSpinner, entry.icon]),
+    [
+      ['local:existing-agent', false, false, 'check-circled'],
+      ['local:draft-agent', true, false, 'check-circled'],
+    ],
+  );
+  assert.equal(Function('document', `return ${exprOpenAgent('local:draft-agent')};`)(document), 'OPENED');
+  assert.equal(selected.length, 0);
+});
+
 test('provider error tray expression extracts terminal evidence without clicking controls', () => {
   const titleNode = { innerText: 'LLM provider error' };
   const buttons = [
