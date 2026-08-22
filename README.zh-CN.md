@@ -41,7 +41,7 @@
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.16.29**（IDE/workbench 与 Agents Window）。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.17.8**（IDE/workbench 与 Agents Window）。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -110,9 +110,9 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.16.29** | **5.4.1**（`master`，当前版本） | 已实机验证 IDE/workbench：CCE、FIFO、parallel Agent、任务状态/控制终态门禁及 normal/minimal 显示切换。已对安装包扫描 Agents Window 选择器，但 3.16.29 Agents Window 尚未完成实机验收。 |
+| **3.17.8** | **5.4.2**（`master`，当前版本） | 已在 Windows 11 IDE/workbench 与 Agents Window 实机验证 Bridge 启动与工作区绑定、CCE、FIFO、独立 parallel Agent、任务状态/控制终态门禁，以及 normal/minimal 切换期间继续使用 CCE。 |
 
-不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 

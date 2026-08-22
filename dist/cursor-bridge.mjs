@@ -20740,7 +20740,7 @@ init_cursor_ensure_core();
 init_lifecycle_paths();
 import http2 from "http";
 import { pathToFileURL as pathToFileURL2 } from "url";
-var PLUGIN_VERSION = "5.4.1";
+var PLUGIN_VERSION = "5.4.2";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -21320,8 +21320,15 @@ var REACT_ADAPTER_BODY = `
           let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
           for(let j=0;f&&j<80;j++,f=f.return){
             for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
-              if(p&&p.section&&Array.isArray(p.section.headers)&&typeof p.onSelectAgent==='function'&&!seen.has(p)){
-                seen.add(p);found.push(p);
+              const selectAgent=p&&(typeof p.onSelectAgent==='function'
+                ?p.onSelectAgent
+                :(p.rowHandlers&&typeof p.rowHandlers.onSelect==='function'?p.rowHandlers.onSelect:null));
+              if(p&&p.section&&Array.isArray(p.section.headers)&&selectAgent&&!seen.has(p)){
+                seen.add(p);found.push({
+                  section:p.section,
+                  selectedAgentId:p.selectedAgentId!==undefined?p.selectedAgentId:p.committedSelectedAgentId,
+                  onSelectAgent:selectAgent
+                });
               }
             }
           }
@@ -21336,18 +21343,39 @@ var REACT_ADAPTER_BODY = `
       return {
         kind:'agents_v2',
         entries:()=>{
-          const entries=[];const seen=new Set();let index=0;
+          const entries=[];const seen=new Set();let index=0;let selectedRaw='';
           for(const p of v2){
             const selectedId=readScalar(p.selectedAgentId);
+            if(!selectedRaw&&selectedId)selectedRaw=String(selectedId).replace(/^local:/,'');
             for(const header of p.section.headers){
               const entry=normalizeV2(header,selectedId,index++,p.section);
               if(entry.id&&!seen.has(entry.id)){seen.add(entry.id);entries.push(entry);}
+            }
+          }
+          const selectedId=selectedRaw?'local:'+selectedRaw:'';
+          if(selectedId&&!seen.has(selectedId)){
+            const composer=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+              .find(node=>String(node.dataset&&node.dataset.composerId||'').replace(/^local:/,'')===selectedRaw&&node.offsetParent!==null);
+            if(composer){
+              const status=String(composer.dataset&&composer.dataset.composerStatus||'').toLowerCase();
+              let icon=status||'draft';
+              if(/in_progress|running|generating/.test(status))icon='loading';
+              else if(status==='done'||status==='completed')icon='check-circled';
+              else if(/needs_attention/.test(status))icon='needs-attention';
+              else if(/failed|error/.test(status))icon='warning';
+              else if(/cancel/.test(status))icon='circle-slash';
+              entries.push({
+                id:selectedId,label:'',searchText:'',timestamp:0,isSelected:true,
+                showSpinner:/in_progress|running|generating/.test(status),icon,
+                workspaceId:'',workspaceLabel:''
+              });
             }
           }
           return entries;
         },
         open:id=>{
           const raw=String(id||'').replace(/^local:/,'');
+          if(v2.some(p=>String(readScalar(p.selectedAgentId)||'').replace(/^local:/,'')===raw))return true;
           for(const p of v2){
             const header=p.section.headers.find(h=>String(readScalar(h&&h.id)||'')===raw);
             if(header){p.onSelectAgent(header);return true;}
@@ -23413,7 +23441,7 @@ function buildToolDefinitions(bridgeInstance) {
 var ADAPTER_START_CWD = process.cwd();
 var bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 var server = new Server(
-  { name: "cursor-bridge", version: "5.4.1" },
+  { name: "cursor-bridge", version: "5.4.2" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {

@@ -6,6 +6,17 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.4.2] - 2026-08-22
+
+### Fixed
+
+- Cursor 3.17.8 Agents v2 now works when `section.headers` exposes selection through `rowHandlers.onSelect` instead of colocating `onSelectAgent` on the same React props object. The earlier Cursor shape remains supported.
+- A newly created Cursor 3.17.8 Agent can exist first only as the current `selectedAgentId` and visible composer before History inserts its header. Cursor Bridge now exposes that draft identity with its live composer status, so `parallel_agent` can bind, monitor, collect, and cancel the exact Agent without falling back to FIFO.
+
+### Compatibility
+
+- Live-tested Cursor **3.17.8** on Windows 11 IDE/workbench and Agents Window for fresh Bridge/CDP launch, workspace binding, CCE, FIFO, independent parallel Agent execution, asynchronous status, exact cancellation, and CCE across normal/minimal presentation changes.
+
 ## [5.4.1] - 2026-08-20
 
 ### Fixed
@@ -212,6 +223,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.4.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.1...cursor-bridge--v5.4.2
 [5.4.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.0...cursor-bridge--v5.4.1
 [5.4.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.6...cursor-bridge--v5.4.0
 [5.3.6]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.5...cursor-bridge--v5.3.6

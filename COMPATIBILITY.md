@@ -11,9 +11,37 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.16.29** | **5.4.1** | `master` | Current maintained version. Windows 11 IDE/workbench is live-tested; Agents Window live acceptance is still pending. |
+| **3.17.8** | **5.4.2** | `master` | Current maintained version. Windows 11 IDE/workbench and Agents Window are live-tested for CCE, FIFO, independent parallel Agent execution, task status/control, and normal/minimal presentation. |
 
 ## Historical versions
+
+### Cursor Bridge 5.4.1 — Cursor 3.16.29
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.4.1`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.4.1
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.4.1 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.4.1
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.4.1
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.4.1 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.4.0 — Cursor 3.16.17
 

@@ -2,16 +2,22 @@
   "schemaVersion": 1,
   "policy": "latest-only",
   "current": {
-    "cursorVersion": "3.16.29",
-    "cursorBridgeVersion": "5.4.1",
+    "cursorVersion": "3.17.8",
+    "cursorBridgeVersion": "5.4.2",
     "sourceRef": "master",
     "status": "current",
     "acceptance": {
       "ideWorkbench": "live-tested",
-      "agentsWindow": "pending-live-acceptance"
+      "agentsWindow": "live-tested"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.16.29",
+      "cursorBridgeVersion": "5.4.1",
+      "gitRef": "cursor-bridge--v5.4.1",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.16.17",
       "cursorBridgeVersion": "5.4.0",
