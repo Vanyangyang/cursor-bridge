@@ -2,7 +2,7 @@
 
 [English](./README.md) · [仓库总览](../../README.zh-CN.md)
 
-**让 Codex 或 Claude Code 通过 MCP 规划、监督、纠偏并验收持久运行的 Grok Build 任务。**
+**让 Codex 或 Claude Code 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
 
 Grok Build Supervisor 是一个可以单独安装到 Codex 或 Claude Code 的插件。它会在 Windows Terminal 中打开或恢复真正的 Grok Build 窗口，并在后台保持连接；即使当前任务结束或插件重新加载，也能继续接上这个会话。Codex 或 Claude Code 可以给 Grok 派活、查看状态、处理问题和权限、取消任务，并核查最终结果。
 
