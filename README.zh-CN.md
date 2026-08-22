@@ -110,7 +110,7 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.17.8** | **5.4.2**（`master`，当前版本） | 已在 Windows 11 IDE/workbench 与 Agents Window 实机验证 Bridge 启动与工作区绑定、CCE、FIFO、独立 parallel Agent、任务状态/控制终态门禁，以及 normal/minimal 切换期间继续使用 CCE。 |
+| **3.17.8** | **5.4.2**（`master`，当前版本） | 已在 Windows 11 的 IDE 和 Agents Window 实机验证，项目理解和任务执行正常。 |
 
 不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
