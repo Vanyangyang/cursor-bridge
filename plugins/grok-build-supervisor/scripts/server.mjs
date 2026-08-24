@@ -8,7 +8,7 @@ const supervisor = new SupervisorClient();
 // Release the versioned plugin cache immediately. Persistent work runs from the
 // content-addressed daemon/TUI snapshots under the user-level state directory.
 process.chdir(supervisor.paths.stateRoot);
-const server = new McpServer({ name: "grok-build-supervisor", version: "0.3.4" });
+const server = new McpServer({ name: "grok-build-supervisor", version: "0.3.5" });
 
 function toolResult(data, isError = false) {
   return {
