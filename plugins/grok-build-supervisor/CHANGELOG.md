@@ -4,6 +4,8 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-08-24
+
 ### Fixed
 
 - Repeated `/grok_execute on` can now repair an idle, exact plugin-recorded Grok TUI whose Leader ownership was lost after human verification or a connection-driven Leader restart. The Supervisor verifies the session, workspace, active registry PID, durable process fingerprint, and absence of supervised work before stopping only that recorded host tree and resuming the same session.
@@ -99,3 +101,4 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 [0.3.2]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.2
 [0.3.3]: https://github.com/Vanyangyang/cursor-bridge/compare/grok-build-supervisor--v0.3.2...grok-build-supervisor--v0.3.4
 [0.3.4]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.4
+[0.3.5]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.5
