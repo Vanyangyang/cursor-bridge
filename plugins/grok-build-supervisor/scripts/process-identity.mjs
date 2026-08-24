@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 
 export function processIsAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -24,7 +25,14 @@ export function inspectProcessIdentity(pid) {
     "[pscustomobject]@{ Name = $process.Name; ExecutablePath = $process.ExecutablePath; CommandLine = $process.CommandLine; CreatedAt = $created } | ConvertTo-Json -Compress",
   ].join("; ");
   try {
-    const output = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    const powershell = join(
+      process.env.SystemRoot || process.env.WINDIR || "C:\\Windows",
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    );
+    const output = execFileSync(powershell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       encoding: "utf8",
       windowsHide: true,
       timeout: 3000,

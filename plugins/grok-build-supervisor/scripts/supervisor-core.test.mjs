@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import {
   agentMessageText,
   buildAcpClientCapabilities,
+  buildProcessTreeTermination,
   buildSupervisedPrompt,
   collectActiveSessions,
+  collectLiveActiveSessions,
   compactForTransport,
   buildGrokAcpArgs,
   GrokSupervisor,
@@ -18,6 +20,7 @@ import {
   parseWorkspaceTrustGatewayRequest,
   parseWorkspaceTrustRequest,
   progressPhaseForToolCall,
+  terminateProcessTree,
   validateSessionId,
   validateWorkingDirectory,
   WORKSPACE_TRUST_ACP_METHODS,
@@ -40,6 +43,32 @@ test("collectActiveSessions handles nested registry shapes", () => {
     clients: [{ session_id: "a", pid: 1 }, { nested: { session_id: "b", pid: 2 } }],
   });
   assert.deepEqual(sessions.map((item) => item.session_id), ["a", "b"]);
+});
+
+test("collectLiveActiveSessions ignores stale registry entries whose PID is dead", () => {
+  const sessions = collectLiveActiveSessions({
+    clients: [
+      { session_id: "live", pid: 11 },
+      { session_id: "dead", pid: 12 },
+      { session_id: "missing-pid" },
+    ],
+  }, (pid) => pid === 11);
+  assert.deepEqual(sessions.map((item) => item.session_id), ["live"]);
+});
+
+test("process-tree termination targets the exact PID and rejects invalid or current PIDs", () => {
+  assert.throws(() => buildProcessTreeTermination(0), /invalid or current process/);
+  assert.throws(() => terminateProcessTree(process.pid), /invalid or current process/);
+  const graceful = buildProcessTreeTermination(424242, { force: false });
+  const forced = buildProcessTreeTermination(424242, { force: true });
+  if (process.platform === "win32") {
+    assert.match(graceful.command, /\\System32\\taskkill\.exe$/i);
+    assert.deepEqual(graceful.args, ["/PID", "424242", "/T"]);
+    assert.deepEqual(forced.args, ["/PID", "424242", "/T", "/F"]);
+  } else {
+    assert.equal(graceful.signal, "SIGTERM");
+    assert.equal(forced.signal, "SIGKILL");
+  }
 });
 
 test("validateWorkingDirectory requires an absolute existing directory", () => {
@@ -865,6 +894,608 @@ test("openSession safely recovers an exact active plugin-recorded TUI without cl
   assert.equal(opened.tui.pid, process.pid);
   assert.equal(opened.tui.ownedByCurrentMcp, false);
   assert.deepEqual(supervisor.tuiProcesses.size, 0);
+});
+
+test("status distinguishes an exact idle TUI with a dead Leader as repairable orphaned_leader", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-orphan-status-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  const stateRoot = join(root, "state");
+  const tuiStateRoot = join(stateRoot, "tuis");
+  mkdirSync(cwd);
+  mkdirSync(tuiStateRoot, { recursive: true });
+  writeFileSync(join(tuiStateRoot, "orphan.json"), JSON.stringify({
+    schemaVersion: 1,
+    launchId: "orphan-launch",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd,
+    hostPid: 424243,
+    grokPid: process.pid,
+    grokProcessFingerprint: "grok-fingerprint",
+  }));
+  const supervisor = createSupervisor({
+    stateRoot,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    inspectProcessIdentity: (pid) => pid === process.pid
+      ? { fingerprint: "grok-fingerprint", executablePath: process.execPath }
+      : null,
+  });
+  supervisor.leaderInfo = async () => ({ running: false });
+  supervisor.readLeaderOwnership = () => ({
+    valid: false,
+    reason: "leader_process_not_alive",
+    record: { ownerToken: OWNER_TOKEN },
+  });
+  supervisor.readActiveSessions = () => [{ session_id: SESSION_ID, pid: process.pid, cwd }];
+
+  const status = await supervisor.status();
+  assert.equal(status.recordedTuis[0].status, "orphaned_leader");
+  assert.equal(status.recordedTuis[0].repairableOrphan, true);
+  assert.equal(status.recordedTuis[0].processAlive, false);
+});
+
+test("status keeps the 20 most recently updated TUI records instead of the last filenames", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-recent-tuis-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const tuiStateRoot = join(root, "tuis");
+  mkdirSync(tuiStateRoot, { recursive: true });
+  for (let index = 0; index < 20; index += 1) {
+    writeFileSync(join(tuiStateRoot, `z-${String(index).padStart(2, "0")}.json`), JSON.stringify({
+      schemaVersion: 1,
+      launchId: `old-${index}`,
+      status: "exited",
+      sessionId: SESSION_ID,
+      cwd: process.cwd(),
+      hostPid: null,
+      grokPid: null,
+      updatedAt: `2026-08-23T00:00:${String(index).padStart(2, "0")}.000Z`,
+    }));
+  }
+  writeFileSync(join(tuiStateRoot, "a-current.json"), JSON.stringify({
+    schemaVersion: 1,
+    launchId: "current-launch",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    hostPid: null,
+    grokPid: process.pid,
+    grokProcessFingerprint: "grok-fingerprint",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+  }));
+  const supervisor = createSupervisor({
+    stateRoot: root,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    inspectProcessIdentity: (pid) => pid === process.pid
+      ? { fingerprint: "grok-fingerprint", executablePath: process.execPath }
+      : null,
+  });
+  supervisor.leaderInfo = async () => ({ running: true });
+  supervisor.readLeaderOwnership = () => ({ valid: true, record: { ownerToken: OWNER_TOKEN } });
+  supervisor.readActiveSessions = () => [{ session_id: SESSION_ID, pid: process.pid, cwd: process.cwd() }];
+
+  const status = await supervisor.status();
+  assert.equal(status.recordedTuis.length, 20);
+  assert.equal(status.recordedTuis.some((entry) => entry.launchId === "current-launch"), true);
+  assert.equal(status.recordedTuis.at(-1).launchId, "current-launch");
+  assert.equal(status.recordedTuis.some((entry) => entry.launchId === "old-0"), false);
+});
+
+test("status counts verified live TUI records outside the public 20-record window", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-all-live-tuis-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const tuiStateRoot = join(root, "tuis");
+  mkdirSync(tuiStateRoot, { recursive: true });
+  writeFileSync(join(tuiStateRoot, "old-live.json"), JSON.stringify({
+    schemaVersion: 1,
+    launchId: "old-live",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "awaiting_workspace_trust",
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    hostPid: null,
+    grokPid: process.pid,
+    grokProcessFingerprint: "grok-fingerprint",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+  }));
+  for (let index = 0; index < 20; index += 1) {
+    writeFileSync(join(tuiStateRoot, `recent-${String(index).padStart(2, "0")}.json`), JSON.stringify({
+      schemaVersion: 1,
+      launchId: `recent-${index}`,
+      status: "exited",
+      sessionId: SESSION_ID,
+      cwd: process.cwd(),
+      hostPid: null,
+      grokPid: null,
+      updatedAt: `2026-08-24T00:00:${String(index).padStart(2, "0")}.000Z`,
+    }));
+  }
+  const supervisor = createSupervisor({
+    stateRoot: root,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    inspectProcessIdentity: (pid) => pid === process.pid
+      ? { fingerprint: "grok-fingerprint", executablePath: process.execPath }
+      : null,
+  });
+  supervisor.leaderInfo = async () => ({ running: true });
+  supervisor.readLeaderOwnership = () => ({ valid: true, record: { ownerToken: OWNER_TOKEN } });
+  supervisor.readActiveSessions = () => [];
+
+  const status = await supervisor.status();
+  assert.equal(status.recordedTuis.length, 20);
+  assert.equal(status.recordedTuis.some((entry) => entry.launchId === "old-live"), false);
+  assert.deepEqual(status.recordedTuiCounts, {
+    total: 21,
+    verifiedLive: 1,
+    repairableOrphaned: 0,
+    displayed: 20,
+  });
+});
+
+function createDirectOrphanRepairFixture(t, options = {}) {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-direct-orphan-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  const stateRoot = join(root, "state");
+  const tuiStateRoot = join(stateRoot, "tuis");
+  const statePath = join(tuiStateRoot, "orphan.json");
+  const hostPid = Object.hasOwn(options, "hostPid") ? options.hostPid : 424243;
+  const grokPid = options.grokPid ?? process.pid;
+  const liveness = { host: true, tui: true };
+  mkdirSync(cwd);
+  mkdirSync(tuiStateRoot, { recursive: true });
+  const value = {
+    schemaVersion: 1,
+    launchId: "orphan-launch",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd,
+    hostPid,
+    hostProcessFingerprint: hostPid ? "host-fingerprint" : null,
+    grokPid,
+    grokProcessFingerprint: "grok-fingerprint",
+  };
+  writeFileSync(statePath, JSON.stringify(value));
+  const supervisor = createSupervisor({
+    stateRoot,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    orphanRepairTimeoutMs: options.orphanRepairTimeoutMs ?? 20,
+    processIsAlive: (pid) => {
+      if (pid === grokPid) return liveness.tui;
+      if (pid === hostPid) return liveness.host;
+      return false;
+    },
+    inspectProcessIdentity: (pid) => options.inspectProcessIdentity
+      ? options.inspectProcessIdentity(pid, liveness, { grokPid, hostPid })
+      : (() => {
+      if (pid === grokPid && liveness.tui) {
+        return { fingerprint: "grok-fingerprint", executablePath: process.execPath };
+      }
+      if (pid === hostPid && liveness.host) {
+        return { fingerprint: "host-fingerprint", executablePath: process.execPath };
+      }
+      return null;
+    })(),
+    isProcessAncestor: options.isProcessAncestor || (async () => false),
+    terminateProcessTree: options.terminateProcessTree || (() => {
+      liveness.host = false;
+      liveness.tui = false;
+    }),
+  });
+  supervisor.leaderInfo = async () => ({ running: false });
+  supervisor.readLeaderOwnership = () => ({
+    valid: false,
+    reason: "leader_process_not_alive",
+    record: { ownerToken: OWNER_TOKEN },
+  });
+  supervisor.readActiveSessions = () => liveness.tui
+    ? [{ session_id: SESSION_ID, pid: grokPid, cwd }]
+    : [];
+  supervisor.readRawActiveSessions = options.readRawActiveSessions || (() => []);
+  return {
+    cwd,
+    grokPid,
+    hostPid,
+    liveness,
+    statePath,
+    supervisor,
+    orphan: { statePath, value, leaderReason: "leader_process_not_alive" },
+  };
+}
+
+test("orphan repair lock rejects a second live Supervisor and releases by exact token", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-orphan-lock-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  mkdirSync(cwd);
+  const inspectProcessIdentity = (pid) => pid === process.pid
+    ? { fingerprint: "supervisor-fingerprint", executablePath: process.execPath }
+    : null;
+  const first = createSupervisor({ stateRoot: root, inspectProcessIdentity });
+  const second = createSupervisor({ stateRoot: root, inspectProcessIdentity });
+  const lock = await first.acquireOrphanRepairLock({ sessionId: SESSION_ID, cwd });
+  await assert.rejects(() => second.acquireOrphanRepairLock({ sessionId: SESSION_ID, cwd }), (error) => {
+    assert.equal(error.code, "GROK_ORPHAN_REPAIR_BUSY");
+    assert.equal(error.details.ownerPid, process.pid);
+    return true;
+  });
+  assert.equal(await first.releaseOrphanRepairLock(lock), true);
+  writeFileSync(lock.path, JSON.stringify({
+    schemaVersion: 1,
+    token: "01900000-0000-7000-8000-000000000099",
+    sessionId: SESSION_ID,
+    cwd,
+    pid: 999999,
+  }));
+  const secondLock = await second.acquireOrphanRepairLock({ sessionId: SESSION_ID, cwd });
+  assert.notEqual(secondLock.token, "01900000-0000-7000-8000-000000000099");
+  assert.equal(await second.releaseOrphanRepairLock(secondLock), true);
+});
+
+test("orphan repair stops an exact host tree gracefully without escalating to force", async (t) => {
+  const calls = [];
+  let fixture;
+  fixture = createDirectOrphanRepairFixture(t, {
+    terminateProcessTree: (pid, options) => {
+      calls.push({ pid, ...options });
+      fixture.liveness.host = false;
+      fixture.liveness.tui = false;
+    },
+  });
+  const result = await fixture.supervisor.repairOrphanedTui(fixture.orphan);
+  assert.deepEqual(calls, [{ pid: fixture.hostPid, force: false }]);
+  assert.equal(result.terminationScope, "host_tree");
+  assert.equal(result.staleRegistryEntryIgnored, false);
+});
+
+test("orphan repair redirects forced termination to the exact Grok PID when the host exits first", async (t) => {
+  const calls = [];
+  let fixture;
+  fixture = createDirectOrphanRepairFixture(t, {
+    orphanRepairTimeoutMs: 20,
+    terminateProcessTree: (pid, options) => {
+      calls.push({ pid, ...options });
+      if (pid === fixture.hostPid && options.force === false) {
+        fixture.liveness.host = false;
+        return;
+      }
+      assert.equal(pid, fixture.grokPid);
+      assert.equal(options.force, true);
+      fixture.liveness.tui = false;
+    },
+  });
+  const result = await fixture.supervisor.repairOrphanedTui(fixture.orphan);
+  assert.deepEqual(calls, [
+    { pid: fixture.hostPid, force: false },
+    { pid: fixture.grokPid, force: true },
+  ]);
+  assert.equal(result.terminationScope, "tui_tree");
+});
+
+test("orphan repair refuses to terminate a host that is an ancestor of the current Supervisor", async (t) => {
+  let terminated = false;
+  const fixture = createDirectOrphanRepairFixture(t, {
+    isProcessAncestor: async (ancestorPid) => ancestorPid === 424243,
+    terminateProcessTree: () => { terminated = true; },
+  });
+  await assert.rejects(() => fixture.supervisor.repairOrphanedTui(fixture.orphan), (error) => {
+    assert.equal(error.code, "GROK_ORPHAN_REPAIR_ANCESTOR");
+    assert.equal(error.details.terminationPid, fixture.hostPid);
+    return true;
+  });
+  assert.equal(terminated, false);
+  assert.equal(existsSync(fixture.supervisor.orphanRepairLockPath(SESSION_ID, fixture.cwd)), false);
+});
+
+test("orphan repair rechecks the host identity fields after acquiring its lock", async (t) => {
+  let terminated = false;
+  const fixture = createDirectOrphanRepairFixture(t, {
+    terminateProcessTree: () => { terminated = true; },
+  });
+  writeFileSync(fixture.statePath, JSON.stringify({
+    ...fixture.orphan.value,
+    hostProcessFingerprint: "changed-host-fingerprint",
+  }));
+  await assert.rejects(() => fixture.supervisor.repairOrphanedTui(fixture.orphan), (error) => {
+    assert.equal(error.code, "GROK_ORPHAN_REPAIR_IDENTITY_CHANGED");
+    return true;
+  });
+  assert.equal(terminated, false);
+});
+
+test("orphan repair returns GROK_ORPHAN_REPAIR_STOP_FAILED when the exact forced target remains alive", async (t) => {
+  const fixture = createDirectOrphanRepairFixture(t, {
+    terminateProcessTree: () => { throw new Error("synthetic taskkill failure"); },
+  });
+  await assert.rejects(() => fixture.supervisor.repairOrphanedTui(fixture.orphan), (error) => {
+    assert.equal(error.code, "GROK_ORPHAN_REPAIR_STOP_FAILED");
+    assert.match(error.details.message, /synthetic taskkill failure/);
+    return true;
+  });
+});
+
+test("orphan repair does not treat a live PID with an unavailable identity probe as stopped", async (t) => {
+  let identityUnavailable = false;
+  const fixture = createDirectOrphanRepairFixture(t, {
+    hostPid: null,
+    orphanRepairTimeoutMs: 20,
+    inspectProcessIdentity: (pid, liveness, { grokPid }) => {
+      if (pid === grokPid && liveness.tui && !identityUnavailable) {
+        return { fingerprint: "grok-fingerprint", executablePath: process.execPath };
+      }
+      return null;
+    },
+    terminateProcessTree: () => {
+      identityUnavailable = true;
+    },
+  });
+  await assert.rejects(() => fixture.supervisor.repairOrphanedTui(fixture.orphan), (error) => {
+    assert.equal(error.code, "GROK_ORPHAN_REPAIR_IDENTITY_UNKNOWN");
+    assert.equal(error.details.identityState, "unknown_alive");
+    return true;
+  });
+  assert.equal(JSON.parse(readFileSync(fixture.statePath, "utf8")).status, "running");
+  assert.equal(fixture.supervisor.events.some((event) => event.kind === "orphaned_tui_repaired"), false);
+});
+
+test("orphan discovery refuses multiple exact persisted candidates", async (t) => {
+  const fixture = createDirectOrphanRepairFixture(t);
+  writeFileSync(join(dirname(fixture.statePath), "orphan-copy.json"), JSON.stringify({
+    ...fixture.orphan.value,
+    launchId: "orphan-launch-copy",
+  }));
+  await assert.rejects(() => fixture.supervisor.findRepairableOrphanedTui({
+    sessionId: SESSION_ID,
+    cwd: fixture.cwd,
+    activeSession: { session_id: SESSION_ID, pid: fixture.grokPid, cwd: fixture.cwd },
+  }), (error) => {
+    assert.equal(error.code, "GROK_ORPHANED_TUI_AMBIGUOUS");
+    assert.equal(error.details.statePaths.length, 2);
+    return true;
+  });
+});
+
+test("orphan discovery returns null while the Leader is running or the active cwd differs", async (t) => {
+  const fixture = createDirectOrphanRepairFixture(t);
+  fixture.supervisor.leaderInfo = async () => ({ running: true });
+  assert.equal(await fixture.supervisor.findRepairableOrphanedTui({
+    sessionId: SESSION_ID,
+    cwd: fixture.cwd,
+    activeSession: { session_id: SESSION_ID, pid: fixture.grokPid, cwd: fixture.cwd },
+  }), null);
+  fixture.supervisor.leaderInfo = async () => ({ running: false });
+  assert.equal(await fixture.supervisor.findRepairableOrphanedTui({
+    sessionId: SESSION_ID,
+    cwd: fixture.cwd,
+    activeSession: { session_id: SESSION_ID, pid: fixture.grokPid, cwd: join(fixture.cwd, "other") },
+  }), null);
+});
+
+test("orphan repair blockers cover live attachment, active and unknown work, requests, and initialization", () => {
+  const supervisor = createSupervisor();
+  supervisor.acpConnection = { signal: { aborted: false } };
+  supervisor.activeRun = { runId: "run-live", status: "cancel_requested" };
+  supervisor.recovery.interruptedRun = { runId: "run-unknown" };
+  supervisor.permissionSummaries = () => [{ sessionId: SESSION_ID }];
+  supervisor.elicitationSummaries = () => [{ sessionId: SESSION_ID }];
+  supervisor.workspaceTrustSummaries = () => [{ sessionId: SESSION_ID }];
+  supervisor.pendingAttachCwd = process.cwd();
+  supervisor.proxyInitialization = {};
+  assert.deepEqual(supervisor.orphanRepairBlockers(SESSION_ID), [
+    "live_acp_attachment",
+    "active_run:run-live",
+    "unknown_run_after_restart:run-unknown",
+    "pending_permission",
+    "pending_input",
+    "pending_workspace_trust",
+    "attachment_starting",
+    "proxy_initialization_running",
+  ]);
+});
+
+test("headless open never invokes orphan process repair", async () => {
+  const supervisor = createSupervisor();
+  let repairDiscoveryCalled = false;
+  supervisor.readActiveSessions = () => [{ session_id: SESSION_ID, pid: 424242, cwd: process.cwd() }];
+  supervisor.findRecoverableTui = async () => null;
+  supervisor.findRepairableOrphanedTui = async () => {
+    repairDiscoveryCalled = true;
+    return null;
+  };
+  await assert.rejects(() => supervisor.openSession({
+    mode: "resume",
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    presentation: "none",
+    confirmation: "OPEN_GROK_SESSION_HEADLESS",
+  }), /refusing a concurrent open/);
+  assert.equal(repairDiscoveryCalled, false);
+});
+
+test("openSession preserves an orphan repair failure code and details beside rollback evidence", async () => {
+  const supervisor = createSupervisor();
+  supervisor.readActiveSessions = () => [{ session_id: SESSION_ID, pid: 424242, cwd: process.cwd() }];
+  supervisor.findPendingTui = async () => null;
+  supervisor.findRecoverableTui = async () => null;
+  supervisor.findRepairableOrphanedTui = async () => ({
+    statePath: "synthetic-state.json",
+    value: { sessionId: SESSION_ID, cwd: process.cwd() },
+  });
+  supervisor.repairOrphanedTui = async () => {
+    const error = new Error("synthetic repair failure");
+    error.code = "GROK_ORPHAN_REPAIR_STOP_FAILED";
+    error.details = { terminationPid: 424242 };
+    throw error;
+  };
+  await assert.rejects(() => supervisor.openSession({
+    mode: "resume",
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    presentation: "windows_terminal",
+    confirmation: "OPEN_GROK_SESSION",
+  }), (error) => {
+    assert.equal(error.code, "GROK_SESSION_OPEN_FAILED");
+    assert.deepEqual(error.details.rollback, ["acp_disconnected"]);
+    assert.deepEqual(error.details.orphanRepairFailure, {
+      code: "GROK_ORPHAN_REPAIR_STOP_FAILED",
+      details: { terminationPid: 424242 },
+    });
+    return true;
+  });
+});
+
+test("openSession repairs one exact idle orphan host tree and resumes the same session", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-orphan-repair-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  const stateRoot = join(root, "state");
+  const tuiStateRoot = join(stateRoot, "tuis");
+  const statePath = join(tuiStateRoot, "orphan.json");
+  const hostPid = 424243;
+  mkdirSync(cwd);
+  mkdirSync(tuiStateRoot, { recursive: true });
+  writeFileSync(statePath, JSON.stringify({
+    schemaVersion: 1,
+    launchId: "orphan-launch",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd,
+    hostPid,
+    hostProcessFingerprint: "host-fingerprint",
+    grokPid: process.pid,
+    grokProcessFingerprint: "grok-fingerprint",
+  }));
+  let tuiAlive = true;
+  let hostAlive = true;
+  const terminations = [];
+  const supervisor = createSupervisor({
+    stateRoot,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    orphanRepairTimeoutMs: 20,
+    isProcessAncestor: async () => false,
+    processIsAlive: (pid) => (pid === process.pid ? tuiAlive : pid === hostPid ? hostAlive : false),
+    inspectProcessIdentity: (pid) => {
+      if (pid === process.pid && tuiAlive) {
+        return { fingerprint: "grok-fingerprint", executablePath: process.execPath };
+      }
+      if (pid === hostPid && hostAlive) {
+        return { fingerprint: "host-fingerprint", executablePath: process.execPath };
+      }
+      return null;
+    },
+    terminateProcessTree: (pid, options) => {
+      terminations.push({ pid, ...options });
+      assert.equal(pid, hostPid);
+      if (!options.force) {
+        throw new Error("synthetic graceful stop refused");
+      }
+      hostAlive = false;
+      tuiAlive = false;
+    },
+  });
+  supervisor.leaderInfo = async () => ({ running: false });
+  supervisor.readLeaderOwnership = () => ({
+    valid: false,
+    reason: "leader_process_not_alive",
+    record: { ownerToken: OWNER_TOKEN },
+  });
+  supervisor.readActiveSessions = () => tuiAlive
+    ? [{ session_id: SESSION_ID, pid: process.pid, cwd }]
+    : [];
+  supervisor.readRawActiveSessions = () => [{ session_id: SESSION_ID, pid: process.pid, cwd }];
+  supervisor.startLeader = async () => {
+    assert.equal(tuiAlive, false);
+    return { started: true, managed: true, pid: 7331 };
+  };
+  supervisor.attachSession = async ({ mode, sessionId }) => ({ attached: true, mode, sessionId });
+  supervisor.launchTui = async ({ sessionId }) => ({ launched: true, pid: 424244, sessionId });
+  supervisor.waitForTuiSession = async () => ({ observed: true, ready: true, state: "ready", pid: 424244 });
+
+  const opened = await supervisor.openSession({
+    mode: "resume",
+    sessionId: SESSION_ID,
+    cwd,
+    presentation: "windows_terminal",
+    confirmation: "OPEN_GROK_SESSION",
+  });
+  assert.equal(opened.recovered, true);
+  assert.equal(opened.sessionId, SESSION_ID);
+  assert.equal(opened.orphanRepair.repaired, true);
+  assert.equal(opened.orphanRepair.terminationScope, "host_tree");
+  assert.equal(opened.orphanRepair.staleRegistryEntryIgnored, true);
+  assert.deepEqual(terminations, [
+    { pid: hostPid, force: false },
+    { pid: hostPid, force: true },
+  ]);
+  assert.equal(JSON.parse(readFileSync(statePath, "utf8")).status, "orphan_repaired");
+  assert.equal(supervisor.events.some((event) => event.kind === "orphaned_tui_repaired"), true);
+  assert.equal(supervisor.events.some((event) => event.kind === "orphaned_tui_graceful_stop_failed"), true);
+  assert.equal(supervisor.events.some((event) => event.kind === "orphaned_tui_registry_residue_ignored"), true);
+});
+
+test("orphan repair refuses to stop an exact TUI when a supervised run is unknown after restart", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-orphan-unsafe-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cwd = join(root, "project");
+  const stateRoot = join(root, "state");
+  const tuiStateRoot = join(stateRoot, "tuis");
+  mkdirSync(cwd);
+  mkdirSync(tuiStateRoot, { recursive: true });
+  writeFileSync(join(tuiStateRoot, "orphan.json"), JSON.stringify({
+    schemaVersion: 1,
+    launchId: "orphan-launch",
+    leaderOwnerToken: OWNER_TOKEN,
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd,
+    hostPid: null,
+    grokPid: process.pid,
+    grokProcessFingerprint: "grok-fingerprint",
+  }));
+  let terminated = false;
+  const supervisor = createSupervisor({
+    stateRoot,
+    tuiStateRoot,
+    grokBinary: process.execPath,
+    inspectProcessIdentity: (pid) => pid === process.pid
+      ? { fingerprint: "grok-fingerprint", executablePath: process.execPath }
+      : null,
+    terminateProcessTree: () => { terminated = true; },
+  });
+  supervisor.leaderInfo = async () => ({ running: false });
+  supervisor.readLeaderOwnership = () => ({
+    valid: false,
+    reason: "leader_process_not_alive",
+    record: { ownerToken: OWNER_TOKEN },
+  });
+  supervisor.readActiveSessions = () => [{ session_id: SESSION_ID, pid: process.pid, cwd }];
+  supervisor.recovery.interruptedRun = {
+    runId: "01900000-0000-7000-8000-000000000004",
+    sessionId: SESSION_ID,
+    status: "unknown_after_restart",
+  };
+
+  await assert.rejects(() => supervisor.openSession({
+    mode: "resume",
+    sessionId: SESSION_ID,
+    cwd,
+    presentation: "windows_terminal",
+    confirmation: "OPEN_GROK_SESSION",
+  }), (error) => {
+    assert.equal(error.code, "GROK_ORPHAN_REPAIR_UNSAFE");
+    assert.deepEqual(error.details.blockers, ["unknown_run_after_restart:01900000-0000-7000-8000-000000000004"]);
+    return true;
+  });
+  assert.equal(terminated, false);
 });
 
 test("workspace trust remains a distinct interaction state until the visible TUI registers", async (t) => {

@@ -20,9 +20,9 @@ import {
   unlinkSync as unlinkSync3,
   writeFileSync as writeFileSync5
 } from "node:fs";
-import { createConnection as createConnection3, createServer } from "node:net";
+import { createConnection as createConnection3, createServer as createServer2 } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname as dirname4, join as join7, resolve as resolve8 } from "node:path";
+import { dirname as dirname4, join as join8, resolve as resolve8 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // plugins/grok-build-supervisor/scripts/supervisor-core.mjs
@@ -30,8 +30,9 @@ import { spawn, execFile as execFile3, execFileSync as execFileSync4 } from "nod
 import { promisify as promisify3 } from "node:util";
 import { Readable, Writable } from "node:stream";
 import { existsSync as existsSync7, mkdirSync as mkdirSync6, readFileSync as readFileSync7, realpathSync, statSync as statSync2, unlinkSync as unlinkSync2 } from "node:fs";
+import { createServer } from "node:net";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join6, resolve as resolve7 } from "node:path";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join7, resolve as resolve7 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash as createHash5, randomUUID as randomUUID2 } from "node:crypto";
 
@@ -19523,6 +19524,7 @@ async function initializeProxySettings({
 // plugins/grok-build-supervisor/scripts/process-identity.mjs
 import { execFileSync as execFileSync3 } from "node:child_process";
 import { createHash as createHash2 } from "node:crypto";
+import { join as join4 } from "node:path";
 function processIsAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
@@ -19545,7 +19547,14 @@ function inspectProcessIdentity(pid) {
     "[pscustomobject]@{ Name = $process.Name; ExecutablePath = $process.ExecutablePath; CommandLine = $process.CommandLine; CreatedAt = $created } | ConvertTo-Json -Compress"
   ].join("; ");
   try {
-    const output = execFileSync3("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    const powershell = join4(
+      process.env.SystemRoot || process.env.WINDIR || "C:\\Windows",
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe"
+    );
+    const output = execFileSync3(powershell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       encoding: "utf8",
       windowsHide: true,
       timeout: 3e3,
@@ -19577,7 +19586,7 @@ import {
   rmSync as rmSync2,
   writeFileSync as writeFileSync3
 } from "node:fs";
-import { join as join4, resolve as resolve5 } from "node:path";
+import { join as join5, resolve as resolve5 } from "node:path";
 var TUI_RUNTIME_FILES = [
   "Start-GrokTui.ps1",
   "tui-host.mjs",
@@ -19613,7 +19622,7 @@ function materializeTuiRuntime({
     throw new Error("sourceDirectory and stateRoot are required to materialize the TUI runtime");
   }
   const contents = files.map((name) => {
-    const sourcePath = join4(sourceRoot, name);
+    const sourcePath = join5(sourceRoot, name);
     if (!existsSync5(sourcePath)) {
       throw new Error(`Required TUI runtime file is missing: ${sourcePath}`);
     }
@@ -19627,17 +19636,17 @@ function materializeTuiRuntime({
     digest.update("\0");
   }
   const fingerprint = digest.digest("hex");
-  const runtimeRoot = join4(persistentRoot, "runtime", `tui-${fingerprint.slice(0, 20)}`);
+  const runtimeRoot = join5(persistentRoot, "runtime", `tui-${fingerprint.slice(0, 20)}`);
   mkdirSync4(runtimeRoot, { recursive: true });
   for (const item of contents) {
-    writeDerivedFile(join4(runtimeRoot, item.name), item.content);
+    writeDerivedFile(join5(runtimeRoot, item.name), item.content);
   }
   return {
     fingerprint,
     runtimeRoot,
-    launcherScript: join4(runtimeRoot, "Start-GrokTui.ps1"),
-    hostScript: join4(runtimeRoot, "tui-host.mjs"),
-    files: contents.map((item) => join4(runtimeRoot, item.name))
+    launcherScript: join5(runtimeRoot, "Start-GrokTui.ps1"),
+    hostScript: join5(runtimeRoot, "tui-host.mjs"),
+    files: contents.map((item) => join5(runtimeRoot, item.name))
   };
 }
 
@@ -19651,7 +19660,7 @@ import {
   rmSync as rmSync3,
   writeFileSync as writeFileSync4
 } from "node:fs";
-import { join as join5, resolve as resolve6 } from "node:path";
+import { join as join6, resolve as resolve6 } from "node:path";
 var UUID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 var DEFAULT_INLINE_RESULT_MAX_BYTES = 4e3;
 var DEFAULT_RESULT_SUMMARY_CHARS = 800;
@@ -19691,8 +19700,8 @@ function persistResultArtifact({
   }
   const digest = createHash4("sha256").update(text, "utf8").digest("hex");
   const artifactRoot = resolve6(root);
-  const directory = join5(artifactRoot, sessionId);
-  const artifactPath = join5(directory, `${runId}-${digest.slice(0, 16)}.md`);
+  const directory = join6(artifactRoot, sessionId);
+  const artifactPath = join6(directory, `${runId}-${digest.slice(0, 16)}.md`);
   mkdirSync5(directory, { recursive: true });
   if (existsSync6(artifactPath)) {
     const existingDigest = createHash4("sha256").update(readFileSync6(artifactPath)).digest("hex");
@@ -19701,7 +19710,7 @@ function persistResultArtifact({
     }
   }
   if (!existsSync6(artifactPath)) {
-    const temporaryPath = join5(directory, `.${runId}.${process.pid}.${randomUUID()}.tmp`);
+    const temporaryPath = join6(directory, `.${runId}.${process.pid}.${randomUUID()}.tmp`);
     try {
       writeFileSync4(temporaryPath, text, { encoding: "utf8", flag: "wx", mode: 384 });
       try {
@@ -20018,14 +20027,14 @@ function defaultGrokBinary() {
   if (process.env.GROK_BIN) {
     return process.env.GROK_BIN;
   }
-  return join6(homedir2(), ".grok", "bin", process.platform === "win32" ? "grok.exe" : "grok");
+  return join7(homedir2(), ".grok", "bin", process.platform === "win32" ? "grok.exe" : "grok");
 }
 function defaultStateRoot() {
   if (process.env.GROK_SUPERVISOR_STATE_ROOT) {
     return resolve7(process.env.GROK_SUPERVISOR_STATE_ROOT);
   }
-  const base = process.env.LOCALAPPDATA || join6(homedir2(), ".local", "state");
-  return join6(base, "VESPERIX", "GrokBuildSupervisor");
+  const base = process.env.LOCALAPPDATA || join7(homedir2(), ".local", "state");
+  return join7(base, "VESPERIX", "GrokBuildSupervisor");
 }
 function validateSessionId(value) {
   if (typeof value !== "string" || !UUID_RE3.test(value)) {
@@ -20073,6 +20082,76 @@ function processIsAlive2(pid) {
   } catch {
     return false;
   }
+}
+function windowsSystemExecutable(...segments) {
+  return join7(process.env.SystemRoot || process.env.WINDIR || "C:\\Windows", ...segments);
+}
+function buildProcessTreeTermination(pid, { force = false } = {}) {
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) {
+    throw new Error(`Refusing to terminate invalid or current process PID ${pid}`);
+  }
+  if (process.platform === "win32") {
+    const args = ["/PID", String(pid), "/T"];
+    if (force) {
+      args.push("/F");
+    }
+    return {
+      command: windowsSystemExecutable("System32", "taskkill.exe"),
+      args
+    };
+  }
+  return {
+    signal: force ? "SIGKILL" : "SIGTERM"
+  };
+}
+function terminateProcessTree(pid, { force = false } = {}) {
+  const termination = buildProcessTreeTermination(pid, { force });
+  if (process.platform === "win32") {
+    execFileSync4(termination.command, termination.args, {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5e3,
+      maxBuffer: 64 * 1024
+    });
+    return;
+  }
+  process.kill(pid, termination.signal);
+}
+async function isProcessAncestor(ancestorPid, descendantPid) {
+  if (!Number.isInteger(ancestorPid) || ancestorPid <= 0 || !Number.isInteger(descendantPid) || descendantPid <= 0) {
+    throw new Error("ancestor and descendant PIDs must be positive integers");
+  }
+  if (ancestorPid === descendantPid) {
+    return true;
+  }
+  if (process.platform !== "win32") {
+    return false;
+  }
+  const command = [
+    `$candidate = [int]${ancestorPid}`,
+    `$currentId = [int]${descendantPid}`,
+    "$found = $false",
+    "for ($depth = 0; $depth -lt 64 -and $currentId -gt 0; $depth += 1) {",
+    "  if ($currentId -eq $candidate) { $found = $true; break }",
+    '  $current = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $currentId) -ErrorAction SilentlyContinue',
+    "  if ($null -eq $current) { break }",
+    "  $parentId = [int]$current.ParentProcessId",
+    "  if ($parentId -le 0 -or $parentId -eq $currentId) { break }",
+    "  $currentId = $parentId",
+    "}",
+    "if ($found) { 'true' } else { 'false' }"
+  ].join("; ");
+  const result = await execFileAsync3(
+    windowsSystemExecutable("System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+    {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 3e3,
+      maxBuffer: 16 * 1024
+    }
+  );
+  return result.stdout.trim().toLowerCase() === "true";
 }
 function inspectTerminalPresentation({ hostPid, launcherPid }) {
   const startPids = [...new Set([hostPid, launcherPid].filter((pid) => Number.isInteger(pid) && pid > 0))];
@@ -20451,7 +20530,7 @@ var GrokSupervisor = class {
   constructor(options2 = {}) {
     this.grokBinary = options2.grokBinary || defaultGrokBinary();
     this.stateRoot = options2.stateRoot || defaultStateRoot();
-    this.leaderOwnershipPath = options2.leaderOwnershipPath || join6(this.stateRoot, "leader-owner.json");
+    this.leaderOwnershipPath = options2.leaderOwnershipPath || join7(this.stateRoot, "leader-owner.json");
     this.socketPathExplicit = typeof options2.socketPath === "string" && options2.socketPath.length > 0;
     let recordedSocketPath = null;
     if (!this.socketPathExplicit) {
@@ -20464,17 +20543,17 @@ var GrokSupervisor = class {
         }
       }
     }
-    this.socketPath = options2.socketPath || recordedSocketPath || join6(this.stateRoot, "leader.sock");
+    this.socketPath = options2.socketPath || recordedSocketPath || join7(this.stateRoot, "leader.sock");
     this.sessionRoot = options2.sessionRoot || defaultSessionRoot();
-    this.tuiStateRoot = options2.tuiStateRoot || join6(this.stateRoot, "tuis");
+    this.tuiStateRoot = options2.tuiStateRoot || join7(this.stateRoot, "tuis");
     this.tuiRuntime = options2.tuiRuntime || (options2.persistTuiRuntime === true ? materializeTuiRuntime({ sourceDirectory: MODULE_DIRECTORY, stateRoot: this.stateRoot }) : null);
-    this.tuiLauncherScript = options2.tuiLauncherScript || this.tuiRuntime?.launcherScript || join6(MODULE_DIRECTORY, "Start-GrokTui.ps1");
-    this.tuiHostScript = options2.tuiHostScript || this.tuiRuntime?.hostScript || join6(MODULE_DIRECTORY, "tui-host.mjs");
+    this.tuiLauncherScript = options2.tuiLauncherScript || this.tuiRuntime?.launcherScript || join7(MODULE_DIRECTORY, "Start-GrokTui.ps1");
+    this.tuiHostScript = options2.tuiHostScript || this.tuiRuntime?.hostScript || join7(MODULE_DIRECTORY, "tui-host.mjs");
     this.nodeBinary = options2.nodeBinary || process.execPath;
     this.spawnProcess = options2.spawnProcess || spawn;
     this.proxyPolicy = options2.proxyPolicy || process.env.GROK_SUPERVISOR_PROXY_POLICY || "required";
-    this.proxySettingsPath = options2.proxySettingsPath || join6(this.stateRoot, "proxy-settings.json");
-    this.resultArtifactRoot = options2.resultArtifactRoot || join6(this.stateRoot, "results");
+    this.proxySettingsPath = options2.proxySettingsPath || join7(this.stateRoot, "proxy-settings.json");
+    this.resultArtifactRoot = options2.resultArtifactRoot || join7(this.stateRoot, "results");
     this.inlineResultMaxBytes = options2.inlineResultMaxBytes ?? DEFAULT_INLINE_RESULT_MAX_BYTES;
     this.persistResultArtifact = options2.persistResultArtifact || persistResultArtifact;
     this.readProxySettings = options2.readProxySettings || readProxySettings;
@@ -20490,8 +20569,12 @@ var GrokSupervisor = class {
     this.resolveTerminalPresentation = options2.resolveTerminalPresentation || resolveWindowsTerminalPresentation;
     this.inspectTerminalPresentation = options2.inspectTerminalPresentation || inspectTerminalPresentation;
     this.inspectProcessIdentity = options2.inspectProcessIdentity || inspectProcessIdentity;
+    this.processIsAlive = options2.processIsAlive || processIsAlive2;
+    this.isProcessAncestor = options2.isProcessAncestor || isProcessAncestor;
+    this.terminateProcessTree = options2.terminateProcessTree || terminateProcessTree;
     this.tuiLaunchTimeoutMs = options2.tuiLaunchTimeoutMs ?? 15e3;
     this.tuiPollIntervalMs = options2.tuiPollIntervalMs ?? 100;
+    this.orphanRepairTimeoutMs = options2.orphanRepairTimeoutMs ?? 7e3;
     this.instanceId = options2.instanceId || randomUUID2();
     this.journalError = null;
     if (options2.eventJournal) {
@@ -20501,7 +20584,7 @@ var GrokSupervisor = class {
     } else {
       try {
         this.journal = new DurableEventJournal({
-          root: options2.journalRoot || join6(this.stateRoot, "journal"),
+          root: options2.journalRoot || join7(this.stateRoot, "journal"),
           maxRecentEvents: MAX_EVENTS,
           maxSegmentEvents: options2.maxSegmentEvents,
           maxSegmentBytes: options2.maxSegmentBytes
@@ -20797,8 +20880,11 @@ var GrokSupervisor = class {
       stderr: result.stderr?.trim() || ""
     };
   }
-  readActiveSessions() {
-    const registry2 = join6(process.env.GROK_HOME || join6(homedir2(), ".grok"), "active_sessions.json");
+  activeSessionsRegistryPath() {
+    return join7(process.env.GROK_HOME || join7(homedir2(), ".grok"), "active_sessions.json");
+  }
+  readRawActiveSessions() {
+    const registry2 = this.activeSessionsRegistryPath();
     if (!existsSync7(registry2)) {
       return [];
     }
@@ -20807,6 +20893,113 @@ var GrokSupervisor = class {
     } catch (error51) {
       this.record("registry_error", { message: conciseError(error51) });
       return [];
+    }
+  }
+  readActiveSessions() {
+    return this.readRawActiveSessions().filter((entry) => Number.isInteger(entry.pid) && entry.pid > 0 && this.processIsAlive(entry.pid));
+  }
+  orphanRepairLockPath(sessionId, cwd) {
+    validateSessionId(sessionId);
+    const normalizedCwd = process.platform === "win32" ? resolve7(cwd).toLowerCase() : resolve7(cwd);
+    const key = createHash5("sha256").update(`${sessionId}
+${normalizedCwd}`).digest("hex").slice(0, 32);
+    return join7(this.stateRoot, "orphan-repair-locks", `${key}.lock.json`);
+  }
+  orphanRepairMutexName(sessionId, cwd) {
+    const lockPath = this.orphanRepairLockPath(sessionId, cwd);
+    const key = lockPath.match(/([0-9a-f]{32})\.lock\.json$/i)?.[1];
+    return process.platform === "win32" ? `\\\\.\\pipe\\grok-build-supervisor-orphan-${key}` : join7(dirname3(lockPath), `${key}.sock`);
+  }
+  async acquireOrphanRepairLock({ sessionId, cwd }) {
+    const lockPath = this.orphanRepairLockPath(sessionId, cwd);
+    mkdirSync6(dirname3(lockPath), { recursive: true });
+    const identity = this.inspectProcessIdentity(process.pid);
+    const owner = {
+      schemaVersion: 1,
+      token: randomUUID2(),
+      sessionId,
+      cwd: resolve7(cwd),
+      pid: process.pid,
+      processFingerprint: identity?.fingerprint ?? null,
+      supervisorInstanceId: this.instanceId,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const mutexName = this.orphanRepairMutexName(sessionId, cwd);
+    const mutex = createServer();
+    mutex.unref();
+    await new Promise((resolveListen, rejectListen) => {
+      const onError = (error51) => {
+        const existing = readJsonFile(lockPath);
+        if (["EADDRINUSE", "EACCES"].includes(error51?.code)) {
+          rejectListen(codedError3(
+            "GROK_ORPHAN_REPAIR_BUSY",
+            `Another Supervisor process is already repairing session ${sessionId}`,
+            {
+              sessionId,
+              cwd: resolve7(cwd),
+              lockPath,
+              mutexName,
+              ownerPid: existing?.pid ?? null,
+              ownerSupervisorInstanceId: existing?.supervisorInstanceId ?? null
+            }
+          ));
+          return;
+        }
+        rejectListen(codedError3(
+          "GROK_ORPHAN_REPAIR_LOCK_FAILED",
+          `Could not acquire the operating-system orphan repair mutex for session ${sessionId}`,
+          { sessionId, cwd: resolve7(cwd), lockPath, mutexName, message: conciseError(error51) }
+        ));
+      };
+      mutex.once("error", onError);
+      mutex.listen(mutexName, () => {
+        mutex.removeListener("error", onError);
+        resolveListen();
+      });
+    });
+    try {
+      writeJsonAtomic(lockPath, owner);
+      return { path: lockPath, mutexName, mutex, ...owner };
+    } catch (error51) {
+      await new Promise((resolveClose) => mutex.close(() => resolveClose()));
+      throw error51;
+    }
+  }
+  async releaseOrphanRepairLock(lock) {
+    if (!lock?.path || !lock?.mutex || !UUID_RE3.test(lock.token || "")) {
+      return false;
+    }
+    let mutexClosed = true;
+    await new Promise((resolveClose) => {
+      lock.mutex.close((error51) => {
+        mutexClosed = !error51;
+        if (error51) {
+          this.record("orphaned_tui_repair_mutex_release_failed", {
+            sessionId: lock.sessionId,
+            mutexName: lock.mutexName,
+            message: conciseError(error51)
+          });
+        }
+        resolveClose();
+      });
+    });
+    const current = readJsonFile(lock.path);
+    if (current?.token !== lock.token) {
+      return mutexClosed;
+    }
+    try {
+      unlinkSync2(lock.path);
+      return mutexClosed;
+    } catch (error51) {
+      if (error51?.code === "ENOENT") {
+        return mutexClosed;
+      }
+      this.record("orphaned_tui_repair_lock_release_failed", {
+        sessionId: lock.sessionId,
+        lockPath: lock.path,
+        message: conciseError(error51)
+      });
+      return false;
     }
   }
   leaderLockPath() {
@@ -20922,7 +21115,7 @@ var GrokSupervisor = class {
     const previousSocketPath = this.socketPath;
     this.removeStaleOwnedLock();
     this.clearLeaderOwnership(Number.isInteger(recordedPid) ? recordedPid : null);
-    this.socketPath = join6(this.stateRoot, `leader-${randomUUID2()}.sock`);
+    this.socketPath = join7(this.stateRoot, `leader-${randomUUID2()}.sock`);
     this.record("leader_socket_rotated", {
       previousSocketPath,
       socketPath: this.socketPath,
@@ -21115,10 +21308,11 @@ var GrokSupervisor = class {
       cwd: entry.cwd,
       openedAt: entry.opened_at
     }));
-    const recordedTuis = listTuiStateRecords(this.tuiStateRoot).map(({ path, value }) => {
+    const allRecordedTuis = listTuiStateRecords(this.tuiStateRoot).map(({ path, value }) => {
       const assessment = this.assessRecordedTui(value, rawActiveSessions, leaderOwnership);
       const liveStatus = LIVE_TUI_STATUSES.has(value.status);
-      const effectiveStatus = liveStatus && !assessment.pidAlive ? "stale" : liveStatus && !assessment.processIdentityMatch ? "stale_pid_reused_or_unverified" : liveStatus && !assessment.leaderOwnershipMatch ? "stale_leader_ownership" : value.status === "running" && !assessment.activeRegistryMatch ? "registry_pending" : value.status;
+      const repairableOrphan = Boolean(value.status === "running" && leader.running !== true && assessment.pidAlive && assessment.processIdentityMatch && assessment.processFingerprintRecorded && assessment.activeRegistryMatch && !assessment.leaderOwnershipMatch);
+      const effectiveStatus = liveStatus && !assessment.pidAlive ? "stale" : liveStatus && !assessment.processIdentityMatch ? "stale_pid_reused_or_unverified" : repairableOrphan ? "orphaned_leader" : liveStatus && !assessment.leaderOwnershipMatch ? "stale_leader_ownership" : value.status === "running" && !assessment.activeRegistryMatch ? "registry_pending" : value.status;
       return {
         statePath: path,
         launchId: value.launchId,
@@ -21134,11 +21328,22 @@ var GrokSupervisor = class {
         processFingerprintRecorded: assessment.processFingerprintRecorded,
         activeRegistryMatch: assessment.activeRegistryMatch,
         leaderOwnershipMatch: assessment.leaderOwnershipMatch,
+        repairableOrphan,
         ownedBySupervisor: this.tuiProcesses.has(value.grokPid),
         ownedByCurrentMcp: this.tuiProcesses.has(value.grokPid),
         updatedAt: value.updatedAt ?? null
       };
-    }).slice(-20);
+    }).sort((left, right) => {
+      const byUpdatedAt = String(left.updatedAt || "").localeCompare(String(right.updatedAt || ""));
+      return byUpdatedAt || left.statePath.localeCompare(right.statePath);
+    });
+    const recordedTuiCounts = {
+      total: allRecordedTuis.length,
+      verifiedLive: allRecordedTuis.filter((item) => item.processAlive === true).length,
+      repairableOrphaned: allRecordedTuis.filter((item) => item.repairableOrphan === true).length,
+      displayed: Math.min(allRecordedTuis.length, 20)
+    };
+    const recordedTuis = allRecordedTuis.slice(-20);
     return {
       supervisorInstanceId: this.instanceId,
       grokBinary: this.grokBinary,
@@ -21196,13 +21401,14 @@ var GrokSupervisor = class {
       pendingElicitations: this.elicitationSummaries(),
       pendingWorkspaceTrust: this.workspaceTrustSummaries(),
       activeSessions,
+      recordedTuiCounts,
       recordedTuis
     };
   }
   assessRecordedTui(value, activeSessions, leaderOwnership) {
     const activeRegistryMatch = activeSessions.some((entry) => entry.session_id === value.sessionId && entry.pid === value.grokPid);
     const leaderOwnershipMatch = Boolean(leaderOwnership.valid && value.leaderOwnerToken === leaderOwnership.record.ownerToken);
-    const pidAlive = processIsAlive2(value.grokPid);
+    const pidAlive = this.processIsAlive(value.grokPid);
     const identity = pidAlive ? this.inspectProcessIdentity(value.grokPid) : null;
     const processFingerprintRecorded = typeof value.grokProcessFingerprint === "string" && value.grokProcessFingerprint.length > 0;
     const fingerprintMatch = processFingerprintRecorded && identity?.fingerprint === value.grokProcessFingerprint;
@@ -21217,8 +21423,53 @@ var GrokSupervisor = class {
       leaderOwnershipMatch
     };
   }
+  recordedProcessIdentityState(pid, fingerprint, expectedExecutablePath = null) {
+    if (!Number.isInteger(pid) || typeof fingerprint !== "string" || fingerprint.length === 0) {
+      return { state: "invalid_record", pidAlive: false, identity: null };
+    }
+    if (!this.processIsAlive(pid)) {
+      return { state: "stopped", pidAlive: false, identity: null };
+    }
+    const identity = this.inspectProcessIdentity(pid);
+    if (!identity || expectedExecutablePath && typeof identity.executablePath !== "string") {
+      return { state: "unknown_alive", pidAlive: true, identity: identity ?? null };
+    }
+    const matches = identity.fingerprint === fingerprint && (!expectedExecutablePath || samePath(identity.executablePath, expectedExecutablePath));
+    return { state: matches ? "matching" : "replaced", pidAlive: true, identity };
+  }
+  recordedProcessIdentityMatches(pid, fingerprint, expectedExecutablePath = null) {
+    return this.recordedProcessIdentityState(pid, fingerprint, expectedExecutablePath).state === "matching";
+  }
+  orphanRepairBlockers(sessionId) {
+    const blockers = [];
+    if (this.acpConnection && !this.acpConnection.signal.aborted) {
+      blockers.push("live_acp_attachment");
+    }
+    if (this.activeRun && ["running", "cancel_requested"].includes(this.activeRun.status)) {
+      blockers.push(`active_run:${this.activeRun.runId}`);
+    }
+    if (this.recovery.interruptedRun) {
+      blockers.push(`unknown_run_after_restart:${this.recovery.interruptedRun.runId}`);
+    }
+    if (this.permissionSummaries().some((entry) => entry.sessionId === sessionId)) {
+      blockers.push("pending_permission");
+    }
+    if (this.elicitationSummaries().some((entry) => entry.sessionId === sessionId)) {
+      blockers.push("pending_input");
+    }
+    if (this.workspaceTrustSummaries().some((entry) => entry.sessionId === sessionId)) {
+      blockers.push("pending_workspace_trust");
+    }
+    if (this.pendingAttachCwd) {
+      blockers.push("attachment_starting");
+    }
+    if (this.proxyInitialization) {
+      blockers.push("proxy_initialization_running");
+    }
+    return blockers;
+  }
   ownedTuiIdentityMatches(pid, owned) {
-    if (!owned || typeof owned.processFingerprint !== "string" || !processIsAlive2(pid)) {
+    if (!owned || typeof owned.processFingerprint !== "string" || !this.processIsAlive(pid)) {
       return false;
     }
     const identity = this.inspectProcessIdentity(pid);
@@ -21703,7 +21954,7 @@ var GrokSupervisor = class {
     const terminal = this.resolveTerminalPresentation();
     const launchId = randomUUID2();
     mkdirSync6(this.tuiStateRoot, { recursive: true });
-    const statePath = assertPathWithin(this.tuiStateRoot, join6(this.tuiStateRoot, `${launchId}.json`), "TUI state path");
+    const statePath = assertPathWithin(this.tuiStateRoot, join7(this.tuiStateRoot, `${launchId}.json`), "TUI state path");
     writeJsonAtomic(statePath, {
       schemaVersion: 1,
       launchId,
@@ -22092,6 +22343,278 @@ var GrokSupervisor = class {
       launchId: record2.value.launchId
     };
   }
+  async findRepairableOrphanedTui({ sessionId, cwd, activeSession }) {
+    validateSessionId(sessionId);
+    const fullCwd = validateWorkingDirectory(cwd);
+    if (!activeSession || activeSession.session_id !== sessionId || !Number.isInteger(activeSession.pid) || typeof activeSession.cwd === "string" && !samePath(activeSession.cwd, fullCwd)) {
+      return null;
+    }
+    const leader = await this.leaderInfo();
+    if (leader.running) {
+      return null;
+    }
+    const ownership = this.readLeaderOwnership();
+    const candidates = [...listTuiStateRecords(this.tuiStateRoot)].reverse().filter(({ value }) => {
+      if (value.status !== "running" || value.sessionId !== sessionId || typeof value.cwd !== "string" || !samePath(value.cwd, fullCwd) || value.grokPid !== activeSession.pid) {
+        return false;
+      }
+      const assessment = this.assessRecordedTui(value, [activeSession], ownership);
+      return assessment.pidAlive && assessment.processIdentityMatch && assessment.processFingerprintRecorded && assessment.activeRegistryMatch && !assessment.leaderOwnershipMatch;
+    });
+    if (candidates.length > 1) {
+      throw codedError3(
+        "GROK_ORPHANED_TUI_AMBIGUOUS",
+        `Multiple exact Supervisor TUI records match orphaned session ${sessionId}; refusing automatic repair`,
+        { statePaths: candidates.map((candidate) => candidate.path), pid: activeSession.pid }
+      );
+    }
+    const record2 = candidates[0];
+    if (!record2) {
+      return null;
+    }
+    const blockers = this.orphanRepairBlockers(sessionId);
+    if (blockers.length > 0) {
+      throw codedError3(
+        "GROK_ORPHAN_REPAIR_UNSAFE",
+        `Orphaned Grok TUI ${activeSession.pid} cannot be repaired while supervised work may still be active`,
+        { sessionId, pid: activeSession.pid, blockers }
+      );
+    }
+    return {
+      statePath: record2.path,
+      value: record2.value,
+      leaderReason: ownership.reason
+    };
+  }
+  async repairOrphanedTui(orphan) {
+    const expected = orphan?.value;
+    if (!expected || typeof expected.sessionId !== "string" || typeof expected.cwd !== "string") {
+      throw codedError3("GROK_ORPHAN_REPAIR_IDENTITY_CHANGED", "The orphaned Grok TUI identity is incomplete; refusing to repair it");
+    }
+    const repairLock = await this.acquireOrphanRepairLock({
+      sessionId: expected.sessionId,
+      cwd: expected.cwd
+    });
+    try {
+      return await this.repairOrphanedTuiUnderLock(orphan);
+    } finally {
+      await this.releaseOrphanRepairLock(repairLock);
+    }
+  }
+  async repairOrphanedTuiUnderLock(orphan) {
+    const expected = orphan?.value;
+    const statePath = orphan?.statePath;
+    const state = typeof statePath === "string" ? readJsonFile(statePath) : null;
+    const fullCwd = state?.cwd;
+    const stateMatches = state && expected && state.launchId === expected.launchId && state.status === "running" && state.sessionId === expected.sessionId && state.grokPid === expected.grokPid && state.grokProcessFingerprint === expected.grokProcessFingerprint && state.hostPid === expected.hostPid && state.hostProcessFingerprint === expected.hostProcessFingerprint && typeof fullCwd === "string" && samePath(fullCwd, expected.cwd);
+    if (!stateMatches) {
+      throw codedError3("GROK_ORPHAN_REPAIR_IDENTITY_CHANGED", "The orphaned Grok TUI record changed before repair; refusing to terminate it");
+    }
+    const activeSession = this.readActiveSessions().find((entry) => entry.session_id === state.sessionId && entry.pid === state.grokPid);
+    const leader = await this.leaderInfo();
+    const ownership = this.readLeaderOwnership();
+    const assessment = activeSession ? this.assessRecordedTui(state, [activeSession], ownership) : null;
+    const stillRepairable = leader.running !== true && assessment?.pidAlive && assessment.processIdentityMatch && assessment.processFingerprintRecorded && assessment.activeRegistryMatch && !assessment.leaderOwnershipMatch;
+    if (!stillRepairable) {
+      throw codedError3("GROK_ORPHAN_REPAIR_IDENTITY_CHANGED", "The orphaned Grok TUI no longer matches the safe repair conditions; refusing to terminate it");
+    }
+    const blockers = this.orphanRepairBlockers(state.sessionId);
+    if (blockers.length > 0) {
+      throw codedError3(
+        "GROK_ORPHAN_REPAIR_UNSAFE",
+        `Orphaned Grok TUI ${state.grokPid} cannot be repaired while supervised work may still be active`,
+        { sessionId: state.sessionId, pid: state.grokPid, blockers }
+      );
+    }
+    const hostMatches = state.hostPid !== process.pid && this.recordedProcessIdentityMatches(state.hostPid, state.hostProcessFingerprint);
+    let terminationPid = hostMatches ? state.hostPid : state.grokPid;
+    let terminationFingerprint = hostMatches ? state.hostProcessFingerprint : state.grokProcessFingerprint;
+    let terminationExecutable = hostMatches ? null : this.grokBinary;
+    let terminationScope = hostMatches ? "host_tree" : "tui_tree";
+    const exactTargetIdentity = () => this.recordedProcessIdentityState(
+      terminationPid,
+      terminationFingerprint,
+      terminationExecutable
+    );
+    const exactTuiIdentity = () => this.recordedProcessIdentityState(
+      state.grokPid,
+      state.grokProcessFingerprint,
+      this.grokBinary
+    );
+    const throwIdentityUnknown = (identity, targetKind) => {
+      throw codedError3(
+        "GROK_ORPHAN_REPAIR_IDENTITY_UNKNOWN",
+        `PID ${targetKind === "tui" ? state.grokPid : terminationPid} is still alive but its exact process identity could not be verified; refusing to report the orphan repair as complete`,
+        {
+          sessionId: state.sessionId,
+          pid: state.grokPid,
+          terminationPid,
+          terminationScope,
+          targetKind,
+          identityState: identity.state
+        }
+      );
+    };
+    const exactTerminationTargetAvailable = () => {
+      const identity = exactTargetIdentity();
+      if (identity.state === "matching") {
+        return true;
+      }
+      if (identity.state === "unknown_alive") {
+        throwIdentityUnknown(identity, "termination_target");
+      }
+      return false;
+    };
+    const assertTerminationTargetSafe = async () => {
+      let ancestorOfSupervisor;
+      try {
+        ancestorOfSupervisor = await this.isProcessAncestor(terminationPid, process.pid);
+      } catch (error51) {
+        throw codedError3(
+          "GROK_ORPHAN_REPAIR_ANCESTRY_UNKNOWN",
+          `Could not verify whether repair target PID ${terminationPid} owns the current Supervisor process; refusing to terminate it`,
+          {
+            sessionId: state.sessionId,
+            pid: state.grokPid,
+            terminationPid,
+            terminationScope,
+            message: conciseError(error51)
+          }
+        );
+      }
+      if (ancestorOfSupervisor) {
+        throw codedError3(
+          "GROK_ORPHAN_REPAIR_ANCESTOR",
+          `Repair target PID ${terminationPid} is an ancestor of the current Supervisor process; refusing to terminate it`,
+          { sessionId: state.sessionId, pid: state.grokPid, terminationPid, terminationScope }
+        );
+      }
+    };
+    const terminate = async (force) => {
+      if (!exactTerminationTargetAvailable()) {
+        return true;
+      }
+      await assertTerminationTargetSafe();
+      if (!exactTerminationTargetAvailable()) {
+        return true;
+      }
+      try {
+        this.terminateProcessTree(terminationPid, { force });
+        return true;
+      } catch (error51) {
+        const identity = exactTargetIdentity();
+        if (identity.state === "unknown_alive") {
+          throwIdentityUnknown(identity, "termination_target");
+        }
+        if (identity.state === "matching") {
+          if (!force) {
+            this.record("orphaned_tui_graceful_stop_failed", {
+              sessionId: state.sessionId,
+              pid: state.grokPid,
+              terminationPid,
+              terminationScope,
+              message: conciseError(error51)
+            });
+            return false;
+          }
+          throw codedError3(
+            "GROK_ORPHAN_REPAIR_STOP_FAILED",
+            `Exact orphaned Grok repair target PID ${terminationPid} could not be stopped`,
+            {
+              sessionId: state.sessionId,
+              pid: state.grokPid,
+              terminationPid,
+              terminationScope,
+              message: conciseError(error51)
+            }
+          );
+        }
+        return true;
+      }
+    };
+    this.record("orphaned_tui_repair_started", {
+      sessionId: state.sessionId,
+      cwd: fullCwd,
+      pid: state.grokPid,
+      hostPid: state.hostPid ?? null,
+      terminationScope,
+      statePath,
+      leaderReason: orphan.leaderReason ?? ownership.reason
+    });
+    const gracefulStarted = await terminate(false);
+    let deadline = Date.now() + Math.max(1e3, Math.floor(this.orphanRepairTimeoutMs * 0.6));
+    let tuiIdentity = exactTuiIdentity();
+    if (gracefulStarted) {
+      while (Date.now() < deadline && ["matching", "unknown_alive"].includes(tuiIdentity.state)) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+        tuiIdentity = exactTuiIdentity();
+      }
+    }
+    if (tuiIdentity.state === "unknown_alive") {
+      throwIdentityUnknown(tuiIdentity, "tui");
+    }
+    if (tuiIdentity.state === "matching") {
+      const targetIdentity = exactTargetIdentity();
+      if (targetIdentity.state !== "matching") {
+        terminationPid = state.grokPid;
+        terminationFingerprint = state.grokProcessFingerprint;
+        terminationExecutable = this.grokBinary;
+        terminationScope = "tui_tree";
+      }
+      await terminate(true);
+    }
+    deadline = Date.now() + Math.max(1e3, Math.floor(this.orphanRepairTimeoutMs * 0.4));
+    tuiIdentity = exactTuiIdentity();
+    while (Date.now() < deadline && ["matching", "unknown_alive"].includes(tuiIdentity.state)) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      tuiIdentity = exactTuiIdentity();
+    }
+    if (tuiIdentity.state === "matching") {
+      throw codedError3(
+        "GROK_ORPHAN_REPAIR_STOP_FAILED",
+        `Exact orphaned Grok TUI PID ${state.grokPid} did not stop`,
+        { sessionId: state.sessionId, pid: state.grokPid, statePath }
+      );
+    }
+    if (tuiIdentity.state === "unknown_alive") {
+      throwIdentityUnknown(tuiIdentity, "tui");
+    }
+    const staleRegistryEntryIgnored = this.readRawActiveSessions().some((entry) => entry.session_id === state.sessionId && entry.pid === state.grokPid);
+    if (staleRegistryEntryIgnored) {
+      this.record("orphaned_tui_registry_residue_ignored", {
+        sessionId: state.sessionId,
+        pid: state.grokPid,
+        statePath,
+        reason: "exact_process_identity_stopped"
+      });
+    }
+    const monitor = this.tuiActivationMonitors.get(state.grokPid);
+    if (monitor?.timer) {
+      clearTimeout(monitor.timer);
+    }
+    this.tuiActivationMonitors.delete(state.grokPid);
+    this.tuiProcesses.delete(state.grokPid);
+    const repairedAt = (/* @__PURE__ */ new Date()).toISOString();
+    writeJsonAtomic(statePath, {
+      ...state,
+      status: "orphan_repaired",
+      repairReason: "leader_ownership_lost",
+      repairedAt,
+      updatedAt: repairedAt
+    });
+    const result = {
+      repaired: true,
+      sessionId: state.sessionId,
+      cwd: fullCwd,
+      oldTuiPid: state.grokPid,
+      oldHostPid: state.hostPid ?? null,
+      terminationScope,
+      staleRegistryEntryIgnored,
+      statePath
+    };
+    this.record("orphaned_tui_repaired", result);
+    return result;
+  }
   async stopOwnedTuiForRollback(pid) {
     const owned = this.tuiProcesses.get(pid);
     if (!owned) {
@@ -22152,7 +22675,8 @@ var GrokSupervisor = class {
     const pendingTui = presentation === "windows_terminal" ? await this.findPendingTui({ sessionId: requestedSessionId || null, cwd: fullCwd }) : null;
     const active = mode === "resume" ? this.readActiveSessions().find((entry) => entry.session_id === requestedSessionId) : null;
     const recoverableTui = active ? await this.findRecoverableTui({ sessionId: requestedSessionId, cwd: fullCwd, activeSession: active }) : null;
-    if (active && !recoverableTui && !pendingTui) {
+    const orphanedTui = active && !recoverableTui && !pendingTui && presentation === "windows_terminal" ? await this.findRepairableOrphanedTui({ sessionId: requestedSessionId, cwd: fullCwd, activeSession: active }) : null;
+    if (active && !recoverableTui && !pendingTui && !orphanedTui) {
       throw new Error(`Session is already active in PID ${active.pid}; refusing a concurrent open`);
     }
     let startedLeader = false;
@@ -22160,7 +22684,11 @@ var GrokSupervisor = class {
     const rollback = [];
     let finalSessionId = requestedSessionId;
     let bootstrapAttachment = null;
+    let orphanRepair = null;
     try {
+      if (orphanedTui) {
+        orphanRepair = await this.repairOrphanedTui(orphanedTui);
+      }
       const leader = await this.startLeader({ cwd: fullCwd });
       startedLeader = leader.started === true;
       if (!startedLeader && leader.managed !== true) {
@@ -22277,11 +22805,12 @@ var GrokSupervisor = class {
         cwd: fullCwd,
         presentation,
         tuiPid,
-        activationState: activation.state
+        activationState: activation.state,
+        orphanRepair
       });
       return {
         opened: true,
-        recovered: false,
+        recovered: orphanRepair?.repaired === true,
         ready: activation.ready === true,
         state: activation.state,
         needsTerminalConfirmation: activation.needsTerminalConfirmation === true,
@@ -22293,7 +22822,8 @@ var GrokSupervisor = class {
         tui,
         attachment,
         bootstrapAttachment,
-        activation
+        activation,
+        orphanRepair
       };
     } catch (error51) {
       await this.disconnect().then(() => rollback.push("acp_disconnected")).catch((rollbackError) => rollback.push(`acp_disconnect_failed:${conciseError(rollbackError)}`));
@@ -22306,6 +22836,10 @@ var GrokSupervisor = class {
       }
       const message = conciseError(error51);
       const rollbackComplete = !rollback.some((step) => step.includes("_failed:"));
+      const orphanRepairFailure = typeof error51?.code === "string" && error51.code.startsWith("GROK_ORPHAN") ? {
+        code: error51.code,
+        details: error51.details ?? null
+      } : null;
       this.record("session_open_failed", {
         mode,
         sessionId: finalSessionId,
@@ -22315,7 +22849,9 @@ var GrokSupervisor = class {
         rollback,
         rollbackComplete,
         verificationRequired: true,
-        bootstrapSessionId: bootstrapAttachment?.sessionId ?? null
+        bootstrapSessionId: bootstrapAttachment?.sessionId ?? null,
+        orphanRepair,
+        orphanRepairFailure
       });
       const openError = new Error(`Could not open Grok session${finalSessionId ? ` ${finalSessionId}` : ""}: ${message}. Rollback: ${rollback.join(", ") || "none"}`);
       openError.code = "GROK_SESSION_OPEN_FAILED";
@@ -22326,7 +22862,9 @@ var GrokSupervisor = class {
         presentation,
         rollback,
         rollbackComplete,
-        verificationRequired: true
+        verificationRequired: true,
+        orphanRepair,
+        orphanRepairFailure
       };
       throw openError;
     }
@@ -22923,7 +23461,7 @@ var GrokSupervisor = class {
 // plugins/grok-build-supervisor/scripts/supervisor-transport.mjs
 var MODULE_DIRECTORY2 = dirname4(fileURLToPath2(import.meta.url));
 var PLUGIN_ROOT = resolve8(MODULE_DIRECTORY2, "..");
-var DEFAULT_DAEMON_BUNDLE = join7(PLUGIN_ROOT, "dist", "supervisor-daemon.mjs");
+var DEFAULT_DAEMON_BUNDLE = join8(PLUGIN_ROOT, "dist", "supervisor-daemon.mjs");
 var MAX_MESSAGE_BYTES = 1024 * 1024;
 var DEFAULT_LEASE_MS = 6e4;
 var DAEMON_PROTOCOL_VERSION = 1;
@@ -22960,7 +23498,7 @@ function processIsAlive3(pid) {
 }
 function readPluginVersion() {
   try {
-    const manifest = JSON.parse(readFileSync8(join7(PLUGIN_ROOT, ".codex-plugin", "plugin.json"), "utf8"));
+    const manifest = JSON.parse(readFileSync8(join8(PLUGIN_ROOT, ".codex-plugin", "plugin.json"), "utf8"));
     return typeof manifest.version === "string" ? manifest.version : "unknown";
   } catch {
     return "unknown";
@@ -22972,10 +23510,10 @@ function daemonPaths(stateRoot = defaultStateRoot()) {
   const suffix = createHash6("sha256").update(identity).digest("hex").slice(0, 20);
   return {
     stateRoot: root,
-    pipePath: process.platform === "win32" ? `\\\\.\\pipe\\grok-build-supervisor-${suffix}` : join7(tmpdir(), `grok-build-supervisor-${suffix}.sock`),
-    authPath: join7(root, "daemon-auth.json"),
-    metadataPath: join7(root, "daemon.json"),
-    startupErrorPath: join7(root, "daemon-startup-error.json")
+    pipePath: process.platform === "win32" ? `\\\\.\\pipe\\grok-build-supervisor-${suffix}` : join8(tmpdir(), `grok-build-supervisor-${suffix}.sock`),
+    authPath: join8(root, "daemon-auth.json"),
+    metadataPath: join8(root, "daemon.json"),
+    startupErrorPath: join8(root, "daemon-startup-error.json")
   };
 }
 function parseAuthRecord(path) {
@@ -23131,13 +23669,14 @@ var SupervisorDaemon = class {
   async daemonBusyState() {
     const status = await this.supervisor.status();
     const liveTuis = (status.recordedTuis || []).filter((item) => item.processAlive === true && item.leaderOwnershipMatch === true && item.processIdentityMatch !== false);
+    const verifiedLiveTuiCount = Number.isInteger(status.recordedTuiCounts?.verifiedLive) ? status.recordedTuiCounts.verifiedLive : liveTuis.length;
     const ownedLiveTuiCount = Array.isArray(status.ownedVisibleTuiPids) ? status.ownedVisibleTuiPids.length : 0;
     return {
       busy: Boolean(
-        status.acpConnected || status.attachedSessionId || status.activeRun?.status === "running" || status.pendingPermissions?.length || status.pendingElicitations?.length || status.pendingWorkspaceTrust?.length || liveTuis.length || ownedLiveTuiCount
+        status.acpConnected || status.attachedSessionId || status.activeRun?.status === "running" || status.pendingPermissions?.length || status.pendingElicitations?.length || status.pendingWorkspaceTrust?.length || verifiedLiveTuiCount || ownedLiveTuiCount
       ),
       status,
-      liveTuiCount: liveTuis.length,
+      liveTuiCount: verifiedLiveTuiCount,
       ownedLiveTuiCount
     };
   }
@@ -23351,7 +23890,7 @@ var SupervisorDaemon = class {
         unlinkSync3(this.paths.pipePath);
       }
     }
-    this.server = createServer((socket) => this.handleSocket(socket));
+    this.server = createServer2((socket) => this.handleSocket(socket));
     await new Promise((resolveListen, rejectListen) => {
       const onError = (error51) => {
         this.server?.off("listening", onListening);
