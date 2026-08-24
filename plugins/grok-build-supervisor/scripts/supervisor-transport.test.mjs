@@ -464,6 +464,25 @@ test("daemon busy state blocks shutdown for a fully verified live TUI", async ()
   assert.equal(state.liveTuiCount, 1);
 });
 
+test("daemon busy state uses the full verified-live count when public TUI details are capped", async () => {
+  const fake = new FakeSupervisor();
+  fake.status = async () => ({
+    acpConnected: false,
+    attachedSessionId: null,
+    activeRun: null,
+    pendingPermissions: [],
+    pendingElicitations: [],
+    pendingWorkspaceTrust: [],
+    ownedVisibleTuiPids: [],
+    recordedTuiCounts: { total: 21, verifiedLive: 1, repairableOrphaned: 0, displayed: 20 },
+    recordedTuis: [],
+  });
+  const daemon = new SupervisorDaemon({ supervisor: fake, runtimeVersion: "test" });
+  const state = await daemon.daemonBusyState();
+  assert.equal(state.busy, true);
+  assert.equal(state.liveTuiCount, 1);
+});
+
 test("daemon busy state preserves a verified trust-pending TUI before registry activation", async () => {
   const fake = new FakeSupervisor();
   fake.status = async () => ({

@@ -366,6 +366,9 @@ export class SupervisorDaemon {
       item.processAlive === true
       && item.leaderOwnershipMatch === true
       && item.processIdentityMatch !== false);
+    const verifiedLiveTuiCount = Number.isInteger(status.recordedTuiCounts?.verifiedLive)
+      ? status.recordedTuiCounts.verifiedLive
+      : liveTuis.length;
     const ownedLiveTuiCount = Array.isArray(status.ownedVisibleTuiPids)
       ? status.ownedVisibleTuiPids.length
       : 0;
@@ -377,11 +380,11 @@ export class SupervisorDaemon {
         || status.pendingPermissions?.length
         || status.pendingElicitations?.length
         || status.pendingWorkspaceTrust?.length
-        || liveTuis.length
+        || verifiedLiveTuiCount
         || ownedLiveTuiCount
       ),
       status,
-      liveTuiCount: liveTuis.length,
+      liveTuiCount: verifiedLiveTuiCount,
       ownedLiveTuiCount,
     };
   }

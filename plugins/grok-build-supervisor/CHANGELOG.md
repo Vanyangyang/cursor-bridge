@@ -4,6 +4,15 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+### Fixed
+
+- Repeated `/grok_execute on` can now repair an idle, exact plugin-recorded Grok TUI whose Leader ownership was lost after human verification or a connection-driven Leader restart. The Supervisor verifies the session, workspace, active registry PID, durable process fingerprint, and absence of supervised work before stopping only that recorded host tree and resuming the same session.
+- Dead PIDs left behind in Grok's `active_sessions.json` no longer block the same-session resume after an orphan repair. Raw registry residue is retained as diagnostic evidence after the exact recorded process identity has stopped instead of being treated as a second failure.
+- Public status retains the 20 most recently updated TUI records, while daemon-busy checks consume an aggregate computed across every durable record. An older verified live terminal therefore still blocks daemon shutdown or runtime replacement even when its detail row is outside the public window.
+- Orphan repair now holds a crash-released operating-system named-pipe mutex for the exact session/workspace; revalidates both Grok and host process fingerprints after acquiring it; and refuses to terminate any process tree that contains the current Supervisor daemon.
+- Windows process-tree termination resolves both PowerShell and `taskkill.exe` from `System32`, preserves command diagnostics, attempts graceful shutdown first, and redirects forced shutdown to the exact Grok PID if the recorded host exits without its child.
+- A live PID whose process identity cannot currently be read is no longer treated as stopped. Repair retries the probe and fails closed with `GROK_ORPHAN_REPAIR_IDENTITY_UNKNOWN` instead of marking the TUI repaired or opening a duplicate session.
+
 ## [0.3.4] - 2026-08-22
 
 ### Fixed
