@@ -48,16 +48,16 @@ test('Codex starter prompts stay user-facing and within manifest limits', () => 
   }
 });
 
-test('bilingual READMEs show the temporary Grok Superpower rename notice near the title', () => {
+test('bilingual READMEs keep the combined repository title without a rename notice', () => {
   const english = readProjectFile('README.md').split(/\r?\n/).slice(0, 30).join('\n');
   const chinese = readProjectFile('README.zh-CN.md').split(/\r?\n/).slice(0, 30).join('\n');
   for (const content of [english, chinese]) {
-    assert.match(content, /TEMPORARY_RENAME_NOTICE_START/);
-    assert.match(content, /\*\*Grok Superpower\*\*/);
-    assert.match(content, /TEMPORARY_RENAME_NOTICE_END/);
+    assert.match(content, /^# Cursor Bridge \+ Grok Build Supervisor$/m);
+    assert.doesNotMatch(content, /TEMPORARY_RENAME_NOTICE/);
+    assert.doesNotMatch(content, /Grok Superpower/);
   }
-  assert.match(english, /Upcoming rename:[\s\S]*installation commands remain unchanged/);
-  assert.match(chinese, /即将更名：[\s\S]*安装命令保持不变/);
+  assert.doesNotMatch(english, /Upcoming rename/);
+  assert.doesNotMatch(chinese, /即将更名/);
 });
 
 test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an isolated plugin', () => {
