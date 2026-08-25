@@ -18,16 +18,19 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
-**两个独立安装、互不影响的 Coding Agent MCP 插件；用户只安装自己需要的 Bridge。**
+> [!WARNING]
+> **目前仅支持 Windows：** Cursor Bridge 和 Grok Build Supervisor 当前都只支持 Windows；macOS 和 Linux 尚不支持，也未通过端到端验收。
+
+**两个独立安装、互不影响的 Coding Agent MCP 插件，可用于 Codex、Claude Code、Grok Build 和 Pi；只安装自己需要的 Bridge 即可。**
 
 | 插件 | 用途 | 文档 |
 |---|---|---|
-| **Cursor Bridge** | 让 Codex / Claude Code / Grok Build 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
-| **Grok Build Supervisor** | 让 Codex / Claude Code 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
+| **Cursor Bridge** | 让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
+| **Grok Build Supervisor** | 让 Codex / Claude Code / Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
 ## Grok Build Supervisor（New）
 
-**让 Codex 或 Claude Code 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
+**让 Codex、Claude Code 或 Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
 
 它与 Cursor Bridge 分别安装、分别更新。
 
@@ -35,7 +38,7 @@
 
 ## Cursor Bridge
 
-**让 Codex / Claude Code / Grok Build 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务。**
+**让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务。**
 
 > [!IMPORTANT]
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
@@ -45,7 +48,7 @@
 
 ## CCE 是什么？
 
-**Cursor Context Engine（CCE）通过 MCP，把 Cursor 已有的项目索引与 Agent 搜索能力交给 Codex / Claude Code / Grok Build 使用。**
+**Cursor Context Engine（CCE）通过 MCP，把 Cursor 已有的项目索引与 Agent 搜索能力交给 Codex / Claude Code / Grok Build / Pi 使用。**
 
 你只需要问一次真实的项目问题。Cursor 自己决定要使用语义检索、精确搜索、源码读取、引用追踪还是 Agent 探索；Cursor Bridge 最后只把精简、可追溯到源码的 `path:line` 证据与相关性说明交回主 Agent，而不是把整个搜索过程塞进主上下文。
 
@@ -81,7 +84,13 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 不先加市场也可以直接装：`grok plugin install Vanyangyang/cursor-bridge --trust`。
 
-重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，或按上面的方式重载 Grok。然后用自然语言初始化项目：
+### Pi
+
+```bash
+pi install npm:pi-cursor-bridge
+```
+
+安装后重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，按上面的方式重载 Grok，或重启 Pi。Pi 会自动把 Cursor Bridge 绑定到启动 Pi 时所在的目录；其他宿主可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
 
 ```text
 初始化 CCE 工作区为 C:\absolute\path\to\project
