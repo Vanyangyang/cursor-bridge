@@ -34785,7 +34785,7 @@ var WORKSPACE_TRUST_ACP_METHODS = Object.freeze([
   "_x.ai/folder_trust/request"
 ]);
 function normalizeHostKind(value) {
-  return (/* @__PURE__ */ new Set(["codex", "claude_code"])).has(value) ? value : "unknown";
+  return (/* @__PURE__ */ new Set(["codex", "claude_code", "pi"])).has(value) ? value : "unknown";
 }
 function defaultStateRoot() {
   if (process.env.GROK_SUPERVISOR_STATE_ROOT) {
@@ -35268,7 +35268,7 @@ var SupervisorClient = class {
 // plugins/grok-build-supervisor/scripts/server.mjs
 var supervisor = new SupervisorClient();
 process.chdir(supervisor.paths.stateRoot);
-var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.5" });
+var server = new McpServer({ name: "grok-build-supervisor", version: "0.3.6" });
 function toolResult(data, isError = false) {
   return {
     content: [{ type: "text", text: JSON.stringify(data) }],

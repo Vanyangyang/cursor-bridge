@@ -19929,12 +19929,13 @@ function interactionMessage(state) {
   }[state] || "Grok supervision state changed.";
 }
 function normalizeHostKind(value) {
-  return (/* @__PURE__ */ new Set(["codex", "claude_code"])).has(value) ? value : "unknown";
+  return (/* @__PURE__ */ new Set(["codex", "claude_code", "pi"])).has(value) ? value : "unknown";
 }
 function supervisingHost(kind) {
   return {
     codex: { label: "Codex", subject: "Codex" },
     claude_code: { label: "Claude Code", subject: "Claude Code" },
+    pi: { label: "Pi", subject: "Pi" },
     unknown: { label: "Host agent", subject: "the supervising host agent" }
   }[normalizeHostKind(kind)];
 }
