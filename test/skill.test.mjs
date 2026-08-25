@@ -174,8 +174,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]*Windows 一次性迁移：[^\r\n]*)/)?.[1] || '';
   const englishGrokSection = english.match(/## Grok Build Supervisor \(New\)\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
   const chineseGrokSection = chinese.match(/## Grok Build Supervisor（New）\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
-  const englishMigration = english.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n## |$)/)?.[0] || '';
-  const chineseMigration = chinese.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n## |$)/)?.[0] || '';
+  const englishMigration = english.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n<details>|$)/)?.[0] || '';
+  const chineseMigration = chinese.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n<details>|$)/)?.[0] || '';
   assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
   assert.match(englishImportant, /Cursor Bridge[\s\S]*5\.3\.6 or earlier[\s\S]*5\.4\.0 or any later release[\s\S]*#windows-update-migration/);
@@ -190,16 +190,25 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
   assert.doesNotMatch(chineseMigration, /Grok Build Supervisor|grok-build-supervisor/);
-  assert.match(english, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## Update an existing installation/);
-  assert.match(chinese, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## 更新已有安装/);
-  assert.doesNotMatch(english, /<summary><strong>Update an existing installation<\/strong><\/summary>/);
-  assert.doesNotMatch(chinese, /<summary><strong>更新已有安装<\/strong><\/summary>/);
+  assert.match(english, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## Update Cursor Bridge/);
+  assert.match(chinese, /<a id="windows-update-migration"><\/a>\r?\n\r?\n## 更新 Cursor Bridge/);
+  assert.doesNotMatch(english, /<summary><strong>Update Cursor Bridge<\/strong><\/summary>/);
+  assert.doesNotMatch(chinese, /<summary><strong>更新 Cursor Bridge<\/strong><\/summary>/);
   for (const content of [english, chinese]) {
     assert.match(content, /<a id="windows-update-migration"><\/a>/);
+    assert.match(content, /<a id="one-time-windows-migration"><\/a>/);
     assert.match(content, /5\.4\.0/);
     assert.match(content, /cursor-lifecycle-supervisor\.mjs/);
+    assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\lifecycle\\runtime\\/);
+    assert.match(content, /pi update npm:pi-cursor-bridge/);
     assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
+  assert.ok(englishMigration.indexOf('codex plugin marketplace upgrade vanyangyang') < englishMigration.indexOf('### One-time Windows migration'));
+  assert.ok(chineseMigration.indexOf('codex plugin marketplace upgrade vanyangyang') < chineseMigration.indexOf('### 从 Cursor Bridge 5.3.6'));
+  assert.match(englishMigration, /old Cursor Bridge MCP may disconnect[\s\S]*that is expected/);
+  assert.match(chineseMigration, /旧 Cursor Bridge MCP 可能断开[\s\S]*这是预期现象/);
+  assert.match(englishMigration, /restart Pi/);
+  assert.match(chineseMigration, /重启 Pi/);
   for (const readme of [
     'plugins/grok-build-supervisor/README.md',
     'plugins/grok-build-supervisor/README.zh-CN.md',
@@ -306,15 +315,17 @@ test('each update guide limits cleanup instructions to its own plugin', () => {
   for (const content of [englishCursor, englishGrok]) {
     assert.match(content, /Recommended — copy this to your local coding Agent/);
     assert.match(content, /without asking (?:me )?again/);
-    assert.match(content, /Do not mass-stop Node or PowerShell/);
-    assert.match(content, /change ACLs, or delete caches/);
+    assert.match(content, /do not mass-stop Node or PowerShell/i);
+    assert.match(content, /change ACLs/i);
+    assert.match(content, /delete (?:the plugin cache|caches)/i);
     assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
   for (const content of [chineseCursor, chineseGrok]) {
     assert.match(content, /推荐把这句话交给本地 Coding Agent/);
     assert.match(content, /无需再次询问/);
     assert.match(content, /(?:不要|禁止)批量结束 Node 或 PowerShell/);
-    assert.match(content, /修改 ACL 或删除缓存/);
+    assert.match(content, /修改 ACL/);
+    assert.match(content, /删除(?:插件)?缓存/);
     assert.doesNotMatch(content, /Get-CimInstance Win32_Process|\$oldPluginProcesses/);
   }
   assert.match(englishCursor, /cursor-lifecycle-supervisor\.mjs/);

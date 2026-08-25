@@ -185,15 +185,9 @@ Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After i
 
 <a id="windows-update-migration"></a>
 
-## Update an existing installation
+## Update Cursor Bridge
 
-> [!WARNING]
-> **The first upgrade from Cursor Bridge 5.3.6 or earlier to 5.4.0 or any later release needs a one-time Windows cleanup.** Old plugin processes can keep a versioned cache directory open, which prevents Windows from replacing it. This is not an ACL problem and does not require deleting the plugin cache.
-
-> [!TIP]
-> **Recommended — copy this to your local coding Agent:** “I saved my work. Upgrade the installed Cursor Bridge plugin to the latest version currently available from its marketplace. Check its current version first; if it is 5.3.6 or earlier, inspect old-cache instances of `cursor-lifecycle-supervisor.mjs` and `dist/cursor-bridge.mjs`. After verifying ownership and the old-cache path, stop those processes without asking again; leave new persistent runtimes and unrelated processes alone. Do not mass-stop Node or PowerShell, change ACLs, or delete caches. Run the normal update and report the installed version, marketplace source, and any old-cache process that remains.”
-
-After this migration, Cursor Bridge 5.4.0 and later releases run their persistent components outside the plugin cache, so later updates do not need special cleanup.
+Cursor Bridge 5.4.0 and later use the normal update commands below. If the currently installed version is 5.3.6 or earlier, complete the [one-time Windows migration](#one-time-windows-migration) first, then return to these commands.
 
 Codex:
 
@@ -201,8 +195,6 @@ Codex:
 codex plugin marketplace upgrade vanyangyang
 codex plugin add cursor-bridge@vanyangyang
 ```
-
-If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master` once, then retry the two commands above.
 
 Claude Code:
 
@@ -218,7 +210,27 @@ grok plugin marketplace update cursor-bridge
 grok plugin update cursor-bridge
 ```
 
-Updating the cache no longer requires stopping post-5.4.0 persistent runtimes, but an already open task does not hot-load new MCP, Skill, or command code. Start a new Codex task, restart Claude Code / run `/reload-plugins`, or in Grok open `/plugins` and press `r` / start a new session.
+Pi:
+
+```bash
+pi update npm:pi-cursor-bridge
+```
+
+After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, or restart Pi. An already open task does not hot-load new MCP, Skill, or command code.
+
+If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master` once, then retry the Codex commands above.
+
+<a id="one-time-windows-migration"></a>
+
+### One-time Windows migration from Cursor Bridge 5.3.6 or earlier
+
+> [!WARNING]
+> **Only the first Windows upgrade from Cursor Bridge 5.3.6 or earlier needs this cleanup.** Old plugin processes can keep a versioned cache directory open and block replacement. Do not change ACLs or delete the plugin cache.
+
+> [!TIP]
+> **Recommended — copy this to your local coding Agent:** “I saved my work. First check the installed Cursor Bridge version. Only if it is 5.3.6 or earlier, inspect processes whose command lines load `cursor-lifecycle-supervisor.mjs` or `dist/cursor-bridge.mjs` from the host's versioned plugin cache. Treat every instance under `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\` as the new persistent runtime and do not stop it. After verifying the exact old-cache path and ownership, stop only those old-cache processes without asking again; do not mass-stop Node or PowerShell, change ACLs, delete caches, or touch unrelated processes. The current task's old Cursor Bridge MCP may disconnect when its old adapter stops; that is expected. Then update Cursor Bridge to the latest version using the current host's normal marketplace command, reload the host, and report the installed version, marketplace source, and any old-cache process that remains.”
+
+After this one-time migration, later updates do not need special process cleanup.
 
 <details>
 <summary><strong>How CCE searches and returns evidence</strong></summary>

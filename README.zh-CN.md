@@ -185,15 +185,9 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 <a id="windows-update-migration"></a>
 
-## 更新已有安装
+## 更新 Cursor Bridge
 
-> [!WARNING]
-> **从 Cursor Bridge 5.3.6 或更早版本首次升级到 5.4.0 或任何后续版本时，需要做一次 Windows 清理。** 旧插件进程可能仍占用带版本号的缓存目录，导致 Windows 无法替换它。这不是 ACL 权限问题，也不需要手工删除插件缓存。
-
-> [!TIP]
-> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。请把已安装的 Cursor Bridge 升级到 marketplace 当前最新版。先核对当前版本；如果是 5.3.6 或更早版本，检查从旧插件缓存运行的 `cursor-lifecycle-supervisor.mjs` 和 `dist/cursor-bridge.mjs`。核验归属和旧缓存路径后直接停止，无需再次询问；保留新版持久运行时和无关进程。禁止批量结束 Node 或 PowerShell、修改 ACL 或删除缓存。完成正常更新后，报告版本、marketplace 来源和仍存在的旧缓存进程。”
-
-完成这次迁移后，Cursor Bridge 5.4.0 及后续版本的常驻程序会在插件缓存之外运行，后续更新不再需要特殊清理。
+Cursor Bridge 5.4.0 及后续版本使用下面的正常更新命令。如果当前安装的是 5.3.6 或更早版本，请先完成[一次性 Windows 迁移](#one-time-windows-migration)，再回来执行这些命令。
 
 Codex：
 
@@ -201,8 +195,6 @@ Codex：
 codex plugin marketplace upgrade vanyangyang
 codex plugin add cursor-bridge@vanyangyang
 ```
-
-如果提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master`，再重试上面的两条命令。
 
 Claude Code：
 
@@ -218,7 +210,27 @@ grok plugin marketplace update cursor-bridge
 grok plugin update cursor-bridge
 ```
 
-更新缓存可以不关闭 5.4.0 之后的常驻程序，但已经打开的任务不会热加载新 MCP、Skill 或命令。更新后请新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或在 Grok 打开 `/plugins` 按 `r` / 新开会话。
+Pi：
+
+```bash
+pi update npm:pi-cursor-bridge
+```
+
+更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；或者重启 Pi。已经打开的任务不会热加载新 MCP、Skill 或命令。
+
+如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master`，再重试上面的 Codex 命令。
+
+<a id="one-time-windows-migration"></a>
+
+### 从 Cursor Bridge 5.3.6 或更早版本进行一次性 Windows 迁移
+
+> [!WARNING]
+> **只有首次从 Cursor Bridge 5.3.6 或更早版本升级时才需要这次 Windows 清理。** 旧插件进程可能占用带版本号的缓存目录，阻止系统替换它。不要修改 ACL，也不要删除插件缓存。
+
+> [!TIP]
+> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。先核对已安装的 Cursor Bridge 版本。只有版本为 5.3.6 或更早时，才检查命令行从宿主带版本号插件缓存加载 `cursor-lifecycle-supervisor.mjs` 或 `dist/cursor-bridge.mjs` 的进程。凡是位于 `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\` 下的实例，都是新版持久运行时，不要停止。核验准确的旧缓存路径和归属后，只停止这些旧缓存进程，无需再次询问；禁止批量结束 Node 或 PowerShell、修改 ACL、删除缓存或处理无关进程。旧 adapter 停止后，当前任务中的旧 Cursor Bridge MCP 可能断开，这是预期现象。随后使用当前宿主的正常 marketplace 命令把 Cursor Bridge 更新到最新版、重载宿主，并报告安装后的版本、marketplace 来源和仍存在的旧缓存进程。”
+
+完成这次一次性迁移后，后续更新不再需要特殊进程清理。
 
 <details>
 <summary><strong>CCE 如何搜索，以及返回什么证据</strong></summary>
