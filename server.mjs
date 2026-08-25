@@ -45,7 +45,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.4.2';
+const PLUGIN_VERSION = '5.5.0';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -60,32 +60,33 @@ const DELEGATION_MODE = normalizeDelegationMode();
 // context, but return compact evidence anchors that the primary agent can verify.
 function searchResultContract() {
   return [
-    '只返回支撑结论所需的最小充分证据集，按证据强度排序；不要为了凑数量堆砌相似结果。',
+    'Return only the minimum sufficient evidence set, ordered by evidence strength. Do not pad the result with similar matches.',
     '',
-    '输出格式（保持紧凑，不要追加长篇解释）：',
+    'Output format (keep it compact; write narrative fields in the language of the user query and do not append a long explanation):',
     'CCE_SEARCH_RESULT',
-    'intent: <一句话复述检索意图>',
-    'coverage: <focused|extended> | <为什么采用该检索力度；是否扩展过优先范围>',
+    'intent: <one-sentence restatement of the retrieval intent>',
+    'coverage: <focused|extended> | <why this search depth was sufficient; whether the preferred scope was expanded>',
     'evidence:',
-    '- <workspace-relative-path>:<start>-<end> | <symbol 或锚点> | <相关性或已核验关系> | <semantic|exact|reference|source-read>',
-    'gaps: <没有确认的部分；没有则写 none>',
-    'confidence: <high|medium|low>（只评价定位证据，不评价代码正确性）',
+    '- <workspace-relative-path>:<start>-<end> | <symbol or anchor> | <relevance or verified relationship> | <semantic|exact|reference|source-read>',
+    'gaps: <anything not confirmed; write none when empty>',
+    'confidence: <high|medium|low> (rate retrieval evidence only, not code correctness)',
   ];
 }
 
 function buildContextEnginePrompt(query) {
   return [
-    '你现在是 Cursor Context Engine（CCE）：一个只读、证据驱动的项目理解引擎。',
-    '目标是把自然语言意图解析成可核验的真实代码上下文，而不是猜测代码位置、复述框架惯例或生成实现方案。',
-    '必须先检索再回答。根据问题形状和检索中发现的关系，自主决定检索力度：简单定位快速收敛；调用链、数据流、注册关系或跨模块问题继续追踪到最小充分证据。',
-    '自行选择 Cursor 当前可用的最佳能力，包括项目索引语义检索、精确文本搜索、符号/引用追踪、定向源码读取，以及确有收益时的 Explore/子代理。调用方只约束只读、证据和停止条件，不替 Cursor 编排内部 harness。',
-    '每条关系都必须由实际搜索、引用或源码读取支撑；语义相似不能冒充已证明调用边。达到最小充分上下文后立即停止，不做无关全仓库漫游。',
-    '不得修改、创建或删除文件，不得执行改变工作区状态的命令。只读取足以确认定位的上下文。',
-    '没有证据时明确写 NOT_FOUND，并在 gaps 中列出实际搜索过的词、符号、引用或范围；不得跳过搜索直接回答。',
-    '检索范围是当前 Cursor 已打开并完成索引的整个工作区。若意图点名了模块或路径，把它视为线索而非硬边界。',
+    'You are Cursor Context Engine (CCE), a read-only, evidence-driven project-understanding engine.',
+    'Resolve natural-language intent into verifiable code context. Do not guess locations, repeat framework conventions, or propose an implementation.',
+    'Search before answering. Choose the search depth from the question shape and discovered relationships: converge quickly for a simple location; trace call chains, data flow, registrations, or cross-module relationships until the minimum sufficient evidence is reached.',
+    'Choose the best Cursor capabilities available, including indexed semantic retrieval, exact text search, symbol/reference tracing, targeted source reading, and Explore or subagents when they materially help. The caller defines the read-only, evidence, and stopping boundaries; it does not prescribe Cursor\'s internal harness.',
+    'Support every claimed relationship with actual search, references, or source reading. Semantic similarity is not a proven call edge. Stop at minimum sufficient context and avoid unrelated repository-wide exploration.',
+    'Do not modify, create, or delete files, and do not run commands that change workspace state. Read only the context needed to verify the location.',
+    'When evidence is missing, write NOT_FOUND and list the terms, symbols, references, or scopes actually searched under gaps. Never answer without searching.',
+    'The search scope is the complete workspace currently open and indexed by Cursor. Treat any module or path named in the intent as a clue, not a hard boundary.',
+    'Write narrative output in the language of the user query unless the query explicitly requests another language. Never translate paths, symbols, identifiers, keys, enum values, or evidence-source markers.',
     ...searchResultContract(),
     '',
-    `检索意图：${String(query || '').trim()}`,
+    `Retrieval intent: ${String(query || '').trim()}`,
   ].join('\n');
 }
 
@@ -111,8 +112,10 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
 }
 
 const DO_DEFAULT_CONTRACT =
-  '\n\n完成要求：在当前 Cursor 已打开的工作区内直接完成任务；不要推送远端。' +
-  '结束前检查实际改动并运行与风险匹配的验证。最终回复必须列出：完成内容、改动文件、验证结果、仍有风险或阻塞。';
+  '\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. ' +
+  'Before finishing, inspect the actual changes and run verification proportional to risk. ' +
+  'Reply in the language of the user task unless it explicitly requests another language. ' +
+  'The final reply must list completed work, changed files, verification results, and remaining risks or blockers.';
 
 // ---------- CDP helpers ----------
 // 连接目标用字面 IP '127.0.0.1'，不用 'localhost'：Windows 上 "localhost" DNS 常优先解析到 ::1，
@@ -123,10 +126,10 @@ function httpJson(path) {
   return new Promise((resolve, reject) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path }, (res) => {
       let d = ''; res.on('data', (c) => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch { reject(new Error('CDP 非 JSON 响应')); } });
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch { reject(new Error('CDP returned a non-JSON response')); } });
     });
     req.on('error', reject);
-    req.setTimeout(4000, () => req.destroy(new Error(`Cursor 调试口 ${CDP_PORT} 无响应——Cursor 是否带 --remote-debugging-port=${CDP_PORT} 启动？`)));
+    req.setTimeout(4000, () => req.destroy(new Error(`Cursor debug port ${CDP_PORT} did not respond. Was Cursor started with --remote-debugging-port=${CDP_PORT}?`)));
   });
 }
 function scoreCursorPageCandidate(candidate, purpose = 'fifo') {
@@ -151,7 +154,7 @@ function selectCursorPageCandidate(candidates, options = {}) {
   const pages = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
   if (options.targetId) {
     const exact = pages.find((page) => page.id === options.targetId);
-    if (!exact) throw new Error(`Cursor CDP target 已消失：${options.targetId}`);
+    if (!exact) throw new Error(`Cursor CDP target disappeared: ${options.targetId}`);
     return exact;
   }
   const purpose = options.purpose || 'fifo';
@@ -209,11 +212,11 @@ async function reloadPageTarget(page, timeoutMs = 5000) {
   try {
     await Promise.race([
       c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 连接超时')), timeoutMs)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out connecting to the CDP target')), timeoutMs)),
     ]);
     await Promise.race([
       c.send('Page.reload', { ignoreCache: true }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP reload 超时')), timeoutMs)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out reloading the CDP target')), timeoutMs)),
     ]);
     return true;
   } catch {
@@ -229,11 +232,11 @@ async function inspectPageTarget(page) {
   try {
     await Promise.race([
       c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 连接超时')), probeMs)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out connecting to the CDP target')), probeMs)),
     ]);
     const raw = await Promise.race([
       evalJS(c, EXPR_PAGE_CAPABILITIES),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('CDP target 探测超时')), probeMs)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out probing the CDP target')), probeMs)),
     ]);
     return { ...page, capabilities: JSON.parse(raw || '{}') };
   } catch (error) {
@@ -291,7 +294,7 @@ function isAgentsWorkspaceBindError(error) {
 async function findPage(options = {}) {
   const list = await httpJson('/json/list');
   const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-  if (!pages.length) throw new Error('未找到 Cursor workbench page target');
+  if (!pages.length) throw new Error('No Cursor workbench page target was found');
   if (options.targetId && options.preferAgentsV2 !== true && options.preferLegacy !== true) {
     return selectCursorPageCandidate(pages, options);
   }
@@ -307,13 +310,13 @@ function makeClient(wsUrl) {
   // 关键健壮性：ws 打开后若关闭/出错，立即拒掉所有 pending。否则半开 socket（renderer 后台节流 / target detach / reload）
   // 会让 evalJS 永挂，_waitComplete 的 QUERY_TIMEOUT（轮询守卫，只在迭代顶部求值）永不触发 → job 永挂 + busy 永真
   // + 队列 wedge + ws 泄漏。_failInflight 加固（2026-06-08 review CB-1）。
-  ws.on('close', () => failAll('CDP ws 已关闭（页面/渲染进程消失）'));
-  ws.on('error', (e) => failAll('CDP ws 出错: ' + (e && e.message)));
+  ws.on('close', () => failAll('CDP WebSocket closed because the page or renderer disappeared'));
+  ws.on('error', (e) => failAll('CDP WebSocket error: ' + (e && e.message)));
   const CMD_TIMEOUT = Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 30000);
   const send = (method, params = {}) => {
     const myId = ++id;
     return new Promise((res, rej) => {
-      const t = setTimeout(() => { if (pending.delete(myId)) rej(new Error(`CDP 命令超时 ${method} (${CMD_TIMEOUT}ms)`)); }, CMD_TIMEOUT);
+    const t = setTimeout(() => { if (pending.delete(myId)) rej(new Error(`CDP command timed out: ${method} (${CMD_TIMEOUT}ms)`)); }, CMD_TIMEOUT);
       pending.set(myId, { res: (v) => { clearTimeout(t); res(v); }, rej: (e) => { clearTimeout(t); rej(e); } });
       try { ws.send(JSON.stringify({ id: myId, method, params })); }
       catch (e) { clearTimeout(t); pending.delete(myId); rej(e); }
@@ -324,7 +327,7 @@ function makeClient(wsUrl) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function evalJS(c, expr) {
   const r = await c.send('Runtime.evaluate', { expression: expr, returnByValue: true, includeCommandLineAPI: true });
-  if (r.exceptionDetails) throw new Error('页面异常: ' + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+    if (r.exceptionDetails) throw new Error('Page exception: ' + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
   return r.result && r.result.value;
 }
 async function chord(c, modifiers, key, code, vk) {
@@ -836,7 +839,7 @@ function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
     targetId: agentsWorkspace.targetId,
     targetUiFlavor: agentsWorkspace.targetUiFlavor,
     workspaceAction: 'reused-agents-repository',
-    message: `CCE 已确认 Cursor Agents 中的工作区 ${lifecycle.projectPath || agentsWorkspace.workspace || ''} 可以使用。`,
+    message: `CCE confirmed that workspace ${lifecycle.projectPath || agentsWorkspace.workspace || ''} is available in Cursor Agents.`,
     needsAction: null,
     nextStep: null,
     retryable: false,
@@ -955,8 +958,8 @@ class CursorBridge {
         bindingPersisted: true,
         ready: false,
         status: lifecycle.status,
-        message: lifecycle.message || 'CCE 初始化尚未完成，但工作区已经保存。',
-        nextStep: lifecycle.nextStep || '处理提示后，重新执行同一句初始化命令。',
+        message: lifecycle.message || 'CCE initialization is not complete, but the workspace binding was saved.',
+        nextStep: lifecycle.nextStep || 'Resolve the reported condition, then run the same initialization command again.',
         retryable: lifecycle.retryable !== false,
         lifecycle,
       };
@@ -967,8 +970,8 @@ class CursorBridge {
       bindingPersisted: true,
       ready: true,
       status: 'ready',
-      message: `CCE 已准备好使用工作区 ${saved.projectPath}。`,
-      nextStep: '现在可以直接使用 cursor_context_engine 或 cursor_do。',
+      message: `CCE is ready to use workspace ${saved.projectPath}.`,
+      nextStep: 'You can now use cursor_context_engine or cursor_do directly.',
       lifecycle: this._lastLifecycle,
     };
   }
@@ -1109,10 +1112,10 @@ class CursorBridge {
 
   async contextEngine(query) {
     const text = String(query || '').trim();
-    if (!text) throw new Error('query 不能为空');
-    if (text.length > 20000) throw new Error('query 过长（最大 20000 字符）');
+    if (!text) throw new Error('query must not be empty');
+    if (text.length > 20000) throw new Error('query exceeds the 20,000-character limit');
     if (this._hasGlobalReservation()) {
-      throw new Error('存在 Stop 未确认的全局 Cursor 占用；请先处理 cursor_status 中的 blockingTaskIds');
+      throw new Error('A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first');
     }
     await this._ensureCursor();
     const job = this._enqueue('context_engine', buildContextEnginePrompt(text), {
@@ -1134,16 +1137,16 @@ class CursorBridge {
       throw new Error('cursor_do is disabled by CURSOR_BRIDGE_DELEGATION=off; restart the MCP server without that setting to enable delegation');
     }
     const text = String(prompt || '').trim();
-    if (!text) throw new Error('prompt 不能为空');
-    if (text.length > 100000) throw new Error('prompt 过长（最大 100000 字符）');
+    if (!text) throw new Error('prompt must not be empty');
+    if (text.length > 100000) throw new Error('prompt exceeds the 100,000-character limit');
     if (this._hasGlobalReservation()) {
-      throw new Error('存在 Stop 未确认的全局 Cursor 占用；在显式恢复或释放前禁止提交新任务');
+      throw new Error('A global Cursor reservation has an unconfirmed Stop state; no new task may be submitted until it is explicitly recovered or released');
     }
     await this._ensureCursor();
 
     const execution = String(options.execution || 'fifo');
     if (execution !== 'fifo' && execution !== 'parallel_agent') {
-      throw new Error(`execution 不支持 ${execution}；只能是 fifo 或 parallel_agent`);
+      throw new Error(`Unsupported execution value ${execution}; expected fifo or parallel_agent`);
     }
     const readOnly = options.readOnly === true;
     const timeoutMs = Math.max(30000, Math.min(900000, Number(options.timeoutMs || 600000)));
@@ -1151,10 +1154,10 @@ class CursorBridge {
       ? options.allowedPaths.map((x) => String(x).trim()).filter(Boolean)
       : [];
     if (readOnly && allowedPaths.length > 0) {
-      throw new Error('read_only=true 与 allowed_paths 不能同时使用；只读任务不得声明写入范围');
+      throw new Error('read_only=true cannot be combined with allowed_paths because a read-only task cannot declare a write scope');
     }
     if (execution === 'parallel_agent' && !readOnly && allowedPaths.length === 0) {
-      throw new Error('parallel_agent 写任务必须提供 allowed_paths；纯读取任务请显式设置 read_only=true');
+      throw new Error('A parallel_agent write task must provide allowed_paths; set read_only=true explicitly for a read-only task');
     }
     if (execution === 'parallel_agent' && !readOnly) {
       this._validateParallelAllowedPaths(allowedPaths);
@@ -1163,11 +1166,11 @@ class CursorBridge {
 
     const contract = String(options.completionContract || '').trim();
     let fullPrompt = text;
-    if (readOnly) fullPrompt += '\n\n只读边界：不得修改、创建或删除任何文件，不得执行会改变工作区状态的命令。';
+    if (readOnly) fullPrompt += '\n\nRead-only boundary: Do not modify, create, or delete files, and do not run commands that change workspace state.';
     if (allowedPaths.length > 0) {
-      fullPrompt += '\n\n允许修改范围（不得越界）：\n' + allowedPaths.map((x) => '- ' + x).join('\n');
+      fullPrompt += '\n\nAllowed modification scope (do not cross this boundary):\n' + allowedPaths.map((x) => '- ' + x).join('\n');
     }
-    fullPrompt += contract ? '\n\n验收与回报合同：\n' + contract : DO_DEFAULT_CONTRACT;
+    fullPrompt += contract ? '\n\nAcceptance and reporting contract:\n' + contract : DO_DEFAULT_CONTRACT;
 
     const job = this._enqueue('do', fullPrompt, {
       timeoutMs,
@@ -1184,26 +1187,26 @@ class CursorBridge {
 
   _assertNoParallelPathConflict(allowedPaths) {
     if (this._hasGlobalReservation()) {
-      throw new Error('存在 Stop 未确认的全局 Cursor 占用；禁止提交新的 parallel_agent 写任务');
+      throw new Error('A global Cursor reservation has an unconfirmed Stop state; no new parallel_agent write task may be submitted');
     }
     const live = [...this.tasks.values()].filter((job) =>
       job.execution === 'parallel_agent' && !job.readOnly && !isTerminalTask(job));
     for (const job of live) {
       const overlap = allowedPaths.some((a) => job.allowedPaths.some((b) => pathsOverlap(a, b)));
-      if (overlap) throw new Error(`parallel_agent allowed_paths 与任务 ${job.id} 重叠；请改用 fifo 或拆成不重叠路径`);
+      if (overlap) throw new Error(`parallel_agent allowed_paths overlap task ${job.id}; use fifo or split the work into non-overlapping paths`);
     }
   }
 
   _validateParallelAllowedPaths(allowedPaths) {
     for (const raw of allowedPaths) {
       const slash = String(raw).replace(/\\/g, '/');
-      if (/[*?\[\]{}!]/.test(slash)) throw new Error(`parallel_agent allowed_paths 不接受 glob：${raw}`);
+      if (/[*?\[\]{}!]/.test(slash)) throw new Error(`parallel_agent allowed_paths do not accept globs: ${raw}`);
       if (/^[a-zA-Z]:\//.test(slash) || slash.startsWith('/')) {
-        throw new Error(`parallel_agent allowed_paths 必须使用工作区相对路径：${raw}`);
+        throw new Error(`parallel_agent allowed_paths must use workspace-relative paths: ${raw}`);
       }
       const normalized = normalizeAllowedPath(slash);
       if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
-        throw new Error(`parallel_agent allowed_paths 不得为空或越出工作区：${raw}`);
+        throw new Error(`parallel_agent allowed_paths must not be empty or escape the workspace: ${raw}`);
       }
     }
   }
@@ -1304,7 +1307,7 @@ class CursorBridge {
 
   _cancelJob(job, reason, options = {}) {
     if (isTerminalTask(job)) return this._taskView(job, true);
-    const message = String(reason || '任务已取消').trim() || '任务已取消';
+    const message = String(reason || 'Task cancelled').trim() || 'Task cancelled';
     this.queue = this.queue.filter((candidate) => candidate.id !== job.id);
     this.activeParallel.delete(job.id);
     this._invalidateParallelMonitor(job);
@@ -1440,9 +1443,9 @@ class CursorBridge {
           return;
         }
         if (rr.status === 'port-not-cursor') { console.error('⚠️ ' + rr.message + ' | ' + life); return; }
-        console.error('🪟 cursor 自愈拉起：' + (rr.message || rr.status) + ' | ' + life);
+        console.error('🪟 Cursor self-healing launch: ' + (rr.message || rr.status) + ' | ' + life);
       } catch (e) {
-        console.error('⚠️ cursor 自愈失败（CCE/委托已中止，避免驱动错误工作区）：', e.message);
+      console.error('⚠️ Cursor self-healing failed; CCE or delegation was stopped to avoid driving the wrong workspace:', e.message);
         throw e;
       }
       finally { this._healing = null; }
@@ -1502,7 +1505,7 @@ class CursorBridge {
                   this._cancelJob(job, job.cancelReason, { underlyingStopConfirmed: true });
                 } else {
                   job.cancelRequested = false;
-                  this._orphanParallelJob(job, new Error(`无法确认 Cursor Agent 已停止：${stopped.error || stopped.state}`));
+          this._orphanParallelJob(job, new Error(`Unable to confirm that the Cursor Agent stopped: ${stopped.error || stopped.state}`));
                   job.recoveryState = 'cancel_unconfirmed';
                 }
               } else {
@@ -1517,19 +1520,19 @@ class CursorBridge {
         } catch (error) {
           if ((error && error.cancelled) || job.cancelRequested) {
             if (error && error.stopConfirmed) {
-              this._cancelJob(job, job.cancelReason || error.message || '任务已取消', {
+        this._cancelJob(job, job.cancelReason || error.message || 'Task cancelled', {
                 underlyingStopConfirmed: true,
               });
             } else {
               job.cancelRequested = false;
-              this._orphanParallelJob(job, new Error('已请求取消，但无法确认 Cursor 已停止；占用继续保留'));
+      this._orphanParallelJob(job, new Error('Cancellation was requested, but Cursor could not be confirmed stopped; the reservation remains held'));
               job.recoveryState = 'cancel_unconfirmed';
             }
           } else if (error && error.confirmedTerminal) {
             this.activeParallel.delete(job.id);
             this._failJob(job, error);
           } else if (error && error.sent) {
-            job.error = `发送状态不确定，继续按 agentId 监控：${error.message}`;
+      job.error = `Submission state is uncertain; monitoring continues by agentId: ${error.message}`;
             if (job.agentId) {
               job.phase = 'running';
               job.reservationScope = job.readOnly ? 'agent' : 'paths';
@@ -1592,7 +1595,7 @@ class CursorBridge {
         await this._bindFifoComposerIdentity(c, options);
         this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
-        if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('填入查询失败（输入框状态异常）');
+      if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the query because the input state was invalid');
         await sleep(450);
         this._throwIfCancelledBeforeSend(options);
         let baseline = { messageCount: 0 };
@@ -1629,7 +1632,7 @@ class CursorBridge {
 
   _throwIfCancelledBeforeSend(job) {
     if (!job || !job.cancelRequested || job.sendState === 'dispatching' || job.sendState === 'sent') return;
-    const error = new Error(job.cancelReason || '任务已取消');
+      const error = new Error(job.cancelReason || 'Task cancelled');
     error.cancelled = true;
     error.stopConfirmed = true;
     error.preSend = true;
@@ -1648,7 +1651,7 @@ class CursorBridge {
       await sleep(1300);
       vis = await evalJS(c, EXPR_VISIBLE);
     }
-    if (!vis) throw new Error('无法打开 Cursor chat/agent 输入面板。Cursor 是否登录且窗口正常？');
+    if (!vis) throw new Error('Unable to open the Cursor chat or agent input panel. Confirm that Cursor is signed in and its window is available.');
   }
 
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
@@ -1702,10 +1705,10 @@ class CursorBridge {
   }
 
   async _readAgentEntries(c, keepOpen = false) {
-    if (!(await this._ensureHistoryOpen(c))) throw new Error('Cursor Agent 列表适配器不可用');
+    if (!(await this._ensureHistoryOpen(c))) throw new Error('Cursor Agent list adapter is unavailable');
     try {
       const snapshot = JSON.parse(await evalJS(c, EXPR_HISTORY_ENTRIES));
-      if (!snapshot.ok) throw new Error(snapshot.error || 'Agent History React adapter 不可用');
+    if (!snapshot.ok) throw new Error(snapshot.error || 'Agent History React adapter is unavailable');
       return snapshot.entries || [];
     } finally {
       if (!keepOpen) await this._closeHistory(c);
@@ -1808,7 +1811,7 @@ class CursorBridge {
         if (await accepted()) return 'button';
       }
     }
-    const error = new Error(`Cursor 未接受提交（submit_not_accepted: ${clicked || 'unknown'}）；提示仍在输入框中，未创建孤儿任务`);
+      const error = new Error(`Cursor did not accept the submission (submit_not_accepted: ${clicked || 'unknown'}); the prompt remains in the input and no orphan task was created`);
     error.confirmedNotSent = true;
     throw error;
   }
@@ -1848,7 +1851,7 @@ class CursorBridge {
       try {
         before = await this._readAgentEntries(c);
       } catch (e) {
-        return { fallbackReason: `parallel_agent 前置能力不可用：${e.message}` };
+      return { fallbackReason: `parallel_agent prerequisite is unavailable: ${e.message}` };
       }
       const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
       this._throwIfCancelledBeforeSend(job);
@@ -1859,12 +1862,12 @@ class CursorBridge {
           : await this._clickNewAgent(c, false);
       } catch (error) {
         if (isAgentsWorkspaceBindError(error)) {
-          return { fallbackReason: 'Agents Window 无法绑定当前仓库，已在发送前降级 FIFO / workbench' };
+      return { fallbackReason: 'Agents Window could not bind the current repository; downgraded to FIFO/workbench before submission' };
         }
         throw error;
       }
       if (!createdForWorkspace) {
-        return { fallbackReason: '找不到 Cursor New Agent 按钮，已在发送前降级 FIFO' };
+      return { fallbackReason: 'Cursor New Agent button was not found; downgraded to FIFO before submission' };
       }
 
       let agent = null;
@@ -1882,7 +1885,7 @@ class CursorBridge {
       await this._ensureChatPanel(c);
       this._throwIfCancelledBeforeSend(job);
       const filled = await evalJS(c, exprFill(job.prompt));
-      if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('parallel_agent 填入任务失败');
+    if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the parallel_agent task');
       await sleep(350);
       this._throwIfCancelledBeforeSend(job);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
@@ -1911,7 +1914,7 @@ class CursorBridge {
         } catch {}
       }
       if (!agent) {
-        const e = new Error('任务可能已发送，但无法从 Agent History 捕获唯一 agentId；已保留占用，禁止自动重发');
+      const e = new Error('The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden');
         e.sent = true;
         throw e;
       }
@@ -1983,12 +1986,12 @@ class CursorBridge {
         transientErrors++;
         // Cursor 切换 Agent、收起侧栏或 History 菜单重渲染时可能短暂不可读。
         // 保留约一分钟恢复窗口；超出后进入 needs_attention，绝不把已发送任务自动重发。
-        if (transientErrors >= 45) throw new Error(`连续无法读取 Agent History：${e.message}`);
+        if (transientErrors >= 45) throw new Error(`Agent History remained unreadable: ${e.message}`);
         continue;
       }
       if (!entry) {
         missingPolls++;
-        if (missingPolls >= 45) throw new Error(`Agent History 中持续丢失 ${job.agentId}`);
+        if (missingPolls >= 45) throw new Error(`Agent History continued to omit ${job.agentId}`);
         continue;
       }
       missingPolls = 0;
@@ -2007,19 +2010,19 @@ class CursorBridge {
         completedStable = 0;
         if (terminalErrorStable >= 2) {
           if (terminalClass === 'needs_attention') {
-            throw new Error(`Cursor Agent ${job.agentId} 正在等待用户处理`);
+        throw new Error(`Cursor Agent ${job.agentId} is waiting for user action`);
           }
           if (terminalClass === 'cancelled') {
             await this._withJobLock(job, async () => {
               if (!this._monitorOwns(job, generation)) return;
               job.terminalEvidence = `stable_history_icon:${entry.icon}`;
-              this._cancelJob(job, `Cursor Agent ${job.agentId} 已显示稳定取消终态`, {
+        this._cancelJob(job, `Cursor Agent ${job.agentId} reached a stable cancelled terminal state`, {
                 underlyingStopConfirmed: true,
               });
             });
             return;
           }
-          const error = new Error(`Cursor Agent ${job.agentId} 显示稳定失败状态 ${entry.icon}`);
+        const error = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${entry.icon}`);
           error.confirmedTerminal = true;
           throw error;
         }
@@ -2049,7 +2052,7 @@ class CursorBridge {
               if (!this._monitorOwns(job, generation)) return 'stale';
               collectionAttempts++;
               lastCollectionError = error.message;
-              job.error = `第 ${collectionAttempts} 次回收未完成，继续重试：${error.message}`;
+        job.error = `Result collection attempt ${collectionAttempts} did not complete; retrying: ${error.message}`;
               job.phase = 'running';
               return 'retry';
             }
@@ -2064,8 +2067,8 @@ class CursorBridge {
       }
     }
     if (!this._monitorOwns(job, generation)) return;
-    const detail = lastCollectionError ? `；最后回收错误：${lastCollectionError}` : '';
-    throw new Error(`Cursor parallel_agent 任务超时 (${job.timeoutMs}ms)${detail}`);
+    const detail = lastCollectionError ? `; last collection error: ${lastCollectionError}` : '';
+    throw new Error(`Cursor parallel_agent task timed out (${job.timeoutMs}ms)${detail}`);
   }
 
   async _waitForSelectedAgent(c, agentId, timeoutMs = 15000) {
@@ -2076,7 +2079,7 @@ class CursorBridge {
       if (target && target.isSelected) return true;
       await sleep(250);
     }
-    throw new Error(`打开 ${agentId} 后未确认其成为当前选中 Agent`);
+      throw new Error(`After opening ${agentId}, it could not be confirmed as the selected Agent`);
   }
 
   async _collectParallelAgent(job) {
@@ -2088,7 +2091,7 @@ class CursorBridge {
       const entries = await this._readAgentEntries(c, true);
       previousSelectedId = (entries.find((e) => e.isSelected) || {}).id || null;
       const opened = await evalJS(c, exprOpenAgent(job.agentId));
-      if (opened !== 'OPENED') throw new Error(`无法打开 ${job.agentId}: ${opened}`);
+      if (opened !== 'OPENED') throw new Error(`Unable to open ${job.agentId}: ${opened}`);
       await this._closeHistory(c);
       await this._waitForSelectedAgent(c, job.agentId);
 
@@ -2108,7 +2111,7 @@ class CursorBridge {
         }
         await sleep(300);
       }
-      if (!answer) throw new Error(`已打开 ${job.agentId}，但未找到助手最终回复`);
+      if (!answer) throw new Error(`${job.agentId} was opened, but no final assistant reply was found`);
 
       if (previousSelectedId && previousSelectedId !== job.agentId) {
         if (await this._ensureHistoryOpen(c)) {
@@ -2126,7 +2129,7 @@ class CursorBridge {
 
   _reapWithoutResult(job, error, evidence) {
     if (isTerminalTask(job)) return;
-    const message = error instanceof Error ? error.message : String(error || 'Cursor Agent 已终止，但最终回复无法回收');
+    const message = error instanceof Error ? error.message : String(error || 'The Cursor Agent terminated, but its final reply could not be collected');
     job.status = 'needs_attention';
     job.phase = 'orphaned';
     job.finishedAt = null;
@@ -2172,18 +2175,18 @@ class CursorBridge {
     } catch (error) {
       job.lastRecoveryAt = new Date().toISOString();
       job.recoveryState = 'history_unavailable';
-      job.error = `重新检查 Agent History 失败：${error.message}`;
+      job.error = `Failed to recheck Agent History: ${error.message}`;
       return { stable: false, error: error.message, entry: null };
     }
     job.lastRecoveryAt = new Date().toISOString();
     if (!first || !second) {
       job.recoveryState = 'agent_missing';
-      return { stable: false, error: 'Agent History 中未找到绑定的 agentId', entry: second || first || null };
+      return { stable: false, error: 'The bound agentId was not found in Agent History', entry: second || first || null };
     }
     const stable = first.id === second.id
       && first.showSpinner === second.showSpinner
       && String(first.icon || '') === String(second.icon || '');
-    return { stable, entry: second, error: stable ? null : 'Agent History 状态尚未稳定' };
+    return { stable, entry: second, error: stable ? null : 'Agent History state is not yet stable' };
   }
 
   async _reapParallelJob(job, options = {}) {
@@ -2222,11 +2225,11 @@ class CursorBridge {
     const terminalClass = classifyParallelTerminalIcon(icon);
     if (terminalClass === 'cancelled') {
       job.terminalEvidence = `stable_history_icon:${icon || 'cancelled'}`;
-      const task = this._cancelJob(job, `Cursor Agent ${job.agentId} 已显示取消终态`, { underlyingStopConfirmed: true });
+      const task = this._cancelJob(job, `Cursor Agent ${job.agentId} reached a cancelled terminal state`, { underlyingStopConfirmed: true });
       return { changed: true, state: 'cancelled', task };
     }
     if (terminalClass === 'failed') {
-      const error = new Error(`Cursor Agent ${job.agentId} 显示稳定失败状态 ${icon}`);
+      const error = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${icon}`);
       job.terminalEvidence = `stable_history_icon:${icon}`;
       this.activeParallel.delete(job.id);
       this._failJob(job, error);
@@ -2251,7 +2254,7 @@ class CursorBridge {
           changed: false,
           state: 'terminal_uncollected',
           error: error.message,
-          next: '底层 Agent 已显示稳定完成，但最终回复尚未取回；可再次 reap 重试，或在接受丢失回复时显式 abandon。',
+        next: 'The underlying Agent is stably complete, but its final reply has not been collected. Retry with reap, or explicitly abandon only if a missing reply is acceptable.',
           task: this._taskView(job, true),
         };
       }
@@ -2428,26 +2431,26 @@ class CursorBridge {
 
   async taskControl(taskId, options = {}) {
     const id = String(taskId || '').trim();
-    if (!id) throw new Error('task_id 不能为空');
+    if (!id) throw new Error('task_id must not be empty');
     const job = this.tasks.get(id);
     if (!job) return { found: false, taskId: id };
     const action = String(options.action || 'reap').trim().toLowerCase();
     if (!['reap', 'cancel', 'abandon'].includes(action)) {
-      throw new Error(`不支持 action=${action}；只能是 reap、cancel 或 abandon`);
+      throw new Error(`Unsupported action=${action}; expected reap, cancel, or abandon`);
     }
     const reason = String(options.reason || '').trim();
     const expectedAgentId = String(options.expectedAgentId || '').trim();
-    if (action !== 'reap' && options.confirm !== true) throw new Error(`${action} 需要 confirm=true`);
+    if (action !== 'reap' && options.confirm !== true) throw new Error(`${action} requires confirm=true`);
     const submittingCancelWithoutPublishedId = action === 'cancel'
       && job.phase === 'submitting'
       && !expectedAgentId;
     if (job.agentId && action !== 'reap' && !submittingCancelWithoutPublishedId && expectedAgentId !== job.agentId) {
-      throw new Error(`expected_agent_id 不匹配；任务绑定的是 ${job.agentId}`);
+      throw new Error(`expected_agent_id does not match; the task is bound to ${job.agentId}`);
     }
     // cancel latch 必须在第一个 await 之前写入，避免 submitting 期间等待 job lock 而错过发送前门禁。
     if (action === 'cancel' && !isTerminalTask(job)) {
       job.cancelRequested = true;
-      job.cancelReason = reason || (job.execution === 'parallel_agent' ? '用户请求取消 Cursor Agent' : '用户请求取消 FIFO 任务');
+    job.cancelReason = reason || (job.execution === 'parallel_agent' ? 'User requested Cursor Agent cancellation' : 'User requested FIFO task cancellation');
       job.cancelRequestSeq = Number(job.cancelRequestSeq || 0) + 1;
     }
     return this._withJobLock(job, () => this._taskControlLocked(job, action, {
@@ -2462,8 +2465,8 @@ class CursorBridge {
       const result = await this._reapParallelJobLocked(job, { reattach: true });
       if (result.state === 'not_parallel_reservation' && job.phase === 'orphaned') {
         result.next = job.agentId
-          ? 'FIFO 已绑定 agentId，但 reap 只服务 parallel_agent；请用 cancel 定向停止，或在确认后 abandon。'
-          : 'FIFO 孤儿没有可安全重绑的 agentId；请先在 Cursor UI 人工确认已停止，再显式 abandon。';
+        ? 'FIFO is bound to an agentId, but reap applies only to parallel_agent. Use cancel for a targeted stop, or abandon after confirmation.'
+        : 'The FIFO orphan has no agentId that can be safely rebound. Confirm that it stopped in the Cursor UI before explicitly abandoning it.';
       }
       return { found: true, action, ...result };
     }
@@ -2473,18 +2476,18 @@ class CursorBridge {
 
     if (action === 'abandon') {
       if (options.acknowledgeMayStillWrite !== true) {
-        throw new Error('abandon 需要 acknowledge_may_still_write=true');
+      throw new Error('abandon requires acknowledge_may_still_write=true');
       }
-      if (!options.reason) throw new Error('abandon 必须提供非空 reason');
+    if (!options.reason) throw new Error('abandon requires a non-empty reason');
       if (job.phase !== 'orphaned' && job.phase !== 'cancelling' && job.status !== 'needs_attention') {
-        throw new Error('abandon 只允许用于 needs_attention/orphaned/cancelling 任务');
+      throw new Error('abandon is allowed only for tasks in needs_attention, orphaned, or cancelling state');
       }
       return {
         found: true,
         action,
         changed: true,
         state: 'abandoned',
-        warning: 'Bridge 已释放占用，但无法证明底层 Cursor Agent 已停止；它仍可能继续写文件。',
+      warning: 'The Bridge released its reservation, but cannot prove that the underlying Cursor Agent stopped; it may still write files.',
         task: this._abandonJob(job, options.reason),
       };
     }
@@ -2495,7 +2498,7 @@ class CursorBridge {
         action,
         changed: true,
         state: 'cancelled',
-        task: this._cancelJob(job, options.reason || '排队任务已取消', { underlyingStopConfirmed: true }),
+        task: this._cancelJob(job, options.reason || 'Queued task cancelled', { underlyingStopConfirmed: true }),
       };
     }
     if (job.phase === 'orphaned' && !job.agentId) {
@@ -2505,7 +2508,7 @@ class CursorBridge {
         action,
         changed: false,
         state: 'cancel_unconfirmed',
-        next: '任务已进入无可安全定向身份的孤儿状态，并继续保留全局占用。请先在 Cursor UI 人工确认已停止，再显式 abandon。',
+        next: 'The task is orphaned without a safely targetable identity and still holds the global reservation. Confirm that it stopped in the Cursor UI before explicitly abandoning it.',
         task: this._taskView(job, true),
       };
     }
@@ -2519,7 +2522,7 @@ class CursorBridge {
         action,
         changed: true,
         state: job.recoveryState,
-        next: 'Bridge 已锁存取消请求；发送前会中止，若消息已发出则会先绑定 agentId 再定向停止。',
+        next: 'The Bridge latched the cancellation request. It will stop before submission, or bind the agentId and issue a targeted stop if the message was already sent.',
         task: this._taskView(job, true),
       };
     }
@@ -2560,14 +2563,14 @@ class CursorBridge {
       job.phase = 'orphaned';
       job.cancelRequested = false;
       job.recoveryState = 'cancel_unconfirmed';
-      job.error = `无法确认 Cursor Agent 已停止：${stopped.error || stopped.state}`;
+          job.error = `Unable to confirm that the Cursor Agent stopped: ${stopped.error || stopped.state}`;
       return {
         found: true,
         action,
         changed: false,
         state: 'cancel_unconfirmed',
         stop: stopped,
-        next: '确认 Cursor UI 已停止后，可再次 cancel；只有明确承担风险时才使用 abandon。',
+            next: 'After confirming that the Cursor UI has stopped, retry cancel. Use abandon only when explicitly accepting the risk.',
         task: this._taskView(job, true),
       };
     }
@@ -2579,7 +2582,7 @@ class CursorBridge {
         action,
         changed: true,
         state: 'cancel_pending_stop',
-        next: 'Bridge 已锁存取消请求；运行中的 FIFO 将按已绑定的 agentId 定向停止，不会模糊点击 Stop。',
+        next: 'The Bridge latched the cancellation request. The running FIFO task will be stopped through its bound agentId without clicking an ambiguous Stop control.',
         task: this._taskView(job, true),
       };
     }
@@ -2591,7 +2594,7 @@ class CursorBridge {
       action,
       changed: true,
       state: 'cancel_pending_fifo',
-      next: 'FIFO 没有可安全定向的 agentId；Bridge 不会模糊点击 Stop。任务会转为全局孤儿占用，人工确认停止后再 abandon。',
+      next: 'FIFO has no safely targetable agentId, so the Bridge will not click an ambiguous Stop control. The task becomes a global orphan reservation; confirm that it stopped manually before abandoning it.',
       task: this._taskView(job, true),
     };
   }
@@ -2628,7 +2631,7 @@ class CursorBridge {
         await this._closeHistory(c);
         c.close();
       }
-    }).catch((e) => console.error('⚠️ 恢复原 Cursor Agent 失败：' + e.message));
+    }).catch((e) => console.error('⚠️ Failed to restore the original Cursor Agent: ' + e.message));
   }
 
   async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0, job = null, providerErrorBaseline = '') {
@@ -2647,7 +2650,7 @@ class CursorBridge {
           } catch (error) {
             stopped = { confirmed: false, state: 'stop_error', error: error.message };
           }
-          const e = new Error(job.cancelReason || '任务已取消');
+          const e = new Error(job.cancelReason || 'Task cancelled');
           e.cancelled = true;
           e.stopConfirmed = stopped.confirmed === true;
           e.stop = stopped;
@@ -2655,7 +2658,7 @@ class CursorBridge {
           throw e;
         }
         // 未绑定身份的 FIFO 禁止用宽泛 Stop/Cancel 选择器猜测性点击其他会话或工作台控件。
-        const e = new Error(job.cancelReason || '任务已取消');
+        const e = new Error(job.cancelReason || 'Task cancelled');
         e.cancelled = true;
         e.stopConfirmed = false;
         throw e;
@@ -2697,10 +2700,10 @@ class CursorBridge {
       sawStop,
       baselineCount,
     })) return ans;
-    const taskHint = job && job.id
-      ? `；task_id=${job.id}，请用 cursor_status(task_id) 检查并按恢复流程处理`
-      : '';
-    throw new Error(`Cursor 任务超时 (${timeoutMs}ms)，尚未确认生成已停止并产生完整助手回复${taskHint}`);
+      const taskHint = job && job.id
+        ? `; task_id=${job.id}. Inspect it with cursor_status(task_id) and follow the recovery flow`
+        : '';
+      throw new Error(`Cursor task timed out (${timeoutMs}ms) before generation was confirmed stopped with a complete assistant reply${taskHint}`);
   }
 
   _taskView(job, includeResult = false) {
@@ -2744,13 +2747,13 @@ class CursorBridge {
     if (includeResult || isTerminalTask(job)) view.result = job.result;
     if (job.phase === 'orphaned') {
       if (job.recoveryState === 'terminal_result_uncollected') {
-        view.attention = 'Agent History 已证明底层任务结束，但最终回复尚未取回；再次 reap 重试，或在接受丢失回复时显式 abandon。';
+      view.attention = 'Agent History proves that the underlying task ended, but its final reply has not been collected. Retry with reap, or explicitly abandon only if a missing reply is acceptable.';
       } else {
         view.attention = job.agentId
           ? (job.execution === 'parallel_agent'
-            ? '用 cursor_task_control(action=reap) 显式重查原 agentId；需要停止时用 cancel；只有已人工确认且接受残余写入风险时才 abandon。'
-            : 'FIFO 已绑定 agentId；用 cursor_task_control(action=cancel) 并传入精确 expected_agent_id 定向停止。')
-          : '该孤儿没有可安全重绑的 agentId，并全局阻断新委托；请先在 Cursor UI 人工确认已停止，再用 cursor_task_control(action=abandon) 显式释放。';
+          ? 'Use cursor_task_control(action=reap) to recheck the original agentId. Use cancel when a stop is needed, and abandon only after manual confirmation while accepting residual write risk.'
+          : 'FIFO is bound to an agentId. Use cursor_task_control(action=cancel) with the exact expected_agent_id for a targeted stop.')
+        : 'This orphan has no agentId that can be safely rebound and globally blocks new delegation. Confirm that it stopped in the Cursor UI, then explicitly release it with cursor_task_control(action=abandon).';
       }
     }
     return view;
@@ -2915,7 +2918,7 @@ function buildToolDefinitions(bridgeInstance) {
 const ADAPTER_START_CWD = process.cwd();
 const bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.4.2' },
+  { name: 'cursor-bridge', version: '5.5.0' },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -3037,16 +3040,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const r = await ensureBridgeCursor(bridge, 'cursor_launch');
       return { content: [{ type: 'text', text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
-    throw new Error(`未知工具: ${name}`);
+        throw new Error(`Unknown tool: ${name}`);
   } catch (error) {
-    return { content: [{ type: 'text', text: `错误: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
   }
 });
 
 async function main() {
-  console.error('🚀 启动 cursor-bridge（CDP 直驱 :' + CDP_PORT + '）...');
+  console.error('🚀 Starting cursor-bridge (direct CDP on port ' + CDP_PORT + ')...');
   const releasedCwd = releaseAdapterWorkingDirectory();
-  console.error(`🔓 MCP 工作目录已移出插件缓存：${releasedCwd}`);
+    console.error(`🔓 MCP working directory released from the plugin cache: ${releasedCwd}`);
   // Prewarm both runtime modes before the MCP handshake completes. In minimal mode this claims
   // Cursor's default single-instance slot with CDP enabled, then the PID-scoped guard keeps its
   // windows hidden. That prevents later "Open in Cursor" actions from stealing the slot without 9223.
@@ -3054,7 +3057,7 @@ async function main() {
     ? ensureBridgeCursor(bridge, 'adapter-startup')
       .then((r) => {
         console.error(
-          '🪟 启动即确保 Cursor：' + (r.message || r.status)
+        '🪟 Startup Cursor check: ' + (r.message || r.status)
           + ' | adapterPid=' + bridge._lastLifecycle.adapterPid
           + ' supervisorPid=' + bridge._lastLifecycle.supervisorPid
           + ' reused=' + bridge._lastLifecycle.reusedSupervisor
@@ -3063,12 +3066,12 @@ async function main() {
         return r;
       })
       .catch((error) => {
-        console.error('⚠️ 启动即拉起 Cursor 失败（忽略，按需再拉）：', error.message);
+      console.error('⚠️ Startup Cursor launch failed; continuing and retrying on demand:', error.message);
         return null;
       })
     : Promise.resolve(null);
   await server.connect(new StdioServerTransport());
-  console.error('✅ MCP 已连接。');
+  console.error('✅ MCP connected.');
   void startupEnsure;
 }
 
@@ -3077,7 +3080,7 @@ const isMain = import.meta.url === pathToFileURL(process.argv[1] || '').href;
 if (isMain) {
   process.on('unhandledRejection', (r) => console.error('unhandledRejection:', r));
   process.on('SIGINT', () => process.exit(0));
-  main().catch((e) => { console.error('❌ 致命错误:', e); process.exit(1); });
+main().catch((e) => { console.error('❌ Fatal error:', e); process.exit(1); });
 }
 export {
   CursorBridge,

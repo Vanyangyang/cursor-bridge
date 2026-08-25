@@ -15,11 +15,11 @@ Provide every task independently:
 
 | Field | Requirement |
 |---|---|
-| `prompt` | State one objective, the necessary context, prohibited actions, and the expected report. Do not ask Cursor to repeat the primary agent's scope decision. |
+| `prompt` | State one objective, the necessary context, prohibited actions, and the expected report. Use the current user-task language unless the user explicitly requests another language. Do not ask Cursor to repeat the primary agent's scope decision. |
 | `execution` | Use only `fifo` or `parallel_agent`. Use `fifo` when safe parallelism cannot be demonstrated. |
 | `read_only` | Use `true` for lookup and analysis; use `false` for any file modification. |
 | `allowed_paths` | Required when `read_only=false`. Provide the smallest workspace-relative path set, with no glob, absolute path, or workspace-escaping `..`. Omit it when `read_only=true`. This is not a filesystem sandbox. |
-| `completion_contract` | State the deliverables, validation commands, permitted incomplete items, and final report format. |
+| `completion_contract` | State the deliverables, validation commands, permitted incomplete items, final report format, and that narrative output should follow the task language. Preserve paths, commands, identifiers, and machine tokens verbatim. |
 | `background` | Default to `true` so the primary agent may continue independent work. |
 
 ## Routing contract

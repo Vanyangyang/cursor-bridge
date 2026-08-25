@@ -6,14 +6,24 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-08-25
+
 ### Added
 
 - `pi-cursor-bridge` and `pi-grok-build-supervisor` are now available as independent npm packages for Pi. Each package embeds only its own product, tools, and Skills.
+- Cursor Bridge now defines one language contract across CCE, `cursor_do`, recovery, and host Skills: narrative output follows the current task language while machine fields and exact options remain stable.
+
+### Changed
+
+- CCE and `cursor_do` use canonical English internal scaffolds, preserve the original multilingual query or task, and explicitly request a matching-language result unless the user asks otherwise.
+- Recovery, validation, task-control, and direct adapter diagnostics now use canonical English so every host can localize them consistently instead of inheriting Chinese-only messages.
+- `cursor_do` is presented as a first-class bounded execution path while CCE remains the default project-understanding route and the supervising host retains final verification.
 
 ### Fixed
 
 - The Cursor Bridge Pi package now isolates its host and workspace identity from inherited Codex or Claude Code environment variables, so launching Pi from another Agent still binds Cursor to Pi's actual working directory.
 - Pi MCP calls now have a bounded 15-minute client timeout instead of the SDK's 60-second default, allowing cold Cursor CCE searches and other legitimately long plugin operations to finish without an adapter-side timeout.
+- The Pi publisher no longer skips an existing version by number alone; it compares the local dry-run tarball shasum with npm and fails when immutable contents differ.
 
 ## [5.4.2] - 2026-08-22
 
@@ -232,6 +242,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[5.5.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.2...cursor-bridge--v5.5.0
 [5.4.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.1...cursor-bridge--v5.4.2
 [5.4.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.0...cursor-bridge--v5.4.1
 [5.4.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.3.6...cursor-bridge--v5.4.0

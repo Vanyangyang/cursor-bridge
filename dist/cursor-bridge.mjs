@@ -11025,15 +11025,15 @@ function writeWorkspaceBinding(filePath, bindingKey, projectPath, options = {}) 
   const key = String(bindingKey || "").trim();
   if (!key) throw new Error("cursor_init could not identify the current Codex or Claude Code workspace session");
   if (!isAbsoluteWorkspacePath(projectPath)) {
-    throw new Error("\u8BF7\u63D0\u4F9B\u9879\u76EE\u7684\u5B8C\u6574\u8DEF\u5F84\uFF0C\u4F8B\u5982 C:\\Projects\\my-app \u6216 /Users/me/Projects/my-app");
+    throw new Error("Provide an absolute project path, for example C:\\Projects\\my-app or /Users/me/Projects/my-app");
   }
   const normalized = normalizeWorkspacePath(projectPath);
   const existsImpl = options.existsImpl || existsSync;
   if (!normalized || !existsImpl(normalized)) {
-    throw new Error(`\u627E\u4E0D\u5230\u5DE5\u4F5C\u533A\uFF1A${normalized || projectPath}`);
+    throw new Error(`Workspace not found: ${normalized || projectPath}`);
   }
   if (!isWorkspaceTarget(normalized, options)) {
-    throw new Error("\u5DE5\u4F5C\u533A\u5FC5\u987B\u662F\u9879\u76EE\u6587\u4EF6\u5939\u6216 .code-workspace \u6587\u4EF6");
+    throw new Error("The workspace must be a project directory or a .code-workspace file");
   }
   const state = readWorkspaceBindings(filePath);
   const updatedAt = options.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
@@ -11351,8 +11351,8 @@ async function ensureCursorRunningLocal(options = {}) {
             windowGuard: windowGuard2,
             needsAction: "install_or_locate_cursor",
             retryable: true,
-            nextStep: "\u8BF7\u786E\u8BA4 Cursor \u5DF2\u5B89\u88C5\u5E76\u767B\u5F55\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-            message: `CCE \u5DF2\u8FDE\u63A5 Cursor\uFF0C\u4F46\u8FD8\u4E0D\u80FD\u6253\u5F00\u5DE5\u4F5C\u533A ${projectPath}\uFF0C\u56E0\u4E3A\u6CA1\u6709\u627E\u5230 Cursor \u7A0B\u5E8F\u3002`
+            nextStep: "Confirm that Cursor is installed and signed in. For a portable or custom installation, set CURSOR_EXE and run the same initialization command again.",
+            message: `CCE connected to Cursor but cannot open workspace ${projectPath} because the Cursor executable was not found.`
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
@@ -11379,8 +11379,8 @@ async function ensureCursorRunningLocal(options = {}) {
             cursorExecutableSource: cursorExecutable2.source,
             needsAction: "retry_initialization",
             retryable: true,
-            nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-            message: `Cursor \u5DF2\u6253\u5F00\u9879\u76EE\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
+            nextStep: "Wait for Cursor to finish opening the project, then run the same initialization command again.",
+            message: `Cursor opened the project, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`
           };
         }
         targetId2 = openedTarget2.id;
@@ -11397,7 +11397,7 @@ async function ensureCursorRunningLocal(options = {}) {
         windowGuard: windowGuard2,
         targetId: targetId2,
         workspaceAction,
-        message: workspaceAction === "reused-agents-window" ? `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u5DF2\u590D\u7528 Agents Window\uFF08${targetId2}\uFF09\uFF0C\u4E0D\u4F1A\u518D\u6253\u5F00 IDE \u65B0\u7A97\u53E3\u3002` : `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u76EE\u6807\u5DE5\u4F5C\u533A\u5DF2\u7ED1\u5B9A\u5230 CDP target ${targetId2 || "default"}\u3002`
+        message: workspaceAction === "reused-agents-window" ? `CDP ${CDP_PORT} responded as Cursor; Agents Window ${targetId2} was reused without opening another IDE window.` : `CDP ${CDP_PORT} responded as Cursor; the target workspace is bound to CDP target ${targetId2 || "default"}.`
       };
     }
     return {
@@ -11406,8 +11406,8 @@ async function ensureCursorRunningLocal(options = {}) {
       port: CDP_PORT,
       needsAction: "free_cce_port",
       retryable: true,
-      nextStep: `\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u4F7F\u7528\u3002\u5173\u95ED\u5360\u7528\u5B83\u7684\u7A0B\u5E8F\u540E\uFF0C\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002`,
-      message: `CCE \u73B0\u5728\u65E0\u6CD5\u8FDE\u63A5 Cursor\uFF0C\u56E0\u4E3A\u6240\u9700\u7684\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u5360\u7528\u3002`
+      nextStep: `Local port ${CDP_PORT} is in use by another program. Close that program, then run the same initialization command again.`,
+      message: `CCE cannot connect to Cursor because required local port ${CDP_PORT} is occupied by another program.`
     };
   }
   if (cursorRunningImpl()) {
@@ -11420,8 +11420,8 @@ async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable2 && cursorExecutable2.source || null,
       needsAction: "close_cursor_and_retry",
       retryable: true,
-      nextStep: projectPath ? `\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u518D\u6B21\u8BF4\u201C\u521D\u59CB\u5316 CCE \u5DE5\u4F5C\u533A\u4E3A ${projectPath}\u201D\u3002` : "\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u91CD\u8BD5\u521A\u624D\u7684 CCE \u64CD\u4F5C\u3002",
-      message: "Cursor \u5DF2\u7ECF\u63D0\u524D\u6253\u5F00\uFF0CCCE \u65E0\u6CD5\u5728\u8FD0\u884C\u4E2D\u4E3A\u5B83\u8865\u4E0A\u8FDE\u63A5\u80FD\u529B\u3002\u4E3A\u4FDD\u62A4\u672A\u4FDD\u5B58\u5185\u5BB9\uFF0CCursor Bridge \u4E0D\u4F1A\u5F3A\u5236\u5173\u95ED\u5B83\u3002"
+      nextStep: projectPath ? `Save your work, exit Cursor normally once, then initialize CCE for workspace ${projectPath} again.` : "Save your work, exit Cursor normally once, then retry the previous CCE operation.",
+      message: "Cursor was already running, so CCE cannot add the required connection capability in place. Cursor Bridge will not force-close it, protecting unsaved work."
     };
   }
   const cursorExecutable = findCursorExeDetailsImpl();
@@ -11433,8 +11433,8 @@ async function ensureCursorRunningLocal(options = {}) {
       port: CDP_PORT,
       needsAction: "install_or_locate_cursor",
       retryable: true,
-      nextStep: "\u8BF7\u5148\u5B89\u88C5\u5E76\u767B\u5F55 Cursor\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-      message: "\u6CA1\u6709\u627E\u5230 Cursor\u3002\u6807\u51C6 Windows \u4E0E macOS \u5B89\u88C5\u4F1A\u81EA\u52A8\u8BC6\u522B\uFF0C\u901A\u5E38\u4E0D\u9700\u8981\u586B\u5199\u7A0B\u5E8F\u8DEF\u5F84\u3002"
+      nextStep: "Install and sign in to Cursor first. For a portable or custom installation, set CURSOR_EXE and run the same initialization command again.",
+      message: "Cursor was not found. Standard Windows and macOS installations are detected automatically and normally do not require an explicit executable path."
     };
   }
   const launchPort = resolveCursorLaunchCdpPort(CDP_PORT);
@@ -11469,8 +11469,8 @@ async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable.source,
       needsAction: "retry_initialization",
       retryable: true,
-      nextStep: "\u8BF7\u7A0D\u7B49\u7247\u523B\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-      message: "Cursor \u5DF2\u7ECF\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u51C6\u5907\u597D\uFF1B\u65E0\u9700\u4FEE\u6539\u4EFB\u4F55\u7AEF\u53E3\u8BBE\u7F6E\u3002"
+      nextStep: "Wait a moment, then run the same initialization command again.",
+      message: "Cursor started, but CCE is not ready yet. No port setting needs to be changed."
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
@@ -11490,13 +11490,13 @@ async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable.source,
       needsAction: "retry_initialization",
       retryable: true,
-      nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
+      nextStep: "Wait for Cursor to finish opening the project, then run the same initialization command again.",
+      message: `Cursor started, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`
     };
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
   const windowGuard = effectiveRuntimeMode === "minimal" && cursorPid ? startMinimalWindowGuard(cursorPid) : null;
-  const target = projectPath ? `\u6253\u5F00 ${projectPath}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
+  const target = projectPath ? `opening ${projectPath}` : "restoring the previous workspace";
   const presentation = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid }) : null;
   return {
     ok: true,
@@ -11513,7 +11513,7 @@ async function ensureCursorRunningLocal(options = {}) {
     cursorExecutableSource: cursorExecutable.source,
     targetId,
     workspaceAction: projectPath ? "launched-project" : "launched-last-workspace",
-    message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
+    message: `Cursor started (${exe}, ${target}); CDP ${CDP_PORT} is ready.`
   };
 }
 function normalizeProjectKey(projectPath) {
@@ -20740,7 +20740,7 @@ init_cursor_ensure_core();
 init_lifecycle_paths();
 import http2 from "http";
 import { pathToFileURL as pathToFileURL2 } from "url";
-var PLUGIN_VERSION = "5.4.2";
+var PLUGIN_VERSION = "5.5.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -20750,31 +20750,32 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
 var DELEGATION_MODE = normalizeDelegationMode();
 function searchResultContract() {
   return [
-    "\u53EA\u8FD4\u56DE\u652F\u6491\u7ED3\u8BBA\u6240\u9700\u7684\u6700\u5C0F\u5145\u5206\u8BC1\u636E\u96C6\uFF0C\u6309\u8BC1\u636E\u5F3A\u5EA6\u6392\u5E8F\uFF1B\u4E0D\u8981\u4E3A\u4E86\u51D1\u6570\u91CF\u5806\u780C\u76F8\u4F3C\u7ED3\u679C\u3002",
+    "Return only the minimum sufficient evidence set, ordered by evidence strength. Do not pad the result with similar matches.",
     "",
-    "\u8F93\u51FA\u683C\u5F0F\uFF08\u4FDD\u6301\u7D27\u51D1\uFF0C\u4E0D\u8981\u8FFD\u52A0\u957F\u7BC7\u89E3\u91CA\uFF09\uFF1A",
+    "Output format (keep it compact; write narrative fields in the language of the user query and do not append a long explanation):",
     "CCE_SEARCH_RESULT",
-    "intent: <\u4E00\u53E5\u8BDD\u590D\u8FF0\u68C0\u7D22\u610F\u56FE>",
-    "coverage: <focused|extended> | <\u4E3A\u4EC0\u4E48\u91C7\u7528\u8BE5\u68C0\u7D22\u529B\u5EA6\uFF1B\u662F\u5426\u6269\u5C55\u8FC7\u4F18\u5148\u8303\u56F4>",
+    "intent: <one-sentence restatement of the retrieval intent>",
+    "coverage: <focused|extended> | <why this search depth was sufficient; whether the preferred scope was expanded>",
     "evidence:",
-    "- <workspace-relative-path>:<start>-<end> | <symbol \u6216\u951A\u70B9> | <\u76F8\u5173\u6027\u6216\u5DF2\u6838\u9A8C\u5173\u7CFB> | <semantic|exact|reference|source-read>",
-    "gaps: <\u6CA1\u6709\u786E\u8BA4\u7684\u90E8\u5206\uFF1B\u6CA1\u6709\u5219\u5199 none>",
-    "confidence: <high|medium|low>\uFF08\u53EA\u8BC4\u4EF7\u5B9A\u4F4D\u8BC1\u636E\uFF0C\u4E0D\u8BC4\u4EF7\u4EE3\u7801\u6B63\u786E\u6027\uFF09"
+    "- <workspace-relative-path>:<start>-<end> | <symbol or anchor> | <relevance or verified relationship> | <semantic|exact|reference|source-read>",
+    "gaps: <anything not confirmed; write none when empty>",
+    "confidence: <high|medium|low> (rate retrieval evidence only, not code correctness)"
   ];
 }
 function buildContextEnginePrompt(query) {
   return [
-    "\u4F60\u73B0\u5728\u662F Cursor Context Engine\uFF08CCE\uFF09\uFF1A\u4E00\u4E2A\u53EA\u8BFB\u3001\u8BC1\u636E\u9A71\u52A8\u7684\u9879\u76EE\u7406\u89E3\u5F15\u64CE\u3002",
-    "\u76EE\u6807\u662F\u628A\u81EA\u7136\u8BED\u8A00\u610F\u56FE\u89E3\u6790\u6210\u53EF\u6838\u9A8C\u7684\u771F\u5B9E\u4EE3\u7801\u4E0A\u4E0B\u6587\uFF0C\u800C\u4E0D\u662F\u731C\u6D4B\u4EE3\u7801\u4F4D\u7F6E\u3001\u590D\u8FF0\u6846\u67B6\u60EF\u4F8B\u6216\u751F\u6210\u5B9E\u73B0\u65B9\u6848\u3002",
-    "\u5FC5\u987B\u5148\u68C0\u7D22\u518D\u56DE\u7B54\u3002\u6839\u636E\u95EE\u9898\u5F62\u72B6\u548C\u68C0\u7D22\u4E2D\u53D1\u73B0\u7684\u5173\u7CFB\uFF0C\u81EA\u4E3B\u51B3\u5B9A\u68C0\u7D22\u529B\u5EA6\uFF1A\u7B80\u5355\u5B9A\u4F4D\u5FEB\u901F\u6536\u655B\uFF1B\u8C03\u7528\u94FE\u3001\u6570\u636E\u6D41\u3001\u6CE8\u518C\u5173\u7CFB\u6216\u8DE8\u6A21\u5757\u95EE\u9898\u7EE7\u7EED\u8FFD\u8E2A\u5230\u6700\u5C0F\u5145\u5206\u8BC1\u636E\u3002",
-    "\u81EA\u884C\u9009\u62E9 Cursor \u5F53\u524D\u53EF\u7528\u7684\u6700\u4F73\u80FD\u529B\uFF0C\u5305\u62EC\u9879\u76EE\u7D22\u5F15\u8BED\u4E49\u68C0\u7D22\u3001\u7CBE\u786E\u6587\u672C\u641C\u7D22\u3001\u7B26\u53F7/\u5F15\u7528\u8FFD\u8E2A\u3001\u5B9A\u5411\u6E90\u7801\u8BFB\u53D6\uFF0C\u4EE5\u53CA\u786E\u6709\u6536\u76CA\u65F6\u7684 Explore/\u5B50\u4EE3\u7406\u3002\u8C03\u7528\u65B9\u53EA\u7EA6\u675F\u53EA\u8BFB\u3001\u8BC1\u636E\u548C\u505C\u6B62\u6761\u4EF6\uFF0C\u4E0D\u66FF Cursor \u7F16\u6392\u5185\u90E8 harness\u3002",
-    "\u6BCF\u6761\u5173\u7CFB\u90FD\u5FC5\u987B\u7531\u5B9E\u9645\u641C\u7D22\u3001\u5F15\u7528\u6216\u6E90\u7801\u8BFB\u53D6\u652F\u6491\uFF1B\u8BED\u4E49\u76F8\u4F3C\u4E0D\u80FD\u5192\u5145\u5DF2\u8BC1\u660E\u8C03\u7528\u8FB9\u3002\u8FBE\u5230\u6700\u5C0F\u5145\u5206\u4E0A\u4E0B\u6587\u540E\u7ACB\u5373\u505C\u6B62\uFF0C\u4E0D\u505A\u65E0\u5173\u5168\u4ED3\u5E93\u6F2B\u6E38\u3002",
-    "\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002\u53EA\u8BFB\u53D6\u8DB3\u4EE5\u786E\u8BA4\u5B9A\u4F4D\u7684\u4E0A\u4E0B\u6587\u3002",
-    "\u6CA1\u6709\u8BC1\u636E\u65F6\u660E\u786E\u5199 NOT_FOUND\uFF0C\u5E76\u5728 gaps \u4E2D\u5217\u51FA\u5B9E\u9645\u641C\u7D22\u8FC7\u7684\u8BCD\u3001\u7B26\u53F7\u3001\u5F15\u7528\u6216\u8303\u56F4\uFF1B\u4E0D\u5F97\u8DF3\u8FC7\u641C\u7D22\u76F4\u63A5\u56DE\u7B54\u3002",
-    "\u68C0\u7D22\u8303\u56F4\u662F\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u5E76\u5B8C\u6210\u7D22\u5F15\u7684\u6574\u4E2A\u5DE5\u4F5C\u533A\u3002\u82E5\u610F\u56FE\u70B9\u540D\u4E86\u6A21\u5757\u6216\u8DEF\u5F84\uFF0C\u628A\u5B83\u89C6\u4E3A\u7EBF\u7D22\u800C\u975E\u786C\u8FB9\u754C\u3002",
+    "You are Cursor Context Engine (CCE), a read-only, evidence-driven project-understanding engine.",
+    "Resolve natural-language intent into verifiable code context. Do not guess locations, repeat framework conventions, or propose an implementation.",
+    "Search before answering. Choose the search depth from the question shape and discovered relationships: converge quickly for a simple location; trace call chains, data flow, registrations, or cross-module relationships until the minimum sufficient evidence is reached.",
+    "Choose the best Cursor capabilities available, including indexed semantic retrieval, exact text search, symbol/reference tracing, targeted source reading, and Explore or subagents when they materially help. The caller defines the read-only, evidence, and stopping boundaries; it does not prescribe Cursor's internal harness.",
+    "Support every claimed relationship with actual search, references, or source reading. Semantic similarity is not a proven call edge. Stop at minimum sufficient context and avoid unrelated repository-wide exploration.",
+    "Do not modify, create, or delete files, and do not run commands that change workspace state. Read only the context needed to verify the location.",
+    "When evidence is missing, write NOT_FOUND and list the terms, symbols, references, or scopes actually searched under gaps. Never answer without searching.",
+    "The search scope is the complete workspace currently open and indexed by Cursor. Treat any module or path named in the intent as a clue, not a hard boundary.",
+    "Write narrative output in the language of the user query unless the query explicitly requests another language. Never translate paths, symbols, identifiers, keys, enum values, or evidence-source markers.",
     ...searchResultContract(),
     "",
-    `\u68C0\u7D22\u610F\u56FE\uFF1A${String(query || "").trim()}`
+    `Retrieval intent: ${String(query || "").trim()}`
   ].join("\n");
 }
 function normalizeCceSearchResult(value) {
@@ -20792,7 +20793,7 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
   const hasCompletionEvidence = sawStop || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
   return hasAssistantEvidence && hasCompletionEvidence;
 }
-var DO_DEFAULT_CONTRACT = "\n\n\u5B8C\u6210\u8981\u6C42\uFF1A\u5728\u5F53\u524D Cursor \u5DF2\u6253\u5F00\u7684\u5DE5\u4F5C\u533A\u5185\u76F4\u63A5\u5B8C\u6210\u4EFB\u52A1\uFF1B\u4E0D\u8981\u63A8\u9001\u8FDC\u7AEF\u3002\u7ED3\u675F\u524D\u68C0\u67E5\u5B9E\u9645\u6539\u52A8\u5E76\u8FD0\u884C\u4E0E\u98CE\u9669\u5339\u914D\u7684\u9A8C\u8BC1\u3002\u6700\u7EC8\u56DE\u590D\u5FC5\u987B\u5217\u51FA\uFF1A\u5B8C\u6210\u5185\u5BB9\u3001\u6539\u52A8\u6587\u4EF6\u3001\u9A8C\u8BC1\u7ED3\u679C\u3001\u4ECD\u6709\u98CE\u9669\u6216\u963B\u585E\u3002";
+var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. Before finishing, inspect the actual changes and run verification proportional to risk. Reply in the language of the user task unless it explicitly requests another language. The final reply must list completed work, changed files, verification results, and remaining risks or blockers.";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
   return new Promise((resolve6, reject) => {
@@ -20803,12 +20804,12 @@ function httpJson(path) {
         try {
           resolve6(JSON.parse(d));
         } catch {
-          reject(new Error("CDP \u975E JSON \u54CD\u5E94"));
+          reject(new Error("CDP returned a non-JSON response"));
         }
       });
     });
     req.on("error", reject);
-    req.setTimeout(4e3, () => req.destroy(new Error(`Cursor \u8C03\u8BD5\u53E3 ${CDP_PORT2} \u65E0\u54CD\u5E94\u2014\u2014Cursor \u662F\u5426\u5E26 --remote-debugging-port=${CDP_PORT2} \u542F\u52A8\uFF1F`)));
+    req.setTimeout(4e3, () => req.destroy(new Error(`Cursor debug port ${CDP_PORT2} did not respond. Was Cursor started with --remote-debugging-port=${CDP_PORT2}?`)));
   });
 }
 function scoreCursorPageCandidate(candidate, purpose = "fifo") {
@@ -20832,7 +20833,7 @@ function selectCursorPageCandidate(candidates, options = {}) {
   const pages = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
   if (options.targetId) {
     const exact = pages.find((page) => page.id === options.targetId);
-    if (!exact) throw new Error(`Cursor CDP target \u5DF2\u6D88\u5931\uFF1A${options.targetId}`);
+    if (!exact) throw new Error(`Cursor CDP target disappeared: ${options.targetId}`);
     return exact;
   }
   const purpose = options.purpose || "fifo";
@@ -20880,11 +20881,11 @@ async function reloadPageTarget(page, timeoutMs = 5e3) {
   try {
     await Promise.race([
       c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("CDP target \u8FDE\u63A5\u8D85\u65F6")), timeoutMs))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out connecting to the CDP target")), timeoutMs))
     ]);
     await Promise.race([
       c.send("Page.reload", { ignoreCache: true }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("CDP reload \u8D85\u65F6")), timeoutMs))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out reloading the CDP target")), timeoutMs))
     ]);
     return true;
   } catch {
@@ -20899,11 +20900,11 @@ async function inspectPageTarget(page) {
   try {
     await Promise.race([
       c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("CDP target \u8FDE\u63A5\u8D85\u65F6")), probeMs))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out connecting to the CDP target")), probeMs))
     ]);
     const raw = await Promise.race([
       evalJS(c, EXPR_PAGE_CAPABILITIES),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("CDP target \u63A2\u6D4B\u8D85\u65F6")), probeMs))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out probing the CDP target")), probeMs))
     ]);
     return { ...page, capabilities: JSON.parse(raw || "{}") };
   } catch (error2) {
@@ -20956,7 +20957,7 @@ function isAgentsWorkspaceBindError(error2) {
 async function findPage(options = {}) {
   const list = await httpJson("/json/list");
   const pages = list.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
-  if (!pages.length) throw new Error("\u672A\u627E\u5230 Cursor workbench page target");
+  if (!pages.length) throw new Error("No Cursor workbench page target was found");
   if (options.targetId && options.preferAgentsV2 !== true && options.preferLegacy !== true) {
     return selectCursorPageCandidate(pages, options);
   }
@@ -20994,14 +20995,14 @@ function makeClient(wsUrl) {
       else res(m.result);
     }
   });
-  ws.on("close", () => failAll("CDP ws \u5DF2\u5173\u95ED\uFF08\u9875\u9762/\u6E32\u67D3\u8FDB\u7A0B\u6D88\u5931\uFF09"));
-  ws.on("error", (e) => failAll("CDP ws \u51FA\u9519: " + (e && e.message)));
+  ws.on("close", () => failAll("CDP WebSocket closed because the page or renderer disappeared"));
+  ws.on("error", (e) => failAll("CDP WebSocket error: " + (e && e.message)));
   const CMD_TIMEOUT = Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 3e4);
   const send = (method, params = {}) => {
     const myId = ++id;
     return new Promise((res, rej) => {
       const t = setTimeout(() => {
-        if (pending.delete(myId)) rej(new Error(`CDP \u547D\u4EE4\u8D85\u65F6 ${method} (${CMD_TIMEOUT}ms)`));
+        if (pending.delete(myId)) rej(new Error(`CDP command timed out: ${method} (${CMD_TIMEOUT}ms)`));
       }, CMD_TIMEOUT);
       pending.set(myId, { res: (v) => {
         clearTimeout(t);
@@ -21029,7 +21030,7 @@ function makeClient(wsUrl) {
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function evalJS(c, expr) {
   const r = await c.send("Runtime.evaluate", { expression: expr, returnByValue: true, includeCommandLineAPI: true });
-  if (r.exceptionDetails) throw new Error("\u9875\u9762\u5F02\u5E38: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+  if (r.exceptionDetails) throw new Error("Page exception: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
   return r.result && r.result.value;
 }
 async function chord(c, modifiers, key, code, vk) {
@@ -21503,7 +21504,7 @@ function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
     targetId: agentsWorkspace.targetId,
     targetUiFlavor: agentsWorkspace.targetUiFlavor,
     workspaceAction: "reused-agents-repository",
-    message: `CCE \u5DF2\u786E\u8BA4 Cursor Agents \u4E2D\u7684\u5DE5\u4F5C\u533A ${lifecycle.projectPath || agentsWorkspace.workspace || ""} \u53EF\u4EE5\u4F7F\u7528\u3002`,
+    message: `CCE confirmed that workspace ${lifecycle.projectPath || agentsWorkspace.workspace || ""} is available in Cursor Agents.`,
     needsAction: null,
     nextStep: null,
     retryable: false
@@ -21590,8 +21591,8 @@ var CursorBridge = class {
         bindingPersisted: true,
         ready: false,
         status: lifecycle.status,
-        message: lifecycle.message || "CCE \u521D\u59CB\u5316\u5C1A\u672A\u5B8C\u6210\uFF0C\u4F46\u5DE5\u4F5C\u533A\u5DF2\u7ECF\u4FDD\u5B58\u3002",
-        nextStep: lifecycle.nextStep || "\u5904\u7406\u63D0\u793A\u540E\uFF0C\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
+        message: lifecycle.message || "CCE initialization is not complete, but the workspace binding was saved.",
+        nextStep: lifecycle.nextStep || "Resolve the reported condition, then run the same initialization command again.",
         retryable: lifecycle.retryable !== false,
         lifecycle
       };
@@ -21602,8 +21603,8 @@ var CursorBridge = class {
       bindingPersisted: true,
       ready: true,
       status: "ready",
-      message: `CCE \u5DF2\u51C6\u5907\u597D\u4F7F\u7528\u5DE5\u4F5C\u533A ${saved.projectPath}\u3002`,
-      nextStep: "\u73B0\u5728\u53EF\u4EE5\u76F4\u63A5\u4F7F\u7528 cursor_context_engine \u6216 cursor_do\u3002",
+      message: `CCE is ready to use workspace ${saved.projectPath}.`,
+      nextStep: "You can now use cursor_context_engine or cursor_do directly.",
       lifecycle: this._lastLifecycle
     };
   }
@@ -21728,10 +21729,10 @@ var CursorBridge = class {
   }
   async contextEngine(query) {
     const text = String(query || "").trim();
-    if (!text) throw new Error("query \u4E0D\u80FD\u4E3A\u7A7A");
-    if (text.length > 2e4) throw new Error("query \u8FC7\u957F\uFF08\u6700\u5927 20000 \u5B57\u7B26\uFF09");
+    if (!text) throw new Error("query must not be empty");
+    if (text.length > 2e4) throw new Error("query exceeds the 20,000-character limit");
     if (this._hasGlobalReservation()) {
-      throw new Error("\u5B58\u5728 Stop \u672A\u786E\u8BA4\u7684\u5168\u5C40 Cursor \u5360\u7528\uFF1B\u8BF7\u5148\u5904\u7406 cursor_status \u4E2D\u7684 blockingTaskIds");
+      throw new Error("A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first");
     }
     await this._ensureCursor();
     const job = this._enqueue("context_engine", buildContextEnginePrompt(text), {
@@ -21755,24 +21756,24 @@ var CursorBridge = class {
       throw new Error("cursor_do is disabled by CURSOR_BRIDGE_DELEGATION=off; restart the MCP server without that setting to enable delegation");
     }
     const text = String(prompt || "").trim();
-    if (!text) throw new Error("prompt \u4E0D\u80FD\u4E3A\u7A7A");
-    if (text.length > 1e5) throw new Error("prompt \u8FC7\u957F\uFF08\u6700\u5927 100000 \u5B57\u7B26\uFF09");
+    if (!text) throw new Error("prompt must not be empty");
+    if (text.length > 1e5) throw new Error("prompt exceeds the 100,000-character limit");
     if (this._hasGlobalReservation()) {
-      throw new Error("\u5B58\u5728 Stop \u672A\u786E\u8BA4\u7684\u5168\u5C40 Cursor \u5360\u7528\uFF1B\u5728\u663E\u5F0F\u6062\u590D\u6216\u91CA\u653E\u524D\u7981\u6B62\u63D0\u4EA4\u65B0\u4EFB\u52A1");
+      throw new Error("A global Cursor reservation has an unconfirmed Stop state; no new task may be submitted until it is explicitly recovered or released");
     }
     await this._ensureCursor();
     const execution = String(options.execution || "fifo");
     if (execution !== "fifo" && execution !== "parallel_agent") {
-      throw new Error(`execution \u4E0D\u652F\u6301 ${execution}\uFF1B\u53EA\u80FD\u662F fifo \u6216 parallel_agent`);
+      throw new Error(`Unsupported execution value ${execution}; expected fifo or parallel_agent`);
     }
     const readOnly = options.readOnly === true;
     const timeoutMs = Math.max(3e4, Math.min(9e5, Number(options.timeoutMs || 6e5)));
     const allowedPaths = Array.isArray(options.allowedPaths) ? options.allowedPaths.map((x) => String(x).trim()).filter(Boolean) : [];
     if (readOnly && allowedPaths.length > 0) {
-      throw new Error("read_only=true \u4E0E allowed_paths \u4E0D\u80FD\u540C\u65F6\u4F7F\u7528\uFF1B\u53EA\u8BFB\u4EFB\u52A1\u4E0D\u5F97\u58F0\u660E\u5199\u5165\u8303\u56F4");
+      throw new Error("read_only=true cannot be combined with allowed_paths because a read-only task cannot declare a write scope");
     }
     if (execution === "parallel_agent" && !readOnly && allowedPaths.length === 0) {
-      throw new Error("parallel_agent \u5199\u4EFB\u52A1\u5FC5\u987B\u63D0\u4F9B allowed_paths\uFF1B\u7EAF\u8BFB\u53D6\u4EFB\u52A1\u8BF7\u663E\u5F0F\u8BBE\u7F6E read_only=true");
+      throw new Error("A parallel_agent write task must provide allowed_paths; set read_only=true explicitly for a read-only task");
     }
     if (execution === "parallel_agent" && !readOnly) {
       this._validateParallelAllowedPaths(allowedPaths);
@@ -21780,11 +21781,11 @@ var CursorBridge = class {
     }
     const contract = String(options.completionContract || "").trim();
     let fullPrompt = text;
-    if (readOnly) fullPrompt += "\n\n\u53EA\u8BFB\u8FB9\u754C\uFF1A\u4E0D\u5F97\u4FEE\u6539\u3001\u521B\u5EFA\u6216\u5220\u9664\u4EFB\u4F55\u6587\u4EF6\uFF0C\u4E0D\u5F97\u6267\u884C\u4F1A\u6539\u53D8\u5DE5\u4F5C\u533A\u72B6\u6001\u7684\u547D\u4EE4\u3002";
+    if (readOnly) fullPrompt += "\n\nRead-only boundary: Do not modify, create, or delete files, and do not run commands that change workspace state.";
     if (allowedPaths.length > 0) {
-      fullPrompt += "\n\n\u5141\u8BB8\u4FEE\u6539\u8303\u56F4\uFF08\u4E0D\u5F97\u8D8A\u754C\uFF09\uFF1A\n" + allowedPaths.map((x) => "- " + x).join("\n");
+      fullPrompt += "\n\nAllowed modification scope (do not cross this boundary):\n" + allowedPaths.map((x) => "- " + x).join("\n");
     }
-    fullPrompt += contract ? "\n\n\u9A8C\u6536\u4E0E\u56DE\u62A5\u5408\u540C\uFF1A\n" + contract : DO_DEFAULT_CONTRACT;
+    fullPrompt += contract ? "\n\nAcceptance and reporting contract:\n" + contract : DO_DEFAULT_CONTRACT;
     const job = this._enqueue("do", fullPrompt, {
       timeoutMs,
       newChat: true,
@@ -21799,24 +21800,24 @@ var CursorBridge = class {
   }
   _assertNoParallelPathConflict(allowedPaths) {
     if (this._hasGlobalReservation()) {
-      throw new Error("\u5B58\u5728 Stop \u672A\u786E\u8BA4\u7684\u5168\u5C40 Cursor \u5360\u7528\uFF1B\u7981\u6B62\u63D0\u4EA4\u65B0\u7684 parallel_agent \u5199\u4EFB\u52A1");
+      throw new Error("A global Cursor reservation has an unconfirmed Stop state; no new parallel_agent write task may be submitted");
     }
     const live = [...this.tasks.values()].filter((job) => job.execution === "parallel_agent" && !job.readOnly && !isTerminalTask(job));
     for (const job of live) {
       const overlap = allowedPaths.some((a) => job.allowedPaths.some((b) => pathsOverlap(a, b)));
-      if (overlap) throw new Error(`parallel_agent allowed_paths \u4E0E\u4EFB\u52A1 ${job.id} \u91CD\u53E0\uFF1B\u8BF7\u6539\u7528 fifo \u6216\u62C6\u6210\u4E0D\u91CD\u53E0\u8DEF\u5F84`);
+      if (overlap) throw new Error(`parallel_agent allowed_paths overlap task ${job.id}; use fifo or split the work into non-overlapping paths`);
     }
   }
   _validateParallelAllowedPaths(allowedPaths) {
     for (const raw of allowedPaths) {
       const slash = String(raw).replace(/\\/g, "/");
-      if (/[*?\[\]{}!]/.test(slash)) throw new Error(`parallel_agent allowed_paths \u4E0D\u63A5\u53D7 glob\uFF1A${raw}`);
+      if (/[*?\[\]{}!]/.test(slash)) throw new Error(`parallel_agent allowed_paths do not accept globs: ${raw}`);
       if (/^[a-zA-Z]:\//.test(slash) || slash.startsWith("/")) {
-        throw new Error(`parallel_agent allowed_paths \u5FC5\u987B\u4F7F\u7528\u5DE5\u4F5C\u533A\u76F8\u5BF9\u8DEF\u5F84\uFF1A${raw}`);
+        throw new Error(`parallel_agent allowed_paths must use workspace-relative paths: ${raw}`);
       }
       const normalized = normalizeAllowedPath(slash);
       if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
-        throw new Error(`parallel_agent allowed_paths \u4E0D\u5F97\u4E3A\u7A7A\u6216\u8D8A\u51FA\u5DE5\u4F5C\u533A\uFF1A${raw}`);
+        throw new Error(`parallel_agent allowed_paths must not be empty or escape the workspace: ${raw}`);
       }
     }
   }
@@ -21914,7 +21915,7 @@ var CursorBridge = class {
   }
   _cancelJob(job, reason, options = {}) {
     if (isTerminalTask(job)) return this._taskView(job, true);
-    const message = String(reason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88").trim() || "\u4EFB\u52A1\u5DF2\u53D6\u6D88";
+    const message = String(reason || "Task cancelled").trim() || "Task cancelled";
     this.queue = this.queue.filter((candidate) => candidate.id !== job.id);
     this.activeParallel.delete(job.id);
     this._invalidateParallelMonitor(job);
@@ -22040,9 +22041,9 @@ var CursorBridge = class {
           console.error("\u26A0\uFE0F " + rr.message + " | " + life);
           return;
         }
-        console.error("\u{1FA9F} cursor \u81EA\u6108\u62C9\u8D77\uFF1A" + (rr.message || rr.status) + " | " + life);
+        console.error("\u{1FA9F} Cursor self-healing launch: " + (rr.message || rr.status) + " | " + life);
       } catch (e) {
-        console.error("\u26A0\uFE0F cursor \u81EA\u6108\u5931\u8D25\uFF08CCE/\u59D4\u6258\u5DF2\u4E2D\u6B62\uFF0C\u907F\u514D\u9A71\u52A8\u9519\u8BEF\u5DE5\u4F5C\u533A\uFF09\uFF1A", e.message);
+        console.error("\u26A0\uFE0F Cursor self-healing failed; CCE or delegation was stopped to avoid driving the wrong workspace:", e.message);
         throw e;
       } finally {
         this._healing = null;
@@ -22105,7 +22106,7 @@ var CursorBridge = class {
                   this._cancelJob(job, job.cancelReason, { underlyingStopConfirmed: true });
                 } else {
                   job.cancelRequested = false;
-                  this._orphanParallelJob(job, new Error(`\u65E0\u6CD5\u786E\u8BA4 Cursor Agent \u5DF2\u505C\u6B62\uFF1A${stopped.error || stopped.state}`));
+                  this._orphanParallelJob(job, new Error(`Unable to confirm that the Cursor Agent stopped: ${stopped.error || stopped.state}`));
                   job.recoveryState = "cancel_unconfirmed";
                 }
               } else {
@@ -22120,19 +22121,19 @@ var CursorBridge = class {
         } catch (error2) {
           if (error2 && error2.cancelled || job.cancelRequested) {
             if (error2 && error2.stopConfirmed) {
-              this._cancelJob(job, job.cancelReason || error2.message || "\u4EFB\u52A1\u5DF2\u53D6\u6D88", {
+              this._cancelJob(job, job.cancelReason || error2.message || "Task cancelled", {
                 underlyingStopConfirmed: true
               });
             } else {
               job.cancelRequested = false;
-              this._orphanParallelJob(job, new Error("\u5DF2\u8BF7\u6C42\u53D6\u6D88\uFF0C\u4F46\u65E0\u6CD5\u786E\u8BA4 Cursor \u5DF2\u505C\u6B62\uFF1B\u5360\u7528\u7EE7\u7EED\u4FDD\u7559"));
+              this._orphanParallelJob(job, new Error("Cancellation was requested, but Cursor could not be confirmed stopped; the reservation remains held"));
               job.recoveryState = "cancel_unconfirmed";
             }
           } else if (error2 && error2.confirmedTerminal) {
             this.activeParallel.delete(job.id);
             this._failJob(job, error2);
           } else if (error2 && error2.sent) {
-            job.error = `\u53D1\u9001\u72B6\u6001\u4E0D\u786E\u5B9A\uFF0C\u7EE7\u7EED\u6309 agentId \u76D1\u63A7\uFF1A${error2.message}`;
+            job.error = `Submission state is uncertain; monitoring continues by agentId: ${error2.message}`;
             if (job.agentId) {
               job.phase = "running";
               job.reservationScope = job.readOnly ? "agent" : "paths";
@@ -22192,7 +22193,7 @@ var CursorBridge = class {
         await this._bindFifoComposerIdentity(c, options);
         this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
-        if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("\u586B\u5165\u67E5\u8BE2\u5931\u8D25\uFF08\u8F93\u5165\u6846\u72B6\u6001\u5F02\u5E38\uFF09");
+        if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("Failed to enter the query because the input state was invalid");
         await sleep2(450);
         this._throwIfCancelledBeforeSend(options);
         let baseline = { messageCount: 0 };
@@ -22233,7 +22234,7 @@ var CursorBridge = class {
   }
   _throwIfCancelledBeforeSend(job) {
     if (!job || !job.cancelRequested || job.sendState === "dispatching" || job.sendState === "sent") return;
-    const error2 = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
+    const error2 = new Error(job.cancelReason || "Task cancelled");
     error2.cancelled = true;
     error2.stopConfirmed = true;
     error2.preSend = true;
@@ -22251,7 +22252,7 @@ var CursorBridge = class {
       await sleep2(1300);
       vis = await evalJS(c, EXPR_VISIBLE);
     }
-    if (!vis) throw new Error("\u65E0\u6CD5\u6253\u5F00 Cursor chat/agent \u8F93\u5165\u9762\u677F\u3002Cursor \u662F\u5426\u767B\u5F55\u4E14\u7A97\u53E3\u6B63\u5E38\uFF1F");
+    if (!vis) throw new Error("Unable to open the Cursor chat or agent input panel. Confirm that Cursor is signed in and its window is available.");
   }
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
   // 而非新建（aria 标注 "New Agent (Ctrl+N) / [Alt] Replace Agent"）。2026-06-08 实测回复区 markdown DOM 清空
@@ -22303,10 +22304,10 @@ var CursorBridge = class {
     }
   }
   async _readAgentEntries(c, keepOpen = false) {
-    if (!await this._ensureHistoryOpen(c)) throw new Error("Cursor Agent \u5217\u8868\u9002\u914D\u5668\u4E0D\u53EF\u7528");
+    if (!await this._ensureHistoryOpen(c)) throw new Error("Cursor Agent list adapter is unavailable");
     try {
       const snapshot = JSON.parse(await evalJS(c, EXPR_HISTORY_ENTRIES));
-      if (!snapshot.ok) throw new Error(snapshot.error || "Agent History React adapter \u4E0D\u53EF\u7528");
+      if (!snapshot.ok) throw new Error(snapshot.error || "Agent History React adapter is unavailable");
       return snapshot.entries || [];
     } finally {
       if (!keepOpen) await this._closeHistory(c);
@@ -22402,7 +22403,7 @@ var CursorBridge = class {
         if (await accepted()) return "button";
       }
     }
-    const error2 = new Error(`Cursor \u672A\u63A5\u53D7\u63D0\u4EA4\uFF08submit_not_accepted: ${clicked || "unknown"}\uFF09\uFF1B\u63D0\u793A\u4ECD\u5728\u8F93\u5165\u6846\u4E2D\uFF0C\u672A\u521B\u5EFA\u5B64\u513F\u4EFB\u52A1`);
+    const error2 = new Error(`Cursor did not accept the submission (submit_not_accepted: ${clicked || "unknown"}); the prompt remains in the input and no orphan task was created`);
     error2.confirmedNotSent = true;
     throw error2;
   }
@@ -22439,7 +22440,7 @@ var CursorBridge = class {
       try {
         before = await this._readAgentEntries(c);
       } catch (e) {
-        return { fallbackReason: `parallel_agent \u524D\u7F6E\u80FD\u529B\u4E0D\u53EF\u7528\uFF1A${e.message}` };
+        return { fallbackReason: `parallel_agent prerequisite is unavailable: ${e.message}` };
       }
       const previousSelectedId = (before.find((e) => e.isSelected) || {}).id || null;
       this._throwIfCancelledBeforeSend(job);
@@ -22448,12 +22449,12 @@ var CursorBridge = class {
         createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath }) : await this._clickNewAgent(c, false);
       } catch (error2) {
         if (isAgentsWorkspaceBindError(error2)) {
-          return { fallbackReason: "Agents Window \u65E0\u6CD5\u7ED1\u5B9A\u5F53\u524D\u4ED3\u5E93\uFF0C\u5DF2\u5728\u53D1\u9001\u524D\u964D\u7EA7 FIFO / workbench" };
+          return { fallbackReason: "Agents Window could not bind the current repository; downgraded to FIFO/workbench before submission" };
         }
         throw error2;
       }
       if (!createdForWorkspace) {
-        return { fallbackReason: "\u627E\u4E0D\u5230 Cursor New Agent \u6309\u94AE\uFF0C\u5DF2\u5728\u53D1\u9001\u524D\u964D\u7EA7 FIFO" };
+        return { fallbackReason: "Cursor New Agent button was not found; downgraded to FIFO before submission" };
       }
       let agent = null;
       for (let i = 0; i < 5 && !agent; i++) {
@@ -22471,7 +22472,7 @@ var CursorBridge = class {
       await this._ensureChatPanel(c);
       this._throwIfCancelledBeforeSend(job);
       const filled = await evalJS(c, exprFill(job.prompt));
-      if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("parallel_agent \u586B\u5165\u4EFB\u52A1\u5931\u8D25");
+      if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("Failed to enter the parallel_agent task");
       await sleep2(350);
       this._throwIfCancelledBeforeSend(job);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
@@ -22497,7 +22498,7 @@ var CursorBridge = class {
         }
       }
       if (!agent) {
-        const e = new Error("\u4EFB\u52A1\u53EF\u80FD\u5DF2\u53D1\u9001\uFF0C\u4F46\u65E0\u6CD5\u4ECE Agent History \u6355\u83B7\u552F\u4E00 agentId\uFF1B\u5DF2\u4FDD\u7559\u5360\u7528\uFF0C\u7981\u6B62\u81EA\u52A8\u91CD\u53D1");
+        const e = new Error("The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden");
         e.sent = true;
         throw e;
       }
@@ -22564,12 +22565,12 @@ var CursorBridge = class {
         transientErrors = 0;
       } catch (e) {
         transientErrors++;
-        if (transientErrors >= 45) throw new Error(`\u8FDE\u7EED\u65E0\u6CD5\u8BFB\u53D6 Agent History\uFF1A${e.message}`);
+        if (transientErrors >= 45) throw new Error(`Agent History remained unreadable: ${e.message}`);
         continue;
       }
       if (!entry) {
         missingPolls++;
-        if (missingPolls >= 45) throw new Error(`Agent History \u4E2D\u6301\u7EED\u4E22\u5931 ${job.agentId}`);
+        if (missingPolls >= 45) throw new Error(`Agent History continued to omit ${job.agentId}`);
         continue;
       }
       missingPolls = 0;
@@ -22588,19 +22589,19 @@ var CursorBridge = class {
         completedStable = 0;
         if (terminalErrorStable >= 2) {
           if (terminalClass === "needs_attention") {
-            throw new Error(`Cursor Agent ${job.agentId} \u6B63\u5728\u7B49\u5F85\u7528\u6237\u5904\u7406`);
+            throw new Error(`Cursor Agent ${job.agentId} is waiting for user action`);
           }
           if (terminalClass === "cancelled") {
             await this._withJobLock(job, async () => {
               if (!this._monitorOwns(job, generation)) return;
               job.terminalEvidence = `stable_history_icon:${entry.icon}`;
-              this._cancelJob(job, `Cursor Agent ${job.agentId} \u5DF2\u663E\u793A\u7A33\u5B9A\u53D6\u6D88\u7EC8\u6001`, {
+              this._cancelJob(job, `Cursor Agent ${job.agentId} reached a stable cancelled terminal state`, {
                 underlyingStopConfirmed: true
               });
             });
             return;
           }
-          const error2 = new Error(`Cursor Agent ${job.agentId} \u663E\u793A\u7A33\u5B9A\u5931\u8D25\u72B6\u6001 ${entry.icon}`);
+          const error2 = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${entry.icon}`);
           error2.confirmedTerminal = true;
           throw error2;
         }
@@ -22629,7 +22630,7 @@ var CursorBridge = class {
               if (!this._monitorOwns(job, generation)) return "stale";
               collectionAttempts++;
               lastCollectionError = error2.message;
-              job.error = `\u7B2C ${collectionAttempts} \u6B21\u56DE\u6536\u672A\u5B8C\u6210\uFF0C\u7EE7\u7EED\u91CD\u8BD5\uFF1A${error2.message}`;
+              job.error = `Result collection attempt ${collectionAttempts} did not complete; retrying: ${error2.message}`;
               job.phase = "running";
               return "retry";
             }
@@ -22644,8 +22645,8 @@ var CursorBridge = class {
       }
     }
     if (!this._monitorOwns(job, generation)) return;
-    const detail = lastCollectionError ? `\uFF1B\u6700\u540E\u56DE\u6536\u9519\u8BEF\uFF1A${lastCollectionError}` : "";
-    throw new Error(`Cursor parallel_agent \u4EFB\u52A1\u8D85\u65F6 (${job.timeoutMs}ms)${detail}`);
+    const detail = lastCollectionError ? `; last collection error: ${lastCollectionError}` : "";
+    throw new Error(`Cursor parallel_agent task timed out (${job.timeoutMs}ms)${detail}`);
   }
   async _waitForSelectedAgent(c, agentId, timeoutMs = 15e3) {
     const deadline = Date.now() + timeoutMs;
@@ -22655,7 +22656,7 @@ var CursorBridge = class {
       if (target && target.isSelected) return true;
       await sleep2(250);
     }
-    throw new Error(`\u6253\u5F00 ${agentId} \u540E\u672A\u786E\u8BA4\u5176\u6210\u4E3A\u5F53\u524D\u9009\u4E2D Agent`);
+    throw new Error(`After opening ${agentId}, it could not be confirmed as the selected Agent`);
   }
   async _collectParallelAgent(job) {
     const page = await findPage({ targetId: job.targetId, purpose: "parallel_agent" });
@@ -22666,7 +22667,7 @@ var CursorBridge = class {
       const entries = await this._readAgentEntries(c, true);
       previousSelectedId = (entries.find((e) => e.isSelected) || {}).id || null;
       const opened = await evalJS(c, exprOpenAgent(job.agentId));
-      if (opened !== "OPENED") throw new Error(`\u65E0\u6CD5\u6253\u5F00 ${job.agentId}: ${opened}`);
+      if (opened !== "OPENED") throw new Error(`Unable to open ${job.agentId}: ${opened}`);
       await this._closeHistory(c);
       await this._waitForSelectedAgent(c, job.agentId);
       let answer = "";
@@ -22693,7 +22694,7 @@ var CursorBridge = class {
         }
         await sleep2(300);
       }
-      if (!answer) throw new Error(`\u5DF2\u6253\u5F00 ${job.agentId}\uFF0C\u4F46\u672A\u627E\u5230\u52A9\u624B\u6700\u7EC8\u56DE\u590D`);
+      if (!answer) throw new Error(`${job.agentId} was opened, but no final assistant reply was found`);
       if (previousSelectedId && previousSelectedId !== job.agentId) {
         if (await this._ensureHistoryOpen(c)) {
           await evalJS(c, exprOpenAgent(previousSelectedId));
@@ -22709,7 +22710,7 @@ var CursorBridge = class {
   }
   _reapWithoutResult(job, error2, evidence) {
     if (isTerminalTask(job)) return;
-    const message = error2 instanceof Error ? error2.message : String(error2 || "Cursor Agent \u5DF2\u7EC8\u6B62\uFF0C\u4F46\u6700\u7EC8\u56DE\u590D\u65E0\u6CD5\u56DE\u6536");
+    const message = error2 instanceof Error ? error2.message : String(error2 || "The Cursor Agent terminated, but its final reply could not be collected");
     job.status = "needs_attention";
     job.phase = "orphaned";
     job.finishedAt = null;
@@ -22753,16 +22754,16 @@ var CursorBridge = class {
     } catch (error2) {
       job.lastRecoveryAt = (/* @__PURE__ */ new Date()).toISOString();
       job.recoveryState = "history_unavailable";
-      job.error = `\u91CD\u65B0\u68C0\u67E5 Agent History \u5931\u8D25\uFF1A${error2.message}`;
+      job.error = `Failed to recheck Agent History: ${error2.message}`;
       return { stable: false, error: error2.message, entry: null };
     }
     job.lastRecoveryAt = (/* @__PURE__ */ new Date()).toISOString();
     if (!first || !second) {
       job.recoveryState = "agent_missing";
-      return { stable: false, error: "Agent History \u4E2D\u672A\u627E\u5230\u7ED1\u5B9A\u7684 agentId", entry: second || first || null };
+      return { stable: false, error: "The bound agentId was not found in Agent History", entry: second || first || null };
     }
     const stable = first.id === second.id && first.showSpinner === second.showSpinner && String(first.icon || "") === String(second.icon || "");
-    return { stable, entry: second, error: stable ? null : "Agent History \u72B6\u6001\u5C1A\u672A\u7A33\u5B9A" };
+    return { stable, entry: second, error: stable ? null : "Agent History state is not yet stable" };
   }
   async _reapParallelJob(job, options = {}) {
     if (!job) return { changed: false, state: "missing", task: null };
@@ -22796,11 +22797,11 @@ var CursorBridge = class {
     const terminalClass = classifyParallelTerminalIcon(icon);
     if (terminalClass === "cancelled") {
       job.terminalEvidence = `stable_history_icon:${icon || "cancelled"}`;
-      const task = this._cancelJob(job, `Cursor Agent ${job.agentId} \u5DF2\u663E\u793A\u53D6\u6D88\u7EC8\u6001`, { underlyingStopConfirmed: true });
+      const task = this._cancelJob(job, `Cursor Agent ${job.agentId} reached a cancelled terminal state`, { underlyingStopConfirmed: true });
       return { changed: true, state: "cancelled", task };
     }
     if (terminalClass === "failed") {
-      const error2 = new Error(`Cursor Agent ${job.agentId} \u663E\u793A\u7A33\u5B9A\u5931\u8D25\u72B6\u6001 ${icon}`);
+      const error2 = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${icon}`);
       job.terminalEvidence = `stable_history_icon:${icon}`;
       this.activeParallel.delete(job.id);
       this._failJob(job, error2);
@@ -22825,7 +22826,7 @@ var CursorBridge = class {
           changed: false,
           state: "terminal_uncollected",
           error: error2.message,
-          next: "\u5E95\u5C42 Agent \u5DF2\u663E\u793A\u7A33\u5B9A\u5B8C\u6210\uFF0C\u4F46\u6700\u7EC8\u56DE\u590D\u5C1A\u672A\u53D6\u56DE\uFF1B\u53EF\u518D\u6B21 reap \u91CD\u8BD5\uFF0C\u6216\u5728\u63A5\u53D7\u4E22\u5931\u56DE\u590D\u65F6\u663E\u5F0F abandon\u3002",
+          next: "The underlying Agent is stably complete, but its final reply has not been collected. Retry with reap, or explicitly abandon only if a missing reply is acceptable.",
           task: this._taskView(job, true)
         };
       }
@@ -22996,23 +22997,23 @@ var CursorBridge = class {
   }
   async taskControl(taskId, options = {}) {
     const id = String(taskId || "").trim();
-    if (!id) throw new Error("task_id \u4E0D\u80FD\u4E3A\u7A7A");
+    if (!id) throw new Error("task_id must not be empty");
     const job = this.tasks.get(id);
     if (!job) return { found: false, taskId: id };
     const action = String(options.action || "reap").trim().toLowerCase();
     if (!["reap", "cancel", "abandon"].includes(action)) {
-      throw new Error(`\u4E0D\u652F\u6301 action=${action}\uFF1B\u53EA\u80FD\u662F reap\u3001cancel \u6216 abandon`);
+      throw new Error(`Unsupported action=${action}; expected reap, cancel, or abandon`);
     }
     const reason = String(options.reason || "").trim();
     const expectedAgentId = String(options.expectedAgentId || "").trim();
-    if (action !== "reap" && options.confirm !== true) throw new Error(`${action} \u9700\u8981 confirm=true`);
+    if (action !== "reap" && options.confirm !== true) throw new Error(`${action} requires confirm=true`);
     const submittingCancelWithoutPublishedId = action === "cancel" && job.phase === "submitting" && !expectedAgentId;
     if (job.agentId && action !== "reap" && !submittingCancelWithoutPublishedId && expectedAgentId !== job.agentId) {
-      throw new Error(`expected_agent_id \u4E0D\u5339\u914D\uFF1B\u4EFB\u52A1\u7ED1\u5B9A\u7684\u662F ${job.agentId}`);
+      throw new Error(`expected_agent_id does not match; the task is bound to ${job.agentId}`);
     }
     if (action === "cancel" && !isTerminalTask(job)) {
       job.cancelRequested = true;
-      job.cancelReason = reason || (job.execution === "parallel_agent" ? "\u7528\u6237\u8BF7\u6C42\u53D6\u6D88 Cursor Agent" : "\u7528\u6237\u8BF7\u6C42\u53D6\u6D88 FIFO \u4EFB\u52A1");
+      job.cancelReason = reason || (job.execution === "parallel_agent" ? "User requested Cursor Agent cancellation" : "User requested FIFO task cancellation");
       job.cancelRequestSeq = Number(job.cancelRequestSeq || 0) + 1;
     }
     return this._withJobLock(job, () => this._taskControlLocked(job, action, {
@@ -23025,7 +23026,7 @@ var CursorBridge = class {
     if (action === "reap") {
       const result = await this._reapParallelJobLocked(job, { reattach: true });
       if (result.state === "not_parallel_reservation" && job.phase === "orphaned") {
-        result.next = job.agentId ? "FIFO \u5DF2\u7ED1\u5B9A agentId\uFF0C\u4F46 reap \u53EA\u670D\u52A1 parallel_agent\uFF1B\u8BF7\u7528 cancel \u5B9A\u5411\u505C\u6B62\uFF0C\u6216\u5728\u786E\u8BA4\u540E abandon\u3002" : "FIFO \u5B64\u513F\u6CA1\u6709\u53EF\u5B89\u5168\u91CD\u7ED1\u7684 agentId\uFF1B\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u663E\u5F0F abandon\u3002";
+        result.next = job.agentId ? "FIFO is bound to an agentId, but reap applies only to parallel_agent. Use cancel for a targeted stop, or abandon after confirmation." : "The FIFO orphan has no agentId that can be safely rebound. Confirm that it stopped in the Cursor UI before explicitly abandoning it.";
       }
       return { found: true, action, ...result };
     }
@@ -23034,18 +23035,18 @@ var CursorBridge = class {
     }
     if (action === "abandon") {
       if (options.acknowledgeMayStillWrite !== true) {
-        throw new Error("abandon \u9700\u8981 acknowledge_may_still_write=true");
+        throw new Error("abandon requires acknowledge_may_still_write=true");
       }
-      if (!options.reason) throw new Error("abandon \u5FC5\u987B\u63D0\u4F9B\u975E\u7A7A reason");
+      if (!options.reason) throw new Error("abandon requires a non-empty reason");
       if (job.phase !== "orphaned" && job.phase !== "cancelling" && job.status !== "needs_attention") {
-        throw new Error("abandon \u53EA\u5141\u8BB8\u7528\u4E8E needs_attention/orphaned/cancelling \u4EFB\u52A1");
+        throw new Error("abandon is allowed only for tasks in needs_attention, orphaned, or cancelling state");
       }
       return {
         found: true,
         action,
         changed: true,
         state: "abandoned",
-        warning: "Bridge \u5DF2\u91CA\u653E\u5360\u7528\uFF0C\u4F46\u65E0\u6CD5\u8BC1\u660E\u5E95\u5C42 Cursor Agent \u5DF2\u505C\u6B62\uFF1B\u5B83\u4ECD\u53EF\u80FD\u7EE7\u7EED\u5199\u6587\u4EF6\u3002",
+        warning: "The Bridge released its reservation, but cannot prove that the underlying Cursor Agent stopped; it may still write files.",
         task: this._abandonJob(job, options.reason)
       };
     }
@@ -23055,7 +23056,7 @@ var CursorBridge = class {
         action,
         changed: true,
         state: "cancelled",
-        task: this._cancelJob(job, options.reason || "\u6392\u961F\u4EFB\u52A1\u5DF2\u53D6\u6D88", { underlyingStopConfirmed: true })
+        task: this._cancelJob(job, options.reason || "Queued task cancelled", { underlyingStopConfirmed: true })
       };
     }
     if (job.phase === "orphaned" && !job.agentId) {
@@ -23065,7 +23066,7 @@ var CursorBridge = class {
         action,
         changed: false,
         state: "cancel_unconfirmed",
-        next: "\u4EFB\u52A1\u5DF2\u8FDB\u5165\u65E0\u53EF\u5B89\u5168\u5B9A\u5411\u8EAB\u4EFD\u7684\u5B64\u513F\u72B6\u6001\uFF0C\u5E76\u7EE7\u7EED\u4FDD\u7559\u5168\u5C40\u5360\u7528\u3002\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u663E\u5F0F abandon\u3002",
+        next: "The task is orphaned without a safely targetable identity and still holds the global reservation. Confirm that it stopped in the Cursor UI before explicitly abandoning it.",
         task: this._taskView(job, true)
       };
     }
@@ -23077,7 +23078,7 @@ var CursorBridge = class {
         action,
         changed: true,
         state: job.recoveryState,
-        next: "Bridge \u5DF2\u9501\u5B58\u53D6\u6D88\u8BF7\u6C42\uFF1B\u53D1\u9001\u524D\u4F1A\u4E2D\u6B62\uFF0C\u82E5\u6D88\u606F\u5DF2\u53D1\u51FA\u5219\u4F1A\u5148\u7ED1\u5B9A agentId \u518D\u5B9A\u5411\u505C\u6B62\u3002",
+        next: "The Bridge latched the cancellation request. It will stop before submission, or bind the agentId and issue a targeted stop if the message was already sent.",
         task: this._taskView(job, true)
       };
     }
@@ -23121,14 +23122,14 @@ var CursorBridge = class {
       job.phase = "orphaned";
       job.cancelRequested = false;
       job.recoveryState = "cancel_unconfirmed";
-      job.error = `\u65E0\u6CD5\u786E\u8BA4 Cursor Agent \u5DF2\u505C\u6B62\uFF1A${stopped.error || stopped.state}`;
+      job.error = `Unable to confirm that the Cursor Agent stopped: ${stopped.error || stopped.state}`;
       return {
         found: true,
         action,
         changed: false,
         state: "cancel_unconfirmed",
         stop: stopped,
-        next: "\u786E\u8BA4 Cursor UI \u5DF2\u505C\u6B62\u540E\uFF0C\u53EF\u518D\u6B21 cancel\uFF1B\u53EA\u6709\u660E\u786E\u627F\u62C5\u98CE\u9669\u65F6\u624D\u4F7F\u7528 abandon\u3002",
+        next: "After confirming that the Cursor UI has stopped, retry cancel. Use abandon only when explicitly accepting the risk.",
         task: this._taskView(job, true)
       };
     }
@@ -23140,7 +23141,7 @@ var CursorBridge = class {
         action,
         changed: true,
         state: "cancel_pending_stop",
-        next: "Bridge \u5DF2\u9501\u5B58\u53D6\u6D88\u8BF7\u6C42\uFF1B\u8FD0\u884C\u4E2D\u7684 FIFO \u5C06\u6309\u5DF2\u7ED1\u5B9A\u7684 agentId \u5B9A\u5411\u505C\u6B62\uFF0C\u4E0D\u4F1A\u6A21\u7CCA\u70B9\u51FB Stop\u3002",
+        next: "The Bridge latched the cancellation request. The running FIFO task will be stopped through its bound agentId without clicking an ambiguous Stop control.",
         task: this._taskView(job, true)
       };
     }
@@ -23151,7 +23152,7 @@ var CursorBridge = class {
       action,
       changed: true,
       state: "cancel_pending_fifo",
-      next: "FIFO \u6CA1\u6709\u53EF\u5B89\u5168\u5B9A\u5411\u7684 agentId\uFF1BBridge \u4E0D\u4F1A\u6A21\u7CCA\u70B9\u51FB Stop\u3002\u4EFB\u52A1\u4F1A\u8F6C\u4E3A\u5168\u5C40\u5B64\u513F\u5360\u7528\uFF0C\u4EBA\u5DE5\u786E\u8BA4\u505C\u6B62\u540E\u518D abandon\u3002",
+      next: "FIFO has no safely targetable agentId, so the Bridge will not click an ambiguous Stop control. The task becomes a global orphan reservation; confirm that it stopped manually before abandoning it.",
       task: this._taskView(job, true)
     };
   }
@@ -23185,7 +23186,7 @@ var CursorBridge = class {
         await this._closeHistory(c);
         c.close();
       }
-    }).catch((e) => console.error("\u26A0\uFE0F \u6062\u590D\u539F Cursor Agent \u5931\u8D25\uFF1A" + e.message));
+    }).catch((e) => console.error("\u26A0\uFE0F Failed to restore the original Cursor Agent: " + e.message));
   }
   async _waitComplete(c, timeoutMs = QUERY_TIMEOUT, baselineCount = 0, job = null, providerErrorBaseline = "") {
     const start = Date.now();
@@ -23203,14 +23204,14 @@ var CursorBridge = class {
           } catch (error2) {
             stopped = { confirmed: false, state: "stop_error", error: error2.message };
           }
-          const e2 = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
+          const e2 = new Error(job.cancelReason || "Task cancelled");
           e2.cancelled = true;
           e2.stopConfirmed = stopped.confirmed === true;
           e2.stop = stopped;
           if (stopped.confirmed) job.terminalEvidence = `targeted_stop:${job.agentId}`;
           throw e2;
         }
-        const e = new Error(job.cancelReason || "\u4EFB\u52A1\u5DF2\u53D6\u6D88");
+        const e = new Error(job.cancelReason || "Task cancelled");
         e.cancelled = true;
         e.stopConfirmed = false;
         throw e;
@@ -23254,8 +23255,8 @@ var CursorBridge = class {
       sawStop,
       baselineCount
     })) return ans;
-    const taskHint = job && job.id ? `\uFF1Btask_id=${job.id}\uFF0C\u8BF7\u7528 cursor_status(task_id) \u68C0\u67E5\u5E76\u6309\u6062\u590D\u6D41\u7A0B\u5904\u7406` : "";
-    throw new Error(`Cursor \u4EFB\u52A1\u8D85\u65F6 (${timeoutMs}ms)\uFF0C\u5C1A\u672A\u786E\u8BA4\u751F\u6210\u5DF2\u505C\u6B62\u5E76\u4EA7\u751F\u5B8C\u6574\u52A9\u624B\u56DE\u590D${taskHint}`);
+    const taskHint = job && job.id ? `; task_id=${job.id}. Inspect it with cursor_status(task_id) and follow the recovery flow` : "";
+    throw new Error(`Cursor task timed out (${timeoutMs}ms) before generation was confirmed stopped with a complete assistant reply${taskHint}`);
   }
   _taskView(job, includeResult = false) {
     const view = {
@@ -23298,9 +23299,9 @@ var CursorBridge = class {
     if (includeResult || isTerminalTask(job)) view.result = job.result;
     if (job.phase === "orphaned") {
       if (job.recoveryState === "terminal_result_uncollected") {
-        view.attention = "Agent History \u5DF2\u8BC1\u660E\u5E95\u5C42\u4EFB\u52A1\u7ED3\u675F\uFF0C\u4F46\u6700\u7EC8\u56DE\u590D\u5C1A\u672A\u53D6\u56DE\uFF1B\u518D\u6B21 reap \u91CD\u8BD5\uFF0C\u6216\u5728\u63A5\u53D7\u4E22\u5931\u56DE\u590D\u65F6\u663E\u5F0F abandon\u3002";
+        view.attention = "Agent History proves that the underlying task ended, but its final reply has not been collected. Retry with reap, or explicitly abandon only if a missing reply is acceptable.";
       } else {
-        view.attention = job.agentId ? job.execution === "parallel_agent" ? "\u7528 cursor_task_control(action=reap) \u663E\u5F0F\u91CD\u67E5\u539F agentId\uFF1B\u9700\u8981\u505C\u6B62\u65F6\u7528 cancel\uFF1B\u53EA\u6709\u5DF2\u4EBA\u5DE5\u786E\u8BA4\u4E14\u63A5\u53D7\u6B8B\u4F59\u5199\u5165\u98CE\u9669\u65F6\u624D abandon\u3002" : "FIFO \u5DF2\u7ED1\u5B9A agentId\uFF1B\u7528 cursor_task_control(action=cancel) \u5E76\u4F20\u5165\u7CBE\u786E expected_agent_id \u5B9A\u5411\u505C\u6B62\u3002" : "\u8BE5\u5B64\u513F\u6CA1\u6709\u53EF\u5B89\u5168\u91CD\u7ED1\u7684 agentId\uFF0C\u5E76\u5168\u5C40\u963B\u65AD\u65B0\u59D4\u6258\uFF1B\u8BF7\u5148\u5728 Cursor UI \u4EBA\u5DE5\u786E\u8BA4\u5DF2\u505C\u6B62\uFF0C\u518D\u7528 cursor_task_control(action=abandon) \u663E\u5F0F\u91CA\u653E\u3002";
+        view.attention = job.agentId ? job.execution === "parallel_agent" ? "Use cursor_task_control(action=reap) to recheck the original agentId. Use cancel when a stop is needed, and abandon only after manual confirmation while accepting residual write risk." : "FIFO is bound to an agentId. Use cursor_task_control(action=cancel) with the exact expected_agent_id for a targeted stop." : "This orphan has no agentId that can be safely rebound and globally blocks new delegation. Confirm that it stopped in the Cursor UI, then explicitly release it with cursor_task_control(action=abandon).";
       }
     }
     return view;
@@ -23441,7 +23442,7 @@ function buildToolDefinitions(bridgeInstance) {
 var ADAPTER_START_CWD = process.cwd();
 var bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 var server = new Server(
-  { name: "cursor-bridge", version: "5.4.2" },
+  { name: "cursor-bridge", version: "5.5.0" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {
@@ -23555,26 +23556,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       const r = await ensureBridgeCursor(bridge, "cursor_launch");
       return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
-    throw new Error(`\u672A\u77E5\u5DE5\u5177: ${name}`);
+    throw new Error(`Unknown tool: ${name}`);
   } catch (error2) {
-    return { content: [{ type: "text", text: `\u9519\u8BEF: ${error2 instanceof Error ? error2.message : String(error2)}` }], isError: true };
+    return { content: [{ type: "text", text: `Error: ${error2 instanceof Error ? error2.message : String(error2)}` }], isError: true };
   }
 });
 async function main() {
-  console.error("\u{1F680} \u542F\u52A8 cursor-bridge\uFF08CDP \u76F4\u9A71 :" + CDP_PORT2 + "\uFF09...");
+  console.error("\u{1F680} Starting cursor-bridge (direct CDP on port " + CDP_PORT2 + ")...");
   const releasedCwd = releaseAdapterWorkingDirectory();
-  console.error(`\u{1F513} MCP \u5DE5\u4F5C\u76EE\u5F55\u5DF2\u79FB\u51FA\u63D2\u4EF6\u7F13\u5B58\uFF1A${releasedCwd}`);
+  console.error(`\u{1F513} MCP working directory released from the plugin cache: ${releasedCwd}`);
   const startupEnsure = shouldAutoLaunchCursor() ? ensureBridgeCursor(bridge, "adapter-startup").then((r) => {
     console.error(
-      "\u{1FA9F} \u542F\u52A8\u5373\u786E\u4FDD Cursor\uFF1A" + (r.message || r.status) + " | adapterPid=" + bridge._lastLifecycle.adapterPid + " supervisorPid=" + bridge._lastLifecycle.supervisorPid + " reused=" + bridge._lastLifecycle.reusedSupervisor + " reason=" + bridge._lastLifecycle.launchReason
+      "\u{1FA9F} Startup Cursor check: " + (r.message || r.status) + " | adapterPid=" + bridge._lastLifecycle.adapterPid + " supervisorPid=" + bridge._lastLifecycle.supervisorPid + " reused=" + bridge._lastLifecycle.reusedSupervisor + " reason=" + bridge._lastLifecycle.launchReason
     );
     return r;
   }).catch((error2) => {
-    console.error("\u26A0\uFE0F \u542F\u52A8\u5373\u62C9\u8D77 Cursor \u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u6309\u9700\u518D\u62C9\uFF09\uFF1A", error2.message);
+    console.error("\u26A0\uFE0F Startup Cursor launch failed; continuing and retrying on demand:", error2.message);
     return null;
   }) : Promise.resolve(null);
   await server.connect(new StdioServerTransport());
-  console.error("\u2705 MCP \u5DF2\u8FDE\u63A5\u3002");
+  console.error("\u2705 MCP connected.");
   void startupEnsure;
 }
 var isMain2 = import.meta.url === pathToFileURL2(process.argv[1] || "").href;
@@ -23582,7 +23583,7 @@ if (isMain2) {
   process.on("unhandledRejection", (r) => console.error("unhandledRejection:", r));
   process.on("SIGINT", () => process.exit(0));
   main().catch((e) => {
-    console.error("\u274C \u81F4\u547D\u9519\u8BEF:", e);
+    console.error("\u274C Fatal error:", e);
     process.exit(1);
   });
 }

@@ -28,6 +28,26 @@
 | **Cursor Bridge** | Let Codex, Claude Code, Grok Build, or Pi use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks | [Continue below](#cursor-bridge) |
 | **Grok Build Supervisor** | Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
+## Start one client and orchestrate the complete Cursor + Grok Build workflow
+
+Choose one orchestrator—**Codex (recommended)**, Claude Code, or Pi—and install both plugins when you want one conversation to coordinate Cursor and Grok Build together.
+
+```text
+Codex (recommended) / Claude Code / Pi
+              │
+       plans, routes, verifies
+          ┌───┴──────────────┐
+          ▼                  ▼
+    Cursor Bridge     Grok Build Supervisor
+   CCE + cursor_do       supervised Grok Build
+```
+
+- Start with `cursor_context_engine` for compact, source-anchored project understanding.
+- Use the now first-class `cursor_do` path for a bounded Cursor Agent task when delegated execution saves time; the orchestrator still reviews the real diff and tests.
+- Turn on `/grok_execute on` when Grok Build should execute while the orchestrator plans, monitors, handles questions, and verifies the result.
+
+Use one orchestrator for a workflow so task ownership stays clear. The plugins remain independent: install either one alone, or both for this combined path. Cursor Bridge can also still be installed directly in Grok Build for its standalone CCE and Cursor execution workflow.
+
 ## Grok Build Supervisor (New)
 
 **Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
@@ -58,11 +78,13 @@ Cursor Bridge does not inspect or manage your Cursor subscription. The models, q
 
 ## Quick start
 
-### Codex
+### Codex (recommended)
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 codex plugin add cursor-bridge@vanyangyang
+# Optional: add the Supervisor for the combined Cursor + Grok Build workflow
+codex plugin add grok-build-supervisor@vanyangyang
 ```
 
 ### Claude Code
@@ -70,6 +92,8 @@ codex plugin add cursor-bridge@vanyangyang
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
+# Optional: add the Supervisor for the combined Cursor + Grok Build workflow
+claude plugin install grok-build-supervisor@vanyangyang
 ```
 
 ### Grok Build
@@ -88,6 +112,8 @@ Grok keeps plugins off until you enable them. `--trust` is required so the plugi
 
 ```bash
 pi install npm:pi-cursor-bridge
+# Optional: add the Supervisor for the combined Cursor + Grok Build workflow
+pi install npm:pi-grok-build-supervisor
 ```
 
 Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, reload Grok as above, or restart Pi after installation. Pi automatically binds Cursor Bridge to the directory where Pi was started. Other hosts can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
@@ -123,12 +149,14 @@ Current Cursor compatibility target (Windows 11):
 
 Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.1 / Cursor 3.16.29 and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
-Supported hosts: **Codex**, **Claude Code**, and **Grok Build**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
+Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
-## Use it
+User-facing explanations follow the language of the current task unless the user explicitly asks for another language. Machine fields, states, paths, commands, IDs, and exact permission options remain stable and untranslated. English and Simplified Chinese are the maintained documentation languages; other languages are supported through runtime adaptation rather than separate translated manuals.
 
-- **Understand a project:** `cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships, then returns compact source anchors, coverage, gaps, and confidence.
-- **Delegate a bounded task:** `cursor_do` sends an explicitly scoped subtask to Cursor Agent and returns a task ID. The primary Agent remains responsible for reviewing the result and workspace changes.
+## Use CCE and `cursor_do`
+
+- **Start with project understanding:** `cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships, then returns compact source anchors, coverage, gaps, and confidence.
+- **Move to bounded execution with `cursor_do`:** send a clearly scoped Cursor Agent task and receive a stable task ID for collection and recovery. `cursor_do` is optional, but no longer hidden as an edge feature: use it whenever a bounded Cursor pass is the efficient execution path. The primary Agent remains responsible for reviewing the result, real workspace changes, and verification evidence.
 
 ## Full MCP tool reference
 
@@ -223,7 +251,7 @@ confidence: high
 <summary><strong>Workspace, Cursor UI, and lifecycle behavior</strong></summary>
 
 ```text
-Codex / Claude Code / Grok Build
+Codex / Claude Code / Grok Build / Pi
         │ MCP
         ▼
 Cursor Bridge adapter(s)
@@ -243,7 +271,7 @@ Cursor Agent + project index
 - `cursor_status` lists CDP page titles only. It does not inspect page DOM. CCE reloads a DOM-blank Agents page once. On Windows normal runtime, reusing an Agents Window also performs a throttled, non-activating native compositor refresh so a healthy DOM cannot remain behind a white Electron surface.
 - Stale target IDs are rejected when the title no longer matches the requested project, except for the Agents Window title `Cursor Agents`, which is a valid reusable target.
 - Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
-- On Windows, the supervisor survives an individual Codex, Claude Code, or Grok session closing.
+- On Windows, the supervisor survives an individual Codex, Claude Code, Grok Build, or Pi session closing.
 
 The path may be an existing project directory or `.code-workspace` file. Quoted paths, Windows UNC/extended paths, and macOS `~` paths are normalized; relative and unrelated file paths are rejected.
 

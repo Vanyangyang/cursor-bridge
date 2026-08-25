@@ -601,8 +601,8 @@ async function ensureCursorRunningLocal(options = {}) {
             windowGuard: windowGuard2,
             needsAction: "install_or_locate_cursor",
             retryable: true,
-            nextStep: "\u8BF7\u786E\u8BA4 Cursor \u5DF2\u5B89\u88C5\u5E76\u767B\u5F55\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-            message: `CCE \u5DF2\u8FDE\u63A5 Cursor\uFF0C\u4F46\u8FD8\u4E0D\u80FD\u6253\u5F00\u5DE5\u4F5C\u533A ${projectPath}\uFF0C\u56E0\u4E3A\u6CA1\u6709\u627E\u5230 Cursor \u7A0B\u5E8F\u3002`
+            nextStep: "Confirm that Cursor is installed and signed in. For a portable or custom installation, set CURSOR_EXE and run the same initialization command again.",
+            message: `CCE connected to Cursor but cannot open workspace ${projectPath} because the Cursor executable was not found.`
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
@@ -629,8 +629,8 @@ async function ensureCursorRunningLocal(options = {}) {
             cursorExecutableSource: cursorExecutable2.source,
             needsAction: "retry_initialization",
             retryable: true,
-            nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-            message: `Cursor \u5DF2\u6253\u5F00\u9879\u76EE\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
+            nextStep: "Wait for Cursor to finish opening the project, then run the same initialization command again.",
+            message: `Cursor opened the project, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`
           };
         }
         targetId2 = openedTarget2.id;
@@ -647,7 +647,7 @@ async function ensureCursorRunningLocal(options = {}) {
         windowGuard: windowGuard2,
         targetId: targetId2,
         workspaceAction,
-        message: workspaceAction === "reused-agents-window" ? `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u5DF2\u590D\u7528 Agents Window\uFF08${targetId2}\uFF09\uFF0C\u4E0D\u4F1A\u518D\u6253\u5F00 IDE \u65B0\u7A97\u53E3\u3002` : `CDP ${CDP_PORT} \u5DF2\u54CD\u5E94\u4E14\u662F Cursor\uFF1B\u76EE\u6807\u5DE5\u4F5C\u533A\u5DF2\u7ED1\u5B9A\u5230 CDP target ${targetId2 || "default"}\u3002`
+        message: workspaceAction === "reused-agents-window" ? `CDP ${CDP_PORT} responded as Cursor; Agents Window ${targetId2} was reused without opening another IDE window.` : `CDP ${CDP_PORT} responded as Cursor; the target workspace is bound to CDP target ${targetId2 || "default"}.`
       };
     }
     return {
@@ -656,8 +656,8 @@ async function ensureCursorRunningLocal(options = {}) {
       port: CDP_PORT,
       needsAction: "free_cce_port",
       retryable: true,
-      nextStep: `\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u4F7F\u7528\u3002\u5173\u95ED\u5360\u7528\u5B83\u7684\u7A0B\u5E8F\u540E\uFF0C\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002`,
-      message: `CCE \u73B0\u5728\u65E0\u6CD5\u8FDE\u63A5 Cursor\uFF0C\u56E0\u4E3A\u6240\u9700\u7684\u672C\u673A\u7AEF\u53E3 ${CDP_PORT} \u6B63\u88AB\u5176\u4ED6\u7A0B\u5E8F\u5360\u7528\u3002`
+      nextStep: `Local port ${CDP_PORT} is in use by another program. Close that program, then run the same initialization command again.`,
+      message: `CCE cannot connect to Cursor because required local port ${CDP_PORT} is occupied by another program.`
     };
   }
   if (cursorRunningImpl()) {
@@ -670,8 +670,8 @@ async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable2 && cursorExecutable2.source || null,
       needsAction: "close_cursor_and_retry",
       retryable: true,
-      nextStep: projectPath ? `\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u518D\u6B21\u8BF4\u201C\u521D\u59CB\u5316 CCE \u5DE5\u4F5C\u533A\u4E3A ${projectPath}\u201D\u3002` : "\u4FDD\u5B58\u624B\u5934\u5185\u5BB9\u5E76\u6B63\u5E38\u9000\u51FA Cursor \u4E00\u6B21\uFF0C\u7136\u540E\u91CD\u8BD5\u521A\u624D\u7684 CCE \u64CD\u4F5C\u3002",
-      message: "Cursor \u5DF2\u7ECF\u63D0\u524D\u6253\u5F00\uFF0CCCE \u65E0\u6CD5\u5728\u8FD0\u884C\u4E2D\u4E3A\u5B83\u8865\u4E0A\u8FDE\u63A5\u80FD\u529B\u3002\u4E3A\u4FDD\u62A4\u672A\u4FDD\u5B58\u5185\u5BB9\uFF0CCursor Bridge \u4E0D\u4F1A\u5F3A\u5236\u5173\u95ED\u5B83\u3002"
+      nextStep: projectPath ? `Save your work, exit Cursor normally once, then initialize CCE for workspace ${projectPath} again.` : "Save your work, exit Cursor normally once, then retry the previous CCE operation.",
+      message: "Cursor was already running, so CCE cannot add the required connection capability in place. Cursor Bridge will not force-close it, protecting unsaved work."
     };
   }
   const cursorExecutable = findCursorExeDetailsImpl();
@@ -683,8 +683,8 @@ async function ensureCursorRunningLocal(options = {}) {
       port: CDP_PORT,
       needsAction: "install_or_locate_cursor",
       retryable: true,
-      nextStep: "\u8BF7\u5148\u5B89\u88C5\u5E76\u767B\u5F55 Cursor\u3002\u82E5\u4F7F\u7528\u4FBF\u643A\u7248\u6216\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CURSOR_EXE \u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-      message: "\u6CA1\u6709\u627E\u5230 Cursor\u3002\u6807\u51C6 Windows \u4E0E macOS \u5B89\u88C5\u4F1A\u81EA\u52A8\u8BC6\u522B\uFF0C\u901A\u5E38\u4E0D\u9700\u8981\u586B\u5199\u7A0B\u5E8F\u8DEF\u5F84\u3002"
+      nextStep: "Install and sign in to Cursor first. For a portable or custom installation, set CURSOR_EXE and run the same initialization command again.",
+      message: "Cursor was not found. Standard Windows and macOS installations are detected automatically and normally do not require an explicit executable path."
     };
   }
   const launchPort = resolveCursorLaunchCdpPort(CDP_PORT);
@@ -719,8 +719,8 @@ async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable.source,
       needsAction: "retry_initialization",
       retryable: true,
-      nextStep: "\u8BF7\u7A0D\u7B49\u7247\u523B\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-      message: "Cursor \u5DF2\u7ECF\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u51C6\u5907\u597D\uFF1B\u65E0\u9700\u4FEE\u6539\u4EFB\u4F55\u7AEF\u53E3\u8BBE\u7F6E\u3002"
+      nextStep: "Wait a moment, then run the same initialization command again.",
+      message: "Cursor started, but CCE is not ready yet. No port setting needs to be changed."
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
@@ -740,13 +740,13 @@ async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable.source,
       needsAction: "retry_initialization",
       retryable: true,
-      nextStep: "\u8BF7\u7B49\u5F85 Cursor \u5B8C\u6210\u6253\u5F00\u9879\u76EE\uFF0C\u7136\u540E\u91CD\u65B0\u6267\u884C\u540C\u4E00\u53E5\u521D\u59CB\u5316\u547D\u4EE4\u3002",
-      message: `Cursor \u5DF2\u542F\u52A8\uFF0C\u4F46 CCE \u8FD8\u6CA1\u6709\u786E\u8BA4\u5DE5\u4F5C\u533A ${projectPath} \u5DF2\u51C6\u5907\u597D\uFF1B\u4E3A\u907F\u514D\u641C\u7D22\u9519\u9879\u76EE\uFF0C\u672C\u6B21\u521D\u59CB\u5316\u5DF2\u5B89\u5168\u505C\u6B62\u3002`
+      nextStep: "Wait for Cursor to finish opening the project, then run the same initialization command again.",
+      message: `Cursor started, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`
     };
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
   const windowGuard = effectiveRuntimeMode === "minimal" && cursorPid ? startMinimalWindowGuard(cursorPid) : null;
-  const target = projectPath ? `\u6253\u5F00 ${projectPath}` : "\u6062\u590D\u4E0A\u6B21\u5DE5\u4F5C\u533A";
+  const target = projectPath ? `opening ${projectPath}` : "restoring the previous workspace";
   const presentation = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid }) : null;
   return {
     ok: true,
@@ -763,7 +763,7 @@ async function ensureCursorRunningLocal(options = {}) {
     cursorExecutableSource: cursorExecutable.source,
     targetId,
     workspaceAction: projectPath ? "launched-project" : "launched-last-workspace",
-    message: `\u5DF2\u542F\u52A8 Cursor\uFF08${exe}\uFF0C${target}\uFF09\uFF0CCDP ${CDP_PORT} \u5C31\u7EEA\u3002`
+    message: `Cursor started (${exe}, ${target}); CDP ${CDP_PORT} is ready.`
   };
 }
 function normalizeProjectKey(projectPath) {

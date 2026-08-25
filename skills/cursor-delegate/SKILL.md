@@ -59,7 +59,7 @@ Do not choose parallel execution merely because there are many tasks. When depen
 ## Dispatch a task
 
 1. Record the relevant pre-dispatch workspace state so later review can distinguish existing user changes.
-2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md).
+2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md). Write its narrative instructions in the language of the user's current substantive task unless the user explicitly requests another language. Do not persist an inferred language or replace a clear conversational signal with the host/OS locale.
 3. Call `cursor_do` with `background=true`; do not invent a chat-selection parameter.
 4. Save each returned `task_id`; also save `agent_id` whenever `cursor_status` publishes one.
 5. If a parallel submission does not return a usable `agent_id`, stop expanding the parallel batch and use `fifo` or report the ambiguous state.
@@ -73,6 +73,8 @@ The envelope may contain a small number of local implementation `open_questions`
 3. Compare Cursor's claimed work with the real diff, `allowed_paths`, and acceptance contract.
 4. Run risk-proportionate verification in the primary agent. Cursor's response alone cannot support a formal pass, verified state, or governance transition.
 5. Record each task as complete, partial, failed, timed out, or ambiguous before summarizing the batch.
+
+Report the accepted result in the language of the user's current task. Keep `task_id`, `agent_id`, tool names, states, enum values, paths, commands, hashes, exact permission options, and error/status codes verbatim. If Cursor returned an artifact or report in another language, preserve it and summarize the relevant facts in the current task language.
 
 Read [delegation-contract.md](references/delegation-contract.md) for state interpretation and recovery details.
 

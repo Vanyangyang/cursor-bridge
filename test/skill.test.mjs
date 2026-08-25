@@ -19,6 +19,8 @@ test('cce-routing skill exposes shared implicit routing with explicit boundaries
   assert.match(skill, /make CCE the first project-discovery surface/);
   assert.match(skill, /generic context-mode, grep, or blind local exploration/);
   assert.match(skill, /Verify returned path:line evidence/);
+  assert.match(skill, /language of the user's current substantive request/);
+  assert.match(skill, /Preserve `CCE_SEARCH_RESULT`/);
   assert.doesNotMatch(skill, /TODO/);
   assert.match(metadata, /default_prompt: "Use \$cce-routing/);
   assert.match(metadata, /value: "cursor-bridge"/);
@@ -27,7 +29,12 @@ test('cce-routing skill exposes shared implicit routing with explicit boundaries
 
 test('delegation guidance defers unknown project semantics to CCE routing', () => {
   const delegation = readProjectFile('skills/cursor-delegate/SKILL.md');
+  const contract = readProjectFile('skills/cursor-delegate/references/delegation-contract.md');
   assert.match(delegation, /follow `cce-routing` and try `cursor_context_engine` before generic local discovery/);
+  assert.match(delegation, /language of the user's current substantive task/);
+  assert.match(delegation, /Keep `task_id`, `agent_id`/);
+  assert.match(contract, /current user-task language/);
+  assert.match(contract, /Preserve paths, commands, identifiers, and machine tokens verbatim/);
 });
 
 test('Codex starter prompts stay user-facing and within manifest limits', () => {
@@ -60,7 +67,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.deepEqual(cursor?.source, { source: 'url', url: './' });
   assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
   assert.equal(grokManifest.name, 'grok-build-supervisor');
-  assert.match(grokManifest.version, /^0\.3\.6\+codex\./);
+  assert.match(grokManifest.version, /^0\.3\.7\+codex\./);
   assert.deepEqual(grokManifest.mcpServers, {
     'grok-build-supervisor': {
       command: 'node',
@@ -75,16 +82,16 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '5.4.2');
-  assert.match(codexCursorManifest.version, /^5\.4\.2\+codex\./);
-  assert.equal(claudeCursorManifest.version, '5.4.2');
-  assert.match(serverSource, /const PLUGIN_VERSION = '5\.4\.2';/);
+  assert.equal(rootPackage.version, '5.5.0');
+  assert.match(codexCursorManifest.version, /^5\.5\.0\+codex\./);
+  assert.equal(claudeCursorManifest.version, '5.5.0');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.5\.0';/);
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.4.2');
+  assert.equal(claudeCursor?.version, '5.5.0');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.3.6');
+  assert.equal(claudeGrok?.version, '0.3.7');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.3.6');
+  assert.equal(claudeGrokManifest.version, '0.3.7');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
@@ -185,6 +192,13 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   assert.match(supervisionFlow, /`available_commands_changed`/);
   assert.match(supervisionFlow, /`inactive_run_activity`/);
   assert.doesNotMatch(supervisorSkill, /正在通过 Grok Build Supervisor 创建 TUI|Grok TUI 已创建并就绪|新建\/创建一个 Grok TUI/);
+  assert.match(supervisorSkill, /explicit language request/);
+  assert.match(supervisorSkill, /latest substantive message\/current task/);
+  assert.match(supervisorSkill, /Codex, Claude Code, Pi, or neutral host-agent/);
+  assert.match(executeCommand, /language of the user's latest substantive message/);
+  for (const content of [executeCommand, executorSkill, supervisorSkill]) {
+    assert.doesNotMatch(content, /[\u3400-\u9fff]/);
+  }
   assert.doesNotMatch(supervisorMetadata, /open or resume a guarded Grok TUI/);
 });
 

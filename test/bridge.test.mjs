@@ -170,7 +170,7 @@ test('page capability scoring prefers Cursor Agents and pins an existing target'
   assert.equal(selectCursorPageCandidate([legacy, agentsV2], { targetId: 'legacy' }).id, 'legacy');
   assert.throws(
     () => selectCursorPageCandidate([legacy, agentsV2], { targetId: 'missing' }),
-    /target 已消失/,
+    /target disappeared/,
   );
   assert.equal(selectPageForUiPreference([legacy, agentsV2], { preferAgentsV2: true }).id, 'agents-v2');
   assert.equal(selectPageForUiPreference([legacy, agentsV2], { preferLegacy: true }).id, 'legacy');
@@ -775,8 +775,8 @@ test('cursor_init keeps a valid binding and returns child-friendly recovery when
     async _ensureCursor() {
       this._lastLifecycle = {
         status: 'running-no-debug',
-        message: 'Cursor 已经提前打开。',
-        nextStep: '保存手头内容并正常退出 Cursor 一次，然后重复初始化。',
+        message: 'Cursor was already running.',
+        nextStep: 'Save your work, exit Cursor normally once, then repeat initialization.',
         retryable: true,
       };
       throw new Error(this._lastLifecycle.message);
@@ -790,23 +790,46 @@ test('cursor_init keeps a valid binding and returns child-friendly recovery when
   assert.equal(result.status, 'running-no-debug');
   assert.equal(result.projectPath, project);
   assert.equal(result.retryable, true);
-  assert.match(result.nextStep, /正常退出 Cursor 一次/);
+  assert.match(result.nextStep, /exit Cursor normally once/);
 });
 
 test('unified CCE prompt lets Cursor choose the minimum sufficient investigation depth', () => {
-  const prompt = buildContextEnginePrompt('谁负责计算最终伤害并如何进入最终结算？重点关注 Assets/Scripts/Battle。');
-  assert.match(prompt, /Cursor Context Engine（CCE）/);
-  assert.match(prompt, /必须先检索再回答/);
-  assert.match(prompt, /自主决定检索力度/);
-  assert.match(prompt, /Explore\/子代理/);
-  assert.match(prompt, /不替 Cursor 编排内部 harness/);
-  assert.match(prompt, /最小充分证据/);
+  const query = '谁负责计算最终伤害并如何进入最终结算？重点关注 Assets/Scripts/Battle。';
+  const prompt = buildContextEnginePrompt(query);
+  assert.match(prompt, /Cursor Context Engine \(CCE\)/);
+  assert.match(prompt, /Search before answering/);
+  assert.match(prompt, /Choose the search depth/);
+  assert.match(prompt, /Explore or subagents/);
+  assert.match(prompt, /does not prescribe Cursor's internal harness/);
+  assert.match(prompt, /minimum sufficient evidence/);
   assert.match(prompt, /NOT_FOUND/);
   assert.match(prompt, /Assets\/Scripts\/Battle/);
-  assert.match(prompt, /线索而非硬边界/);
+  assert.match(prompt, /clue, not a hard boundary/);
+  assert.match(prompt, /language of the user query/);
+  assert.match(prompt, new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(prompt, /coverage: <focused\|extended>/);
   assert.match(prompt, /workspace-relative-path/);
   assert.match(prompt, /confidence: <high\|medium\|low>/);
+});
+
+test('CCE and cursor_do scaffolds preserve multilingual user text and request matching-language replies', async () => {
+  const samples = [
+    '请定位最终伤害的所有者。',
+    'Locate the owner of final damage.',
+    '最終ダメージの所有者を特定してください。',
+    'حدد مالك الضرر النهائي.',
+  ];
+  for (const sample of samples) {
+    const ccePrompt = buildContextEnginePrompt(sample);
+    assert.equal(ccePrompt.includes(sample), true);
+    assert.match(ccePrompt, /Write narrative output in the language of the user query/);
+
+    const bridge = new OfflineBridge();
+    const view = await bridge.doTask(sample);
+    const delegatedPrompt = bridge.tasks.get(view.taskId).prompt;
+    assert.equal(delegatedPrompt.startsWith(sample), true);
+    assert.match(delegatedPrompt, /Reply in the language of the user task/);
+  }
 });
 
 test('unified context engine reuses readiness, FIFO, read-only options, and result normalization', async () => {
@@ -1016,22 +1039,22 @@ test('parallel agent requires read_only or a writable path boundary', async () =
   const bridge = new OfflineBridge();
   await assert.rejects(
     bridge.doTask('无边界写任务', { execution: 'parallel_agent' }),
-    /必须提供 allowed_paths/,
+    /must provide allowed_paths/,
   );
   const view = await bridge.doTask('只读任务', { execution: 'parallel_agent', readOnly: true });
   assert.equal(view.execution, 'parallel_agent');
   assert.equal(view.readOnly, true);
   await assert.rejects(
     bridge.doTask('矛盾边界', { execution: 'parallel_agent', readOnly: true, allowedPaths: ['Assets'] }),
-    /不能同时使用/,
+    /cannot be combined/,
   );
   await assert.rejects(
     bridge.doTask('绝对路径', { execution: 'parallel_agent', allowedPaths: ['G:/repo/file.txt'] }),
-    /必须使用工作区相对路径/,
+    /must use workspace-relative paths/,
   );
   await assert.rejects(
     bridge.doTask('glob 路径', { execution: 'parallel_agent', allowedPaths: ['Assets/**/*.cs'] }),
-    /不接受 glob/,
+    /do not accept globs/,
   );
 });
 
@@ -1046,13 +1069,13 @@ test('overlapping writable parallel tasks are rejected before submission', async
       execution: 'parallel_agent',
       allowedPaths: ['Assets/Scripts/Battle/Effects'],
     }),
-    /allowed_paths 与任务 .* 重叠/,
+    /allowed_paths overlap task/,
   );
 });
 
 test('unsupported execution mode is rejected explicitly', async () => {
   const bridge = new OfflineBridge();
-  await assert.rejects(bridge.doTask('任务', { execution: 'multitask' }), /只能是 fifo 或 parallel_agent/);
+  await assert.rejects(bridge.doTask('任务', { execution: 'multitask' }), /expected fifo or parallel_agent/);
 });
 
 test('unbound uncertain parallel task becomes a global reservation', async () => {
@@ -1071,7 +1094,7 @@ test('unbound uncertain parallel task becomes a global reservation', async () =>
       execution: 'parallel_agent',
       allowedPaths: ['Tools/Reserved/Sub'],
     }),
-    /全局 Cursor 占用/,
+    /global Cursor reservation/,
   );
   assert.equal(job.reservationScope, 'global');
   assert.equal(bridge._taskView(job).blocksAll, true);
@@ -1335,7 +1358,7 @@ test('stable completion keeps reservation when final response extraction is temp
   await assert.rejects(bridge.doTask('原路径仍应保留', {
     execution: 'parallel_agent',
     allowedPaths: ['Tools/Reaped/Sub'],
-  }), /重叠/);
+  }), /overlap task/);
 
   bridge.collectError = null;
   bridge.collectResult = 'retry recovered result';
@@ -1368,7 +1391,7 @@ test('targeted cancel requires the exact agent id and releases only after confir
       confirm: true,
       expectedAgentId: 'local:wrong-agent',
     }),
-    /expected_agent_id 不匹配/,
+    /expected_agent_id does not match/,
   );
   assert.equal(bridge.activeParallel.has(job.id), true);
 
@@ -1415,7 +1438,7 @@ test('unconfirmed cancel keeps reservation and reports the safe next action', as
       execution: 'parallel_agent',
       allowedPaths: ['Tools/StillReserved/Sub'],
     }),
-    /重叠/,
+    /overlap task/,
   );
   assert.equal(job.reservationScope, 'paths');
   assert.equal(bridge._taskView(job).blocksAll, false);
@@ -1513,7 +1536,7 @@ test('unbound running FIFO still latches cancel_pending_fifo without clicking St
   job.targetUiFlavor = 'legacy';
   const result = await bridge._taskControlLocked(job, 'cancel', { reason: 'stop' });
   assert.equal(result.state, 'cancel_pending_fifo');
-  assert.match(result.next, /没有可安全定向/);
+  assert.match(result.next, /no safely targetable agentId/);
 });
 
 test('FIFO with bound agentId latches cancel_pending_stop instead of unbound FIFO copy', async () => {
@@ -1527,8 +1550,8 @@ test('FIFO with bound agentId latches cancel_pending_stop instead of unbound FIF
   const result = await bridge._taskControlLocked(job, 'cancel', { reason: 'stop' });
   assert.equal(result.state, 'cancel_pending_stop');
   assert.equal(job.recoveryState, 'cancel_pending_stop');
-  assert.match(result.next, /定向停止/);
-  assert.doesNotMatch(result.next, /没有可安全定向/);
+  assert.match(result.next, /stopped through its bound agentId/);
+  assert.doesNotMatch(result.next, /no safely targetable agentId/);
 });
 
 test('running FIFO cancel with bound agentId uses targeted stop after the waiter yields', async () => {
@@ -1639,11 +1662,11 @@ test('running FIFO cancel that cannot confirm Stop remains blocked with an expli
   await assert.rejects(bridge.doTask('全局占用期间不得提交并行任务', {
     execution: 'parallel_agent',
     readOnly: true,
-  }), /全局 Cursor 占用/);
+  }), /global Cursor reservation/);
 
   const reaped = await bridge.taskControl(view.taskId, { action: 'reap' });
   assert.equal(reaped.state, 'not_parallel_reservation');
-  assert.match(reaped.next, /FIFO 孤儿/);
+  assert.match(reaped.next, /FIFO orphan/);
 });
 
 test('parallel to FIFO fallback cancellation reports orphaned instead of pending agent binding', async () => {
@@ -1660,7 +1683,7 @@ test('parallel to FIFO fallback cancellation reports orphaned instead of pending
   assert.equal(result.task.status, 'needs_attention');
   assert.equal(result.task.effectiveExecution, 'fifo');
   assert.equal(result.task.reservationScope, 'global');
-  assert.doesNotMatch(result.next, /绑定 agentId/);
+  assert.doesNotMatch(result.next, /bind the agentId/);
 });
 
 test('global orphan reservation blocks already queued work at the scheduler gate', async () => {
@@ -1743,7 +1766,7 @@ test('abandon requires explicit risk acknowledgement and releases an orphan visi
     acknowledgeMayStillWrite: true,
   });
   assert.equal(result.state, 'abandoned');
-  assert.match(result.warning, /仍可能继续写文件/);
+  assert.match(result.warning, /may still write files/);
   assert.equal(job.status, 'abandoned');
   assert.equal(job.underlyingStopConfirmed, false);
   assert.equal(bridge.activeParallel.has(job.id), false);

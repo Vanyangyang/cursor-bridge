@@ -38,7 +38,7 @@ Pi：
 pi install npm:pi-grok-build-supervisor
 ```
 
-安装或更新后需要新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi；Skill、提示模板和 slash command 不会热加载到已经打开的任务。Pi 包独立计版本，目前内置 Grok Build Supervisor 0.3.6。
+安装或更新后需要新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi；Skill、提示模板和 slash command 不会热加载到已经打开的任务。Pi 包独立计版本，目前内置 Grok Build Supervisor 0.3.7。
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 
@@ -97,9 +97,9 @@ claude plugin update grok-build-supervisor@vanyangyang
 
 模式开启后：
 
-- Codex 或 Claude Code 负责规划、拆分、看进度、纠偏和验收。
+- Codex、Claude Code 或 Pi 负责规划、拆分、看进度、纠偏和验收。
 - Grok 负责实现、会改变状态的命令、构建和测试。
-- Codex 或 Claude Code 在接受完成前，会独立检查真实文件和测试证据。
+- Codex、Claude Code 或 Pi 在接受完成前，会独立检查真实文件和测试证据。
 
 不再需要 Grok 执行模式时，关闭即可：
 
@@ -112,7 +112,7 @@ claude plugin update grok-build-supervisor@vanyangyang
 ## 它如何保持连接
 
 ```text
-Codex 或 Claude Code
+Codex / Claude Code / Pi
         ↓
 后台监督程序
         ↓
@@ -121,14 +121,16 @@ Grok Build + Windows Terminal 窗口
 
 连接细节由插件自己处理。用户不需要管理底层 Leader、ACP 连接、进程号或事件游标。
 
-- 关闭一个 Codex / Claude Code 任务或更新插件，不会立刻断开后台连接。
+- 关闭一个 Codex / Claude Code / Pi 任务或更新插件，不会立刻断开后台连接。
 - 多个宿主可以查看同一个 Grok 会话，但同一时间只有一个能发送指令，避免两个 Agent 互相覆盖。
 - Grok 工作时，查看进度只会拿到“正在定位、正在修改、正在验证”等简短阶段，以及有上限的文件和工具数量。Supervisor 自己的静默心跳不会冒充 Grok 有新进展，原始工具日志和已经累计的整段回答也不会被反复取回。
 - 短答案只返回一次。长报告会保存成文件，插件只返回文件位置、大小、校验值、是否截断和短摘要。已经安装 [context-mode（推荐）](https://github.com/mksglu/context-mode) 时，可以用它提取重点；不安装也能正常使用。
-- 插件会告诉 Grok 任务究竟来自 Codex、Claude Code 还是其他宿主，不会一律冒充 Codex。
+- 插件会告诉 Grok 任务究竟来自 Codex、Claude Code、Pi 还是其他宿主，不会一律冒充 Codex。
 - 正在运行的会话所需脚本会复制到持久目录，所以刷新插件缓存不会把脚本从它脚下删掉。
 - 新版插件会等旧的后台监督程序空闲后再替换它，升级过程中不会主动打断现有任务。
 - 复用或停止进程前，插件会同时核对会话、项目目录、进程身份、Grok 的活动记录和自己的启动记录；只有进程号相同远远不够。
+
+面向用户的说明会跟随当前任务语言；用户明确指定其他语言时，以明确要求为准。机器字段、状态、路径、命令、ID 与原始权限或表单选项不会被翻译。仓库正式维护英文与简体中文文档，其他语言由运行时自适应处理。
 
 ## 安全规则
 
@@ -138,7 +140,7 @@ Grok Build + Windows Terminal 窗口
 - 除非你明确要求不显示窗口，否则它不会把终端偷偷藏起来。
 - 它只接受真正能工作的本地代理，不保存代理密码，也不假定某个固定端口。
 - Grok 不能自己声称任务来自哪个宿主；发送者身份由本地 MCP 连接提供。
-- “Grok 说完成了”不等于已经验收。Codex 或 Claude Code 仍需核查文件、diff、测试和你要求的其他证据。
+- “Grok 说完成了”不等于已经验收。Codex、Claude Code 或 Pi 仍需核查文件、diff、测试和你要求的其他证据。
 - 安装插件不会自动获得删除数据、发布代码、发送外部消息、读取秘密或决定产品方向的权限。
 
 ## 兼容性提示

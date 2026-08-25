@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge",
-  "version": "5.4.2+codex.20260822153144",
+  "version": "5.5.0+codex.20260825093335",
   "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution, including a UI-suppressed minimal runtime.",
   "author": {
     "name": "Vanyangyang"
@@ -19,8 +19,8 @@
   },
   "interface": {
     "displayName": "Cursor Bridge",
-    "shortDescription": "Evidence-backed CCE search and bounded Cursor Agent work.",
-    "longDescription": "Use Cursor's indexed Agent as an adaptive Cursor Context Engine. State the intent once; Cursor chooses the necessary investigation depth and returns compact path:line evidence instead of guessed locations. Cursor Bridge can also execute bounded FIFO or independent Agent tasks while Codex retains review and final control. Minimal runtime keeps CCE and execution tools available while hiding the Windows Cursor UI.",
+    "shortDescription": "Evidence-backed CCE search and bounded cursor_do execution.",
+    "longDescription": "Use Cursor's indexed Agent as an adaptive Cursor Context Engine. State the intent once; Cursor chooses the necessary investigation depth and returns compact path:line evidence instead of guessed locations. When execution is useful, cursor_do is the first-class bounded path for FIFO or independent Cursor Agent tasks while the supervising host retains review and final control. User-facing prose follows the task language while machine fields remain stable. Minimal runtime keeps CCE and execution tools available while hiding the Windows Cursor UI.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,7 +28,7 @@
     ],
     "defaultPrompt": [
       "Find where this project implements a behavior and return verified path:line evidence.",
-      "Trace a symbol, call chain, data flow, or ownership boundary across this workspace.",
+      "Delegate one clearly bounded implementation task to Cursor and verify the real changes.",
       "Initialize CCE workspace to C:\\absolute\\project\\path."
     ],
     "websiteURL": "https://github.com/Vanyangyang/cursor-bridge"
