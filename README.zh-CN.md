@@ -4,16 +4,11 @@
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
-<p align="center"><strong>✨ 30 Stars 达成，感谢每一位关注者！Cursor Bridge 将长期维护，并持续跟进 Cursor 最新版本。如果这个项目对您有帮助，欢迎点亮一个 ⭐ Star，感谢您的支持！✨</strong></p>
+<p align="center"><strong>✨ 30 Stars 达成，感谢每一位关注者！本项目将长期维护，其中 Cursor Bridge 会持续跟进 Cursor 最新版本。如果这个项目对您有帮助，欢迎点亮一个 ⭐ Star，感谢您的支持！✨</strong></p>
 
 <p align="center"><sub><strong>版本兼容说明：</strong>Cursor Bridge 只维护 Cursor 最新版本，不再主动兼容上一版本。如果需要使用历史 Cursor 版本，请先前往 <a href="./COMPATIBILITY.zh-CN.md">Cursor Bridge 兼容与更新历史</a>，精确切换到已列出的对应版本；历史版本不再维护。如果历史版本仍不能满足您的需求，请点击仓库右上角的 <strong>Fork</strong>，并在自己的 Fork 中自行适配。</sub></p>
 
 # Cursor Bridge + Grok Build Supervisor
-
-<!-- TEMPORARY_RENAME_NOTICE_START -->
-> [!IMPORTANT]
-> **即将更名：** 本仓库即将更名为 **Grok Superpower**。目前仓库地址与现有安装命令保持不变；正式更名完成后会移除这条临时提示。
-<!-- TEMPORARY_RENAME_NOTICE_END -->
 
 [English](./README.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 

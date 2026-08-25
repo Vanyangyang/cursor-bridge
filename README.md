@@ -4,16 +4,11 @@
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
-<p align="center"><strong>✨ 30 stars—thank you! Cursor Bridge is here for the long run and will keep pace with the latest Cursor releases. If this project helps you, please consider lighting up a ⭐ Star—thank you for your support! ✨</strong></p>
+<p align="center"><strong>✨ 30 stars—thank you! This project is here for the long run, and Cursor Bridge will keep pace with the latest Cursor releases. If it helps you, please consider lighting up a ⭐ Star—thank you for your support! ✨</strong></p>
 
 <p align="center"><sub><strong>Compatibility policy:</strong> Cursor Bridge maintains only the latest Cursor release; previous Cursor releases are not actively supported. If you need a historical Cursor version, first open the <a href="./COMPATIBILITY.md">Cursor Bridge compatibility and update history</a> and switch precisely to its matching archived release when one is listed. Archived releases receive no maintenance. If no historical release meets your needs, use <strong>Fork</strong> in the top-right corner and maintain the required adaptation in your own fork.</sub></p>
 
-# Cursor Bridge + Grok Build Supervisor（New）
-
-<!-- TEMPORARY_RENAME_NOTICE_START -->
-> [!IMPORTANT]
-> **Upcoming rename:** This repository will soon be renamed **Grok Superpower**. The repository URL and all existing installation commands remain unchanged for now. This temporary notice will be removed after the rename is complete.
-<!-- TEMPORARY_RENAME_NOTICE_END -->
+# Cursor Bridge + Grok Build Supervisor
 
 [简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
