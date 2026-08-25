@@ -30,7 +30,7 @@
 
 ## Give the coding client you already use access to Cursor and Grok Build
 
-Keep using **Codex (recommended)**, Claude Code, or Pi as your normal coding client. Install both plugins to give that same client the ability to use Cursor and coordinate Grok Build in one conversation.
+Keep using **Codex (recommended)**, Claude Code, or Pi as your normal coding client. The plugins are independent: install Cursor Bridge to let that client use Cursor, install Grok Build Supervisor to let it coordinate Grok Build, or install both to combine those capabilities in one conversation.
 
 ```text
 Codex (recommended) / Claude Code / Pi
@@ -47,7 +47,7 @@ Codex (recommended) / Claude Code / Pi
 - Use the now first-class `cursor_do` path for a bounded Cursor Agent task when delegated execution saves time; your current client still reviews the real diff and tests.
 - Turn on `/grok_execute on` when Grok Build should execute while your current client plans, monitors, handles questions, and verifies the result.
 
-This repository is not a separate orchestrator. The plugins add these coordination abilities to the client you already use. They remain independent: install either one alone, or both for the combined path.
+This repository is not a separate orchestrator. The plugins add these capabilities to the client you already use, so install only what you need.
 
 ## Grok Build Supervisor (New)
 

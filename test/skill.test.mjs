@@ -66,11 +66,13 @@ test('bilingual READMEs present coordination as added capability of the existing
 
   assert.match(english, /Give the coding client you already use access to Cursor and Grok Build/);
   assert.match(english, /Keep using \*\*Codex \(recommended\)\*\*, Claude Code, or Pi as your normal coding client/);
+  assert.match(english, /The plugins are independent:[\s\S]*install Cursor Bridge[\s\S]*install Grok Build Supervisor[\s\S]*install both/);
   assert.match(english, /This repository is not a separate orchestrator/);
   assert.doesNotMatch(english, /Choose one orchestrator|installed directly in Grok Build/);
 
   assert.match(chinese, /让你正在使用的客户端同时调用 Cursor 与 Grok Build/);
-  assert.match(chinese, /继续使用你原本就在用的 \*\*Codex（推荐）\*\*、Claude Code 或 Pi/);
+  assert.match(chinese, /继续使用你原本就在用的 \*\*Codex（推荐）\*\*、Claude Code 或 Pi 作为常用代码客户端/);
+  assert.match(chinese, /两个插件互相独立：[\s\S]*只安装 Cursor Bridge[\s\S]*只安装 Grok Build Supervisor[\s\S]*两者都安装/);
   assert.match(chinese, /这个仓库不是一款新的“协调器”/);
   assert.doesNotMatch(chinese, /选择一个编排客户端|直接安装进 Grok Build/);
 });
