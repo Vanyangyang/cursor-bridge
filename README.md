@@ -28,14 +28,15 @@
 | **Cursor Bridge** | Let Codex, Claude Code, Grok Build, or Pi use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks | [Continue below](#cursor-bridge) |
 | **Grok Build Supervisor** | Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
-## Start one client and orchestrate the complete Cursor + Grok Build workflow
+## Give the coding client you already use access to Cursor and Grok Build
 
-Choose one orchestrator—**Codex (recommended)**, Claude Code, or Pi—and install both plugins when you want one conversation to coordinate Cursor and Grok Build together.
+Keep using **Codex (recommended)**, Claude Code, or Pi as your normal coding client. Install both plugins to give that same client the ability to use Cursor and coordinate Grok Build in one conversation.
 
 ```text
 Codex (recommended) / Claude Code / Pi
+      your existing coding client
               │
-       plans, routes, verifies
+   plugins add coordination abilities
           ┌───┴──────────────┐
           ▼                  ▼
     Cursor Bridge     Grok Build Supervisor
@@ -43,10 +44,10 @@ Codex (recommended) / Claude Code / Pi
 ```
 
 - Start with `cursor_context_engine` for compact, source-anchored project understanding.
-- Use the now first-class `cursor_do` path for a bounded Cursor Agent task when delegated execution saves time; the orchestrator still reviews the real diff and tests.
-- Turn on `/grok_execute on` when Grok Build should execute while the orchestrator plans, monitors, handles questions, and verifies the result.
+- Use the now first-class `cursor_do` path for a bounded Cursor Agent task when delegated execution saves time; your current client still reviews the real diff and tests.
+- Turn on `/grok_execute on` when Grok Build should execute while your current client plans, monitors, handles questions, and verifies the result.
 
-Use one orchestrator for a workflow so task ownership stays clear. The plugins remain independent: install either one alone, or both for this combined path. Cursor Bridge can also still be installed directly in Grok Build for its standalone CCE and Cursor execution workflow.
+This repository is not a separate orchestrator. The plugins add these coordination abilities to the client you already use. They remain independent: install either one alone, or both for the combined path.
 
 ## Grok Build Supervisor (New)
 

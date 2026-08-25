@@ -28,14 +28,15 @@
 | **Cursor Bridge** | 让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
 | **Grok Build Supervisor** | 让 Codex / Claude Code / Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
-## 只需启动一个客户端，统筹完整的 Cursor + Grok Build 工作流
+## 让你正在使用的客户端同时调用 Cursor 与 Grok Build
 
-选择一个编排客户端——**Codex（推荐）**、Claude Code 或 Pi——同时安装两个插件，就能在一段对话里统一协调 Cursor 与 Grok Build。
+继续使用你原本就在用的 **Codex（推荐）**、Claude Code 或 Pi。安装这两个插件后，同一个客户端就能在一段对话里调用 Cursor，并协调 Grok Build 完成工作。
 
 ```text
 Codex（推荐）/ Claude Code / Pi
+        你原本使用的开发客户端
               │
-          规划、调度、验收
+        插件赋予协调能力
           ┌───┴──────────────┐
           ▼                  ▼
     Cursor Bridge     Grok Build Supervisor
@@ -43,10 +44,10 @@ Codex（推荐）/ Claude Code / Pi
 ```
 
 - 先用 `cursor_context_engine` 获取精简、可回到源码核验的项目理解。
-- 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由编排客户端验收。
-- 需要 Grok Build 执行时，开启 `/grok_execute on`；编排客户端继续负责计划、看进度、处理问题与核验结果。
+- 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由当前客户端验收。
+- 需要 Grok Build 执行时，开启 `/grok_execute on`；当前客户端继续负责计划、看进度、处理问题与核验结果。
 
-一个工作流只选择一个编排客户端，任务归属会更清楚。两个插件仍然互相独立：可以只装其中一个，也可以一起安装形成这条完整链路。Cursor Bridge 仍可单独安装进 Grok Build，继续使用它原有的 CCE 与 Cursor 执行能力。
+这个仓库不是一款新的“协调器”，而是给你正在使用的客户端增加这些协调能力。两个插件仍然互相独立：可以只装其中一个，也可以一起安装形成完整链路。
 
 ## Grok Build Supervisor（New）
 

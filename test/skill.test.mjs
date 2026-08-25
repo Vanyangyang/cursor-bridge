@@ -60,6 +60,21 @@ test('bilingual READMEs keep the combined repository title without a rename noti
   assert.doesNotMatch(chinese, /即将更名/);
 });
 
+test('bilingual READMEs present coordination as added capability of the existing client', () => {
+  const english = readProjectFile('README.md');
+  const chinese = readProjectFile('README.zh-CN.md');
+
+  assert.match(english, /Give the coding client you already use access to Cursor and Grok Build/);
+  assert.match(english, /Keep using \*\*Codex \(recommended\)\*\*, Claude Code, or Pi as your normal coding client/);
+  assert.match(english, /This repository is not a separate orchestrator/);
+  assert.doesNotMatch(english, /Choose one orchestrator|installed directly in Grok Build/);
+
+  assert.match(chinese, /让你正在使用的客户端同时调用 Cursor 与 Grok Build/);
+  assert.match(chinese, /继续使用你原本就在用的 \*\*Codex（推荐）\*\*、Claude Code 或 Pi/);
+  assert.match(chinese, /这个仓库不是一款新的“协调器”/);
+  assert.doesNotMatch(chinese, /选择一个编排客户端|直接安装进 Grok Build/);
+});
+
 test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an isolated plugin', () => {
   const marketplace = JSON.parse(readProjectFile('.agents/plugins/marketplace.json'));
   const cursor = marketplace.plugins.find((plugin) => plugin.name === 'cursor-bridge');
