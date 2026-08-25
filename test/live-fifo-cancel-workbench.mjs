@@ -1,10 +1,25 @@
 #!/usr/bin/env node
 import { CursorBridge } from '../server.mjs';
+import { isAgentsWindowTitle } from '../cursor-ensure-core.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = Date.now().toString(36).toUpperCase();
 const marker = `CURSOR_BRIDGE_WB_FIFO_CANCEL_${stamp}`;
 const bridge = new CursorBridge();
+
+await bridge._ensureCursor();
+const preflight = await bridge.status();
+const pageTitles = Array.isArray(preflight.pageTitles) ? preflight.pageTitles : [];
+const legacyWorkbenchPresent = pageTitles.some((title) => !isAgentsWindowTitle(title));
+if (!legacyWorkbenchPresent) {
+  console.log(JSON.stringify({
+    event: 'skipped',
+    reason: 'legacy-workbench-not-exposed',
+    pageTitles,
+    note: 'No task was submitted; the fresh Cursor launch exposes only the Agents Window.',
+  }));
+  process.exit(0);
+}
 
 const submitted = await bridge.doTask(
   `这是只读 Workbench FIFO 取消测试。不要读取或修改任何文件。在终端执行 PowerShell Start-Sleep -Seconds 90，随后最终只回复 ${marker}。在任务被停止前不要结束。`,
