@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge",
-  "version": "5.5.0+codex.20260825140224",
+  "version": "5.5.0+codex.20260825151115",
   "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution, including a UI-suppressed minimal runtime.",
   "author": {
     "name": "Vanyangyang"
