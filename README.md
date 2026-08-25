@@ -137,8 +137,6 @@ Initialization is persistent. Repeat the initialization sentence with another ab
 > After initialization, say “Switch CCE to minimal mode.” The real Cursor process, project index, Agent DOM, and task queue keep running in the background while top-level windows stay hidden. You can use Cursor as the capability behind the plugin without visible interruption; `cursor_context_engine` and `cursor_do` remain available.
 >
 > **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and remains hidden. Before you need the Cursor UI again, say “Switch CCE to normal mode.”
->
-> This is an explicit, persistent opt-in live-tested on Windows 11, not a headless reimplementation of Cursor. Returning to normal does not deliberately take keyboard focus; minimized, maximized, and snapped placement remains user-owned.
 
 ## Compatibility
 
@@ -151,8 +149,6 @@ Current Cursor compatibility target (Windows 11):
 Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
-
-User-facing explanations follow the language of the current task unless the user explicitly asks for another language. Machine fields, states, paths, commands, IDs, and exact permission options remain stable and untranslated. English and Simplified Chinese are the maintained documentation languages; other languages are supported through runtime adaptation rather than separate translated manuals.
 
 ## Use CCE and `cursor_do`
 

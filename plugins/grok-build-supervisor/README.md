@@ -130,8 +130,6 @@ The Supervisor handles the connection details. Users do not manage the underlyin
 - A newer plugin waits until an older busy Supervisor is idle before replacing it. Existing work stays connected during the transition.
 - Before reusing or stopping a process, the plugin checks the session, project, process identity, Grok's active-session record, and its own ownership record. A matching process number alone is not enough.
 
-User-facing explanations follow the current task language unless the user explicitly asks for another language. Machine fields, states, paths, commands, IDs, and exact permission or form options remain untranslated. English and Simplified Chinese are the maintained documentation languages; other languages are handled through runtime adaptation.
-
 ## Safety rules
 
 - The plugin never turns on approve-everything modes or chooses a permission for you.

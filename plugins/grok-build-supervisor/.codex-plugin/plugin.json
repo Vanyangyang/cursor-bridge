@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.3.7+codex.20260825093335",
+  "version": "0.3.7+codex.20260825113339",
   "description": "Persistent Grok Build Leader/ACP supervision with verified local-proxy initialization and visible Windows Terminal TUI control.",
   "author": {
     "name": "Vanyangyang",

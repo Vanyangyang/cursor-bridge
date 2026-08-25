@@ -137,8 +137,6 @@ pi install npm:pi-grok-build-supervisor
 > 初始化完成后，说“将 CCE 切换到极简模式”。真实 Cursor、项目索引、Agent DOM 与任务队列会继续在后台运行，只隐藏顶层窗口；你可以把 Cursor 作为插件背后的能力无感使用，`cursor_context_engine` 和 `cursor_do` 仍然可用。
 >
 > **代价：**极简模式期间，手动打开 Cursor 只会复用受守卫的单实例，并继续保持隐藏。需要重新使用 Cursor 界面时，先说“将 CCE 切换到普通模式”。
->
-> 这是 Windows 11 上经过实测的显式、持久选择，不是重新实现的 headless Cursor。切回普通模式时不会主动抢走键盘焦点；最小化、最大化与贴靠布局仍由你控制。
 
 ## 兼容性
 
@@ -151,8 +149,6 @@ pi install npm:pi-grok-build-supervisor
 不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.2 / Cursor 3.17.8、Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
-
-面向用户的说明会跟随当前任务使用的语言；用户明确指定其他语言时，以明确要求为准。机器字段、状态、路径、命令、ID 与原始权限选项保持稳定，不会被翻译。仓库正式维护英文与简体中文文档；其他语言通过运行时自适应支持，不另外维护整套翻译手册。
 
 ## 用好 CCE 与 `cursor_do`
 
