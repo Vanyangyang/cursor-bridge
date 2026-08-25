@@ -9,6 +9,10 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 - The authenticated host-identity envelope now recognizes Pi as a first-class supervising host, so Grok receives a Pi supervision contract instead of a generic or Codex sender label.
 - Two independently versioned Pi Packages can install Cursor Bridge and Grok Build Supervisor from npm without requiring a separate third-party MCP adapter.
 
+### Fixed
+
+- The shared Pi MCP adapter now allows bounded long-running tool calls for up to 15 minutes instead of inheriting the SDK's 60-second request timeout.
+
 ## [0.3.5] - 2026-08-24
 
 ### Fixed

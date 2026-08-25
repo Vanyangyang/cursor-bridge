@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+const DEFAULT_TOOL_TIMEOUT_MS = 15 * 60 * 1000;
+
 function stringEnvironment(extra = {}) {
   return Object.fromEntries(
     Object.entries({ ...process.env, ...extra })
@@ -33,6 +35,9 @@ export function createStdioMcpExtension(options) {
       { name: options.clientName, version: options.packageVersion },
       { capabilities: {} },
     );
+    const toolTimeoutMs = Number.isInteger(options.toolTimeoutMs) && options.toolTimeoutMs > 0
+      ? options.toolTimeoutMs
+      : DEFAULT_TOOL_TIMEOUT_MS;
     const transport = new StdioClientTransport({
       command: options.nodeCommand || "node",
       args: [options.serverScript],
@@ -55,7 +60,11 @@ export function createStdioMcpExtension(options) {
             const result = await client.callTool(
               { name: tool.name, arguments: params || {} },
               undefined,
-              { signal },
+              {
+                signal,
+                timeout: toolTimeoutMs,
+                maxTotalTimeout: toolTimeoutMs,
+              },
             );
             return {
               content: toolContent(result),
