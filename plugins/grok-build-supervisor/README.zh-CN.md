@@ -7,7 +7,7 @@
 Grok Build Supervisor 是一个可以单独安装到 Codex 或 Claude Code 的插件。它会在 Windows Terminal 中打开或恢复真正的 Grok Build 窗口，并在后台保持连接；即使当前任务结束或插件重新加载，也能继续接上这个会话。Codex 或 Claude Code 可以给 Grok 派活、查看状态、处理问题和权限、取消任务，并核查最终结果。
 
 > [!NOTE]
-> 已在 Windows 11、Windows Terminal、PowerShell 和 Grok Build 1.0.6 上完成实机验证。目前不声明其他操作系统已经通过端到端支持验收。
+> 已在 Windows 11、Windows Terminal、PowerShell 和 Grok Build 1.0.10 上完成实机验证。目前不声明其他操作系统已经通过端到端支持验收。
 
 ## 安装
 
