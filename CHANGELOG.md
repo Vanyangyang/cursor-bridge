@@ -27,6 +27,12 @@ The project follows [Semantic Versioning](https://semver.org/).
 - A custom `completion_contract` no longer drops the `cursor_do` response-language contract; task language and immutable machine tokens remain explicit on every delegated path.
 - CCE result normalization restores a missing evidence bullet when Cursor returns a valid `path:line | ...` row without `-`, keeping the machine envelope stable without changing evidence content.
 - Cursor Agents v2 distinguishes a selected-composer provisional ID from a durable History row. An uncertain submitted Agent now keeps its exact provisional identity under a global reservation, preventing another parallel submission from replacing it before it can be safely monitored or recovered.
+- The opt-in legacy Workbench cancellation smoke test now checks that Cursor actually exposes a legacy CDP target before submitting. Agents-Window-only launches report a clean skip instead of sending a Workbench test into Agents v2.
+
+### Compatibility
+
+- Live-tested Cursor **3.17.19** on Windows 11 through a fresh Bridge/CDP launch for workspace binding, CCE with source-anchored evidence, read-only FIFO, independent `parallel_agent` execution, exact Agent IDs, matching-language results, and CCE across normal/minimal presentation changes.
+- The fresh 3.17.19 launch exposed only the Agents Window as a CDP page target. Legacy IDE/workbench behavior is therefore not claimed for this pairing; the dedicated Workbench smoke now skips before submission when that surface is absent.
 
 ## [5.4.2] - 2026-08-22
 

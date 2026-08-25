@@ -11,9 +11,37 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.17.8** | **5.4.2** | `master` | Current maintained version. Windows 11 IDE/workbench and Agents Window are live-tested for CCE, FIFO, independent parallel Agent execution, task status/control, and normal/minimal presentation. |
+| **3.17.19** | **5.5.0** | `master` | Current maintained version. A fresh Windows 11 Agents Window launch is live-tested for workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, and CCE across normal/minimal presentation. This launch did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. |
 
 ## Historical versions
+
+### Cursor Bridge 5.4.2 — Cursor 3.17.8
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.4.2`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.4.2
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.4.2 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.4.2
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.4.2
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.4.2 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.4.1 — Cursor 3.16.29
 

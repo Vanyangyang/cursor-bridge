@@ -69,7 +69,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.17.8** (IDE/workbench and Agents Window). Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.17.19** (fresh Agents Window launch). Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. This launch did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -150,9 +150,9 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.8** | **5.4.2** (`master`, current) | Live-tested on Windows 11 in both the IDE and Agents Window. Project understanding and task execution work as expected. |
+| **3.17.19** | **5.5.0** (`master`, current) | Live-tested on Windows 11 through a fresh Agents Window launch: workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, and CCE across normal/minimal presentation all passed. The legacy IDE/workbench was not exposed by this launch. |
 
-Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.1 / Cursor 3.16.29 and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 

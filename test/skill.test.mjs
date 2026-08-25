@@ -121,8 +121,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.match(chineseGrokSection, /负责规划和把关[\s\S]*自动调度 Grok Build[\s\S]*执行任务[\s\S]*跟进过程[\s\S]*核验结果/);
   assert.doesNotMatch(englishGrokSection, /optional/i);
   assert.doesNotMatch(chineseGrokSection, /可选/);
-  assert.match(english, /Cursor \*\*3\.17\.8\*\* \(IDE\/workbench and Agents Window\)/);
-  assert.match(chinese, /Cursor \*\*3\.17\.8\*\*（IDE\/workbench 与 Agents Window）/);
+  assert.match(english, /Cursor \*\*3\.17\.19\*\* \(fresh Agents Window launch\)/);
+  assert.match(chinese, /Cursor \*\*3\.17\.19\*\*（全新 Agents Window 启动）/);
   assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
@@ -282,17 +282,18 @@ test('bilingual README promotes the minimal runtime benefit and trade-off', () =
   }
 });
 
-test('bilingual compatibility docs keep Cursor 3.17.8 acceptance evidence scoped', () => {
+test('bilingual compatibility docs keep Cursor 3.17.19 acceptance evidence scoped', () => {
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   const changelog = readProjectFile('CHANGELOG.md');
 
-  assert.match(english, /3\.17\.8[\s\S]*IDE and Agents Window[\s\S]*Project understanding and task execution work as expected/);
-  assert.match(chinese, /3\.17\.8[\s\S]*IDE 和 Agents Window[\s\S]*项目理解和任务执行正常/);
+  assert.match(english, /3\.17\.19[\s\S]*fresh Agents Window launch[\s\S]*legacy IDE\/workbench was not exposed/);
+  assert.match(chinese, /3\.17\.19[\s\S]*全新 Agents Window 启动[\s\S]*没有暴露旧版 IDE\/workbench/);
+  assert.match(changelog, /3\.17\.19[\s\S]*fresh Bridge\/CDP launch[\s\S]*parallel_agent[\s\S]*normal\/minimal/);
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history archives 5.4.1 and keeps 5.4.2 current for Cursor 3.17.8', () => {
+test('compatibility history archives 5.4.2 and keeps 5.5.0 current for Cursor 3.17.19', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -300,13 +301,19 @@ test('compatibility history archives 5.4.1 and keeps 5.4.2 current for Cursor 3.
   const data = JSON.parse(readProjectFile('compatibility.json'));
 
   assert.equal(data.policy, 'latest-only');
-  assert.equal(data.current.cursorVersion, '3.17.8');
-  assert.equal(data.current.cursorBridgeVersion, '5.4.2');
+  assert.equal(data.current.cursorVersion, '3.17.19');
+  assert.equal(data.current.cursorBridgeVersion, '5.5.0');
   assert.equal(data.current.sourceRef, 'master');
   assert.equal(data.current.status, 'current');
-  assert.equal(data.current.acceptance.ideWorkbench, 'live-tested');
+  assert.equal(data.current.acceptance.ideWorkbench, 'not-exposed-in-fresh-launch');
   assert.equal(data.current.acceptance.agentsWindow, 'live-tested');
   assert.deepEqual(data.history, [
+    {
+      cursorVersion: '3.17.8',
+      cursorBridgeVersion: '5.4.2',
+      gitRef: 'cursor-bridge--v5.4.2',
+      status: 'archived',
+    },
     {
       cursorVersion: '3.16.29',
       cursorBridgeVersion: '5.4.1',
@@ -327,6 +334,9 @@ test('compatibility history archives 5.4.1 and keeps 5.4.2 current for Cursor 3.
   assert.match(chinese, /只维护 Cursor 最新版本/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
+  assert.match(english, /Cursor Bridge 5\.4\.2 — Cursor 3\.17\.8/);
+  assert.match(chinese, /Cursor Bridge 5\.4\.2 — Cursor 3\.17\.8/);
+  assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.4\.2/);
   assert.match(english, /Cursor Bridge 5\.4\.1 — Cursor 3\.16\.29/);
   assert.match(chinese, /Cursor Bridge 5\.4\.1 — Cursor 3\.16\.29/);
   assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.4\.1/);
@@ -335,4 +345,15 @@ test('compatibility history archives 5.4.1 and keeps 5.4.2 current for Cursor 3.
   assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.4\.0/);
   assert.match(chinese, /grok plugin install Vanyangyang\/cursor-bridge@cursor-bridge--v5\.4\.0 --trust/);
   assert.doesNotMatch(english + chinese + JSON.stringify(data), /5\.3\.|5\.1\.0|4\.0\.0|3\.2\.0/);
+});
+
+test('legacy Workbench live smoke skips before submitting when Cursor exposes only Agents Window', () => {
+  const script = readProjectFile('test/live-fifo-cancel-workbench.mjs');
+  const skip = script.indexOf("reason: 'legacy-workbench-not-exposed'");
+  const submit = script.indexOf('const submitted = await bridge.doTask');
+
+  assert.match(script, /isAgentsWindowTitle/);
+  assert.ok(skip >= 0);
+  assert.ok(submit > skip);
+  assert.match(script, /No task was submitted/);
 });
