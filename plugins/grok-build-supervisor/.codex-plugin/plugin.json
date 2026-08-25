@@ -1,6 +1,6 @@
 {
   "name": "grok-build-supervisor",
-  "version": "0.3.6+codex.20260825045004",
+  "version": "0.3.7+codex.20260825093335",
   "description": "Persistent Grok Build Leader/ACP supervision with verified local-proxy initialization and visible Windows Terminal TUI control.",
   "author": {
     "name": "Vanyangyang",
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Grok Build Supervisor",
     "shortDescription": "Keep guarded Grok TUI sessions connected across host tasks and plugin reloads.",
-    "longDescription": "Run /grok_init once to remember the local proxy. In the project you want to use, /grok_execute on binds that workspace for the current task and immediately reuses or opens its visible Grok Build terminal without sending a coding prompt. If Grok asks whether the project is trusted, the Supervisor keeps that exact terminal and waits for the user's native Grok choice instead of opening another window or auto-trusting it. After that, Codex or Claude Code plans and checks the work while Grok handles implementation. /grok_execute off leaves the mode without cancelling active work or closing the terminal. While Grok works, compact locating, modifying, and verifying updates replace raw tool logs and cumulative answers. Short results arrive once, while long reports are saved as local files with a path, size, checksum, and summary. Context-mode can optionally process those files but is not required. The plugin never enables approve-everything modes, adopts an unrelated Grok process, or stops a process it cannot prove it owns.",
+    "longDescription": "Run /grok_init once to remember the local proxy. In the project you want to use, /grok_execute on binds that workspace for the current task and immediately reuses or opens its visible Grok Build terminal without sending a coding prompt. If Grok asks whether the project is trusted, the Supervisor keeps that exact terminal and waits for the user's native Grok choice instead of opening another window or auto-trusting it. After that, Codex, Claude Code, or Pi plans and checks the work while Grok handles implementation. /grok_execute off leaves the mode without cancelling active work or closing the terminal. While Grok works, compact locating, modifying, and verifying updates replace raw tool logs and cumulative answers. Short results arrive once, while long reports are saved as local files with a path, size, checksum, and summary. Context-mode can optionally process those files but is not required. The plugin never enables approve-everything modes, adopts an unrelated Grok process, or stops a process it cannot prove it owns.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [

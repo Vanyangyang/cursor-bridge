@@ -149,7 +149,7 @@ test('ensure reuses an already-open Agents Window and never opens an IDE window'
   assert.equal(result.workspaceAction, 'reused-agents-window');
   assert.equal(result.targetId, 'agents');
   assert.equal(spawned.length, 0);
-  assert.match(result.message, /不会再打开 IDE 新窗口/);
+  assert.match(result.message, /without opening another IDE window/);
 
   const again = await ensureCursorRunningLocal({
     projectPath: project,
@@ -253,8 +253,8 @@ test('cursor_init accepts only an absolute project directory or .code-workspace 
 
   assert.equal(isAbsoluteWorkspacePath(project), true);
   assert.equal(isAbsoluteWorkspacePath('relative/project'), false);
-  assert.throws(() => writeWorkspaceBinding(stateFile, 'test', 'relative/project'), /完整路径/);
-  assert.throws(() => writeWorkspaceBinding(stateFile, 'test', ordinaryFile), /项目文件夹或 \.code-workspace/);
+  assert.throws(() => writeWorkspaceBinding(stateFile, 'test', 'relative/project'), /absolute project path/);
+  assert.throws(() => writeWorkspaceBinding(stateFile, 'test', ordinaryFile), /project directory or a \.code-workspace file/);
   assert.equal(writeWorkspaceBinding(stateFile, 'directory', project).projectPath, normalizeWorkspacePath(project));
   assert.equal(writeWorkspaceBinding(stateFile, 'workspace', workspace).projectPath, normalizeWorkspacePath(workspace));
   writeFileSync(stateFile, JSON.stringify({
@@ -351,8 +351,8 @@ test('an already-running Cursor without CCE access fails safely with one simple 
   assert.equal(result.status, 'running-no-debug');
   assert.equal(result.needsAction, 'close_cursor_and_retry');
   assert.equal(result.retryable, true);
-  assert.match(result.message, /不会强制关闭/);
-  assert.match(result.nextStep, /正常退出 Cursor 一次/);
+  assert.match(result.message, /will not force-close/);
+  assert.match(result.nextStep, /exit Cursor normally once/);
   assert.doesNotMatch(result.nextStep, /remote-debugging-port|9223/);
 });
 

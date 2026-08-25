@@ -7,16 +7,19 @@ const external = ['bufferutil', 'utf-8-validate'];
 const banner = {
   js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
 };
+const grokOnly = process.argv.includes('--grok-only');
 
-await build({
-  entryPoints: ['server.mjs'],
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  outfile: 'dist/cursor-bridge.mjs',
-  external,
-  banner,
-});
+if (!grokOnly) {
+  await build({
+    entryPoints: ['server.mjs'],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile: 'dist/cursor-bridge.mjs',
+    external,
+    banner,
+  });
+}
 
 await build({
   entryPoints: ['plugins/grok-build-supervisor/scripts/server.mjs'],
@@ -38,17 +41,21 @@ await build({
   banner,
 });
 
-await build({
-  entryPoints: ['cursor-lifecycle-supervisor.mjs'],
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  outfile: 'dist/cursor-lifecycle-supervisor.mjs',
-  external,
-  banner,
-});
+if (!grokOnly) {
+  await build({
+    entryPoints: ['cursor-lifecycle-supervisor.mjs'],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile: 'dist/cursor-lifecycle-supervisor.mjs',
+    external,
+    banner,
+  });
+}
 
-console.log('✅ built dist/cursor-bridge.mjs');
-console.log('✅ built dist/cursor-lifecycle-supervisor.mjs');
+if (!grokOnly) {
+  console.log('✅ built dist/cursor-bridge.mjs');
+  console.log('✅ built dist/cursor-lifecycle-supervisor.mjs');
+}
 console.log('✅ built plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs');
 console.log('✅ built plugins/grok-build-supervisor/dist/supervisor-daemon.mjs');

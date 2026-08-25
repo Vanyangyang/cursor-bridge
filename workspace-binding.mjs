@@ -109,15 +109,15 @@ export function writeWorkspaceBinding(filePath, bindingKey, projectPath, options
   const key = String(bindingKey || '').trim();
   if (!key) throw new Error('cursor_init could not identify the current Codex or Claude Code workspace session');
   if (!isAbsoluteWorkspacePath(projectPath)) {
-    throw new Error('请提供项目的完整路径，例如 C:\\Projects\\my-app 或 /Users/me/Projects/my-app');
+    throw new Error('Provide an absolute project path, for example C:\\Projects\\my-app or /Users/me/Projects/my-app');
   }
   const normalized = normalizeWorkspacePath(projectPath);
   const existsImpl = options.existsImpl || existsSync;
   if (!normalized || !existsImpl(normalized)) {
-    throw new Error(`找不到工作区：${normalized || projectPath}`);
+    throw new Error(`Workspace not found: ${normalized || projectPath}`);
   }
   if (!isWorkspaceTarget(normalized, options)) {
-    throw new Error('工作区必须是项目文件夹或 .code-workspace 文件');
+    throw new Error('The workspace must be a project directory or a .code-workspace file');
   }
 
   const state = readWorkspaceBindings(filePath);

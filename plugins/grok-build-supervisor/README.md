@@ -38,7 +38,7 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update. Skills, prompt templates, and slash commands do not hot-load into an existing task. The Pi package is versioned independently and currently embeds Grok Build Supervisor 0.3.6.
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update. Skills, prompt templates, and slash commands do not hot-load into an existing task. The Pi package is versioned independently and currently embeds Grok Build Supervisor 0.3.7.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
@@ -97,11 +97,11 @@ The project binding lasts only for the current Codex, Claude Code, or Pi task. T
 
 While the mode is on:
 
-- Codex or Claude Code plans the work, breaks it down, watches it, corrects course, and checks the result.
+- Codex, Claude Code, or Pi plans the work, breaks it down, watches it, corrects course, and checks the result.
 - Grok performs implementation, mutating commands, builds, and tests.
-- Codex or Claude Code checks the actual files and test evidence before accepting completion.
+- Codex, Claude Code, or Pi checks the actual files and test evidence before accepting completion.
 
-Turn the mode off when you want Codex or Claude Code to handle tasks normally again:
+Turn the mode off when you want Codex, Claude Code, or Pi to handle tasks normally again:
 
 ```text
 /grok_execute off
@@ -112,7 +112,7 @@ Only the exact `on` and `off` forms change the mode. Turning it off does not can
 ## How it stays connected
 
 ```text
-Codex or Claude Code
+Codex / Claude Code / Pi
         ↓
 Background Supervisor
         ↓
@@ -121,14 +121,16 @@ Grok Build + the Windows Terminal window
 
 The Supervisor handles the connection details. Users do not manage the underlying Leader, ACP connection, process IDs, or event cursor.
 
-- Closing one Codex or Claude Code task, or updating the plugin, does not immediately disconnect the background Supervisor.
+- Closing one Codex, Claude Code, or Pi task, or updating the plugin, does not immediately disconnect the background Supervisor.
 - More than one host can view the same Grok session, but only one can send commands at a time. This prevents two agents from writing over each other.
 - Status checks return compact stages such as locating, modifying, and verifying, with bounded file and tool counts. Silent Supervisor heartbeats do not pretend that Grok made progress, and raw tool logs or the answer accumulated so far are not repeated.
 - Short final answers are returned once. A longer report is saved as a local file, and the plugin returns its location, size, checksum, truncation status, and a short summary. [context-mode (recommended)](https://github.com/mksglu/context-mode) can process that file when installed, but the Supervisor does not require it.
-- Grok is told whether the sender is Codex, Claude Code, or another host, instead of always being told that Codex sent the task.
+- Grok is told whether the sender is Codex, Claude Code, Pi, or another host, instead of always being told that Codex sent the task.
 - The scripts needed by an already-running session are copied to persistent storage, so refreshing the plugin cache cannot remove them mid-session.
 - A newer plugin waits until an older busy Supervisor is idle before replacing it. Existing work stays connected during the transition.
 - Before reusing or stopping a process, the plugin checks the session, project, process identity, Grok's active-session record, and its own ownership record. A matching process number alone is not enough.
+
+User-facing explanations follow the current task language unless the user explicitly asks for another language. Machine fields, states, paths, commands, IDs, and exact permission or form options remain untranslated. English and Simplified Chinese are the maintained documentation languages; other languages are handled through runtime adaptation.
 
 ## Safety rules
 
@@ -138,7 +140,7 @@ The Supervisor handles the connection details. Users do not manage the underlyin
 - It does not hide the terminal unless you explicitly ask for no visible window.
 - It accepts only a local proxy that can actually carry the required connection. It does not store proxy passwords or assume one fixed port.
 - Grok cannot choose its own sender label; the local MCP connection supplies it.
-- “Grok says it is done” is not proof. Codex or Claude Code still checks the files, diff, tests, and other evidence you requested.
+- “Grok says it is done” is not proof. Codex, Claude Code, or Pi still checks the files, diff, tests, and other evidence you requested.
 - Installing the plugin does not grant permission to delete data, publish code, send outside messages, read secrets, or make product decisions.
 
 ## Compatibility note

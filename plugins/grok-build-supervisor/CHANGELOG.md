@@ -4,6 +4,21 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-08-25
+
+### Added
+
+- Host Skills now render user-facing supervision, readiness, trust, permission, and result explanations in the current task language while preserving machine fields and exact options verbatim.
+
+### Changed
+
+- `/grok_execute` and the executor-mode contract use semantic message requirements instead of hardcoded Chinese replies, with explicit language precedence and no persisted inferred locale.
+- The supervision contract now names Pi alongside Codex and Claude Code, and the repository exposes `npm run build:grok-supervisor` as the canonical command for rebuilding both Supervisor bundles.
+
+### Fixed
+
+- The Pi adapter removes inherited Codex and Claude Code identity markers before starting the Supervisor frontend while retaining the authenticated `pi` host kind.
+
 ## [0.3.6] - 2026-08-25
 
 ### Added
@@ -114,3 +129,4 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 [0.3.4]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.4
 [0.3.5]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.5
 [0.3.6]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.6
+[0.3.7]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.7

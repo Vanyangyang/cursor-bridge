@@ -28,6 +28,26 @@
 | **Cursor Bridge** | 让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
 | **Grok Build Supervisor** | 让 Codex / Claude Code / Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
+## 只需启动一个客户端，统筹完整的 Cursor + Grok Build 工作流
+
+选择一个编排客户端——**Codex（推荐）**、Claude Code 或 Pi——同时安装两个插件，就能在一段对话里统一协调 Cursor 与 Grok Build。
+
+```text
+Codex（推荐）/ Claude Code / Pi
+              │
+          规划、调度、验收
+          ┌───┴──────────────┐
+          ▼                  ▼
+    Cursor Bridge     Grok Build Supervisor
+   CCE + cursor_do       受监督的 Grok Build
+```
+
+- 先用 `cursor_context_engine` 获取精简、可回到源码核验的项目理解。
+- 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由编排客户端验收。
+- 需要 Grok Build 执行时，开启 `/grok_execute on`；编排客户端继续负责计划、看进度、处理问题与核验结果。
+
+一个工作流只选择一个编排客户端，任务归属会更清楚。两个插件仍然互相独立：可以只装其中一个，也可以一起安装形成这条完整链路。Cursor Bridge 仍可单独安装进 Grok Build，继续使用它原有的 CCE 与 Cursor 执行能力。
+
 ## Grok Build Supervisor（New）
 
 **让 Codex、Claude Code 或 Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
@@ -58,11 +78,13 @@ Cursor Bridge 不检查或管理 Cursor 订阅。已登录 Cursor 能使用哪�
 
 ## 快速开始
 
-### Codex
+### Codex（推荐）
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
 codex plugin add cursor-bridge@vanyangyang
+# 可选：为完整的 Cursor + Grok Build 工作流再安装 Supervisor
+codex plugin add grok-build-supervisor@vanyangyang
 ```
 
 ### Claude Code
@@ -70,6 +92,8 @@ codex plugin add cursor-bridge@vanyangyang
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
+# 可选：为完整的 Cursor + Grok Build 工作流再安装 Supervisor
+claude plugin install grok-build-supervisor@vanyangyang
 ```
 
 ### Grok Build
@@ -88,6 +112,8 @@ Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放�
 
 ```bash
 pi install npm:pi-cursor-bridge
+# 可选：为完整的 Cursor + Grok Build 工作流再安装 Supervisor
+pi install npm:pi-grok-build-supervisor
 ```
 
 安装后重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，按上面的方式重载 Grok，或重启 Pi。Pi 会自动把 Cursor Bridge 绑定到启动 Pi 时所在的目录；其他宿主可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
@@ -123,12 +149,14 @@ pi install npm:pi-cursor-bridge
 
 不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。打不开 Agents Window 时，会改用 workbench。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
-支持的宿主：**Codex**、**Claude Code**、**Grok Build**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
+支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
-## 两项核心能力
+面向用户的说明会跟随当前任务使用的语言；用户明确指定其他语言时，以明确要求为准。机器字段、状态、路径、命令、ID 与原始权限选项保持稳定，不会被翻译。仓库正式维护英文与简体中文文档；其他语言通过运行时自适应支持，不另外维护整套翻译手册。
 
-- **理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。
-- **委派有边界任务：** `cursor_do` 会把明确限定范围的子任务交给 Cursor Agent，并返回任务 ID；最终结果和工作区改动仍由主 Agent 审核。
+## 用好 CCE 与 `cursor_do`
+
+- **先理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。
+- **再用 `cursor_do` 执行有边界任务：** 它会把范围清楚的任务交给 Cursor Agent，并返回稳定的任务 ID，便于继续查看与恢复。`cursor_do` 仍是可选能力，但不再藏在边角：只要一次有边界的 Cursor 执行能节省时间，就可以直接使用；最终结果、真实工作区改动与验证证据仍由主 Agent 审核。
 
 ## 完整 MCP 工具说明
 
@@ -223,7 +251,7 @@ confidence: high
 <summary><strong>工作区、Cursor UI 与生命周期</strong></summary>
 
 ```text
-Codex / Claude Code / Grok Build
+Codex / Claude Code / Grok Build / Pi
         │ MCP
         ▼
 Cursor Bridge adapter(s)
@@ -243,7 +271,7 @@ Cursor Agent + project index
 - `cursor_status` 只列 CDP 页标题，不再探测页面 DOM。CCE 会对 DOM 确实为空的 Agents 页 reload 一次；Windows normal 模式复用 Agents Window 时还会进行一次有节流、无抢焦点的原生合成器重绘，避免 DOM 正常却只显示 Electron 白色表面。
 - 缓存 target 的窗口标题不再匹配项目时会被拒绝；但 `Cursor Agents` 这个 Agents Window 标题是合法的可复用 target。
 - Cursor 使用旧 UI、新 UI 还是同时开启，仍由用户决定；Bridge 不会改写偏好。
-- Windows 上 supervisor 不会随单个 Codex、Claude Code 或 Grok 会话关闭而退出 Cursor。
+- Windows 上 supervisor 不会随单个 Codex、Claude Code、Grok Build 或 Pi 会话关闭而退出 Cursor。
 
 初始化路径可以是已存在的项目目录或 `.code-workspace` 文件。带引号路径、Windows UNC / 扩展路径和 macOS `~` 路径会自动规范化；相对路径和无关文件会被拒绝。
 

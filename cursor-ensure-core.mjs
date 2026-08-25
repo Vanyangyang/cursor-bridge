@@ -322,8 +322,8 @@ export async function ensureCursorRunningLocal(options = {}) {
             windowGuard,
             needsAction: 'install_or_locate_cursor',
             retryable: true,
-            nextStep: '请确认 Cursor 已安装并登录。若使用便携版或自定义目录，请设置 CURSOR_EXE 后重新执行同一句初始化命令。',
-            message: `CCE 已连接 Cursor，但还不能打开工作区 ${projectPath}，因为没有找到 Cursor 程序。`,
+            nextStep: 'Confirm that Cursor is installed and signed in. For a portable or custom installation, set CURSOR_EXE and run the same initialization command again.',
+            message: `CCE connected to Cursor but cannot open workspace ${projectPath} because the Cursor executable was not found.`,
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target) => target.id));
@@ -350,8 +350,8 @@ export async function ensureCursorRunningLocal(options = {}) {
             cursorExecutableSource: cursorExecutable.source,
             needsAction: 'retry_initialization',
             retryable: true,
-            nextStep: '请等待 Cursor 完成打开项目，然后重新执行同一句初始化命令。',
-            message: `Cursor 已打开项目，但 CCE 还没有确认工作区 ${projectPath} 已准备好；为避免搜索错项目，本次初始化已安全停止。`,
+            nextStep: 'Wait for Cursor to finish opening the project, then run the same initialization command again.',
+            message: `Cursor opened the project, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`,
           };
         }
         targetId = openedTarget.id;
@@ -369,8 +369,8 @@ export async function ensureCursorRunningLocal(options = {}) {
         targetId,
         workspaceAction,
         message: workspaceAction === 'reused-agents-window'
-          ? `CDP ${CDP_PORT} 已响应且是 Cursor；已复用 Agents Window（${targetId}），不会再打开 IDE 新窗口。`
-          : `CDP ${CDP_PORT} 已响应且是 Cursor；目标工作区已绑定到 CDP target ${targetId || 'default'}。`,
+          ? `CDP ${CDP_PORT} responded as Cursor; Agents Window ${targetId} was reused without opening another IDE window.`
+          : `CDP ${CDP_PORT} responded as Cursor; the target workspace is bound to CDP target ${targetId || 'default'}.`,
       };
     }
     return {
@@ -379,8 +379,8 @@ export async function ensureCursorRunningLocal(options = {}) {
       port: CDP_PORT,
       needsAction: 'free_cce_port',
       retryable: true,
-      nextStep: `本机端口 ${CDP_PORT} 正被其他程序使用。关闭占用它的程序后，重新执行同一句初始化命令。`,
-      message: `CCE 现在无法连接 Cursor，因为所需的本机端口 ${CDP_PORT} 正被其他程序占用。`,
+      nextStep: `Local port ${CDP_PORT} is in use by another program. Close that program, then run the same initialization command again.`,
+      message: `CCE cannot connect to Cursor because required local port ${CDP_PORT} is occupied by another program.`,
     };
   }
   if (cursorRunningImpl()) {
@@ -394,9 +394,9 @@ export async function ensureCursorRunningLocal(options = {}) {
       needsAction: 'close_cursor_and_retry',
       retryable: true,
       nextStep: projectPath
-        ? `保存手头内容并正常退出 Cursor 一次，然后再次说“初始化 CCE 工作区为 ${projectPath}”。`
-        : '保存手头内容并正常退出 Cursor 一次，然后重试刚才的 CCE 操作。',
-      message: 'Cursor 已经提前打开，CCE 无法在运行中为它补上连接能力。为保护未保存内容，Cursor Bridge 不会强制关闭它。',
+        ? `Save your work, exit Cursor normally once, then initialize CCE for workspace ${projectPath} again.`
+        : 'Save your work, exit Cursor normally once, then retry the previous CCE operation.',
+      message: 'Cursor was already running, so CCE cannot add the required connection capability in place. Cursor Bridge will not force-close it, protecting unsaved work.',
     };
   }
   const cursorExecutable = findCursorExeDetailsImpl();
@@ -408,8 +408,8 @@ export async function ensureCursorRunningLocal(options = {}) {
       port: CDP_PORT,
       needsAction: 'install_or_locate_cursor',
       retryable: true,
-      nextStep: '请先安装并登录 Cursor。若使用便携版或自定义目录，请设置 CURSOR_EXE 后重新执行同一句初始化命令。',
-      message: '没有找到 Cursor。标准 Windows 与 macOS 安装会自动识别，通常不需要填写程序路径。',
+      nextStep: 'Install and sign in to Cursor first. For a portable or custom installation, set CURSOR_EXE and run the same initialization command again.',
+      message: 'Cursor was not found. Standard Windows and macOS installations are detected automatically and normally do not require an explicit executable path.',
     };
   }
 
@@ -448,8 +448,8 @@ export async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable.source,
       needsAction: 'retry_initialization',
       retryable: true,
-      nextStep: '请稍等片刻，然后重新执行同一句初始化命令。',
-      message: 'Cursor 已经启动，但 CCE 还没准备好；无需修改任何端口设置。',
+      nextStep: 'Wait a moment, then run the same initialization command again.',
+      message: 'Cursor started, but CCE is not ready yet. No port setting needs to be changed.',
     };
   }
   const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
@@ -469,15 +469,15 @@ export async function ensureCursorRunningLocal(options = {}) {
       cursorExecutableSource: cursorExecutable.source,
       needsAction: 'retry_initialization',
       retryable: true,
-      nextStep: '请等待 Cursor 完成打开项目，然后重新执行同一句初始化命令。',
-      message: `Cursor 已启动，但 CCE 还没有确认工作区 ${projectPath} 已准备好；为避免搜索错项目，本次初始化已安全停止。`,
+      nextStep: 'Wait for Cursor to finish opening the project, then run the same initialization command again.',
+      message: `Cursor started, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`,
     };
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
   const windowGuard = effectiveRuntimeMode === 'minimal' && cursorPid
     ? startMinimalWindowGuard(cursorPid)
     : null;
-  const target = projectPath ? `打开 ${projectPath}` : '恢复上次工作区';
+  const target = projectPath ? `opening ${projectPath}` : 'restoring the previous workspace';
   const presentation = effectiveRuntimeMode === 'minimal'
     ? setCursorWindowPresentation({ action: 'hide', port: CDP_PORT, pid: cursorPid })
     : null;
@@ -496,7 +496,7 @@ export async function ensureCursorRunningLocal(options = {}) {
     cursorExecutableSource: cursorExecutable.source,
     targetId,
     workspaceAction: projectPath ? 'launched-project' : 'launched-last-workspace',
-    message: `已启动 Cursor（${exe}，${target}），CDP ${CDP_PORT} 就绪。`,
+    message: `Cursor started (${exe}, ${target}); CDP ${CDP_PORT} is ready.`,
   };
 }
 

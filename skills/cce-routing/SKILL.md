@@ -37,6 +37,7 @@ Do not submit the same lookup to CCE and another semantic system in parallel. Us
 Call `cursor_context_engine` once with the question's real intent. Include a known symbol, subsystem, or path only when it is a useful lead.
 
 - Describe the relationship or behavior to establish and the evidence needed.
+- Preserve the language of the user's current substantive request unless the user explicitly asks for another language. Do not infer or persist a different language from the operating system when the conversation already provides a clear signal.
 - Do not prescribe Cursor's internal search sequence, harness, Explore usage, or number of files.
 - Do not invent hidden parameters; the public input is only `query`.
 - Allow a cold or large workspace enough time to complete its serialized Cursor UI turn.
@@ -49,5 +50,7 @@ Treat CCE output as evidence leads, not final authority.
 2. Distinguish exact references and demonstrated flows from semantic similarity.
 3. If CCE returns `NOT_FOUND` or names gaps, report those gaps or perform one bounded fallback search; do not guess from framework convention.
 4. Keep edits, final review, tests, and acceptance with the primary agent unless a separate bounded delegation is appropriate.
+
+Explain the result in the language of the user's current task unless an explicit language override applies. Preserve `CCE_SEARCH_RESULT`, field names, enum values, `NOT_FOUND`, paths, symbols, line anchors, hashes, IDs, commands, and error/status codes verbatim. When a result was authored in another host task or language, keep the evidence unchanged and explain it in the current task language rather than rewriting the artifact.
 
 CCE is strongly prompted and audited for read-only investigation, but it is not a filesystem sandbox. Preserve user changes and normal workspace safety boundaries.
