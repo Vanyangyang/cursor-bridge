@@ -20782,7 +20782,7 @@ function normalizeCceSearchResult(value) {
   const text = String(value || "").trim();
   const marker = text.indexOf("CCE_SEARCH_RESULT");
   if (marker < 0) return text;
-  return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, "CCE_SEARCH_RESULT\n").replace(/[^\S\r\n]+(?=(?:coverage|evidence|gaps|confidence):)/g, "\n");
+  return text.slice(marker).replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, "CCE_SEARCH_RESULT\n").replace(/[^\S\r\n]+(?=(?:coverage|evidence|gaps|confidence):)/g, "\n").replace(/^(?!- )([^:\r\n]+:\d+(?:-\d+)?\s+\|)/gm, "- $1");
 }
 function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, baselineCount = 0 } = {}) {
   if (!String(answer || "").trim()) return false;
@@ -20793,7 +20793,8 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
   const hasCompletionEvidence = sawStop || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
   return hasAssistantEvidence && hasCompletionEvidence;
 }
-var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. Before finishing, inspect the actual changes and run verification proportional to risk. Reply in the language of the user task unless it explicitly requests another language. The final reply must list completed work, changed files, verification results, and remaining risks or blockers.";
+var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. Before finishing, inspect the actual changes and run verification proportional to risk. The final reply must list completed work, changed files, verification results, and remaining risks or blockers.";
+var DO_LANGUAGE_CONTRACT = "\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
   return new Promise((resolve6, reject) => {
@@ -21269,7 +21270,8 @@ var REACT_ADAPTER_BODY = `
     id:String(e&&e.id||''),label:String(e&&e.label||''),searchText:String(e&&e.searchText||''),
     timestamp:normalizeTimestamp(e&&e.timestamp,index),isSelected:!!(e&&e.isSelected),
     showSpinner:!!(e&&e.showSpinner),
-    icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
+    icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||''),
+    durable:true
   });
   const normalizeV2=(header,selectedId,index,section)=>{
     const rawId=String(readScalar(header&&header.id)||'').replace(/^local:/,'');
@@ -21287,7 +21289,8 @@ var REACT_ADAPTER_BODY = `
       timestamp:normalizeTimestamp(readScalar(header&&header.lastUpdatedAt)||readScalar(header&&header.createdAt),index),
       isSelected:!!rawId&&(String(selectedId||'')===rawId||String(selectedId||'')==='local:'+rawId),
       showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft',
-      workspaceId:String(readScalar(section&&section.id)||''),workspaceLabel:String(readScalar(section&&section.displayName)||'')
+      workspaceId:String(readScalar(section&&section.id)||''),workspaceLabel:String(readScalar(section&&section.displayName)||''),
+      durable:true
     };
   };
   const findLegacyAdapter=()=>{
@@ -21368,7 +21371,7 @@ var REACT_ADAPTER_BODY = `
               entries.push({
                 id:selectedId,label:'',searchText:'',timestamp:0,isSelected:true,
                 showSpinner:/in_progress|running|generating/.test(status),icon,
-                workspaceId:'',workspaceLabel:''
+                workspaceId:'',workspaceLabel:'',durable:false
               });
             }
           }
@@ -21474,6 +21477,13 @@ function classifyParallelTerminalIcon(icon) {
   if (/error|failed|warning/i.test(value)) return "failed";
   if (/check-circled|check/i.test(value)) return "completed";
   return "unknown";
+}
+function isDurablyRegisteredParallelEntry(entry) {
+  return !!entry && entry.durable !== false && (entry.showSpinner || classifyParallelTerminalIcon(entry.icon) !== "unknown");
+}
+function uncertainSubmissionReservationScope(job, error2) {
+  if (error2 && error2.requiresGlobalReservation) return "global";
+  return job && job.readOnly ? "agent" : "paths";
 }
 function providerErrorSignature(info) {
   if (!info || info.found !== true) return "";
@@ -21780,7 +21790,7 @@ var CursorBridge = class {
       this._assertNoParallelPathConflict(allowedPaths);
     }
     const contract = String(options.completionContract || "").trim();
-    let fullPrompt = text;
+    let fullPrompt = text + DO_LANGUAGE_CONTRACT;
     if (readOnly) fullPrompt += "\n\nRead-only boundary: Do not modify, create, or delete files, and do not run commands that change workspace state.";
     if (allowedPaths.length > 0) {
       fullPrompt += "\n\nAllowed modification scope (do not cross this boundary):\n" + allowedPaths.map((x) => "- " + x).join("\n");
@@ -22488,18 +22498,26 @@ var CursorBridge = class {
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
       agent = null;
-      for (let i = 0; i < 24 && !agent; i++) {
+      let provisionalAgent = job.agentId ? { id: job.agentId, label: job.agentLabel } : null;
+      for (let i = 0; i < 40 && !agent; i++) {
         await sleep2(350);
         await this._throwIfNewProviderError(c, providerErrorBaseline);
         try {
           const candidate = selectNewAgentEntry(before, await this._readAgentEntries(c));
-          if (candidate && (candidate.showSpinner || classifyParallelTerminalIcon(candidate.icon) !== "unknown")) agent = candidate;
+          if (candidate && !provisionalAgent) {
+            provisionalAgent = candidate;
+            job.agentId = candidate.id;
+            job.agentLabel = candidate.label || null;
+          }
+          if (isDurablyRegisteredParallelEntry(candidate)) agent = candidate;
         } catch {
         }
       }
       if (!agent) {
-        const e = new Error("The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden");
+        const e = new Error(provisionalAgent ? `Cursor Agent ${provisionalAgent.id} was submitted but did not become a durable Agent History row; the reservation remains held and automatic resubmission is forbidden` : "The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden");
         e.sent = true;
+        e.requiresGlobalReservation = !!provisionalAgent;
+        e.recoveryState = provisionalAgent ? "awaiting_durable_history" : "unbound_agent";
         throw e;
       }
       job.agentId = agent.id;
@@ -22719,7 +22737,8 @@ var CursorBridge = class {
     job.resultUnavailable = true;
     job.terminalEvidence = evidence || "stable_completed_history_icon";
     job.recoveryState = "terminal_result_uncollected";
-    job.reservationScope = job.readOnly ? "agent" : "paths";
+    job.reservationScope = uncertainSubmissionReservationScope(job, error2);
+    job.recoveryState = error2.recoveryState || "monitoring_uncertain_submission";
   }
   _abandonJob(job, reason) {
     if (isTerminalTask(job)) return this._taskView(job, true);
@@ -23612,6 +23631,7 @@ export {
   exprOpenAgent,
   isBlankAgentsWindow,
   isConfirmedCompletedReply,
+  isDurablyRegisteredParallelEntry,
   isTargetedStopConfirmed,
   normalizeAllowedPath,
   normalizeCceSearchResult,
@@ -23628,5 +23648,6 @@ export {
   shouldAutoLaunchCursor,
   shouldRecoverNormalAgentsPresentation,
   summarizeCdpPages,
+  uncertainSubmissionReservationScope,
   updateStableEntryObservation
 };

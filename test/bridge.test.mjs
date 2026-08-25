@@ -38,6 +38,8 @@ import {
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,
+  isDurablyRegisteredParallelEntry,
+  uncertainSubmissionReservationScope,
   providerErrorSignature,
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
@@ -830,6 +832,14 @@ test('CCE and cursor_do scaffolds preserve multilingual user text and request ma
     assert.equal(delegatedPrompt.startsWith(sample), true);
     assert.match(delegatedPrompt, /Reply in the language of the user task/);
   }
+
+  const customBridge = new OfflineBridge();
+  const custom = await customBridge.doTask('日本語で結果を返してください。', {
+    completionContract: 'Return one verified result.',
+  });
+  const customPrompt = customBridge.tasks.get(custom.taskId).prompt;
+  assert.match(customPrompt, /Reply in the language of the user task/);
+  assert.match(customPrompt, /Acceptance and reporting contract:\nReturn one verified result\./);
 });
 
 test('unified context engine reuses readiness, FIFO, read-only options, and result normalization', async () => {
@@ -855,6 +865,8 @@ test('CCE result normalization removes conversational preamble without inventing
   assert.match(compact, /intent: locate owner\ncoverage:/);
   assert.match(compact, /\nevidence:/);
   assert.match(compact, /\ngaps: none\nconfidence: high/);
+  const unbulleted = normalizeCceSearchResult('CCE_SEARCH_RESULT\nintent: locate owner\ncoverage: focused | enough\nevidence:\nserver.mjs:76-91 | buildContextEnginePrompt | owner | source-read\ngaps: none\nconfidence: high');
+  assert.match(unbulleted, /\nevidence:\n- server\.mjs:76-91 \|/);
   assert.equal(normalizeCceSearchResult('legacy result'), 'legacy result');
 });
 
@@ -1298,6 +1310,19 @@ test('parallel failure icons require two identical stable observations', () => {
   assert.equal(classifyParallelTerminalIcon('circle-slash'), 'cancelled');
   assert.equal(classifyParallelTerminalIcon('warning'), 'failed');
   assert.equal(classifyParallelTerminalIcon('check-circled'), 'completed');
+});
+
+test('parallel submission waits for a durable History row before releasing the UI lock', () => {
+  assert.equal(isDurablyRegisteredParallelEntry({ durable: false, showSpinner: true, icon: 'loading' }), false);
+  assert.equal(isDurablyRegisteredParallelEntry({ durable: true, showSpinner: true, icon: 'loading' }), true);
+  assert.equal(isDurablyRegisteredParallelEntry({ durable: true, showSpinner: false, icon: 'check-circled' }), true);
+  assert.equal(isDurablyRegisteredParallelEntry({ showSpinner: true, icon: 'loading' }), true);
+  assert.equal(isDurablyRegisteredParallelEntry({ durable: true, showSpinner: false, icon: 'draft' }), false);
+  assert.match(EXPR_HISTORY_ENTRIES, /durable:true/);
+  assert.match(EXPR_HISTORY_ENTRIES, /durable:false/);
+  assert.equal(uncertainSubmissionReservationScope({ readOnly: true }, { requiresGlobalReservation: true }), 'global');
+  assert.equal(uncertainSubmissionReservationScope({ readOnly: true }, {}), 'agent');
+  assert.equal(uncertainSubmissionReservationScope({ readOnly: false }, {}), 'paths');
 });
 
 test('orphaned task can be reaped to completed after its original promise was rejected', async () => {

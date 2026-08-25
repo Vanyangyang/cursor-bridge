@@ -96,7 +96,8 @@ function normalizeCceSearchResult(value) {
   if (marker < 0) return text;
   return text.slice(marker)
     .replace(/^CCE_SEARCH_RESULT\s+(?=intent:)/, 'CCE_SEARCH_RESULT\n')
-    .replace(/[^\S\r\n]+(?=(?:coverage|evidence|gaps|confidence):)/g, '\n');
+    .replace(/[^\S\r\n]+(?=(?:coverage|evidence|gaps|confidence):)/g, '\n')
+    .replace(/^(?!- )([^:\r\n]+:\d+(?:-\d+)?\s+\|)/gm, '- $1');
 }
 
 function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, baselineCount = 0 } = {}) {
@@ -114,8 +115,10 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
 const DO_DEFAULT_CONTRACT =
   '\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. ' +
   'Before finishing, inspect the actual changes and run verification proportional to risk. ' +
-  'Reply in the language of the user task unless it explicitly requests another language. ' +
   'The final reply must list completed work, changed files, verification results, and remaining risks or blockers.';
+const DO_LANGUAGE_CONTRACT =
+  '\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. ' +
+  'Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.';
 
 // ---------- CDP helpers ----------
 // 连接目标用字面 IP '127.0.0.1'，不用 'localhost'：Windows 上 "localhost" DNS 常优先解析到 ::1，
@@ -591,7 +594,8 @@ const REACT_ADAPTER_BODY = `
     id:String(e&&e.id||''),label:String(e&&e.label||''),searchText:String(e&&e.searchText||''),
     timestamp:normalizeTimestamp(e&&e.timestamp,index),isSelected:!!(e&&e.isSelected),
     showSpinner:!!(e&&e.showSpinner),
-    icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||'')
+    icon:String(typeof (e&&e.icon)==='string'?e.icon:(e&&e.icon&&((e.icon.id)||(e.icon.props&&e.icon.props.id)||(e.icon.type&&e.icon.type.id)))||''),
+    durable:true
   });
   const normalizeV2=(header,selectedId,index,section)=>{
     const rawId=String(readScalar(header&&header.id)||'').replace(/^local:/,'');
@@ -609,7 +613,8 @@ const REACT_ADAPTER_BODY = `
       timestamp:normalizeTimestamp(readScalar(header&&header.lastUpdatedAt)||readScalar(header&&header.createdAt),index),
       isSelected:!!rawId&&(String(selectedId||'')===rawId||String(selectedId||'')==='local:'+rawId),
       showSpinner:/in_progress|running|generating/.test(status),icon:icon||'draft',
-      workspaceId:String(readScalar(section&&section.id)||''),workspaceLabel:String(readScalar(section&&section.displayName)||'')
+      workspaceId:String(readScalar(section&&section.id)||''),workspaceLabel:String(readScalar(section&&section.displayName)||''),
+      durable:true
     };
   };
   const findLegacyAdapter=()=>{
@@ -690,7 +695,7 @@ const REACT_ADAPTER_BODY = `
               entries.push({
                 id:selectedId,label:'',searchText:'',timestamp:0,isSelected:true,
                 showSpinner:/in_progress|running|generating/.test(status),icon,
-                workspaceId:'',workspaceLabel:''
+                workspaceId:'',workspaceLabel:'',durable:false
               });
             }
           }
@@ -806,6 +811,17 @@ function classifyParallelTerminalIcon(icon) {
   if (/error|failed|warning/i.test(value)) return 'failed';
   if (/check-circled|check/i.test(value)) return 'completed';
   return 'unknown';
+}
+
+function isDurablyRegisteredParallelEntry(entry) {
+  return !!entry
+    && entry.durable !== false
+    && (entry.showSpinner || classifyParallelTerminalIcon(entry.icon) !== 'unknown');
+}
+
+function uncertainSubmissionReservationScope(job, error) {
+  if (error && error.requiresGlobalReservation) return 'global';
+  return job && job.readOnly ? 'agent' : 'paths';
 }
 
 function providerErrorSignature(info) {
@@ -1165,7 +1181,7 @@ class CursorBridge {
     }
 
     const contract = String(options.completionContract || '').trim();
-    let fullPrompt = text;
+    let fullPrompt = text + DO_LANGUAGE_CONTRACT;
     if (readOnly) fullPrompt += '\n\nRead-only boundary: Do not modify, create, or delete files, and do not run commands that change workspace state.';
     if (allowedPaths.length > 0) {
       fullPrompt += '\n\nAllowed modification scope (do not cross this boundary):\n' + allowedPaths.map((x) => '- ' + x).join('\n');
@@ -1902,20 +1918,27 @@ class CursorBridge {
       // 新版还会先登记 draft；只有进入 running/terminal 状态才算发送确认。若同时出现新的
       // provider error tray，则这是明确失败终态，释放占用但不自动重试。
       agent = null;
-      for (let i = 0; i < 24 && !agent; i++) {
+      let provisionalAgent = job.agentId ? { id: job.agentId, label: job.agentLabel } : null;
+      for (let i = 0; i < 40 && !agent; i++) {
         await sleep(350);
         await this._throwIfNewProviderError(c, providerErrorBaseline);
         try {
           const candidate = selectNewAgentEntry(before, await this._readAgentEntries(c));
-          if (candidate && (
-            candidate.showSpinner
-            || classifyParallelTerminalIcon(candidate.icon) !== 'unknown'
-          )) agent = candidate;
+          if (candidate && !provisionalAgent) {
+            provisionalAgent = candidate;
+            job.agentId = candidate.id;
+            job.agentLabel = candidate.label || null;
+          }
+          if (isDurablyRegisteredParallelEntry(candidate)) agent = candidate;
         } catch {}
       }
       if (!agent) {
-      const e = new Error('The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden');
+      const e = new Error(provisionalAgent
+        ? `Cursor Agent ${provisionalAgent.id} was submitted but did not become a durable Agent History row; the reservation remains held and automatic resubmission is forbidden`
+        : 'The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden');
         e.sent = true;
+        e.requiresGlobalReservation = !!provisionalAgent;
+        e.recoveryState = provisionalAgent ? 'awaiting_durable_history' : 'unbound_agent';
         throw e;
       }
       job.agentId = agent.id;
@@ -2138,7 +2161,8 @@ class CursorBridge {
     job.resultUnavailable = true;
     job.terminalEvidence = evidence || 'stable_completed_history_icon';
     job.recoveryState = 'terminal_result_uncollected';
-    job.reservationScope = job.readOnly ? 'agent' : 'paths';
+              job.reservationScope = uncertainSubmissionReservationScope(job, error);
+              job.recoveryState = error.recoveryState || 'monitoring_uncertain_submission';
   }
 
   _abandonJob(job, reason) {
@@ -3116,6 +3140,8 @@ export {
   isTargetedStopConfirmed,
   updateStableEntryObservation,
   classifyParallelTerminalIcon,
+  isDurablyRegisteredParallelEntry,
+  uncertainSubmissionReservationScope,
   providerErrorSignature,
   createProviderError,
   promoteAgentsWorkspaceLifecycle,

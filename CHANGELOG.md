@@ -24,6 +24,9 @@ The project follows [Semantic Versioning](https://semver.org/).
 - The Cursor Bridge Pi package now isolates its host and workspace identity from inherited Codex or Claude Code environment variables, so launching Pi from another Agent still binds Cursor to Pi's actual working directory.
 - Pi MCP calls now have a bounded 15-minute client timeout instead of the SDK's 60-second default, allowing cold Cursor CCE searches and other legitimately long plugin operations to finish without an adapter-side timeout.
 - The Pi publisher no longer skips an existing version by number alone; it compares the local dry-run tarball shasum with npm and fails when immutable contents differ.
+- A custom `completion_contract` no longer drops the `cursor_do` response-language contract; task language and immutable machine tokens remain explicit on every delegated path.
+- CCE result normalization restores a missing evidence bullet when Cursor returns a valid `path:line | ...` row without `-`, keeping the machine envelope stable without changing evidence content.
+- Cursor Agents v2 distinguishes a selected-composer provisional ID from a durable History row. An uncertain submitted Agent now keeps its exact provisional identity under a global reservation, preventing another parallel submission from replacing it before it can be safely monitored or recovered.
 
 ## [5.4.2] - 2026-08-22
 
