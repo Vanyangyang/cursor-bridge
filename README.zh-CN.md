@@ -30,7 +30,7 @@
 
 ## 让你正在使用的客户端同时调用 Cursor 与 Grok Build
 
-继续使用你原本就在用的 **Codex（推荐）**、Claude Code 或 Pi。安装这两个插件后，同一个客户端就能在一段对话里调用 Cursor，并协调 Grok Build 完成工作。
+继续使用你原本就在用的 **Codex（推荐）**、Claude Code 或 Pi 作为常用代码客户端。两个插件互相独立：只安装 Cursor Bridge，当前客户端就能使用 Cursor；只安装 Grok Build Supervisor，就能协调 Grok Build；两者都安装后，则可以在同一段对话里同时使用这两种能力。
 
 ```text
 Codex（推荐）/ Claude Code / Pi
@@ -47,7 +47,7 @@ Codex（推荐）/ Claude Code / Pi
 - 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由当前客户端验收。
 - 需要 Grok Build 执行时，开启 `/grok_execute on`；当前客户端继续负责计划、看进度、处理问题与核验结果。
 
-这个仓库不是一款新的“协调器”，而是给你正在使用的客户端增加这些协调能力。两个插件仍然互相独立：可以只装其中一个，也可以一起安装形成完整链路。
+这个仓库不是一款新的“协调器”，而是给你正在使用的客户端增加这些能力；按需安装即可。
 
 ## Grok Build Supervisor（New）
 
