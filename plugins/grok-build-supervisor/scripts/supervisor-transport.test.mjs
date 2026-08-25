@@ -139,6 +139,7 @@ test("MCP frontend derives a bounded host identity without trusting prompt argum
   assert.equal(resolveHostKind({ CLAUDE_CODE_SESSION_ID: "session-1" }), "claude_code");
   assert.equal(resolveHostKind({ CLAUDE_PROJECT_DIR: "C:\\project" }), "claude_code");
   assert.equal(resolveHostKind({ GROK_SUPERVISOR_HOST_KIND: "claude_code", CODEX_THREAD_ID: "thread-1" }), "claude_code");
+  assert.equal(resolveHostKind({ GROK_SUPERVISOR_HOST_KIND: "pi", CODEX_THREAD_ID: "thread-1" }), "pi");
   assert.equal(resolveHostKind({}), "unknown");
 });
 

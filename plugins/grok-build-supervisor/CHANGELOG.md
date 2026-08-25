@@ -4,6 +4,11 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+### Added
+
+- The authenticated host-identity envelope now recognizes Pi as a first-class supervising host, so Grok receives a Pi supervision contract instead of a generic or Codex sender label.
+- Two independently versioned Pi Packages can install Cursor Bridge and Grok Build Supervisor from npm without requiring a separate third-party MCP adapter.
+
 ## [0.3.5] - 2026-08-24
 
 ### Fixed

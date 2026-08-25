@@ -192,11 +192,15 @@ test("workspace trust ACP capability is explicit and its structured request is v
 test("supervision prompt and fallback question keep clarification narrowly scoped", () => {
   const codexPrompt = buildSupervisedPrompt("Inspect the failing build.", "codex");
   const claudePrompt = buildSupervisedPrompt("Inspect the failing build.", "claude_code");
+  const piPrompt = buildSupervisedPrompt("Inspect the failing build.", "pi");
   const neutralPrompt = buildSupervisedPrompt("Inspect the failing build.");
   assert.match(codexPrompt, /delegated by Codex/);
   assert.match(claudePrompt, /\[Claude Code supervision contract\]/);
   assert.match(claudePrompt, /delegated by Claude Code/);
   assert.doesNotMatch(claudePrompt, /delegated by Codex/);
+  assert.match(piPrompt, /\[Pi supervision contract\]/);
+  assert.match(piPrompt, /delegated by Pi/);
+  assert.doesNotMatch(piPrompt, /delegated by Codex/);
   assert.match(neutralPrompt, /delegated by the supervising host agent/);
   assert.match(codexPrompt, /specific fact or coordination decision/);
   assert.match(codexPrompt, /Inspect the failing build/);

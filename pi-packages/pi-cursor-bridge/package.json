@@ -1,0 +1,52 @@
+{
+  "name": "pi-cursor-bridge",
+  "version": "0.1.0",
+  "description": "Use Cursor Context Engine and bounded Cursor Agent execution from the Pi coding agent.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Vanyangyang",
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vanyangyang/cursor-bridge.git",
+    "directory": "pi-packages/pi-cursor-bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/Vanyangyang/cursor-bridge/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-coding-agent",
+    "cursor",
+    "mcp",
+    "semantic-search",
+    "coding-agent"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ],
+    "skills": [
+      "./skills/cce-routing",
+      "./skills/cursor-delegate"
+    ]
+  },
+  "files": [
+    "extensions/",
+    "dist/",
+    "skills/",
+    ".codex-plugin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "piPackage": {
+    "embeddedProduct": "Cursor Bridge",
+    "embeddedProductVersion": "5.4.2"
+  }
+}
