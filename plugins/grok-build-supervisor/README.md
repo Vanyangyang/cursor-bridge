@@ -2,18 +2,18 @@
 
 [简体中文](./README.zh-CN.md) · [Repository overview](../../README.md)
 
-**Let Codex or Claude Code plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
+**Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
 
-Grok Build Supervisor is a separate plugin for Codex and Claude Code. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when a host task ends or the plugin is reloaded. Codex or Claude Code can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
+Grok Build Supervisor is a separate plugin for Codex, Claude Code, and Pi. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when a host task ends or the plugin is reloaded. The supervising host can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
 
 > [!NOTE]
-> Live-tested on Windows 11 with Windows Terminal, PowerShell, and Grok Build 1.0.10. Other operating systems are not currently claimed as end-to-end supported.
+> Live-tested on Windows 11 with Windows Terminal, PowerShell, and Grok Build 1.0.10. The npm package installation and MCP registration were also verified with Pi 0.84.3. Other operating systems are not currently claimed as end-to-end supported.
 
 ## Install
 
 Requirements:
 
-- Codex or Claude Code with plugin support
+- Codex or Claude Code with plugin support, or Pi (tested with 0.84.3)
 - Node.js 20 or newer
 - Grok Build installed and authenticated
 - Windows Terminal with a PowerShell profile
@@ -32,7 +32,13 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-Start a new Codex task, or restart Claude Code / run `/reload-plugins`, after installation or update. Skills and slash commands do not hot-load into an existing task.
+Pi:
+
+```powershell
+pi install npm:pi-grok-build-supervisor
+```
+
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update. Skills, prompt templates, and slash commands do not hot-load into an existing task. The Pi package is versioned independently and currently embeds Grok Build Supervisor 0.3.6.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
@@ -80,11 +86,11 @@ Open the project you want to work on, then turn supervised execution on:
 /grok_execute on
 ```
 
-At that moment Codex or Claude Code binds executor mode to the current project directory and immediately reuses or starts its visible Grok terminal. Activation does not send a coding task. When the terminal is ready, ask for work normally; the host sends the separately approved task and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
+At that moment Codex, Claude Code, or Pi binds executor mode to the current project directory and immediately reuses or starts its visible Grok terminal. Activation does not send a coding task. When the terminal is ready, ask for work normally; the host sends the separately approved task and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
 
 The first time Grok sees a project containing local automation, its own terminal may ask whether you trust that directory. The Supervisor recognizes this exact screen, keeps the same terminal and session, and tells you to confirm there; do not run `/grok_execute on` again. It never presses `y` or adds `--trust` for you. After you answer in Grok, activation continues automatically.
 
-The project binding lasts only for the current Codex or Claude Code task. Turning the mode off clears that binding but does not close the terminal or cancel work already in progress.
+The project binding lasts only for the current Codex, Claude Code, or Pi task. Turning the mode off clears that binding but does not close the terminal or cancel work already in progress.
 
 > [!TIP]
 > `/grok_execute on` opens Grok in a visible Windows Terminal window by default. If this activation should be headless, say so before running `on`, for example: “Do not show the Grok terminal this time.” The plugin never hides the window unless you ask, and it does not quietly switch to background mode when a visible launch fails.

@@ -2,18 +2,18 @@
 
 [English](./README.md) · [仓库总览](../../README.zh-CN.md)
 
-**让 Codex 或 Claude Code 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
+**让 Codex、Claude Code 或 Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
 
-Grok Build Supervisor 是一个可以单独安装到 Codex 或 Claude Code 的插件。它会在 Windows Terminal 中打开或恢复真正的 Grok Build 窗口，并在后台保持连接；即使当前任务结束或插件重新加载，也能继续接上这个会话。Codex 或 Claude Code 可以给 Grok 派活、查看状态、处理问题和权限、取消任务，并核查最终结果。
+Grok Build Supervisor 可以单独安装到 Codex、Claude Code 或 Pi。它会在 Windows Terminal 中打开或恢复真正的 Grok Build 窗口，并在后台保持连接；即使当前任务结束或插件重新加载，也能继续接上这个会话。负责监督的宿主可以给 Grok 派活、查看状态、处理问题和权限、取消任务，并核查最终结果。
 
 > [!NOTE]
-> 已在 Windows 11、Windows Terminal、PowerShell 和 Grok Build 1.0.10 上完成实机验证。目前不声明其他操作系统已经通过端到端支持验收。
+> 已在 Windows 11、Windows Terminal、PowerShell 和 Grok Build 1.0.10 上完成实机验证；npm 包的安装与 MCP 注册也已在 Pi 0.84.3 上验证。目前不声明其他操作系统已经通过端到端支持验收。
 
 ## 安装
 
 前置条件：
 
-- 支持插件的 Codex 或 Claude Code
+- 支持插件的 Codex 或 Claude Code，或 Pi（已在 0.84.3 上验证）
 - Node.js 20 或更高版本
 - 已安装并登录的 Grok Build
 - 带 PowerShell 配置的 Windows Terminal
@@ -32,7 +32,13 @@ claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-安装或更新后需要新建 Codex 任务，或重启 Claude Code / 执行 `/reload-plugins`；Skill 和 slash command 不会热加载到已经打开的任务。
+Pi：
+
+```powershell
+pi install npm:pi-grok-build-supervisor
+```
+
+安装或更新后需要新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi；Skill、提示模板和 slash command 不会热加载到已经打开的任务。Pi 包独立计版本，目前内置 Grok Build Supervisor 0.3.6。
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 
@@ -80,11 +86,11 @@ claude plugin update grok-build-supervisor@vanyangyang
 /grok_execute on
 ```
 
-此时 Codex 或 Claude Code 会把执行模式绑定到当前项目目录，并立即复用或启动该项目的可见 Grok 终端。开启模式不会发送开发任务。终端就绪后，像平常一样交代任务即可；宿主会发送你另行同意的任务，并持续查看状态，直到 Grok 完成、失败、提出问题或需要权限选择。你不需要管理 TUI、会话 ID 或进程。
+此时 Codex、Claude Code 或 Pi 会把执行模式绑定到当前项目目录，并立即复用或启动该项目的可见 Grok 终端。开启模式不会发送开发任务。终端就绪后，像平常一样交代任务即可；宿主会发送你另行同意的任务，并持续查看状态，直到 Grok 完成、失败、提出问题或需要权限选择。你不需要管理 TUI、会话 ID 或进程。
 
 如果项目里带有本地自动化配置，Grok 第一次打开时可能会在终端里询问你是否信任这个目录。Supervisor 会准确识别这个界面，保留当前终端和会话，并提醒你直接在 Grok 里确认；这时不要再次运行 `/grok_execute on`。插件不会替你按 `y`，也不会偷偷加上 `--trust`。你在 Grok 中作出选择后，启动流程会自动继续。
 
-工作区绑定只对当前 Codex 或 Claude Code 任务有效。关闭模式会清除这个绑定，但不会关闭终端，也不会取消已经在执行的工作。
+工作区绑定只对当前 Codex、Claude Code 或 Pi 任务有效。关闭模式会清除这个绑定，但不会关闭终端，也不会取消已经在执行的工作。
 
 > [!TIP]
 > `/grok_execute on` 默认会立即在 Windows Terminal 中显示 Grok。如果这次开启需要隐藏终端，请在运行 `on` 前先说“这次不要显示 Grok 终端”。没有你的明确要求，插件不会自己隐藏窗口；可见窗口启动失败时，也不会偷偷改成后台运行。

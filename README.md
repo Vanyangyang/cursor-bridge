@@ -18,16 +18,19 @@
 [![MCP](https://img.shields.io/badge/MCP-server-6D4AFF?style=flat-square)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
-**Two independently installable MCP plugins for supervised coding-agent workflows. Install only the bridge you need.**
+> [!WARNING]
+> **Windows only:** Cursor Bridge and Grok Build Supervisor currently support Windows only. macOS and Linux are not supported or covered by end-to-end acceptance.
+
+**Two independently installable MCP plugins for Codex, Claude Code, Grok Build, and Pi. Install only the bridge you need.**
 
 | Plugin | Use it for | Documentation |
 |---|---|---|
-| **Cursor Bridge** | Let Codex, Claude Code, or Grok Build use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks | [Continue below](#cursor-bridge) |
-| **Grok Build Supervisor** | Let Codex or Claude Code plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
+| **Cursor Bridge** | Let Codex, Claude Code, Grok Build, or Pi use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks | [Continue below](#cursor-bridge) |
+| **Grok Build Supervisor** | Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
 ## Grok Build Supervisor (New)
 
-**Let Codex or Claude Code plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
+**Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
 
 It is installed and updated independently from Cursor Bridge.
 
@@ -35,7 +38,7 @@ It is installed and updated independently from Cursor Bridge.
 
 ## Cursor Bridge
 
-**Let Codex, Claude Code, or Grok Build use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks.**
+**Let Codex, Claude Code, Grok Build, or Pi use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks.**
 
 > [!IMPORTANT]
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
@@ -45,7 +48,7 @@ It is installed and updated independently from Cursor Bridge.
 
 ## What is CCE?
 
-**Cursor Context Engine (CCE) exposes Cursor's existing project index and Agent search capabilities to Codex, Claude Code, and Grok Build through MCP.**
+**Cursor Context Engine (CCE) exposes Cursor's existing project index and Agent search capabilities to Codex, Claude Code, Grok Build, and Pi through MCP.**
 
 Ask a project question once. Cursor chooses the semantic retrieval, exact search, source reading, reference tracing, or Agent exploration it needs. Cursor Bridge returns compact, source-anchored `path:line` evidence with relevance notes instead of dumping the entire search process into the main Agent's context.
 
@@ -81,7 +84,13 @@ Grok keeps plugins off until you enable them. `--trust` is required so the plugi
 
 `grok plugin install Vanyangyang/cursor-bridge --trust` also works without adding the marketplace first.
 
-Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, or reload Grok as above. Then initialize the project in natural language:
+### Pi
+
+```bash
+pi install npm:pi-cursor-bridge
+```
+
+Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, reload Grok as above, or restart Pi after installation. Pi automatically binds Cursor Bridge to the directory where Pi was started. Other hosts can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
 
 ```text
 Initialize CCE workspace to C:\absolute\path\to\project

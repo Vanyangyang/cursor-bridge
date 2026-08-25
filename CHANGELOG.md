@@ -6,6 +6,14 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `pi-cursor-bridge` and `pi-grok-build-supervisor` are now available as independent npm packages for Pi. Each package embeds only its own product, tools, and Skills.
+
+### Fixed
+
+- The Cursor Bridge Pi package now isolates its host and workspace identity from inherited Codex or Claude Code environment variables, so launching Pi from another Agent still binds Cursor to Pi's actual working directory.
+
 ## [5.4.2] - 2026-08-22
 
 ### Fixed
