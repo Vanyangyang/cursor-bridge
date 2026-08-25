@@ -79,7 +79,11 @@ Cursor Bridge does not inspect or manage your Cursor subscription. The models, q
 
 ## Quick start
 
-### Codex (recommended)
+### 1. Choose your client and install what you need
+
+The commands are grouped by the client you already use. Cursor Bridge and Grok Build Supervisor are independent: install either one, or both.
+
+#### Codex (recommended)
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
@@ -88,7 +92,7 @@ codex plugin add cursor-bridge@vanyangyang
 codex plugin add grok-build-supervisor@vanyangyang
 ```
 
-### Claude Code
+#### Claude Code
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
@@ -97,7 +101,7 @@ claude plugin install cursor-bridge@vanyangyang
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-### Grok Build
+#### Grok Build
 
 ```bash
 grok plugin marketplace add Vanyangyang/cursor-bridge
@@ -105,11 +109,9 @@ grok plugin install Vanyangyang/cursor-bridge --trust
 grok plugin enable cursor-bridge
 ```
 
-Grok keeps plugins off until you enable them. `--trust` is required so the plugin's MCP server and hooks can run. Installing does not hot-reload the current session: open `/plugins` and press `r`, or start a new Grok session.
-
 `grok plugin install Vanyangyang/cursor-bridge --trust` also works without adding the marketplace first.
 
-### Pi
+#### Pi
 
 ```bash
 pi install npm:pi-cursor-bridge
@@ -117,19 +119,31 @@ pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
 ```
 
-Restart Codex and start a new task, restart Claude Code / run `/reload-plugins`, reload Grok as above, or restart Pi after installation. Pi automatically binds Cursor Bridge to the directory where Pi was started. Other hosts can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
+### 2. Restart or reload your client
+
+Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, or restart Pi. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
+
+### 3. Initialize the plugin you installed
+
+If you installed Cursor Bridge, Pi automatically binds it to the directory where Pi was started. Other hosts can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
 
 ```text
 Initialize CCE workspace to C:\absolute\path\to\project
 ```
 
-Ask the real project question:
+Initialization is persistent. Repeat the sentence with another absolute path whenever you want to switch projects.
+
+If you installed Grok Build Supervisor, run `/grok_init` once. Then run `/grok_execute on` in the project where you want the current client to coordinate Grok Build.
+
+### 4. Start with a real task
+
+With Cursor Bridge, ask the real project question:
 
 ```text
 Who owns this state, and what is the complete path from save loading to runtime use and save write-back?
 ```
 
-Initialization is persistent. Repeat the initialization sentence with another absolute path whenever you want to switch projects.
+With Grok Build Supervisor enabled, send your normal implementation task; the current client handles planning and verification while Grok Build executes.
 
 > [!TIP]
 > **Recommended on Windows 11: minimal runtime**

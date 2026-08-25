@@ -77,6 +77,35 @@ test('bilingual READMEs present coordination as added capability of the existing
   assert.doesNotMatch(chinese, /选择一个编排客户端|直接安装进 Grok Build/);
 });
 
+test('bilingual quick starts separate installation, reload, initialization, and first use', () => {
+  const english = readProjectFile('README.md');
+  const chinese = readProjectFile('README.zh-CN.md');
+  const englishSteps = [
+    '### 1. Choose your client and install what you need',
+    '### 2. Restart or reload your client',
+    '### 3. Initialize the plugin you installed',
+    '### 4. Start with a real task',
+  ];
+  const chineseSteps = [
+    '### 1. 选择当前客户端，按需安装',
+    '### 2. 重启或重载当前客户端',
+    '### 3. 初始化已经安装的插件',
+    '### 4. 开始处理真实任务',
+  ];
+
+  for (const [content, steps] of [[english, englishSteps], [chinese, chineseSteps]]) {
+    const positions = steps.map((step) => content.indexOf(step));
+    assert.ok(positions.every((position) => position >= 0));
+    assert.deepEqual([...positions].sort((a, b) => a - b), positions);
+    assert.match(content, /#### Codex/);
+    assert.match(content, /#### Claude Code/);
+    assert.match(content, /#### Grok Build/);
+    assert.match(content, /#### Pi/);
+  }
+  assert.match(english, /Cursor Bridge and Grok Build Supervisor are independent: install either one, or both/);
+  assert.match(chinese, /Cursor Bridge 与 Grok Build Supervisor 互相独立：可以只装一个，也可以两个都装/);
+});
+
 test('public READMEs leave language-adaptation details to release history', () => {
   const readmes = [
     'README.md',

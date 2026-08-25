@@ -79,7 +79,11 @@ Cursor Bridge 不检查或管理 Cursor 订阅。已登录 Cursor 能使用哪�
 
 ## 快速开始
 
-### Codex（推荐）
+### 1. 选择当前客户端，按需安装
+
+下面按你正在使用的客户端分组。Cursor Bridge 与 Grok Build Supervisor 互相独立：可以只装一个，也可以两个都装。
+
+#### Codex（推荐）
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
@@ -88,7 +92,7 @@ codex plugin add cursor-bridge@vanyangyang
 codex plugin add grok-build-supervisor@vanyangyang
 ```
 
-### Claude Code
+#### Claude Code
 
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
@@ -97,7 +101,7 @@ claude plugin install cursor-bridge@vanyangyang
 claude plugin install grok-build-supervisor@vanyangyang
 ```
 
-### Grok Build
+#### Grok Build
 
 ```bash
 grok plugin marketplace add Vanyangyang/cursor-bridge
@@ -105,11 +109,9 @@ grok plugin install Vanyangyang/cursor-bridge --trust
 grok plugin enable cursor-bridge
 ```
 
-Grok 的插件默认是关闭的，装完必须 `enable`。`--trust` 用来放行插件自带的 MCP 和 hooks。当前会话不会热加载刚装的插件：打开 `/plugins` 按 `r`，或新开一个 Grok 会话。
-
 不先加市场也可以直接装：`grok plugin install Vanyangyang/cursor-bridge --trust`。
 
-### Pi
+#### Pi
 
 ```bash
 pi install npm:pi-cursor-bridge
@@ -117,19 +119,31 @@ pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
 ```
 
-安装后重启 Codex 并新建任务，重启 Claude Code / 执行 `/reload-plugins`，按上面的方式重载 Grok，或重启 Pi。Pi 会自动把 Cursor Bridge 绑定到启动 Pi 时所在的目录；其他宿主可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
+### 2. 重启或重载当前客户端
+
+Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
+
+### 3. 初始化已经安装的插件
+
+如果安装了 Cursor Bridge，Pi 会自动绑定启动时所在的目录；其他宿主可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
 
 ```text
 初始化 CCE 工作区为 C:\absolute\path\to\project
 ```
 
-直接问真正的项目问题：
+初始化结果会持久保存。需要切换项目时，再用另一个绝对路径重复同一句话即可。
+
+如果安装了 Grok Build Supervisor，先运行一次 `/grok_init`；然后在需要当前客户端协调 Grok Build 的项目中运行 `/grok_execute on`。
+
+### 4. 开始处理真实任务
+
+安装 Cursor Bridge 后，可以直接问真正的项目问题：
 
 ```text
 这个状态由谁持有？从存档加载、运行时使用到保存写回的完整链路是什么？
 ```
 
-初始化结果会持久保存。需要切换项目时，再用另一个绝对路径重复同一句初始化指令即可。
+开启 Grok Build Supervisor 后，直接发送正常的开发任务；当前客户端负责规划和验收，Grok Build 负责执行。
 
 > [!TIP]
 > **Windows 11 推荐：极简模式**
