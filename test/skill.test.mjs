@@ -75,6 +75,23 @@ test('bilingual READMEs present coordination as added capability of the existing
   assert.doesNotMatch(chinese, /选择一个编排客户端|直接安装进 Grok Build/);
 });
 
+test('public READMEs leave language-adaptation details to release history', () => {
+  const readmes = [
+    'README.md',
+    'README.zh-CN.md',
+    'plugins/grok-build-supervisor/README.md',
+    'plugins/grok-build-supervisor/README.zh-CN.md',
+    'pi-packages/pi-cursor-bridge/README.md',
+    'pi-packages/pi-grok-build-supervisor/README.md',
+  ].map(readProjectFile).join('\n');
+  const cursorChangelog = readProjectFile('CHANGELOG.md');
+  const supervisorChangelog = readProjectFile('plugins/grok-build-supervisor/CHANGELOG.md');
+
+  assert.doesNotMatch(readmes, /current task language|runtime adaptation|面向用户的说明会跟随|运行时自适应/);
+  assert.match(cursorChangelog, /5\.5\.0[\s\S]*language contract/);
+  assert.match(supervisorChangelog, /0\.3\.7[\s\S]*current task language/);
+});
+
 test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an isolated plugin', () => {
   const marketplace = JSON.parse(readProjectFile('.agents/plugins/marketplace.json'));
   const cursor = marketplace.plugins.find((plugin) => plugin.name === 'cursor-bridge');
@@ -287,10 +304,10 @@ test('bilingual README promotes the minimal runtime benefit and trade-off', () =
 
   assert.match(englishTip, /Recommended on Windows 11: minimal runtime/);
   assert.match(englishTip, /manually opening Cursor[\s\S]*Switch CCE to normal mode/);
-  assert.match(englishTip, /explicit, persistent opt-in[\s\S]*not a headless reimplementation/);
   assert.match(chineseTip, /Windows 11 推荐：极简模式/);
   assert.match(chineseTip, /手动打开 Cursor[\s\S]*将 CCE 切换到普通模式/);
-  assert.match(chineseTip, /显式、持久选择[\s\S]*不是重新实现的 headless Cursor/);
+  assert.doesNotMatch(englishTip, /headless reimplementation|keyboard focus|minimized|maximized|snapped/);
+  assert.doesNotMatch(chineseTip, /headless Cursor|键盘焦点|最小化、最大化|贴靠布局/);
   for (const content of [english, chinese]) {
     assert.ok(content.indexOf('> [!TIP]') < content.indexOf('<details>'));
     assert.doesNotMatch(content, /<summary><strong>(?:Minimal runtime details|极简运行时细节)<\/strong><\/summary>/);

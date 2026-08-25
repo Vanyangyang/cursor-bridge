@@ -6,8 +6,8 @@ This repository ships two independently installable plugins and two independentl
 |---|---:|---|
 | Cursor Bridge | 5.5.0 | Codex, Claude Code, Grok Build |
 | Grok Build Supervisor | 0.3.7 | Codex, Claude Code |
-| Cursor Bridge for Pi | 0.1.3 | `pi-cursor-bridge` on npm |
-| Grok Build Supervisor for Pi | 0.1.2 | `pi-grok-build-supervisor` on npm |
+| Cursor Bridge for Pi | 0.1.4 | `pi-cursor-bridge` on npm |
+| Grok Build Supervisor for Pi | 0.1.3 | `pi-grok-build-supervisor` on npm |
 
 The Pi versions are wrapper-package versions. Their manifests must also name the exact embedded Cursor Bridge or Grok Build Supervisor version.
 
@@ -67,8 +67,8 @@ Keep 0.3.7 synchronized in:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `pi-cursor-bridge`: package and adapter 0.1.3, embedded Cursor Bridge 5.5.0
-- `pi-grok-build-supervisor`: package and adapter 0.1.2, embedded Grok Build Supervisor 0.3.7
+- `pi-cursor-bridge`: package and adapter 0.1.4, embedded Cursor Bridge 5.5.0
+- `pi-grok-build-supervisor`: package and adapter 0.1.3, embedded Grok Build Supervisor 0.3.7
 - package READMEs and Pi staging tests
 
 ## Validation
