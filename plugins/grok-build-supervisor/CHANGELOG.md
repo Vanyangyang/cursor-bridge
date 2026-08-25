@@ -4,6 +4,8 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-08-25
+
 ### Added
 
 - The authenticated host-identity envelope now recognizes Pi as a first-class supervising host, so Grok receives a Pi supervision contract instead of a generic or Codex sender label.
@@ -111,3 +113,4 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 [0.3.3]: https://github.com/Vanyangyang/cursor-bridge/compare/grok-build-supervisor--v0.3.2...grok-build-supervisor--v0.3.4
 [0.3.4]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.4
 [0.3.5]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.5
+[0.3.6]: https://github.com/Vanyangyang/cursor-bridge/releases/tag/grok-build-supervisor--v0.3.6
