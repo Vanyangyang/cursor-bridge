@@ -13,6 +13,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - The Cursor Bridge Pi package now isolates its host and workspace identity from inherited Codex or Claude Code environment variables, so launching Pi from another Agent still binds Cursor to Pi's actual working directory.
+- Pi MCP calls now have a bounded 15-minute client timeout instead of the SDK's 60-second default, allowing cold Cursor CCE searches and other legitimately long plugin operations to finish without an adapter-side timeout.
 
 ## [5.4.2] - 2026-08-22
 

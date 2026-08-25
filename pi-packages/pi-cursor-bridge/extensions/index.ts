@@ -10,7 +10,7 @@ const hostWorkspaceId = hostCwd.replace(/\\/g, "/").toLowerCase();
 export default createStdioMcpExtension({
   label: "Cursor Bridge",
   clientName: "pi-cursor-bridge",
-  packageVersion: "0.1.1",
+  packageVersion: "0.1.2",
   serverName: "cursor-bridge",
   serverScript: join(packageRoot, "dist", "cursor-bridge.mjs"),
   cwd: hostCwd,
