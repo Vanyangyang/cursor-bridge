@@ -7,7 +7,7 @@
 Grok Build Supervisor is a separate plugin for Codex and Claude Code. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when a host task ends or the plugin is reloaded. Codex or Claude Code can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
 
 > [!NOTE]
-> Live-tested on Windows 11 with Windows Terminal, PowerShell, and Grok Build 1.0.6. Other operating systems are not currently claimed as end-to-end supported.
+> Live-tested on Windows 11 with Windows Terminal, PowerShell, and Grok Build 1.0.10. Other operating systems are not currently claimed as end-to-end supported.
 
 ## Install
 
