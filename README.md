@@ -10,6 +10,11 @@
 
 # Cursor Bridge + Grok Build Supervisor（New）
 
+<!-- TEMPORARY_RENAME_NOTICE_START -->
+> [!IMPORTANT]
+> **Upcoming rename:** This repository will soon be renamed **Grok Superpower**. The repository URL and all existing installation commands remain unchanged for now. This temporary notice will be removed after the rename is complete.
+<!-- TEMPORARY_RENAME_NOTICE_END -->
+
 [简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
 [![Release](https://img.shields.io/github/v/release/Vanyangyang/cursor-bridge?style=flat-square&logo=github)](https://github.com/Vanyangyang/cursor-bridge/releases)

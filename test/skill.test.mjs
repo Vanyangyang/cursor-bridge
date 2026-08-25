@@ -48,6 +48,18 @@ test('Codex starter prompts stay user-facing and within manifest limits', () => 
   }
 });
 
+test('bilingual READMEs show the temporary Grok Superpower rename notice near the title', () => {
+  const english = readProjectFile('README.md').split(/\r?\n/).slice(0, 30).join('\n');
+  const chinese = readProjectFile('README.zh-CN.md').split(/\r?\n/).slice(0, 30).join('\n');
+  for (const content of [english, chinese]) {
+    assert.match(content, /TEMPORARY_RENAME_NOTICE_START/);
+    assert.match(content, /\*\*Grok Superpower\*\*/);
+    assert.match(content, /TEMPORARY_RENAME_NOTICE_END/);
+  }
+  assert.match(english, /Upcoming rename:[\s\S]*installation commands remain unchanged/);
+  assert.match(chinese, /即将更名：[\s\S]*安装命令保持不变/);
+});
+
 test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an isolated plugin', () => {
   const marketplace = JSON.parse(readProjectFile('.agents/plugins/marketplace.json'));
   const cursor = marketplace.plugins.find((plugin) => plugin.name === 'cursor-bridge');
@@ -95,8 +107,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
-  const englishImportant = english.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
-  const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]+)/)?.[1] || '';
+  const englishImportant = english.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]*One-time Windows migration:[^\r\n]*)/)?.[1] || '';
+  const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]*Windows 一次性迁移：[^\r\n]*)/)?.[1] || '';
   const englishGrokSection = english.match(/## Grok Build Supervisor \(New\)\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
   const chineseGrokSection = chinese.match(/## Grok Build Supervisor（New）\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
   const englishMigration = english.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n## |$)/)?.[0] || '';
