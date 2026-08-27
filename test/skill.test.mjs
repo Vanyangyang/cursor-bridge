@@ -184,8 +184,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.match(chineseGrokSection, /负责规划和把关[\s\S]*自动调度 Grok Build[\s\S]*执行任务[\s\S]*跟进过程[\s\S]*核验结果/);
   assert.doesNotMatch(englishGrokSection, /optional/i);
   assert.doesNotMatch(chineseGrokSection, /可选/);
-  assert.match(english, /Cursor \*\*3\.17\.19\*\* \(fresh Agents Window launch\)/);
-  assert.match(chinese, /Cursor \*\*3\.17\.19\*\*（全新 Agents Window 启动）/);
+  assert.match(english, /Cursor \*\*3\.17\.21\*\* user setup[\s\S]*--remote-debugging-port=9223/);
+  assert.match(chinese, /Cursor \*\*3\.17\.21\*\* user setup[\s\S]*--remote-debugging-port=9223/);
   assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
@@ -356,18 +356,18 @@ test('bilingual README promotes the minimal runtime benefit and trade-off', () =
   }
 });
 
-test('bilingual compatibility docs keep Cursor 3.17.19 acceptance evidence scoped', () => {
+test('bilingual compatibility docs keep Cursor 3.17.21 acceptance evidence scoped', () => {
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   const changelog = readProjectFile('CHANGELOG.md');
 
-  assert.match(english, /3\.17\.19[\s\S]*fresh Agents Window launch[\s\S]*legacy IDE\/workbench was not exposed/);
-  assert.match(chinese, /3\.17\.19[\s\S]*全新 Agents Window 启动[\s\S]*没有暴露旧版 IDE\/workbench/);
-  assert.match(changelog, /3\.17\.19[\s\S]*fresh Bridge\/CDP launch[\s\S]*parallel_agent[\s\S]*normal\/minimal/);
+  assert.match(english, /3\.17\.21[\s\S]*carrying `--remote-debugging-port=9223`[\s\S]*legacy IDE\/workbench CDP target/);
+  assert.match(chinese, /3\.17\.21[\s\S]*携带 `--remote-debugging-port=9223`[\s\S]*没有暴露旧版 IDE\/workbench CDP 目标/);
+  assert.match(changelog, /3\.17\.21[\s\S]*CDP port 9223[\s\S]*parallel execution[\s\S]*minimal\/normal/);
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history archives 5.4.2 and keeps 5.5.0 current for Cursor 3.17.19', () => {
+test('compatibility history archives 5.4.2 and keeps 5.5.0 current for Cursor 3.17.21', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -375,12 +375,13 @@ test('compatibility history archives 5.4.2 and keeps 5.5.0 current for Cursor 3.
   const data = JSON.parse(readProjectFile('compatibility.json'));
 
   assert.equal(data.policy, 'latest-only');
-  assert.equal(data.current.cursorVersion, '3.17.19');
+  assert.equal(data.current.cursorVersion, '3.17.21');
   assert.equal(data.current.cursorBridgeVersion, '5.5.0');
   assert.equal(data.current.sourceRef, 'master');
   assert.equal(data.current.status, 'current');
-  assert.equal(data.current.acceptance.ideWorkbench, 'not-exposed-in-fresh-launch');
-  assert.equal(data.current.acceptance.agentsWindow, 'live-tested');
+  assert.equal(data.current.acceptance.ideWorkbench, 'not-exposed-in-live-run');
+  assert.equal(data.current.acceptance.agentsWindow, 'live-tested-existing-cdp-9223');
+  assert.equal(data.current.acceptance.modelPreferences, 'live-tested');
   assert.deepEqual(data.history, [
     {
       cursorVersion: '3.17.8',

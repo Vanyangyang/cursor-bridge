@@ -11,7 +11,7 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.17.19** | **5.5.0** | `master` | 当前维护版本。已通过 Windows 11 全新 Agents Window 启动，实机验证工作区绑定、CCE、FIFO、独立 parallel Agent、精确 Agent ID，以及 normal/minimal 切换期间的 CCE。本次全新启动没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。 |
+| **3.17.21** | **5.5.0** | `master` | 当前维护版本。Windows 11 实机验收复用了 user setup 中已经携带 CDP 9223 端口的 Agents Window，并通过工作区绑定、CCE、FIFO、独立 parallel Agent、精确 Agent ID、按工具持久保存并应用模型/思考程度，以及 normal/minimal 切换期间的 CCE。本次运行没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。 |
 
 ## 历史版本
 

@@ -65,7 +65,7 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.17.19**（全新 Agents Window 启动）。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次启动没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.17.21** user setup，复用其已经携带 `--remote-debugging-port=9223` 的 Agents Window 进程。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次运行没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -158,7 +158,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.17.19** | **5.5.0**（`master`，当前版本） | 已通过 Windows 11 全新 Agents Window 启动，实机验证工作区绑定、CCE、FIFO、独立 parallel Agent、精确 Agent ID，以及 normal/minimal 切换期间的 CCE；本次启动没有暴露旧版 IDE/workbench。 |
+| **3.17.21** | **5.5.0**（`master`，当前版本） | 已在 Windows 11 上复用 user setup 中携带 CDP 9223 端口的 Agents Window，实机验证工作区绑定、CCE、FIFO、独立 parallel Agent、精确 Agent ID、按工具持久保存并应用模型/思考程度，以及 normal/minimal 切换期间的 CCE；本次运行没有暴露旧版 IDE/workbench。 |
 
 不再主动维护旧 Cursor 版本。Cursor Bridge 5.4.2 / Cursor 3.17.8、Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
@@ -168,6 +168,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 - **先理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。
 - **再用 `cursor_do` 执行有边界任务：** 它会把范围清楚的任务交给 Cursor Agent，并返回稳定的任务 ID，便于继续查看与恢复。`cursor_do` 仍是可选能力，但不再藏在边角：只要一次有边界的 Cursor 执行能节省时间，就可以直接使用；最终结果、真实工作区改动与验证证据仍由主 Agent 审核。
+- **指定一次，持续使用：** 可以说“CCE 默认使用 GPT-5.6 Terra，思考程度 max”或“`cursor_do` 默认使用 GPT-5.6 Sol，思考程度 high”。`cursor_model` 会分别持久保存 CCE 与 `cursor_do` 的默认值，跨宿主任务和重启继续生效，直到你明确修改或重置。Bridge 会在每次发送前应用并回读选择；无法确认时停止发送，不会静默退回 Auto。
 
 ## 完整 MCP 工具说明
 
@@ -176,7 +177,8 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 | **`cursor_init`** | 使用一个绝对路径初始化 CCE，或切换工作区。 |
 | **`cursor_context_engine`** | 使用一个自然语言 `query` 进行只读项目理解。 |
 | **`cursor_do`** | 把明确、有边界的子任务交给 Cursor Agent 执行。 |
-| **`cursor_status`** | 只读查看连接、队列、运行时和任务状态。 |
+| **`cursor_model`** | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
+| **`cursor_status`** | 只读查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。 |
 | `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
 | `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`。 |
 
@@ -350,6 +352,7 @@ npm run build
 | `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | 没有持久化选择时的初始模式。 |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | 用户配置目录 | 覆盖持久运行模式文件。 |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | 用户 lifecycle 目录 | 覆盖持久工作区绑定文件。 |
+| `CURSOR_BRIDGE_MODEL_PREFERENCES_FILE` | 用户配置目录 | 覆盖 CCE / `cursor_do` 持久模型与思考程度文件。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 设为 `off` 可禁用并隐藏 `cursor_do`。 |
 | `CURSOR_PROJECT_PATH` | 未设置 | 仅在没有持久初始化时使用的兼容回退。 |
 | `CURSOR_EXE` | 自动探测 | 便携/自定义可执行文件、Windows 安装目录或 macOS `.app` 覆盖。 |

@@ -37,6 +37,15 @@ import {
   writePersistedCursorRuntimeMode,
 } from './cursor-runtime.mjs';
 import {
+  CURSOR_MODEL_EFFORTS,
+  CURSOR_MODEL_TARGETS,
+  cursorEffortUiValue,
+  normalizeCursorModelEffort,
+  readCursorModelPreferences,
+  resolveCursorModelPreferencesFile,
+  updateCursorModelPreferences,
+} from './cursor-model-preferences.mjs';
+import {
   readWorkspaceBinding,
   resolveWorkspaceBindingFile,
   resolveWorkspaceBindingKey,
@@ -499,6 +508,88 @@ function exprClickBoundComposerStop(agentId) {
 // "New Agent" 新对话钮中心坐标。新版 Cursor Agents 只有可见文本，旧版主要依赖 aria-label。
 const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
+const MODEL_PICKER_VISIBLE_BODY = `
+  const visible=(node)=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
+  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root')].filter(visible);
+  const composer=composers[composers.length-1]||document;
+`;
+
+const EXPR_MODEL_PICKER_TRIGGER = `(function(){
+  ${MODEL_PICKER_VISIBLE_BODY}
+  const triggerSelector='.ui-model-picker__trigger,.vscode-model-picker__trigger';
+  const candidates=[...composer.querySelectorAll(triggerSelector)].filter(visible);
+  const trigger=candidates[candidates.length-1]||[...document.querySelectorAll(triggerSelector)].filter(visible).pop();
+  if(!trigger)return JSON.stringify({found:false,state:'trigger_missing'});
+  const rect=trigger.getBoundingClientRect();
+  const text=String(trigger.querySelector('.ui-model-picker__trigger-text,.vscode-model-picker__trigger-text')?.innerText||trigger.innerText||'').replace(/\\s+/g,' ').trim();
+  const detail=String(trigger.querySelector('.ui-model-picker__trigger-variant-suffix,.vscode-model-picker__trigger-variant-suffix')?.innerText||'').replace(/\\s+/g,' ').trim();
+  return JSON.stringify({found:true,state:'ready',text,detail,x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)});
+})()`;
+
+const EXPR_MODEL_PICKER_ROWS = `(function(){
+  ${MODEL_PICKER_VISIBLE_BODY}
+  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
+  const rows=[];
+  const seen=new Set();
+  for(const menu of menus){
+    for(const row of menu.querySelectorAll('[data-component="menu-row"],[data-component="menu-submenu-trigger"],[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]')){
+      if(!visible(row)||seen.has(row))continue;
+      seen.add(row);
+      const rect=row.getBoundingClientRect();
+      const text=String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim();
+      if(!text)continue;
+      const menuTestId=String(menu.getAttribute('data-testid')||'').toLowerCase();
+      let kind='control';
+      if(row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'))kind='model';
+      else if(/^model(?:\\s|$)/i.test(text)&&row.getAttribute('aria-haspopup')==='menu')kind='model_control';
+      else if(/^effort(?:\\s|$)/i.test(text)&&row.getAttribute('aria-haspopup')==='menu')kind='effort_control';
+      else if(menuTestId.includes('parameter-submenu')||row.closest('[data-submenu]'))kind='parameter';
+      else if(menuTestId.includes('model-picker-menu')||menuTestId.includes('model-selection'))kind='model';
+      rows.push({
+        text,
+        kind,
+        selected:row.getAttribute('data-selected')==='true'||row.getAttribute('aria-checked')==='true'||!!row.querySelector('.ui-model-picker__item-check,.ui-model-picker__param-check'),
+        disabled:row.getAttribute('data-disabled')==='true'||row.getAttribute('aria-disabled')==='true',
+        hasSubmenu:row.getAttribute('aria-haspopup')==='menu',
+        submenu:!!row.closest('[data-submenu]'),
+        x:Math.round(rect.x+rect.width/2),
+        y:Math.round(rect.y+rect.height/2),
+      });
+    }
+  }
+  return JSON.stringify({open:menus.length>0,rows});
+})()`;
+
+function normalizeModelPickerText(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/extra[\s_-]*high/g, 'xhigh')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function selectModelPickerRow(rows, requested, kind = 'model') {
+  const wanted = normalizeModelPickerText(requested);
+  if (!wanted) return null;
+  const candidates = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row && row.disabled !== true && (kind === 'any' || row.kind === kind))
+    .map((row) => {
+      const normalized = normalizeModelPickerText(row.text);
+      let score = normalized === wanted ? 1000 : 0;
+      if (!score && normalized.startsWith(wanted)) score = 800;
+      if (!score && wanted.startsWith(normalized)) score = 700;
+      if (!score && normalized.includes(wanted)) score = 600;
+      return { row, score, distance: Math.abs(normalized.length - wanted.length) };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.distance - b.distance);
+  if (candidates.length === 0) return null;
+  if (candidates.length > 1
+      && candidates[0].score === candidates[1].score
+      && candidates[0].distance === candidates[1].distance) return null;
+  return candidates[0].row;
+}
+
 // Cursor currently ships two editors in every version: the workbench and the
 // Agents Window. Agents Window repo rows used to be
 // section.glass-sidebar-workspace-section-root; 3.16.17 dropped that wrapper
@@ -638,6 +729,8 @@ const REACT_ADAPTER_BODY = `
   };
   const findV2Props=()=>{
     const found=[]; const seen=new Set();
+    let globalSelectAgent=null;
+    let sectionIdByAgentId=null;
     for(const root of document.querySelectorAll('.glass-sidebar-agent-list-container')){
       const nodes=[]; let n=root;
       for(let i=0;n&&i<24;i++,n=n.parentElement)nodes.push(n);
@@ -648,6 +741,8 @@ const REACT_ADAPTER_BODY = `
           let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
           for(let j=0;f&&j<80;j++,f=f.return){
             for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
+              if(p&&typeof p.onSelectAgent==='function'&&!globalSelectAgent)globalSelectAgent=p.onSelectAgent;
+              if(p&&p.sectionIdByAgentId&&!sectionIdByAgentId)sectionIdByAgentId=p.sectionIdByAgentId;
               const selectAgent=p&&(typeof p.onSelectAgent==='function'
                 ?p.onSelectAgent
                 :(p.rowHandlers&&typeof p.rowHandlers.onSelect==='function'?p.rowHandlers.onSelect:null));
@@ -663,6 +758,8 @@ const REACT_ADAPTER_BODY = `
         }
       }
     }
+    found.globalSelectAgent=globalSelectAgent;
+    found.sectionIdByAgentId=sectionIdByAgentId;
     return found;
   };
   const findAdapter=()=>{
@@ -692,10 +789,28 @@ const REACT_ADAPTER_BODY = `
               else if(/needs_attention/.test(status))icon='needs-attention';
               else if(/failed|error/.test(status))icon='warning';
               else if(/cancel/.test(status))icon='circle-slash';
+              seen.add(selectedId);
               entries.push({
                 id:selectedId,label:'',searchText:'',timestamp:0,isSelected:true,
                 showSpinner:/in_progress|running|generating/.test(status),icon,
-                workspaceId:'',workspaceLabel:'',durable:false
+                workspaceId:String(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.get(selectedRaw)||'':v2.sectionIdByAgentId&&readScalar(v2.sectionIdByAgentId[selectedRaw])||''),
+                workspaceLabel:'',durable:!!(v2.sectionIdByAgentId&&(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.has(selectedRaw):v2.sectionIdByAgentId[selectedRaw]!==undefined)),
+                registeredBySectionMap:true
+              });
+            }
+          }
+          if(v2.sectionIdByAgentId){
+            const registered=v2.sectionIdByAgentId instanceof Map?[...v2.sectionIdByAgentId.entries()]:Object.entries(v2.sectionIdByAgentId);
+            for(const pair of registered){
+              const raw=String(pair&&pair[0]||'').replace(/^local:/,'');
+              if(!raw)continue;
+              const id='local:'+raw;
+              if(seen.has(id))continue;
+              seen.add(id);
+              entries.push({
+                id,label:'',searchText:'',timestamp:0,isSelected:id===selectedId,
+                showSpinner:false,icon:'registered',workspaceId:String(readScalar(pair[1])||''),workspaceLabel:'',
+                durable:true,registeredBySectionMap:true
               });
             }
           }
@@ -708,6 +823,8 @@ const REACT_ADAPTER_BODY = `
             const header=p.section.headers.find(h=>String(readScalar(h&&h.id)||'')===raw);
             if(header){p.onSelectAgent(header);return true;}
           }
+          const registered=v2.sectionIdByAgentId&&(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.has(raw):v2.sectionIdByAgentId[raw]!==undefined);
+          if(registered&&typeof v2.globalSelectAgent==='function'){v2.globalSelectAgent(raw);return true;}
           return false;
         }
       };
@@ -819,6 +936,14 @@ function isDurablyRegisteredParallelEntry(entry) {
     && (entry.showSpinner || classifyParallelTerminalIcon(entry.icon) !== 'unknown');
 }
 
+function selectPromotedFifoEntry(beforeEntries, currentAgentId, afterEntries) {
+  if (!Array.isArray(beforeEntries) || !Array.isArray(afterEntries)) return null;
+  if (currentAgentId && afterEntries.some((entry) => entry && entry.id === currentAgentId)) return null;
+  const candidate = selectNewAgentEntry(beforeEntries, afterEntries);
+  if (!candidate || candidate.id === currentAgentId || candidate.isSelected !== true) return null;
+  return isDurablyRegisteredParallelEntry(candidate) ? candidate : null;
+}
+
 function uncertainSubmissionReservationScope(job, error) {
   if (error && error.requiresGlobalReservation) return 'global';
   return job && job.readOnly ? 'agent' : 'paths';
@@ -918,6 +1043,10 @@ class CursorBridge {
         ? 'persistent_init'
         : 'auto_detect';
     this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
+    this.modelPreferencesFile = options.modelPreferencesFile === null
+      ? null
+      : resolve(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
+    this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
     this._lastPresentation = null;
     this.busy = false;
     this.queue = [];
@@ -1031,6 +1160,40 @@ class CursorBridge {
     };
   }
 
+  _refreshModelPreferences() {
+    if (!this.modelPreferencesFile) return false;
+    const next = readCursorModelPreferences(this.modelPreferencesFile);
+    const changed = JSON.stringify(next) !== JSON.stringify(this.modelPreferences);
+    this.modelPreferences = next;
+    return changed;
+  }
+
+  modelPreferencesView() {
+    this._refreshModelPreferences();
+    return {
+      modelPreferencesFile: this.modelPreferencesFile,
+      modelPreferencesPersistAcrossRestart: !!this.modelPreferencesFile,
+      modelPreferenceTargets: [...CURSOR_MODEL_TARGETS],
+      availableEfforts: [...CURSOR_MODEL_EFFORTS],
+      modelPreferences: {
+        cce: this.modelPreferences.targets.cce,
+        cursor_do: this.modelPreferences.targets.cursor_do,
+      },
+      modelPreferencesUpdatedAt: this.modelPreferences.updatedAt,
+    };
+  }
+
+  configureModelPreferences(options = {}) {
+    this.modelPreferences = updateCursorModelPreferences(this.modelPreferencesFile, options);
+    return this.modelPreferencesView();
+  }
+
+  _modelPreferenceFor(target) {
+    this._refreshModelPreferences();
+    const preference = this.modelPreferences.targets[target];
+    return preference ? { ...preference } : null;
+  }
+
   _refreshPersistedRuntimeMode() {
     if (!this.runtimeFile || this.runtimeModeScope === 'session' || this.runtimeModeScope === 'constructor') {
       return false;
@@ -1140,6 +1303,7 @@ class CursorBridge {
       execution: 'fifo',
       readOnly: true,
       allowedPaths: [],
+      modelPreference: this._modelPreferenceFor('cce'),
     });
     return normalizeCceSearchResult(await job.promise);
   }
@@ -1195,6 +1359,7 @@ class CursorBridge {
       readOnly,
       allowedPaths,
       preferLegacyUi: options.preferLegacyUi === true,
+      modelPreference: this._modelPreferenceFor('cursor_do'),
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -1247,6 +1412,8 @@ class CursorBridge {
       effectiveExecution: options.execution || 'fifo',
       readOnly: options.readOnly === true,
       allowedPaths: options.allowedPaths || [],
+      modelPreference: options.modelPreference ? { ...options.modelPreference } : null,
+      modelSelection: options.modelPreference ? { configured: true, applied: false, ...options.modelPreference } : null,
       projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
       status: 'queued',
       phase: 'queued',
@@ -1610,6 +1777,8 @@ class CursorBridge {
         await this._bindFifoAgentAfterComposerReady(c, options, historyBefore);
         await this._bindFifoComposerIdentity(c, options);
         this._throwIfCancelledBeforeSend(options);
+        await this._applyModelPreference(c, options.modelPreference, options);
+        this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the query because the input state was invalid');
         await sleep(450);
@@ -1623,10 +1792,8 @@ class CursorBridge {
           await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
           options.sendState = 'sent';
           options.sentAt = options.sentAt || new Date().toISOString();
-          if (!options.agentId) {
-            await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
-            await this._bindFifoComposerIdentity(c, options);
-          }
+          await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
+          await this._bindFifoComposerIdentity(c, options);
           return await this._waitComplete(
             c,
             options.timeoutMs || QUERY_TIMEOUT,
@@ -1653,6 +1820,188 @@ class CursorBridge {
     error.stopConfirmed = true;
     error.preSend = true;
     throw error;
+  }
+
+  async _readModelPickerTrigger(c) {
+    try {
+      return JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_TRIGGER) || '{}');
+    } catch {
+      return { found: false, state: 'trigger_unreadable' };
+    }
+  }
+
+  async _readModelPickerRows(c) {
+    try {
+      const snapshot = JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_ROWS) || '{}');
+      return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
+    } catch {
+      return { open: false, rows: [] };
+    }
+  }
+
+  async _clickModelPickerPoint(c, point) {
+    if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+      throw new Error('Cursor model picker returned an invalid target');
+    }
+    const x = Number(point.x);
+    const y = Number(point.y);
+    await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+  }
+
+  async _hoverModelPickerPoint(c, point) {
+    if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) return;
+    await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Number(point.x), y: Number(point.y) });
+  }
+
+  async _openModelPicker(c) {
+    const trigger = await this._readModelPickerTrigger(c);
+    if (!trigger.found) {
+      throw new Error('Cursor model picker is unavailable in the active Agent composer');
+    }
+    let snapshot = await this._readModelPickerRows(c);
+    if (!snapshot.open) {
+      await this._clickModelPickerPoint(c, trigger);
+      await sleep(450);
+      snapshot = await this._readModelPickerRows(c);
+    }
+    if (!snapshot.open) throw new Error('Cursor model picker did not open');
+    return { trigger, ...snapshot };
+  }
+
+  async _closeModelPicker(c) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const snapshot = await this._readModelPickerRows(c);
+      if (!snapshot.open) return;
+      await c.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+      await c.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+      await sleep(150);
+    }
+    if ((await this._readModelPickerRows(c)).open) throw new Error('Cursor model picker did not close after selection');
+  }
+
+  async _openModelPickerControl(c, snapshot, controlKind) {
+    const control = (snapshot && snapshot.rows || []).find((row) => row.kind === controlKind && row.disabled !== true);
+    if (!control) return snapshot;
+    await this._clickModelPickerPoint(c, control);
+    await sleep(400);
+    let next = await this._readModelPickerRows(c);
+    const expectedKind = controlKind === 'model_control' ? 'model' : 'parameter';
+    if (!next.rows.some((row) => row.kind === expectedKind)) {
+      await this._hoverModelPickerPoint(c, control);
+      await sleep(350);
+      next = await this._readModelPickerRows(c);
+    }
+    return next;
+  }
+
+  async _findModelPickerModel(c, snapshot, requestedModel) {
+    let modelRow = selectModelPickerRow(snapshot && snapshot.rows, requestedModel, 'model');
+    if (modelRow) return { snapshot, modelRow };
+    const expanded = await this._openModelPickerControl(c, snapshot, 'model_control');
+    modelRow = selectModelPickerRow(expanded && expanded.rows, requestedModel, 'model');
+    return { snapshot: expanded, modelRow };
+  }
+
+  async _selectedEffortRow(c, modelRow, effort) {
+    let snapshot = await this._readModelPickerRows(c);
+    let effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), 'parameter');
+    if (!effortRow) {
+      snapshot = await this._openModelPickerControl(c, snapshot, 'effort_control');
+      effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), 'parameter');
+    }
+    if (effortRow) return effortRow;
+    await this._hoverModelPickerPoint(c, modelRow);
+    await sleep(400);
+    snapshot = await this._readModelPickerRows(c);
+    effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), 'parameter');
+    if (!effortRow && modelRow && modelRow.hasSubmenu) {
+      await this._clickModelPickerPoint(c, modelRow);
+      await sleep(350);
+      snapshot = await this._readModelPickerRows(c);
+      effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), 'parameter');
+    }
+    return effortRow;
+  }
+
+  async _applyModelPreference(c, preference, job) {
+    if (!preference) {
+      if (job) job.modelSelection = null;
+      return null;
+    }
+    const requestedModel = String(preference.model || '').trim();
+    const requestedEffort = preference.effort ? normalizeCursorModelEffort(preference.effort, '') : null;
+    const opened = await this._openModelPicker(c);
+    let located = await this._findModelPickerModel(c, opened, requestedModel);
+    let modelRow = located.modelRow;
+    if (!modelRow) {
+      throw new Error(`Configured Cursor model is unavailable or ambiguous: ${requestedModel}`);
+    }
+    let selectedEffortRow = null;
+    if (requestedEffort && modelRow.hasSubmenu) {
+      selectedEffortRow = await this._selectedEffortRow(c, modelRow, requestedEffort);
+      if (!selectedEffortRow) {
+        throw new Error(`Cursor model ${requestedModel} does not expose effort ${requestedEffort}`);
+      }
+      if (!selectedEffortRow.selected || !modelRow.selected) {
+        await this._clickModelPickerPoint(c, selectedEffortRow);
+        await sleep(550);
+      }
+    } else if (!modelRow.selected) {
+      await this._clickModelPickerPoint(c, modelRow);
+      await sleep(550);
+    }
+    let trigger = await this._readModelPickerTrigger(c);
+    if (!trigger.found || !normalizeModelPickerText(trigger.text).includes(normalizeModelPickerText(requestedModel))) {
+      const reopened = await this._openModelPicker(c);
+      located = await this._findModelPickerModel(c, reopened, requestedModel);
+      const selected = selectModelPickerRow(located.snapshot.rows.filter((row) => row.selected), requestedModel, 'model');
+      if (!selected) throw new Error(`Cursor did not confirm configured model ${requestedModel}`);
+      modelRow = selected;
+    }
+
+    let effectiveEffort = null;
+    if (requestedEffort) {
+      const reopened = await this._openModelPicker(c);
+      located = await this._findModelPickerModel(c, reopened, requestedModel);
+      modelRow = located.modelRow;
+      if (!modelRow) throw new Error(`Cursor model row disappeared while applying effort: ${requestedModel}`);
+      let effortRow = await this._selectedEffortRow(c, modelRow, requestedEffort);
+      if (!effortRow) {
+        throw new Error(`Cursor model ${requestedModel} does not expose effort ${requestedEffort}`);
+      }
+      if (!effortRow.selected) {
+        await this._clickModelPickerPoint(c, effortRow);
+        await sleep(450);
+      }
+      trigger = await this._readModelPickerTrigger(c);
+      const detailMatches = normalizeModelPickerText(`${trigger.detail || ''} ${trigger.text || ''}`)
+        .includes(normalizeModelPickerText(requestedEffort));
+      if (!detailMatches) {
+        const verify = await this._openModelPicker(c);
+        const verifiedModel = await this._findModelPickerModel(c, verify, requestedModel);
+        const selectedModel = verifiedModel.modelRow;
+        effortRow = await this._selectedEffortRow(c, selectedModel, requestedEffort);
+        if (!effortRow || !effortRow.selected) {
+          throw new Error(`Cursor did not confirm effort ${requestedEffort} for model ${requestedModel}`);
+        }
+      }
+      effectiveEffort = requestedEffort;
+    }
+    await this._closeModelPicker(c);
+    trigger = await this._readModelPickerTrigger(c);
+    const result = {
+      configured: true,
+      applied: true,
+      requestedModel,
+      requestedEffort,
+      effectiveModel: trigger.text || modelRow.text,
+      effectiveEffort,
+      pickerDetail: trigger.detail || null,
+      verifiedAt: new Date().toISOString(),
+    };
+    if (job) job.modelSelection = result;
+    return result;
   }
 
   async _ensureChatPanel(c) {
@@ -1797,12 +2146,28 @@ class CursorBridge {
   }
 
   async _bindFifoAgentAfterSend(c, job, beforeEntries, providerErrorBaseline) {
-    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries) || job.agentId) return;
-    for (let i = 0; i < 24 && !job.agentId; i++) {
+    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries)) return;
+    for (let i = 0; i < 24; i++) {
       await sleep(350);
       await this._throwIfNewProviderError(c, providerErrorBaseline);
-      const candidate = await this._resolveNewAgent(c, beforeEntries, { requireActive: true });
-      if (candidate) this._applyAgentIdentity(job, candidate);
+      let entries = null;
+      try { entries = await this._readAgentEntries(c); } catch {}
+      if (!Array.isArray(entries)) continue;
+      const promoted = selectPromotedFifoEntry(beforeEntries, job.agentId, entries);
+      if (promoted) {
+        job.provisionalAgentId = job.agentId || null;
+        this._applyAgentIdentity(job, promoted);
+        return;
+      }
+      const current = job.agentId ? entries.find((entry) => entry && entry.id === job.agentId) : null;
+      if (current && isDurablyRegisteredParallelEntry(current)) return;
+      if (!job.agentId) {
+        const candidate = selectNewAgentEntry(beforeEntries, entries);
+        if (candidate && isDurablyRegisteredParallelEntry(candidate)) {
+          this._applyAgentIdentity(job, candidate);
+          return;
+        }
+      }
     }
   }
 
@@ -1900,6 +2265,8 @@ class CursorBridge {
       await this._closeHistory(c);
       await this._ensureChatPanel(c);
       this._throwIfCancelledBeforeSend(job);
+      await this._applyModelPreference(c, job.modelPreference, job);
+      this._throwIfCancelledBeforeSend(job);
       const filled = await evalJS(c, exprFill(job.prompt));
     if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the parallel_agent task');
       await sleep(350);
@@ -1959,8 +2326,25 @@ class CursorBridge {
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
       try {
-        const entries = await this._readAgentEntries(c);
-        return entries.find((e) => e.id === job.agentId) || null;
+        let entries = await this._readAgentEntries(c);
+        let entry = entries.find((e) => e.id === job.agentId) || null;
+        if (!entry && (job.execution === 'fifo' || job.effectiveExecution === 'fifo')) {
+          const promoted = selectPromotedFifoEntry(job.historyBeforeEntries, job.agentId, entries);
+          if (promoted) {
+            job.provisionalAgentId = job.agentId || null;
+            this._applyAgentIdentity(job, promoted);
+            entry = promoted;
+          }
+        }
+        if (entry && entry.registeredBySectionMap && classifyParallelTerminalIcon(entry.icon) === 'unknown') {
+          const opened = await evalJS(c, exprOpenAgent(job.agentId));
+          if (opened === 'OPENED') {
+            await sleep(350);
+            entries = await this._readAgentEntries(c);
+            entry = entries.find((e) => e.id === job.agentId) || entry;
+          }
+        }
+        return entry;
       } finally { c.close(); }
     });
   }
@@ -2740,8 +3124,11 @@ class CursorBridge {
       effectiveExecution: job.effectiveExecution,
       readOnly: job.readOnly,
       allowedPaths: job.allowedPaths,
+      modelPreference: job.modelPreference,
+      modelSelection: job.modelSelection,
       projectPath: job.projectPath,
       agentId: job.agentId,
+      provisionalAgentId: job.provisionalAgentId || null,
       agentLabel: job.agentLabel,
       targetId: job.targetId,
       targetUiFlavor: job.targetUiFlavor,
@@ -2794,8 +3181,8 @@ class CursorBridge {
   async status(taskId = '') {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView() };
-      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView() };
+      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
@@ -2806,6 +3193,7 @@ class CursorBridge {
       ...this.workspaceView(),
       ...this.delegationView(),
       ...this.runtimeModeView(),
+      ...this.modelPreferencesView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
       parallelRunning,
@@ -2932,8 +3320,25 @@ function buildToolDefinitions(bridgeInstance) {
       },
     },
     {
+      name: 'cursor_model',
+      description:
+        'Show, set, or reset persistent Cursor model defaults for CCE and cursor_do. Settings are independent per target and survive host tasks, MCP restarts, and Cursor Bridge restarts until the user explicitly changes or resets them. ' +
+        'When configured, Bridge applies the model and optional effort in every newly created Cursor Agent before sending the prompt, then verifies the visible selection. An unavailable, ambiguous, unsupported, or unconfirmed selection fails before prompt submission instead of silently falling back to Auto. ' +
+        'Use set/reset only when the user explicitly asks to change these defaults; use show for read-only inspection.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['show', 'set', 'reset'], description: 'show reads current defaults; set persists a model and optional effort; reset restores Cursor default selection for the target.' },
+          target: { type: 'string', enum: ['cce', 'cursor_do', 'both'], description: 'Required for set/reset. CCE and cursor_do keep independent defaults; both changes both targets together.' },
+          model: { type: 'string', description: 'Required for set. Use a model ID or display name currently available in the signed-in Cursor account.' },
+          effort: { type: 'string', enum: [...CURSOR_MODEL_EFFORTS], description: 'Optional reasoning effort for set. Omit it to use that model\'s Cursor default.' },
+        },
+        required: ['action'],
+      },
+    },
+    {
       name: 'cursor_status',
-      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.',
+      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, and normal/minimal runtime presentation. Pass a task ID to read its configured and effective model selection plus any result already collected; this tool never switches Agents, reconciles, or stops work.',
       inputSchema: { type: 'object', properties: { task_id: { type: 'string', description: 'A task ID returned by cursor_do. Omit it for an overall status view.' } } },
     },
   ].filter(Boolean);
@@ -3039,6 +3444,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
+    if (name === 'cursor_model') {
+      const result = bridge.configureModelPreferences({
+        action: args && args.action,
+        target: args && args.target,
+        model: args && args.model,
+        effort: args && args.effort,
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === 'cursor_status') {
       const statusMs = Math.max(1000, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8000));
       let result;
@@ -3119,13 +3533,21 @@ export {
   normalizeCceSearchResult,
   isConfirmedCompletedReply,
   buildToolDefinitions,
+  CURSOR_MODEL_EFFORTS,
+  CURSOR_MODEL_TARGETS,
+  normalizeCursorModelEffort,
+  normalizeModelPickerText,
+  selectModelPickerRow,
   pathsOverlap,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
   selectPageForUiPreference,
   selectNewAgentEntry,
+  selectPromotedFifoEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
+  EXPR_MODEL_PICKER_TRIGGER,
+  EXPR_MODEL_PICKER_ROWS,
   exprCreateAgentForWorkspace,
   exprInspectWorkspaceRepository,
   EXPR_PAGE_CAPABILITIES,

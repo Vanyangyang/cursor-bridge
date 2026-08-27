@@ -6,6 +6,21 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added `cursor_model` so CCE and `cursor_do` can keep independent model and reasoning-effort defaults across host tasks and restarts until the user explicitly changes or resets them. Every new Cursor Agent applies and verifies its configured selection before sending; unavailable or ambiguous selections fail closed instead of silently falling back to Auto.
+
+### Fixed
+
+- Cursor 3.17.21 model and effort menus are supported through the current `vscode-model-picker` structure while retaining the earlier picker contract.
+- Cursor 3.17.21 Agents registered in the top-level repository map remain addressable before their per-section History headers appear, so independent parallel work can bind, monitor, and collect exact Agent IDs.
+- Cursor 3.17.21 FIFO work now safely promotes a vanished pre-send composer identity to the selected durable Agent identity, preserving long-running task monitoring, targeted cancellation, and result collection.
+- Pi extension adapter versions now stay synchronized with their package manifests, and staging tests enforce the contract for both Pi packages.
+
+### Compatibility
+
+- Live-tested Cursor **3.17.21** user setup on Windows 11 by reusing its Agents Window process already carrying CDP port 9223. Workspace binding, CCE source evidence, FIFO and independent parallel execution, exact Agent IDs, separate persistent model/effort application, and minimal/normal presentation all passed. The run did not expose a legacy IDE/workbench target, so that surface is not claimed for this pairing.
+
 ## [5.5.0] - 2026-08-25
 
 ### Added

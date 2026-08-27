@@ -5,6 +5,8 @@ description: "Use Cursor Bridge's read-only cursor_context_engine for unfamiliar
 
 # CCE Routing
 
+`cursor_context_engine` automatically inherits the persistent CCE model and reasoning-effort default configured through `cursor_model`. Do not change or reset that default unless the user explicitly asks; if selection cannot be confirmed, report the pre-send failure instead of retrying with Auto.
+
 Route project-understanding questions to the cheapest evidence surface that can answer them without guessing.
 
 ## Choose CCE for project semantics

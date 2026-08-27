@@ -2,13 +2,14 @@
   "schemaVersion": 1,
   "policy": "latest-only",
   "current": {
-    "cursorVersion": "3.17.19",
+    "cursorVersion": "3.17.21",
     "cursorBridgeVersion": "5.5.0",
     "sourceRef": "master",
     "status": "current",
     "acceptance": {
-      "ideWorkbench": "not-exposed-in-fresh-launch",
-      "agentsWindow": "live-tested"
+      "ideWorkbench": "not-exposed-in-live-run",
+      "agentsWindow": "live-tested-existing-cdp-9223",
+      "modelPreferences": "live-tested"
     }
   },
   "history": [

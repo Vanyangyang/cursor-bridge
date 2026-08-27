@@ -22,6 +22,7 @@ import {
   selectCursorPageCandidate,
   selectPageForUiPreference,
   selectNewAgentEntry,
+  selectPromotedFifoEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
   exprCreateAgentForWorkspace,
@@ -433,6 +434,50 @@ test('Cursor Agents v2 React adapter exposes a selected 3.17 draft before Histor
   assert.equal(selected.length, 0);
 });
 
+test('Cursor 3.17.21 section map keeps draft Agents addressable before headers insert them', () => {
+  const selected = [];
+  const global = {
+    parentElement: null,
+    '__reactProps$global': {
+      sectionIdByAgentId: new Map([
+        ['draft-a', 'repo:github.com/vanyangyang/cursor-bridge'],
+        ['draft-b', 'repo:github.com/vanyangyang/cursor-bridge'],
+      ]),
+      onSelectAgent(id) { selected.push(id); },
+    },
+  };
+  const root = {
+    parentElement: global,
+    '__reactProps$section': {
+      section: { id: 'repo:github.com/vanyangyang/cursor-bridge', headers: [] },
+      selectedAgentId: 'draft-b',
+      rowHandlers: { onSelect() {} },
+    },
+  };
+  const composer = {
+    dataset: { composerId: 'draft-b', composerStatus: 'completed' },
+    offsetParent: {},
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.glass-sidebar-agent-list-container') return [root];
+      if (selector === '.composer-bar[data-composer-id]') return [composer];
+      if (selector === '.compact-agent-history-react-menu-label') return [];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.deepEqual(snapshot.entries.map((entry) => [
+    entry.id, entry.isSelected, entry.icon, entry.durable, entry.registeredBySectionMap,
+  ]), [
+    ['local:draft-b', true, 'check-circled', true, true],
+    ['local:draft-a', false, 'registered', true, true],
+  ]);
+  assert.equal(Function('document', `return ${exprOpenAgent('local:draft-a')};`)(document), 'OPENED');
+  assert.deepEqual(selected, ['draft-a']);
+});
+
 test('provider error tray expression extracts terminal evidence without clicking controls', () => {
   const titleNode = { innerText: 'LLM provider error' };
   const buttons = [
@@ -532,7 +577,7 @@ test('Agents workspace recovery clears stale failure guidance before reporting r
 
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
-    super({ runtimeFile: null, workspaceFile: null, runtimeMode: 'normal', ...options });
+    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, runtimeMode: 'normal', ...options });
   }
 
   async _ensureCursor() {}
@@ -1312,6 +1357,31 @@ test('parallel failure icons require two identical stable observations', () => {
   assert.equal(classifyParallelTerminalIcon('check-circled'), 'completed');
 });
 
+test('Cursor 3.17.21 FIFO safely rebinds a vanished composer ID to its selected durable Agent', () => {
+  const before = [{ id: 'local:existing', durable: true, icon: 'check-circled' }];
+  const promoted = {
+    id: 'local:promoted',
+    isSelected: true,
+    durable: true,
+    showSpinner: true,
+    icon: 'loading',
+  };
+  assert.equal(selectPromotedFifoEntry(before, 'local:provisional', [...before, promoted]).id, 'local:promoted');
+  assert.equal(selectPromotedFifoEntry(before, 'local:provisional', [
+    ...before,
+    { ...promoted, isSelected: false },
+  ]), null);
+  assert.equal(selectPromotedFifoEntry(before, 'local:provisional', [
+    ...before,
+    { ...promoted, durable: false },
+  ]), null);
+  assert.equal(selectPromotedFifoEntry(before, 'local:provisional', [
+    ...before,
+    { id: 'local:provisional', durable: true, showSpinner: true, icon: 'loading' },
+    promoted,
+  ]), null);
+});
+
 test('parallel submission waits for a durable History row before releasing the UI lock', () => {
   assert.equal(isDurablyRegisteredParallelEntry({ durable: false, showSpinner: true, icon: 'loading' }), false);
   assert.equal(isDurablyRegisteredParallelEntry({ durable: true, showSpinner: true, icon: 'loading' }), true);
@@ -1319,7 +1389,8 @@ test('parallel submission waits for a durable History row before releasing the U
   assert.equal(isDurablyRegisteredParallelEntry({ showSpinner: true, icon: 'loading' }), true);
   assert.equal(isDurablyRegisteredParallelEntry({ durable: true, showSpinner: false, icon: 'draft' }), false);
   assert.match(EXPR_HISTORY_ENTRIES, /durable:true/);
-  assert.match(EXPR_HISTORY_ENTRIES, /durable:false/);
+  assert.match(EXPR_HISTORY_ENTRIES, /sectionIdByAgentId/);
+  assert.match(EXPR_HISTORY_ENTRIES, /registeredBySectionMap/);
   assert.equal(uncertainSubmissionReservationScope({ readOnly: true }, { requiresGlobalReservation: true }), 'global');
   assert.equal(uncertainSubmissionReservationScope({ readOnly: true }, {}), 'agent');
   assert.equal(uncertainSubmissionReservationScope({ readOnly: false }, {}), 'paths');
