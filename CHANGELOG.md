@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-08-27
+
 ### Added
 
 - Added `cursor_model` so CCE and `cursor_do` can keep independent model and reasoning-effort defaults across host tasks and restarts until the user explicitly changes or resets them. Every new Cursor Agent applies and verifies its configured selection before sending; unavailable or ambiguous selections fail closed instead of silently falling back to Auto.
@@ -266,6 +268,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
+[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.0...HEAD
+[5.6.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.5.0...cursor-bridge--v5.6.0
 [5.5.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.2...cursor-bridge--v5.5.0
 [5.4.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.1...cursor-bridge--v5.4.2
 [5.4.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.0...cursor-bridge--v5.4.1

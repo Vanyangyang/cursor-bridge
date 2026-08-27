@@ -158,9 +158,9 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.21** | **5.5.0** (`master`, current) | Live-tested on Windows 11 by reusing the user-setup Agents Window already carrying CDP port 9223: workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation all passed. The legacy IDE/workbench was not exposed by this run. |
+| **3.17.21** | **5.6.0** (`master`, current) | Live-tested on Windows 11 by reusing the user-setup Agents Window already carrying CDP port 9223: workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation all passed. The legacy IDE/workbench was not exposed by this run. |
 
-Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.5.0 / Cursor 3.17.19, Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 

@@ -11,9 +11,37 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.17.21** | **5.5.0** | `master` | Current maintained version. Windows 11 live acceptance reused the user-setup Agents Window already carrying CDP port 9223 and passed workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation. This run did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. |
+| **3.17.21** | **5.6.0** | `master` | Current maintained version. Windows 11 live acceptance reused the user-setup Agents Window already carrying CDP port 9223 and passed workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation. This run did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. |
 
 ## Historical versions
+
+### Cursor Bridge 5.5.0 — Cursor 3.17.19
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.5.0`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.5.0
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.5.0 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.5.0
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.5.0
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.5.0 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.4.2 — Cursor 3.17.8
 
