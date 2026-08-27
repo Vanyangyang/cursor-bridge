@@ -1,6 +1,6 @@
 {
   "name": "pi-grok-build-supervisor",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Let Pi plan and verify work while Grok Build executes through the persistent Grok Build Supervisor.",
   "type": "module",
   "license": "MIT",
