@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Bumped the `pi-grok-build-supervisor` wrapper to 0.1.4 so npm can publish the adapter `packageVersion` synchronization fix without attempting to overwrite the immutable 0.1.3 tarball.
+
 ## [5.6.0] - 2026-08-27
 
 ### Added

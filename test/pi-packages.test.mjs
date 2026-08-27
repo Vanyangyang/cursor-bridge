@@ -25,7 +25,7 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   assert.equal(cursor.version, "0.1.5");
   assert.equal(cursor.piPackage.embeddedProductVersion, "5.6.0");
   assert.equal(grok.name, "pi-grok-build-supervisor");
-  assert.equal(grok.version, "0.1.3");
+  assert.equal(grok.version, "0.1.4");
   assert.equal(grok.piPackage.embeddedProductVersion, "0.3.7");
   assert.deepEqual(cursor.pi.extensions, ["./extensions/index.ts"]);
   assert.deepEqual(grok.pi.prompts, ["./prompts/grok_init.md", "./prompts/grok_execute.md"]);
