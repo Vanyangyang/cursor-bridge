@@ -11,7 +11,7 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.17.19** | **5.5.0** | `master` | Current maintained version. A fresh Windows 11 Agents Window launch is live-tested for workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, and CCE across normal/minimal presentation. This launch did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. |
+| **3.17.21** | **5.5.0** | `master` | Current maintained version. Windows 11 live acceptance reused the user-setup Agents Window already carrying CDP port 9223 and passed workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation. This run did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. |
 
 ## Historical versions
 

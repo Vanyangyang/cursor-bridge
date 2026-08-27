@@ -5,7 +5,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = Date.now().toString(36).toUpperCase();
 const markerA = `CURSOR_BRIDGE_PARALLEL_A_${stamp}`;
 const markerB = `CURSOR_BRIDGE_PARALLEL_B_${stamp}`;
-const bridge = new CursorBridge();
+const bridge = new CursorBridge({
+  workspaceFile: null,
+  projectPath: process.cwd(),
+  modelPreferencesFile: null,
+});
+const liveModel = String(process.env.CURSOR_BRIDGE_LIVE_MODEL || '').trim();
+const liveEffort = String(process.env.CURSOR_BRIDGE_LIVE_EFFORT || '').trim() || null;
+if (liveModel) bridge.modelPreferences.targets.cursor_do = { model: liveModel, effort: liveEffort };
 
 const common = {
   execution: 'parallel_agent',
@@ -95,11 +102,14 @@ if (!sawTwoAgents) throw new Error('did not observe two distinct active top-leve
 if (!String(finalA.result || '').includes(markerA)) throw new Error(`A result mismatch: ${finalA.result}`);
 if (!String(finalB.result || '').includes(markerB)) throw new Error(`B result mismatch: ${finalB.result}`);
 if (finalA.agentId === finalB.agentId) throw new Error('parallel tasks share the same agentId');
+if (liveModel && (!finalA.modelSelection?.applied || !finalB.modelSelection?.applied)) {
+  throw new Error(`parallel model selection was not applied: A=${JSON.stringify(finalA.modelSelection)} B=${JSON.stringify(finalB.modelSelection)}`);
+}
 
 await sleep(1200);
 console.log(JSON.stringify({
   event: 'passed',
   sawTwoAgents,
-  a: { taskId: finalA.taskId, agentId: finalA.agentId, result: finalA.result },
-  b: { taskId: finalB.taskId, agentId: finalB.agentId, result: finalB.result },
+  a: { taskId: finalA.taskId, agentId: finalA.agentId, modelSelection: finalA.modelSelection, result: finalA.result },
+  b: { taskId: finalB.taskId, agentId: finalB.agentId, modelSelection: finalB.modelSelection, result: finalB.result },
 }));

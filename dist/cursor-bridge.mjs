@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve6.call(this, root, ref);
+      let _sch = resolve7.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve6(root, ref) {
+    function resolve7(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3648,7 +3648,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve6(baseURI, relativeURI, options) {
+    function resolve7(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3906,7 +3906,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve6,
+      resolve: resolve7,
       resolveComponent,
       equal,
       serialize,
@@ -10897,20 +10897,20 @@ public static class CursorBridgeWindowControl {
 
 // lifecycle-paths.mjs
 import { createHash } from "node:crypto";
-import { homedir as homedir2 } from "node:os";
-import { join as join2 } from "node:path";
-import { mkdirSync as mkdirSync2 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { join as join3 } from "node:path";
+import { mkdirSync as mkdirSync3 } from "node:fs";
 function defaultLifecycleDir() {
   if (process.env.CURSOR_BRIDGE_LIFECYCLE_DIR) return process.env.CURSOR_BRIDGE_LIFECYCLE_DIR;
   if (process.platform === "win32") {
-    const root2 = process.env.LOCALAPPDATA || join2(homedir2(), "AppData", "Local");
-    return join2(root2, "cursor-bridge", "lifecycle");
+    const root2 = process.env.LOCALAPPDATA || join3(homedir3(), "AppData", "Local");
+    return join3(root2, "cursor-bridge", "lifecycle");
   }
-  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join2(homedir2(), ".local", "state");
-  return join2(root, "cursor-bridge", "lifecycle");
+  const root = process.env.XDG_RUNTIME_DIR || process.env.XDG_STATE_HOME || join3(homedir3(), ".local", "state");
+  return join3(root, "cursor-bridge", "lifecycle");
 }
 function ensureLifecycleDir(dir = defaultLifecycleDir()) {
-  mkdirSync2(dir, { recursive: true });
+  mkdirSync3(dir, { recursive: true });
   return dir;
 }
 function lifecycleEndpointTag(dir) {
@@ -10921,13 +10921,13 @@ function supervisorSockPath(dir = defaultLifecycleDir()) {
   if (process.platform === "win32") {
     return `\\\\.\\pipe\\cursor-bridge-lifecycle-${lifecycleEndpointTag(dir)}`;
   }
-  return join2(dir, "supervisor.sock");
+  return join3(dir, "supervisor.sock");
 }
 function supervisorPidPath(dir = defaultLifecycleDir()) {
-  return join2(dir, "supervisor.pid");
+  return join3(dir, "supervisor.pid");
 }
 function supervisorLockPath(dir = defaultLifecycleDir()) {
-  return join2(dir, "supervisor.lock");
+  return join3(dir, "supervisor.lock");
 }
 var init_lifecycle_paths = __esm({
   "lifecycle-paths.mjs"() {
@@ -10937,15 +10937,15 @@ var init_lifecycle_paths = __esm({
 // workspace-binding.mjs
 import {
   existsSync,
-  mkdirSync as mkdirSync3,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
+  mkdirSync as mkdirSync4,
+  readFileSync as readFileSync3,
+  renameSync as renameSync3,
+  rmSync as rmSync3,
   statSync,
-  writeFileSync as writeFileSync2
+  writeFileSync as writeFileSync3
 } from "node:fs";
-import { dirname as dirname2, extname, isAbsolute, join as join3, resolve as resolve2 } from "node:path";
-import { homedir as homedir3 } from "node:os";
+import { dirname as dirname3, extname, isAbsolute, join as join4, resolve as resolve3 } from "node:path";
+import { homedir as homedir4 } from "node:os";
 function pluginRuntimePath(candidate) {
   const value = String(candidate || "").replace(/\//g, "\\").toLowerCase();
   return value.includes("\\.codex\\.tmp\\marketplaces\\") || value.includes("\\.codex\\plugins\\cache\\") || value.includes("\\.claude\\plugins\\cache\\") || value.includes("\\appdata\\local\\npm-cache\\_npx\\");
@@ -10953,11 +10953,11 @@ function pluginRuntimePath(candidate) {
 function normalizeWorkspacePath(value) {
   let raw = String(value || "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
   if (!raw) return "";
-  if (raw === "~") raw = homedir3();
-  else if (raw.startsWith("~/") || raw.startsWith("~\\")) raw = join3(homedir3(), raw.slice(2));
-  if (/^\\\\\?\\UNC\\/i.test(raw)) return resolve2(`\\\\${raw.slice(8)}`);
-  if (/^\\\\\?\\[a-zA-Z]:\\/.test(raw)) return resolve2(raw.slice(4));
-  return resolve2(raw);
+  if (raw === "~") raw = homedir4();
+  else if (raw.startsWith("~/") || raw.startsWith("~\\")) raw = join4(homedir4(), raw.slice(2));
+  if (/^\\\\\?\\UNC\\/i.test(raw)) return resolve3(`\\\\${raw.slice(8)}`);
+  if (/^\\\\\?\\[a-zA-Z]:\\/.test(raw)) return resolve3(raw.slice(4));
+  return resolve3(raw);
 }
 function isAbsoluteWorkspacePath(value) {
   const raw = String(value || "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
@@ -10977,7 +10977,7 @@ function isWorkspaceTarget(projectPath, options = {}) {
   }
 }
 function resolveWorkspaceBindingFile(env = process.env) {
-  return resolve2(env.CURSOR_BRIDGE_WORKSPACE_FILE || join3(defaultLifecycleDir(), "workspaces.json"));
+  return resolve3(env.CURSOR_BRIDGE_WORKSPACE_FILE || join4(defaultLifecycleDir(), "workspaces.json"));
 }
 function resolveWorkspaceBindingKey(env = process.env, options = {}) {
   const codexThreadId = String(env.CODEX_THREAD_ID || "").trim();
@@ -11001,7 +11001,7 @@ function resolveWorkspaceBindingKey(env = process.env, options = {}) {
 function readWorkspaceBindings(filePath) {
   if (!filePath) return { version: WORKSPACE_BINDING_VERSION, bindings: {} };
   try {
-    const parsed = JSON.parse(readFileSync2(filePath, "utf8"));
+    const parsed = JSON.parse(readFileSync3(filePath, "utf8"));
     if (!parsed || parsed.version !== WORKSPACE_BINDING_VERSION || !parsed.bindings || typeof parsed.bindings !== "object") {
       return { version: WORKSPACE_BINDING_VERSION, bindings: {} };
     }
@@ -11038,13 +11038,13 @@ function writeWorkspaceBinding(filePath, bindingKey, projectPath, options = {}) 
   const state = readWorkspaceBindings(filePath);
   const updatedAt = options.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
   state.bindings[key] = { projectPath: normalized, updatedAt };
-  mkdirSync3(dirname2(filePath), { recursive: true });
+  mkdirSync4(dirname3(filePath), { recursive: true });
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   try {
-    writeFileSync2(temporary, JSON.stringify(state, null, 2) + "\n", "utf8");
-    renameSync2(temporary, filePath);
+    writeFileSync3(temporary, JSON.stringify(state, null, 2) + "\n", "utf8");
+    renameSync3(temporary, filePath);
   } catch (error2) {
-    rmSync2(temporary, { force: true });
+    rmSync3(temporary, { force: true });
     throw new Error(`failed to persist cursor_init at ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
   }
   return { projectPath: normalized, updatedAt };
@@ -11068,8 +11068,8 @@ var init_workspace_binding = __esm({
 import { spawn as spawn2, execFileSync as execFileSync2 } from "child_process";
 import { existsSync as existsSync2 } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
-import { homedir as homedir4 } from "node:os";
-import { basename as basename2, extname as extname2, join as join4, resolve as resolve3, win32 as winPath, posix as posixPath } from "node:path";
+import { homedir as homedir5 } from "node:os";
+import { basename as basename3, extname as extname2, join as join5, resolve as resolve4, win32 as winPath, posix as posixPath } from "node:path";
 import http from "http";
 function resolveCursorLaunchCdpPort(port = process.env.CURSOR_BRIDGE_CDP_PORT) {
   const parsed = Number(port == null || String(port).trim() === "" ? 9223 : port);
@@ -11096,13 +11096,13 @@ function resolveCodexThreadProjectPath(options = {}) {
   try {
     const lookupThreadCwd = options.lookupThreadCwd || ((id) => {
       const { DatabaseSync } = (options.requireImpl || loadModule)("node:sqlite");
-      const databasePath = options.databasePath || join4(homedir4(), ".codex", "state_5.sqlite");
+      const databasePath = options.databasePath || join5(homedir5(), ".codex", "state_5.sqlite");
       database = new DatabaseSync(databasePath, { readOnly: true });
       return database.prepare("SELECT cwd FROM threads WHERE id = ?").get(id)?.cwd || null;
     });
     const candidate = normalizeCodexThreadCwd(lookupThreadCwd(threadId));
     const existsImpl = options.existsImpl || existsSync2;
-    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve3(candidate) : null;
+    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve4(candidate) : null;
     if (options.useCache !== false) CODEX_THREAD_PROJECTS.set(threadId, resolved);
     return resolved;
   } catch {
@@ -11117,14 +11117,14 @@ function resolveCodexThreadProjectPath(options = {}) {
 }
 function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {}) {
   const explicit = String(value || "").trim();
-  if (explicit) return resolve3(explicit);
+  if (explicit) return resolve4(explicit);
   const persisted = String(options.persistedProjectPath || "").trim();
-  if (persisted) return resolve3(normalizeCodexThreadCwd(persisted));
+  if (persisted) return resolve4(normalizeCodexThreadCwd(persisted));
   const threadProjectPath = options.threadProjectPath === void 0 ? resolveCodexThreadProjectPath(options) : options.threadProjectPath;
-  if (threadProjectPath) return resolve3(normalizeCodexThreadCwd(threadProjectPath));
+  if (threadProjectPath) return resolve4(normalizeCodexThreadCwd(threadProjectPath));
   const cwd = options.cwd ?? process.cwd();
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
-  return resolve3(cwd);
+  return resolve4(cwd);
 }
 function cursorFromRegistry(options = {}) {
   const execFileSyncImpl = options.execFileSyncImpl || execFileSync2;
@@ -11189,7 +11189,7 @@ function findCursorExeDetails(options = {}) {
       existsImpl
     });
     if (fromReg) return { path: fromReg, source: "windows_registry", platform };
-    const localAppData = env.LOCALAPPDATA || join4(homedir4(), "AppData", "Local");
+    const localAppData = env.LOCALAPPDATA || join5(homedir5(), "AppData", "Local");
     const programFiles = env.ProgramFiles || env.PROGRAMFILES || "C:\\Program Files";
     const programFilesX86 = env["ProgramFiles(x86)"] || env.PROGRAMFILES_X86 || "";
     const candidates = [
@@ -11206,7 +11206,7 @@ function findCursorExeDetails(options = {}) {
     return null;
   }
   if (platform === "darwin") {
-    const userHome = env.HOME || homedir4();
+    const userHome = env.HOME || homedir5();
     const candidates = [
       "/Applications/Cursor.app/Contents/MacOS/Cursor",
       userHome && posixPath.join(userHome, "Applications", "Cursor.app", "Contents", "MacOS", "Cursor")
@@ -11225,42 +11225,42 @@ function findCursorExe(options = {}) {
   return findCursorExeDetails(options)?.path || null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve6(res.statusCode === 200);
+      resolve7(res.statusCode === 200);
     });
-    req.on("error", () => resolve6(false));
+    req.on("error", () => resolve7(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve6(false);
+      resolve7(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve6(false);
-          resolve6(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve7(false);
+          resolve7(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve6(false);
+          resolve7(false);
         }
       });
     });
-    req.on("error", () => resolve6(false));
+    req.on("error", () => resolve7(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve6(false);
+      resolve7(false);
     });
   });
 }
@@ -11300,7 +11300,7 @@ async function ensureCursorRunningLocal(options = {}) {
   const cdpIsCursorImpl = options.cdpIsCursorImpl || cdpIsCursor;
   const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
   const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
-  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve3(String(options.projectPath)) : null : resolveProjectPath();
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve4(String(options.projectPath)) : null : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn2;
   if (await cdpUpImpl()) {
@@ -11517,10 +11517,10 @@ async function ensureCursorRunningLocal(options = {}) {
   };
 }
 function normalizeProjectKey(projectPath) {
-  return projectPath ? resolve3(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
+  return projectPath ? resolve4(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
 }
 function targetTitleMatchesProject(title, projectPath) {
-  const name = basename2(String(projectPath || "")).trim().toLowerCase();
+  const name = basename3(String(projectPath || "")).trim().toLowerCase();
   if (!name) return false;
   const extension2 = extname2(name);
   const candidates = [...new Set([name, extension2 ? name.slice(0, -extension2.length) : name].filter(Boolean))];
@@ -11707,66 +11707,66 @@ import net from "node:net";
 import { createHash as createHash2 } from "node:crypto";
 import {
   existsSync as existsSync4,
-  mkdirSync as mkdirSync4,
-  readFileSync as readFileSync3,
+  mkdirSync as mkdirSync5,
+  readFileSync as readFileSync4,
   readdirSync,
-  renameSync as renameSync3,
-  rmSync as rmSync3,
+  renameSync as renameSync4,
+  rmSync as rmSync4,
   unlinkSync,
-  writeFileSync as writeFileSync3
+  writeFileSync as writeFileSync4
 } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname as dirname3, join as join5, resolve as resolve4 } from "node:path";
+import { dirname as dirname4, join as join6, resolve as resolve5 } from "node:path";
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 function resolveSupervisorScript() {
   if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
-    return resolve4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+    return resolve5(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
-  const here = dirname3(fileURLToPath(import.meta.url));
+  const here = dirname4(fileURLToPath(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
-    const entryDir = dirname3(resolve4(process.argv[1]));
-    candidates.push(join5(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
-    candidates.push(join5(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    const entryDir = dirname4(resolve5(process.argv[1]));
+    candidates.push(join6(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
+    candidates.push(join6(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join5(here, "dist", "cursor-lifecycle-supervisor.mjs"),
-    join5(here, "cursor-lifecycle-supervisor.mjs")
+    join6(here, "dist", "cursor-lifecycle-supervisor.mjs"),
+    join6(here, "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
     if (existsSync4(c)) return c;
   }
-  return join5(here, "cursor-lifecycle-supervisor.mjs");
+  return join6(here, "cursor-lifecycle-supervisor.mjs");
 }
 function writeRuntimeFile(target, content) {
-  if (existsSync4(target) && readFileSync3(target).equals(content)) return;
+  if (existsSync4(target) && readFileSync4(target).equals(content)) return;
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync3(temporary, content);
+  writeFileSync4(temporary, content);
   try {
-    renameSync3(temporary, target);
+    renameSync4(temporary, target);
   } catch (error2) {
     if (!existsSync4(target)) {
-      rmSync3(temporary, { force: true });
+      rmSync4(temporary, { force: true });
       throw error2;
     }
-    if (readFileSync3(target).equals(content)) {
-      rmSync3(temporary, { force: true });
+    if (readFileSync4(target).equals(content)) {
+      rmSync4(temporary, { force: true });
       return;
     }
-    rmSync3(target, { force: true });
-    renameSync3(temporary, target);
+    rmSync4(target, { force: true });
+    renameSync4(temporary, target);
   }
 }
 function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
-  const source = resolve4(sourceScript || resolveSupervisorScript());
+  const source = resolve5(sourceScript || resolveSupervisorScript());
   if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
-  const content = readFileSync3(source);
+  const content = readFileSync4(source);
   const fingerprint = createHash2("sha256").update(content).digest("hex");
-  const runtimeRoot = join5(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  mkdirSync4(runtimeRoot, { recursive: true });
-  const script = join5(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join6(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  mkdirSync5(runtimeRoot, { recursive: true });
+  const script = join6(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
 }
@@ -11781,7 +11781,7 @@ function isProcessAlive(pid) {
 }
 function readPidFile(pidPath) {
   try {
-    const n = Number(String(readFileSync3(pidPath, "utf8")).trim());
+    const n = Number(String(readFileSync4(pidPath, "utf8")).trim());
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
@@ -11874,7 +11874,7 @@ function tryUnlink(path) {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join5(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join6(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -11885,7 +11885,7 @@ function writeBootEnv(dir, extra = {}) {
   for (const [k, v] of Object.entries(payload)) {
     if (v != null && v !== "") cleaned[k] = String(v);
   }
-  writeFileSync3(bootPath, `${JSON.stringify(cleaned, null, 2)}
+  writeFileSync4(bootPath, `${JSON.stringify(cleaned, null, 2)}
 `, { encoding: "utf8" });
   return bootPath;
 }
@@ -11897,9 +11897,9 @@ async function ensureSupervisorConnected(options = {}) {
   const createWaitMs = Number(options.createWaitMs || DEFAULT_CREATE_WAIT_MS);
   const sourceScript = options.supervisorScript || resolveSupervisorScript();
   const runtime = options.persistSupervisorRuntime === false ? {
-    sourceScript: resolve4(sourceScript),
-    script: resolve4(sourceScript),
-    runtimeRoot: dirname3(resolve4(sourceScript)),
+    sourceScript: resolve5(sourceScript),
+    script: resolve5(sourceScript),
+    runtimeRoot: dirname4(resolve5(sourceScript)),
     fingerprint: null
   } : materializeLifecycleSupervisorRuntime({ sourceScript, dir });
   let socket = await tryConnect(sock);
@@ -19478,7 +19478,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve6) => setTimeout(resolve6, pollInterval));
+        await new Promise((resolve7) => setTimeout(resolve7, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -19495,7 +19495,7 @@ var Protocol = class {
    */
   request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve6, reject) => {
+    return new Promise((resolve7, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -19573,7 +19573,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve6(parseResult.data);
+            resolve7(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -19834,12 +19834,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve6, reject) => {
+    return new Promise((resolve7, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve6, interval);
+      const timeoutId = setTimeout(resolve7, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -20709,19 +20709,19 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve6) => {
+    return new Promise((resolve7) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve6();
+        resolve7();
       } else {
-        this._stdout.once("drain", resolve6);
+        this._stdout.once("drain", resolve7);
       }
     });
   }
 };
 
 // server.mjs
-import { basename as basename3, dirname as dirname4, join as join6, resolve as resolve5 } from "node:path";
+import { basename as basename4, dirname as dirname5, join as join7, resolve as resolve6 } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -20735,11 +20735,118 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // server.mjs
 init_cursor_runtime();
+import http2 from "http";
+import { pathToFileURL as pathToFileURL2 } from "url";
+
+// cursor-model-preferences.mjs
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync as rmSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { basename as basename2, dirname as dirname2, join as join2, resolve as resolve2 } from "node:path";
+var CURSOR_MODEL_TARGETS = Object.freeze(["cce", "cursor_do"]);
+var CURSOR_MODEL_EFFORTS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
+function normalizeCursorModelTarget(value, fallback = "") {
+  const normalized = String(value || "").trim().toLowerCase().replace(/-/g, "_");
+  if (normalized === "context_engine" || normalized === "cursor_context_engine") return "cce";
+  if (normalized === "do" || normalized === "delegate") return "cursor_do";
+  return CURSOR_MODEL_TARGETS.includes(normalized) ? normalized : fallback;
+}
+function normalizeCursorModelEffort(value, fallback = "") {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
+  if (normalized === "extra-high" || normalized === "extra-high-thinking") return "xhigh";
+  return CURSOR_MODEL_EFFORTS.includes(normalized) ? normalized : fallback;
+}
+function cursorEffortUiValue(value) {
+  const normalized = normalizeCursorModelEffort(value, "");
+  return normalized === "xhigh" ? "extra-high" : normalized;
+}
+function normalizeCursorModelPreference(value, options = {}) {
+  if (value == null) return null;
+  const model = String(value.model || "").trim();
+  if (!model) {
+    if (options.allowEmpty) return null;
+    throw new Error("model must not be empty");
+  }
+  if (model.length > 200) throw new Error("model exceeds the 200-character limit");
+  const rawEffort = value.effort == null ? "" : String(value.effort).trim();
+  const effort = rawEffort ? normalizeCursorModelEffort(rawEffort, "") : null;
+  if (rawEffort && !effort) {
+    throw new Error(`unsupported Cursor model effort: ${value.effort}; expected low, medium, high, xhigh, or max`);
+  }
+  return { model, effort };
+}
+function resolveCursorModelPreferencesFile(value = process.env.CURSOR_BRIDGE_MODEL_PREFERENCES_FILE) {
+  const configured = String(value || "").trim();
+  if (configured) return resolve2(configured);
+  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join2(homedir2(), ".config");
+  return join2(configRoot, "cursor-bridge", "model-preferences.json");
+}
+function emptyPreferences() {
+  return { version: 1, targets: { cce: null, cursor_do: null }, updatedAt: null };
+}
+function readCursorModelPreferences(filePath) {
+  const empty = emptyPreferences();
+  if (!filePath) return empty;
+  try {
+    const parsed = JSON.parse(readFileSync2(filePath, "utf8"));
+    const targets = parsed && typeof parsed.targets === "object" ? parsed.targets : {};
+    return {
+      version: 1,
+      targets: {
+        cce: normalizeCursorModelPreference(targets.cce, { allowEmpty: true }),
+        cursor_do: normalizeCursorModelPreference(targets.cursor_do, { allowEmpty: true })
+      },
+      updatedAt: parsed && parsed.updatedAt ? String(parsed.updatedAt) : null
+    };
+  } catch (error2) {
+    if (error2 && error2.code === "ENOENT") return empty;
+    console.error(`[cursor-bridge] ignoring unreadable model preferences file ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    return empty;
+  }
+}
+function writeCursorModelPreferences(filePath, preferences) {
+  if (!filePath) throw new Error("persistent cursor_model storage is disabled for this server");
+  const target = resolve2(filePath);
+  const normalized = {
+    version: 1,
+    targets: {
+      cce: normalizeCursorModelPreference(preferences && preferences.targets && preferences.targets.cce, { allowEmpty: true }),
+      cursor_do: normalizeCursorModelPreference(preferences && preferences.targets && preferences.targets.cursor_do, { allowEmpty: true })
+    },
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  mkdirSync2(dirname2(target), { recursive: true });
+  const temporary = join2(dirname2(target), `.${basename2(target)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    writeFileSync2(temporary, `${JSON.stringify(normalized, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+    renameSync2(temporary, target);
+  } catch (error2) {
+    rmSync2(temporary, { force: true });
+    throw new Error(`failed to persist cursor_model at ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+  }
+  return normalized;
+}
+function updateCursorModelPreferences(filePath, { action, target, model, effort } = {}) {
+  const normalizedAction = String(action || "show").trim().toLowerCase();
+  if (!["show", "set", "reset"].includes(normalizedAction)) {
+    throw new Error(`unsupported cursor_model action: ${action}; expected show, set, or reset`);
+  }
+  const selectedTargets = String(target || "").trim().toLowerCase() === "both" ? [...CURSOR_MODEL_TARGETS] : [normalizeCursorModelTarget(target, "")].filter(Boolean);
+  if (normalizedAction !== "show" && selectedTargets.length === 0) {
+    throw new Error("cursor_model set/reset requires target=cce, cursor_do, or both");
+  }
+  const current = readCursorModelPreferences(filePath);
+  if (normalizedAction === "show") return current;
+  const next = { ...current, targets: { ...current.targets } };
+  const preference = normalizedAction === "set" ? normalizeCursorModelPreference({ model, effort }) : null;
+  for (const selectedTarget of selectedTargets) next.targets[selectedTarget] = preference;
+  return writeCursorModelPreferences(filePath, next);
+}
+
+// server.mjs
 init_workspace_binding();
 init_cursor_ensure_core();
 init_lifecycle_paths();
-import http2 from "http";
-import { pathToFileURL as pathToFileURL2 } from "url";
 var PLUGIN_VERSION = "5.5.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
@@ -20797,13 +20904,13 @@ var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the wor
 var DO_LANGUAGE_CONTRACT = "\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve6(JSON.parse(d));
+          resolve7(JSON.parse(d));
         } catch {
           reject(new Error("CDP returned a non-JSON response"));
         }
@@ -21185,6 +21292,73 @@ function exprClickBoundComposerStop(agentId) {
   })()`;
 }
 var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
+var MODEL_PICKER_VISIBLE_BODY = `
+  const visible=(node)=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
+  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root')].filter(visible);
+  const composer=composers[composers.length-1]||document;
+`;
+var EXPR_MODEL_PICKER_TRIGGER = `(function(){
+  ${MODEL_PICKER_VISIBLE_BODY}
+  const triggerSelector='.ui-model-picker__trigger,.vscode-model-picker__trigger';
+  const candidates=[...composer.querySelectorAll(triggerSelector)].filter(visible);
+  const trigger=candidates[candidates.length-1]||[...document.querySelectorAll(triggerSelector)].filter(visible).pop();
+  if(!trigger)return JSON.stringify({found:false,state:'trigger_missing'});
+  const rect=trigger.getBoundingClientRect();
+  const text=String(trigger.querySelector('.ui-model-picker__trigger-text,.vscode-model-picker__trigger-text')?.innerText||trigger.innerText||'').replace(/\\s+/g,' ').trim();
+  const detail=String(trigger.querySelector('.ui-model-picker__trigger-variant-suffix,.vscode-model-picker__trigger-variant-suffix')?.innerText||'').replace(/\\s+/g,' ').trim();
+  return JSON.stringify({found:true,state:'ready',text,detail,x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)});
+})()`;
+var EXPR_MODEL_PICKER_ROWS = `(function(){
+  ${MODEL_PICKER_VISIBLE_BODY}
+  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
+  const rows=[];
+  const seen=new Set();
+  for(const menu of menus){
+    for(const row of menu.querySelectorAll('[data-component="menu-row"],[data-component="menu-submenu-trigger"],[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]')){
+      if(!visible(row)||seen.has(row))continue;
+      seen.add(row);
+      const rect=row.getBoundingClientRect();
+      const text=String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim();
+      if(!text)continue;
+      const menuTestId=String(menu.getAttribute('data-testid')||'').toLowerCase();
+      let kind='control';
+      if(row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'))kind='model';
+      else if(/^model(?:\\s|$)/i.test(text)&&row.getAttribute('aria-haspopup')==='menu')kind='model_control';
+      else if(/^effort(?:\\s|$)/i.test(text)&&row.getAttribute('aria-haspopup')==='menu')kind='effort_control';
+      else if(menuTestId.includes('parameter-submenu')||row.closest('[data-submenu]'))kind='parameter';
+      else if(menuTestId.includes('model-picker-menu')||menuTestId.includes('model-selection'))kind='model';
+      rows.push({
+        text,
+        kind,
+        selected:row.getAttribute('data-selected')==='true'||row.getAttribute('aria-checked')==='true'||!!row.querySelector('.ui-model-picker__item-check,.ui-model-picker__param-check'),
+        disabled:row.getAttribute('data-disabled')==='true'||row.getAttribute('aria-disabled')==='true',
+        hasSubmenu:row.getAttribute('aria-haspopup')==='menu',
+        submenu:!!row.closest('[data-submenu]'),
+        x:Math.round(rect.x+rect.width/2),
+        y:Math.round(rect.y+rect.height/2),
+      });
+    }
+  }
+  return JSON.stringify({open:menus.length>0,rows});
+})()`;
+function normalizeModelPickerText(value) {
+  return String(value || "").trim().toLowerCase().replace(/extra[\s_-]*high/g, "xhigh").replace(/[^a-z0-9]+/g, "");
+}
+function selectModelPickerRow(rows, requested, kind = "model") {
+  const wanted = normalizeModelPickerText(requested);
+  if (!wanted) return null;
+  const candidates = (Array.isArray(rows) ? rows : []).filter((row) => row && row.disabled !== true && (kind === "any" || row.kind === kind)).map((row) => {
+    const normalized = normalizeModelPickerText(row.text);
+    let score = normalized === wanted ? 1e3 : 0;
+    if (!score && normalized.startsWith(wanted)) score = 800;
+    if (!score && wanted.startsWith(normalized)) score = 700;
+    if (!score && normalized.includes(wanted)) score = 600;
+    return { row, score, distance: Math.abs(normalized.length - wanted.length) };
+  }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score || a.distance - b.distance);
+  if (candidates.length === 0) return null;
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score && candidates[0].distance === candidates[1].distance) return null;
+  return candidates[0].row;
+}
 var WORKSPACE_SECTION_BODY = `
   const headText=(el)=>String(el&&(el.innerText||el.textContent)||'').trim();
   const isNewAgentButton=(node)=>{
@@ -21228,7 +21402,7 @@ var WORKSPACE_SECTION_BODY = `
   };
 `;
 function exprCreateAgentForWorkspace(projectPath) {
-  const workspaceLabel = JSON.stringify(basename3(String(projectPath || "")).trim().toLowerCase());
+  const workspaceLabel = JSON.stringify(basename4(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
     const wanted=${workspaceLabel};
@@ -21244,7 +21418,7 @@ function exprCreateAgentForWorkspace(projectPath) {
   })()`;
 }
 function exprInspectWorkspaceRepository(projectPath) {
-  const workspaceLabel = JSON.stringify(basename3(String(projectPath || "")).trim().toLowerCase());
+  const workspaceLabel = JSON.stringify(basename4(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
     const wanted=${workspaceLabel};
@@ -21314,6 +21488,8 @@ var REACT_ADAPTER_BODY = `
   };
   const findV2Props=()=>{
     const found=[]; const seen=new Set();
+    let globalSelectAgent=null;
+    let sectionIdByAgentId=null;
     for(const root of document.querySelectorAll('.glass-sidebar-agent-list-container')){
       const nodes=[]; let n=root;
       for(let i=0;n&&i<24;i++,n=n.parentElement)nodes.push(n);
@@ -21324,6 +21500,8 @@ var REACT_ADAPTER_BODY = `
           let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
           for(let j=0;f&&j<80;j++,f=f.return){
             for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
+              if(p&&typeof p.onSelectAgent==='function'&&!globalSelectAgent)globalSelectAgent=p.onSelectAgent;
+              if(p&&p.sectionIdByAgentId&&!sectionIdByAgentId)sectionIdByAgentId=p.sectionIdByAgentId;
               const selectAgent=p&&(typeof p.onSelectAgent==='function'
                 ?p.onSelectAgent
                 :(p.rowHandlers&&typeof p.rowHandlers.onSelect==='function'?p.rowHandlers.onSelect:null));
@@ -21339,6 +21517,8 @@ var REACT_ADAPTER_BODY = `
         }
       }
     }
+    found.globalSelectAgent=globalSelectAgent;
+    found.sectionIdByAgentId=sectionIdByAgentId;
     return found;
   };
   const findAdapter=()=>{
@@ -21368,10 +21548,28 @@ var REACT_ADAPTER_BODY = `
               else if(/needs_attention/.test(status))icon='needs-attention';
               else if(/failed|error/.test(status))icon='warning';
               else if(/cancel/.test(status))icon='circle-slash';
+              seen.add(selectedId);
               entries.push({
                 id:selectedId,label:'',searchText:'',timestamp:0,isSelected:true,
                 showSpinner:/in_progress|running|generating/.test(status),icon,
-                workspaceId:'',workspaceLabel:'',durable:false
+                workspaceId:String(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.get(selectedRaw)||'':v2.sectionIdByAgentId&&readScalar(v2.sectionIdByAgentId[selectedRaw])||''),
+                workspaceLabel:'',durable:!!(v2.sectionIdByAgentId&&(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.has(selectedRaw):v2.sectionIdByAgentId[selectedRaw]!==undefined)),
+                registeredBySectionMap:true
+              });
+            }
+          }
+          if(v2.sectionIdByAgentId){
+            const registered=v2.sectionIdByAgentId instanceof Map?[...v2.sectionIdByAgentId.entries()]:Object.entries(v2.sectionIdByAgentId);
+            for(const pair of registered){
+              const raw=String(pair&&pair[0]||'').replace(/^local:/,'');
+              if(!raw)continue;
+              const id='local:'+raw;
+              if(seen.has(id))continue;
+              seen.add(id);
+              entries.push({
+                id,label:'',searchText:'',timestamp:0,isSelected:id===selectedId,
+                showSpinner:false,icon:'registered',workspaceId:String(readScalar(pair[1])||''),workspaceLabel:'',
+                durable:true,registeredBySectionMap:true
               });
             }
           }
@@ -21384,6 +21582,8 @@ var REACT_ADAPTER_BODY = `
             const header=p.section.headers.find(h=>String(readScalar(h&&h.id)||'')===raw);
             if(header){p.onSelectAgent(header);return true;}
           }
+          const registered=v2.sectionIdByAgentId&&(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.has(raw):v2.sectionIdByAgentId[raw]!==undefined);
+          if(registered&&typeof v2.globalSelectAgent==='function'){v2.globalSelectAgent(raw);return true;}
           return false;
         }
       };
@@ -21481,6 +21681,13 @@ function classifyParallelTerminalIcon(icon) {
 function isDurablyRegisteredParallelEntry(entry) {
   return !!entry && entry.durable !== false && (entry.showSpinner || classifyParallelTerminalIcon(entry.icon) !== "unknown");
 }
+function selectPromotedFifoEntry(beforeEntries, currentAgentId, afterEntries) {
+  if (!Array.isArray(beforeEntries) || !Array.isArray(afterEntries)) return null;
+  if (currentAgentId && afterEntries.some((entry) => entry && entry.id === currentAgentId)) return null;
+  const candidate = selectNewAgentEntry(beforeEntries, afterEntries);
+  if (!candidate || candidate.id === currentAgentId || candidate.isSelected !== true) return null;
+  return isDurablyRegisteredParallelEntry(candidate) ? candidate : null;
+}
 function uncertainSubmissionReservationScope(job, error2) {
   if (error2 && error2.requiresGlobalReservation) return "global";
   return job && job.readOnly ? "agent" : "paths";
@@ -21527,10 +21734,10 @@ function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chd
 }
 var CursorBridge = class {
   constructor(options = {}) {
-    this.adapterStartCwd = resolve5(options.adapterStartCwd || process.cwd());
+    this.adapterStartCwd = resolve6(options.adapterStartCwd || process.cwd());
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     this._syncDelegationState();
-    this.runtimeFile = options.runtimeFile === null ? null : resolve5(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeFile = options.runtimeFile === null ? null : resolve6(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
       "normal"
@@ -21541,12 +21748,14 @@ var CursorBridge = class {
     this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
     this.runtimeModeSource = options.runtimeMode !== void 0 ? "constructor" : persistedRuntimeMode ? "persistent" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
     this.runtimeModeScope = persistedRuntimeMode ? "persistent" : options.runtimeMode !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
-    this.workspaceFile = options.workspaceFile === null ? null : resolve5(options.workspaceFile || resolveWorkspaceBindingFile());
+    this.workspaceFile = options.workspaceFile === null ? null : resolve6(options.workspaceFile || resolveWorkspaceBindingFile());
     this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
     const persistedWorkspace = options.projectPath === void 0 ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey) : null;
-    this.projectPath = options.projectPath !== void 0 ? resolve5(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
+    this.projectPath = options.projectPath !== void 0 ? resolve6(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
     this.workspaceSource = options.projectPath !== void 0 ? "constructor" : persistedWorkspace ? "persistent_init" : "auto_detect";
     this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
+    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve6(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
+    this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
     this._lastPresentation = null;
     this.busy = false;
     this.queue = [];
@@ -21654,6 +21863,36 @@ var CursorBridge = class {
       environmentLockedOff: this.environmentDelegationMode === "off"
     };
   }
+  _refreshModelPreferences() {
+    if (!this.modelPreferencesFile) return false;
+    const next = readCursorModelPreferences(this.modelPreferencesFile);
+    const changed = JSON.stringify(next) !== JSON.stringify(this.modelPreferences);
+    this.modelPreferences = next;
+    return changed;
+  }
+  modelPreferencesView() {
+    this._refreshModelPreferences();
+    return {
+      modelPreferencesFile: this.modelPreferencesFile,
+      modelPreferencesPersistAcrossRestart: !!this.modelPreferencesFile,
+      modelPreferenceTargets: [...CURSOR_MODEL_TARGETS],
+      availableEfforts: [...CURSOR_MODEL_EFFORTS],
+      modelPreferences: {
+        cce: this.modelPreferences.targets.cce,
+        cursor_do: this.modelPreferences.targets.cursor_do
+      },
+      modelPreferencesUpdatedAt: this.modelPreferences.updatedAt
+    };
+  }
+  configureModelPreferences(options = {}) {
+    this.modelPreferences = updateCursorModelPreferences(this.modelPreferencesFile, options);
+    return this.modelPreferencesView();
+  }
+  _modelPreferenceFor(target) {
+    this._refreshModelPreferences();
+    const preference = this.modelPreferences.targets[target];
+    return preference ? { ...preference } : null;
+  }
   _refreshPersistedRuntimeMode() {
     if (!this.runtimeFile || this.runtimeModeScope === "session" || this.runtimeModeScope === "constructor") {
       return false;
@@ -21750,7 +21989,8 @@ var CursorBridge = class {
       newChat: true,
       execution: "fifo",
       readOnly: true,
-      allowedPaths: []
+      allowedPaths: [],
+      modelPreference: this._modelPreferenceFor("cce")
     });
     return normalizeCceSearchResult(await job.promise);
   }
@@ -21802,7 +22042,8 @@ var CursorBridge = class {
       execution,
       readOnly,
       allowedPaths,
-      preferLegacyUi: options.preferLegacyUi === true
+      preferLegacyUi: options.preferLegacyUi === true,
+      modelPreference: this._modelPreferenceFor("cursor_do")
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -21835,8 +22076,8 @@ var CursorBridge = class {
     const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve6, reject) => {
-      resolvePromise = resolve6;
+    const promise = new Promise((resolve7, reject) => {
+      resolvePromise = resolve7;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -21852,6 +22093,8 @@ var CursorBridge = class {
       effectiveExecution: options.execution || "fifo",
       readOnly: options.readOnly === true,
       allowedPaths: options.allowedPaths || [],
+      modelPreference: options.modelPreference ? { ...options.modelPreference } : null,
+      modelSelection: options.modelPreference ? { configured: true, applied: false, ...options.modelPreference } : null,
       projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
       status: "queued",
       phase: "queued",
@@ -22202,6 +22445,8 @@ var CursorBridge = class {
         await this._bindFifoAgentAfterComposerReady(c, options, historyBefore);
         await this._bindFifoComposerIdentity(c, options);
         this._throwIfCancelledBeforeSend(options);
+        await this._applyModelPreference(c, options.modelPreference, options);
+        this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
         if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("Failed to enter the query because the input state was invalid");
         await sleep2(450);
@@ -22218,10 +22463,8 @@ var CursorBridge = class {
           await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
           options.sendState = "sent";
           options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
-          if (!options.agentId) {
-            await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
-            await this._bindFifoComposerIdentity(c, options);
-          }
+          await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
+          await this._bindFifoComposerIdentity(c, options);
           return await this._waitComplete(
             c,
             options.timeoutMs || QUERY_TIMEOUT,
@@ -22250,6 +22493,176 @@ var CursorBridge = class {
     error2.preSend = true;
     throw error2;
   }
+  async _readModelPickerTrigger(c) {
+    try {
+      return JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_TRIGGER) || "{}");
+    } catch {
+      return { found: false, state: "trigger_unreadable" };
+    }
+  }
+  async _readModelPickerRows(c) {
+    try {
+      const snapshot = JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_ROWS) || "{}");
+      return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
+    } catch {
+      return { open: false, rows: [] };
+    }
+  }
+  async _clickModelPickerPoint(c, point) {
+    if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+      throw new Error("Cursor model picker returned an invalid target");
+    }
+    const x = Number(point.x);
+    const y = Number(point.y);
+    await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  }
+  async _hoverModelPickerPoint(c, point) {
+    if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) return;
+    await c.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: Number(point.x), y: Number(point.y) });
+  }
+  async _openModelPicker(c) {
+    const trigger = await this._readModelPickerTrigger(c);
+    if (!trigger.found) {
+      throw new Error("Cursor model picker is unavailable in the active Agent composer");
+    }
+    let snapshot = await this._readModelPickerRows(c);
+    if (!snapshot.open) {
+      await this._clickModelPickerPoint(c, trigger);
+      await sleep2(450);
+      snapshot = await this._readModelPickerRows(c);
+    }
+    if (!snapshot.open) throw new Error("Cursor model picker did not open");
+    return { trigger, ...snapshot };
+  }
+  async _closeModelPicker(c) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const snapshot = await this._readModelPickerRows(c);
+      if (!snapshot.open) return;
+      await c.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+      await c.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+      await sleep2(150);
+    }
+    if ((await this._readModelPickerRows(c)).open) throw new Error("Cursor model picker did not close after selection");
+  }
+  async _openModelPickerControl(c, snapshot, controlKind) {
+    const control = (snapshot && snapshot.rows || []).find((row) => row.kind === controlKind && row.disabled !== true);
+    if (!control) return snapshot;
+    await this._clickModelPickerPoint(c, control);
+    await sleep2(400);
+    let next = await this._readModelPickerRows(c);
+    const expectedKind = controlKind === "model_control" ? "model" : "parameter";
+    if (!next.rows.some((row) => row.kind === expectedKind)) {
+      await this._hoverModelPickerPoint(c, control);
+      await sleep2(350);
+      next = await this._readModelPickerRows(c);
+    }
+    return next;
+  }
+  async _findModelPickerModel(c, snapshot, requestedModel) {
+    let modelRow = selectModelPickerRow(snapshot && snapshot.rows, requestedModel, "model");
+    if (modelRow) return { snapshot, modelRow };
+    const expanded = await this._openModelPickerControl(c, snapshot, "model_control");
+    modelRow = selectModelPickerRow(expanded && expanded.rows, requestedModel, "model");
+    return { snapshot: expanded, modelRow };
+  }
+  async _selectedEffortRow(c, modelRow, effort) {
+    let snapshot = await this._readModelPickerRows(c);
+    let effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
+    if (!effortRow) {
+      snapshot = await this._openModelPickerControl(c, snapshot, "effort_control");
+      effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
+    }
+    if (effortRow) return effortRow;
+    await this._hoverModelPickerPoint(c, modelRow);
+    await sleep2(400);
+    snapshot = await this._readModelPickerRows(c);
+    effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
+    if (!effortRow && modelRow && modelRow.hasSubmenu) {
+      await this._clickModelPickerPoint(c, modelRow);
+      await sleep2(350);
+      snapshot = await this._readModelPickerRows(c);
+      effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
+    }
+    return effortRow;
+  }
+  async _applyModelPreference(c, preference, job) {
+    if (!preference) {
+      if (job) job.modelSelection = null;
+      return null;
+    }
+    const requestedModel = String(preference.model || "").trim();
+    const requestedEffort = preference.effort ? normalizeCursorModelEffort(preference.effort, "") : null;
+    const opened = await this._openModelPicker(c);
+    let located = await this._findModelPickerModel(c, opened, requestedModel);
+    let modelRow = located.modelRow;
+    if (!modelRow) {
+      throw new Error(`Configured Cursor model is unavailable or ambiguous: ${requestedModel}`);
+    }
+    let selectedEffortRow = null;
+    if (requestedEffort && modelRow.hasSubmenu) {
+      selectedEffortRow = await this._selectedEffortRow(c, modelRow, requestedEffort);
+      if (!selectedEffortRow) {
+        throw new Error(`Cursor model ${requestedModel} does not expose effort ${requestedEffort}`);
+      }
+      if (!selectedEffortRow.selected || !modelRow.selected) {
+        await this._clickModelPickerPoint(c, selectedEffortRow);
+        await sleep2(550);
+      }
+    } else if (!modelRow.selected) {
+      await this._clickModelPickerPoint(c, modelRow);
+      await sleep2(550);
+    }
+    let trigger = await this._readModelPickerTrigger(c);
+    if (!trigger.found || !normalizeModelPickerText(trigger.text).includes(normalizeModelPickerText(requestedModel))) {
+      const reopened = await this._openModelPicker(c);
+      located = await this._findModelPickerModel(c, reopened, requestedModel);
+      const selected = selectModelPickerRow(located.snapshot.rows.filter((row) => row.selected), requestedModel, "model");
+      if (!selected) throw new Error(`Cursor did not confirm configured model ${requestedModel}`);
+      modelRow = selected;
+    }
+    let effectiveEffort = null;
+    if (requestedEffort) {
+      const reopened = await this._openModelPicker(c);
+      located = await this._findModelPickerModel(c, reopened, requestedModel);
+      modelRow = located.modelRow;
+      if (!modelRow) throw new Error(`Cursor model row disappeared while applying effort: ${requestedModel}`);
+      let effortRow = await this._selectedEffortRow(c, modelRow, requestedEffort);
+      if (!effortRow) {
+        throw new Error(`Cursor model ${requestedModel} does not expose effort ${requestedEffort}`);
+      }
+      if (!effortRow.selected) {
+        await this._clickModelPickerPoint(c, effortRow);
+        await sleep2(450);
+      }
+      trigger = await this._readModelPickerTrigger(c);
+      const detailMatches = normalizeModelPickerText(`${trigger.detail || ""} ${trigger.text || ""}`).includes(normalizeModelPickerText(requestedEffort));
+      if (!detailMatches) {
+        const verify = await this._openModelPicker(c);
+        const verifiedModel = await this._findModelPickerModel(c, verify, requestedModel);
+        const selectedModel = verifiedModel.modelRow;
+        effortRow = await this._selectedEffortRow(c, selectedModel, requestedEffort);
+        if (!effortRow || !effortRow.selected) {
+          throw new Error(`Cursor did not confirm effort ${requestedEffort} for model ${requestedModel}`);
+        }
+      }
+      effectiveEffort = requestedEffort;
+    }
+    await this._closeModelPicker(c);
+    trigger = await this._readModelPickerTrigger(c);
+    const result = {
+      configured: true,
+      applied: true,
+      requestedModel,
+      requestedEffort,
+      effectiveModel: trigger.text || modelRow.text,
+      effectiveEffort,
+      pickerDetail: trigger.detail || null,
+      verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (job) job.modelSelection = result;
+    return result;
+  }
   async _ensureChatPanel(c) {
     let vis = await evalJS(c, EXPR_VISIBLE);
     if (!vis) {
@@ -22272,7 +22685,7 @@ var CursorBridge = class {
       const created = JSON.parse(await evalJS(c, exprCreateAgentForWorkspace(options.projectPath)) || "{}");
       if (!created.ok) {
         const available = Array.isArray(created.available) ? `; available=${created.available.join(", ")}` : "";
-        throw new Error(`Cursor Agents workspace binding failed: ${created.state || "unknown"}; wanted=${created.wanted || basename3(options.projectPath)}${available}`);
+        throw new Error(`Cursor Agents workspace binding failed: ${created.state || "unknown"}; wanted=${created.wanted || basename4(options.projectPath)}${available}`);
       }
       await sleep2(1100);
       return true;
@@ -22383,12 +22796,31 @@ var CursorBridge = class {
     }
   }
   async _bindFifoAgentAfterSend(c, job, beforeEntries, providerErrorBaseline) {
-    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries) || job.agentId) return;
-    for (let i = 0; i < 24 && !job.agentId; i++) {
+    if (!this._canBindFifoHistory(job) || !Array.isArray(beforeEntries)) return;
+    for (let i = 0; i < 24; i++) {
       await sleep2(350);
       await this._throwIfNewProviderError(c, providerErrorBaseline);
-      const candidate = await this._resolveNewAgent(c, beforeEntries, { requireActive: true });
-      if (candidate) this._applyAgentIdentity(job, candidate);
+      let entries = null;
+      try {
+        entries = await this._readAgentEntries(c);
+      } catch {
+      }
+      if (!Array.isArray(entries)) continue;
+      const promoted = selectPromotedFifoEntry(beforeEntries, job.agentId, entries);
+      if (promoted) {
+        job.provisionalAgentId = job.agentId || null;
+        this._applyAgentIdentity(job, promoted);
+        return;
+      }
+      const current = job.agentId ? entries.find((entry) => entry && entry.id === job.agentId) : null;
+      if (current && isDurablyRegisteredParallelEntry(current)) return;
+      if (!job.agentId) {
+        const candidate = selectNewAgentEntry(beforeEntries, entries);
+        if (candidate && isDurablyRegisteredParallelEntry(candidate)) {
+          this._applyAgentIdentity(job, candidate);
+          return;
+        }
+      }
     }
   }
   async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "") {
@@ -22481,6 +22913,8 @@ var CursorBridge = class {
       await this._closeHistory(c);
       await this._ensureChatPanel(c);
       this._throwIfCancelledBeforeSend(job);
+      await this._applyModelPreference(c, job.modelPreference, job);
+      this._throwIfCancelledBeforeSend(job);
       const filled = await evalJS(c, exprFill(job.prompt));
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("Failed to enter the parallel_agent task");
       await sleep2(350);
@@ -22537,8 +22971,25 @@ var CursorBridge = class {
       const c = makeClient(page.webSocketDebuggerUrl);
       await c.ready;
       try {
-        const entries = await this._readAgentEntries(c);
-        return entries.find((e) => e.id === job.agentId) || null;
+        let entries = await this._readAgentEntries(c);
+        let entry = entries.find((e) => e.id === job.agentId) || null;
+        if (!entry && (job.execution === "fifo" || job.effectiveExecution === "fifo")) {
+          const promoted = selectPromotedFifoEntry(job.historyBeforeEntries, job.agentId, entries);
+          if (promoted) {
+            job.provisionalAgentId = job.agentId || null;
+            this._applyAgentIdentity(job, promoted);
+            entry = promoted;
+          }
+        }
+        if (entry && entry.registeredBySectionMap && classifyParallelTerminalIcon(entry.icon) === "unknown") {
+          const opened = await evalJS(c, exprOpenAgent(job.agentId));
+          if (opened === "OPENED") {
+            await sleep2(350);
+            entries = await this._readAgentEntries(c);
+            entry = entries.find((e) => e.id === job.agentId) || entry;
+          }
+        }
+        return entry;
       } finally {
         c.close();
       }
@@ -23287,8 +23738,11 @@ var CursorBridge = class {
       effectiveExecution: job.effectiveExecution,
       readOnly: job.readOnly,
       allowedPaths: job.allowedPaths,
+      modelPreference: job.modelPreference,
+      modelSelection: job.modelSelection,
       projectPath: job.projectPath,
       agentId: job.agentId,
+      provisionalAgentId: job.provisionalAgentId || null,
       agentLabel: job.agentLabel,
       targetId: job.targetId,
       targetUiFlavor: job.targetUiFlavor,
@@ -23335,8 +23789,8 @@ var CursorBridge = class {
   async status(taskId = "") {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView() };
-      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView() };
+      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
@@ -23347,6 +23801,7 @@ var CursorBridge = class {
       ...this.workspaceView(),
       ...this.delegationView(),
       ...this.runtimeModeView(),
+      ...this.modelPreferencesView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
       parallelRunning,
@@ -23452,8 +23907,22 @@ function buildToolDefinitions(bridgeInstance) {
       }
     },
     {
+      name: "cursor_model",
+      description: "Show, set, or reset persistent Cursor model defaults for CCE and cursor_do. Settings are independent per target and survive host tasks, MCP restarts, and Cursor Bridge restarts until the user explicitly changes or resets them. When configured, Bridge applies the model and optional effort in every newly created Cursor Agent before sending the prompt, then verifies the visible selection. An unavailable, ambiguous, unsupported, or unconfirmed selection fails before prompt submission instead of silently falling back to Auto. Use set/reset only when the user explicitly asks to change these defaults; use show for read-only inspection.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["show", "set", "reset"], description: "show reads current defaults; set persists a model and optional effort; reset restores Cursor default selection for the target." },
+          target: { type: "string", enum: ["cce", "cursor_do", "both"], description: "Required for set/reset. CCE and cursor_do keep independent defaults; both changes both targets together." },
+          model: { type: "string", description: "Required for set. Use a model ID or display name currently available in the signed-in Cursor account." },
+          effort: { type: "string", enum: [...CURSOR_MODEL_EFFORTS], description: "Optional reasoning effort for set. Omit it to use that model's Cursor default." }
+        },
+        required: ["action"]
+      }
+    },
+    {
       name: "cursor_status",
-      description: "Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, and normal/minimal runtime presentation. Pass a task ID to read its current in-memory state and any result already collected; this tool never switches Agents, reconciles, or stops work.",
+      description: "Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, and normal/minimal runtime presentation. Pass a task ID to read its configured and effective model selection plus any result already collected; this tool never switches Agents, reconciles, or stops work.",
       inputSchema: { type: "object", properties: { task_id: { type: "string", description: "A task ID returned by cursor_do. Omit it for an overall status view." } } }
     }
   ].filter(Boolean);
@@ -23550,6 +24019,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
+    if (name === "cursor_model") {
+      const result = bridge.configureModelPreferences({
+        action: args && args.action,
+        target: args && args.target,
+        model: args && args.model,
+        effort: args && args.effort
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === "cursor_status") {
       const statusMs = Math.max(1e3, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8e3));
       let result;
@@ -23607,11 +24085,15 @@ if (isMain2) {
   });
 }
 export {
+  CURSOR_MODEL_EFFORTS,
+  CURSOR_MODEL_TARGETS,
   CURSOR_RUNTIME_MODES,
   CursorBridge,
   EXPR_CLICK_SEND,
   EXPR_FIND_NEWAGENT,
   EXPR_HISTORY_ENTRIES,
+  EXPR_MODEL_PICKER_ROWS,
+  EXPR_MODEL_PICKER_TRIGGER,
   EXPR_PAGE_CAPABILITIES,
   EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
@@ -23635,16 +24117,20 @@ export {
   isTargetedStopConfirmed,
   normalizeAllowedPath,
   normalizeCceSearchResult,
+  normalizeCursorModelEffort,
   normalizeCursorRuntimeMode,
   normalizeDelegationMode,
+  normalizeModelPickerText,
   pathsOverlap,
   promoteAgentsWorkspaceLifecycle,
   providerErrorSignature,
   releaseAdapterWorkingDirectory,
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
+  selectModelPickerRow,
   selectNewAgentEntry,
   selectPageForUiPreference,
+  selectPromotedFifoEntry,
   shouldAutoLaunchCursor,
   shouldRecoverNormalAgentsPresentation,
   summarizeCdpPages,

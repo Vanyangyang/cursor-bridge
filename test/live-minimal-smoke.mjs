@@ -15,6 +15,8 @@ const query = argv.filter((value) => !['--keep-hidden', '--persist'].includes(va
 const bridge = new CursorBridge({
   runtimeFile: persist ? undefined : null,
   runtimeMode: persist ? undefined : 'minimal',
+  projectPath: process.cwd(),
+  workspaceFile: null,
 });
 
 let result = null;

@@ -65,7 +65,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.17.19** (fresh Agents Window launch). Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. This launch did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.17.21** user setup, reusing its existing Agents Window process carrying `--remote-debugging-port=9223`. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. This run did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -158,7 +158,7 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.19** | **5.5.0** (`master`, current) | Live-tested on Windows 11 through a fresh Agents Window launch: workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, and CCE across normal/minimal presentation all passed. The legacy IDE/workbench was not exposed by this launch. |
+| **3.17.21** | **5.5.0** (`master`, current) | Live-tested on Windows 11 by reusing the user-setup Agents Window already carrying CDP port 9223: workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation all passed. The legacy IDE/workbench was not exposed by this run. |
 
 Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
@@ -168,6 +168,7 @@ Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After i
 
 - **Start with project understanding:** `cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships, then returns compact source anchors, coverage, gaps, and confidence.
 - **Move to bounded execution with `cursor_do`:** send a clearly scoped Cursor Agent task and receive a stable task ID for collection and recovery. `cursor_do` is optional, but no longer hidden as an edge feature: use it whenever a bounded Cursor pass is the efficient execution path. The primary Agent remains responsible for reviewing the result, real workspace changes, and verification evidence.
+- **Keep the model you chose:** say “Use GPT-5.6 Terra with max effort for CCE” or “Use GPT-5.6 Sol with high effort for cursor_do.” `cursor_model` stores independent defaults for CCE and `cursor_do` across host tasks and restarts until you explicitly change or reset them. Before every prompt, Bridge applies and verifies the selection; it fails before sending instead of silently falling back to Auto.
 
 ## Full MCP tool reference
 
@@ -176,7 +177,8 @@ Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After i
 | **`cursor_init`** | Initializes or switches CCE to one absolute workspace path. |
 | **`cursor_context_engine`** | Read-only project understanding from one natural-language `query`. |
 | **`cursor_do`** | Submits a clear, bounded subtask to Cursor Agent for execution. |
-| **`cursor_status`** | Reads connection, queue, runtime, and task state without changing it. |
+| **`cursor_model`** | Shows, sets, or resets persistent model and reasoning-effort defaults for CCE, `cursor_do`, or both. |
+| **`cursor_status`** | Reads connection, queue, runtime, persistent model defaults, and configured/effective task state without changing it. |
 | `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
 | `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery. |
 
@@ -350,6 +352,7 @@ npm run build
 | `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | Bootstrap mode when no persisted choice exists. |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override persistent runtime-mode storage. |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | user lifecycle directory | Override persistent workspace binding storage. |
+| `CURSOR_BRIDGE_MODEL_PREFERENCES_FILE` | user config directory | Override persistent CCE / `cursor_do` model and effort storage. |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. |
 | `CURSOR_PROJECT_PATH` | unset | Compatibility fallback used only without persisted initialization. |
 | `CURSOR_EXE` | auto-detected | Portable/custom executable, Windows install folder, or macOS `.app` override. |

@@ -13,6 +13,7 @@ Use Cursor as an execution partner. Keep direction, scope decisions, risk owners
 - If `cursor_do` is unavailable, or `cursor_status` reports delegation as disabled, do not bypass the setting, repeatedly retry, or ask Cursor to re-enable itself. Complete the work in the primary agent.
 - Treat `CURSOR_BRIDGE_DELEGATION=off` as an administrator-level host switch. It disables delegated execution but does not by itself disable `cursor_context_engine`, `cursor_init`, or `cursor_status`.
 - Cursor Bridge exposes one fixed delegation contract. Do not invent participation levels, call-frequency controls, or slash commands.
+- `cursor_model` owns persistent model and reasoning-effort defaults. Call its `set` or `reset` action only when the user explicitly asks to change those defaults; ordinary delegation must inherit the stored `cursor_do` choice without silently changing it.
 
 ## Follow the default workflow
 
@@ -71,8 +72,9 @@ The envelope may contain a small number of local implementation `open_questions`
 1. Always query `cursor_status(task_id)` for the exact task. Do not treat the currently visible Cursor chat as task identity.
 2. Treat `submitting`, `running`, and `collecting` as normal in-progress states. More than two minutes is not itself a failure; wait for an explicit terminal state.
 3. Compare Cursor's claimed work with the real diff, `allowed_paths`, and acceptance contract.
-4. Run risk-proportionate verification in the primary agent. Cursor's response alone cannot support a formal pass, verified state, or governance transition.
-5. Record each task as complete, partial, failed, timed out, or ambiguous before summarizing the batch.
+4. When `cursor_status` reports a configured model default, confirm `modelSelection.applied=true` and preserve its configured/effective model and effort fields in any failure report.
+5. Run risk-proportionate verification in the primary agent. Cursor's response alone cannot support a formal pass, verified state, or governance transition.
+6. Record each task as complete, partial, failed, timed out, or ambiguous before summarizing the batch.
 
 Report the accepted result in the language of the user's current task. Keep `task_id`, `agent_id`, tool names, states, enum values, paths, commands, hashes, exact permission options, and error/status codes verbatim. If Cursor returned an artifact or report in another language, preserve it and summarize the relevant facts in the current task language.
 
