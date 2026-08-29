@@ -102,15 +102,32 @@ git push origin refs/tags/cursor-bridge--v5.6.2
 Cursor Bridge 5.6.2 (New) + Grok Build Supervisor 0.3.7
 ```
 
-6. Publish the Pi Packages only after the component tags and staged-tarball parity checks pass:
+6. Configure npm Trusted Publishing once for each existing Pi package. Both packages use the same GitHub Actions trust coordinates, but npm stores the relationship per package:
+
+```text
+GitHub owner: Vanyangyang
+Repository: cursor-bridge
+Workflow filename: publish-pi.yml
+Allowed action: npm publish
+Environment: leave blank unless the workflow job is updated to use the exact same GitHub Environment
+```
+
+The trusted workflow is `.github/workflows/publish-pi.yml`. It uses a GitHub-hosted Windows runner with `permissions.id-token: write`, Node 24, and npm 12. The Windows checkout preserves the established tarball byte convention used by the existing Pi releases. Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to its publish job. npm exchanges the GitHub OIDC identity only during `npm publish`; `npm whoami` is intentionally skipped by the publisher in GitHub Actions.
+
+7. A newly pushed `cursor-bridge--v*` or `grok-build-supervisor--v*` tag automatically publishes only that component's corresponding Pi package. For an already-existing release tag, manually dispatch `Publish Pi packages` with that exact tag as the `ref`; the workflow rejects non-component-tag refs, uses the current trusted tooling, and packages source from the exact requested tag. The publisher preflights every selected package before any write, treats only a confirmed registry `E404` as unpublished, skips byte-identical versions, and stops on an immutable-version mismatch or uncertain registry response.
+
+Local publication remains an interactive fallback and still verifies the expected npm account before publishing:
 
 ```powershell
 pwsh -File .\scripts\publish-pi-packages.ps1
+
+# Optional: publish or verify only one component
+pwsh -File .\scripts\publish-pi-packages.ps1 -PackageName pi-cursor-bridge
 ```
 
-The publisher verifies the npm account and compares each existing registry tarball shasum with the local dry-run package. It skips only byte-identical content. If the same version exists with different content, bump the package version; npm releases are immutable.
+The local fallback may require WebAuthn/2FA. Do not automate that proof-of-presence or store a long-lived bypass-2FA write token. If the same version exists with different content, bump the package version; npm releases are immutable.
 
-7. Install the released artifacts from their real remote sources in fresh host tasks and rerun the bounded smoke paths. Confirm final Git status is clean and local/remote commit IDs agree.
+8. Install the released artifacts from their real remote sources in fresh host tasks and rerun the bounded smoke paths. Confirm final Git status is clean and local/remote commit IDs agree.
 
 ## Installation surfaces to verify
 

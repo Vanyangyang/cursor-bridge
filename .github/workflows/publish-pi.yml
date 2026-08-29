@@ -1,0 +1,92 @@
+name: Publish Pi packages
+
+on:
+  push:
+    tags:
+      - "cursor-bridge--v*"
+      - "grok-build-supervisor--v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact release tag to publish again
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pi-packages
+  cancel-in-progress: false
+
+jobs:
+  validate-dispatch-ref:
+    name: Validate dispatched tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject refs outside released Pi tag namespaces
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ inputs.ref }}
+        run: |
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            exit 0
+          fi
+
+          if [[ ! "$REF" =~ ^(cursor-bridge--v|grok-build-supervisor--v)[0-9][0-9A-Za-z._-]*$ ]] || ! git check-ref-format --allow-onelevel "refs/tags/$REF"; then
+            echo "::error::ref must be an exact cursor-bridge--v* or grok-build-supervisor--v* tag."
+            exit 1
+          fi
+
+  publish:
+    needs: validate-dispatch-ref
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+    steps:
+      - name: Match the supported Windows release checkout
+        shell: pwsh
+        run: git config --global core.autocrlf true
+
+      - name: Check out trusted publishing tooling
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          path: .release-tooling
+          ref: ${{ github.sha }}
+
+      - name: Check out the release tag
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          path: release
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.ref) || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install npm 12
+        run: npm install --global npm@12
+
+      - name: Publish Pi packages
+        shell: pwsh
+        run: |
+          $packageName = if ($env:RELEASE_TAG.StartsWith('cursor-bridge--v')) {
+            'pi-cursor-bridge'
+          } elseif ($env:RELEASE_TAG.StartsWith('grok-build-supervisor--v')) {
+            'pi-grok-build-supervisor'
+          } else {
+            throw "Unsupported release tag: $env:RELEASE_TAG"
+          }
+
+          & "$env:GITHUB_WORKSPACE/.release-tooling/scripts/publish-pi-packages.ps1" `
+            -RepositoryRoot "$env:GITHUB_WORKSPACE/release" `
+            -PackageName $packageName
