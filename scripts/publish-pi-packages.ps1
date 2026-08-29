@@ -52,7 +52,15 @@ foreach ($package in $packages) {
         throw "Unable to calculate the local package digest for $packageSpec."
     }
     $localPack = ($localPackOutput -join [Environment]::NewLine) | ConvertFrom-Json
-    $localShasum = ([string]($localPack | Select-Object -First 1).shasum).Trim()
+    $namedPackProperty = $localPack.PSObject.Properties[$manifest.name]
+    $localPackRecord = if ($localPack -is [array]) {
+        $localPack | Select-Object -First 1
+    } elseif ($namedPackProperty) {
+        $namedPackProperty.Value
+    } else {
+        $localPack
+    }
+    $localShasum = ([string]$localPackRecord.shasum).Trim()
     if (-not $localShasum) {
         throw "npm pack did not return a shasum for $packageSpec."
     }
