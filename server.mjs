@@ -54,7 +54,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.6.1';
+const PLUGIN_VERSION = '5.6.2';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -1001,6 +1001,9 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     degradedReason: result.degradedReason || null,
     spawnErrorCode: result.spawnErrorCode ?? null,
     supervisorErrorKind: result.supervisorErrorKind || null,
+    supervisorError: result.supervisorError || null,
+    supervisorStderr: result.supervisorStderr || null,
+    spawnAttempts: result.spawnAttempts ?? null,
     capabilities: result.capabilities || null,
     cursorPid: result.cursorPid || null,
     runtimeMode: result.runtimeMode || fallbackRuntimeMode,
@@ -1020,6 +1023,22 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     runtimeScript: result.runtimeScript || null,
     runtimeUpgradeDeferred: result.runtimeUpgradeDeferred === true,
   };
+}
+
+function lifecycleFailureSummary(lifecycle, fallback) {
+  if (!lifecycle) return fallback;
+  const diagnostic = [
+    `status=${lifecycle.status || 'unknown'}`,
+    `lifecycleMode=${lifecycle.lifecycleMode || 'unknown'}`,
+    `degradedReason=${lifecycle.degradedReason || 'none'}`,
+    `spawnErrorCode=${lifecycle.spawnErrorCode ?? 'none'}`,
+    `supervisorErrorKind=${lifecycle.supervisorErrorKind || 'none'}`,
+    `spawnAttempts=${lifecycle.spawnAttempts ?? 'none'}`,
+  ].join(' ');
+  const original = lifecycle.supervisorError
+    ? `Original supervisor error: ${lifecycle.supervisorError}`
+    : null;
+  return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(' ');
 }
 
 function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
@@ -1140,7 +1159,7 @@ class CursorBridge {
         bindingPersisted: true,
         ready: false,
         status: lifecycle.status,
-        message: lifecycle.message || 'CCE initialization is not complete, but the workspace binding was saved.',
+        message: lifecycleFailureSummary(lifecycle, 'CCE initialization is not complete, but the workspace binding was saved.'),
         nextStep: lifecycle.nextStep || 'Resolve the reported condition, then run the same initialization command again.',
         retryable: lifecycle.retryable !== false,
         lifecycle,
@@ -1645,7 +1664,12 @@ class CursorBridge {
         }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
         if ((!rr.ok || this._lastLifecycle.status === 'workspace-not-ready') && this._lastLifecycle.status !== 'agents-workspace-ready') {
-          throw new Error([rr.message || `Cursor lifecycle failed: ${rr.status}`, rr.nextStep].filter(Boolean).join(' '));
+          const lifecycleError = new Error([
+            lifecycleFailureSummary(this._lastLifecycle, rr.message || `Cursor lifecycle failed: ${rr.status}`),
+            rr.nextStep,
+          ].filter(Boolean).join(' '));
+          lifecycleError.lifecycle = this._lastLifecycle;
+          throw lifecycleError;
         }
         if (this._lastLifecycle.status === 'agents-workspace-ready') {
           console.error(`🪟 Cursor Agents repository ready: ${this._lastLifecycle.projectPath} -> ${this._lastLifecycle.targetId}`);
@@ -3382,7 +3406,7 @@ function buildToolDefinitions(bridgeInstance) {
 const ADAPTER_START_CWD = process.cwd();
 const bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.6.1' },
+  { name: 'cursor-bridge', version: PLUGIN_VERSION },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -3581,5 +3605,6 @@ export {
   isBlankAgentsWindow,
   shouldRecoverNormalAgentsPresentation,
   releaseAdapterWorkingDirectory,
+  lifecycleFailureSummary,
   PLUGIN_VERSION,
 };

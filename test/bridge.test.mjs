@@ -48,6 +48,7 @@ import {
   isBlankAgentsWindow,
   shouldRecoverNormalAgentsPresentation,
   releaseAdapterWorkingDirectory,
+  lifecycleFailureSummary,
   PLUGIN_VERSION,
 } from '../server.mjs';
 
@@ -73,6 +74,24 @@ test('status snapshot lists CDP titles without requiring a live page probe', () 
     title: 'Cursor Settings - cursor-bridge - Cursor',
     probeError: 'ignored',
   }), false);
+});
+
+test('lifecycle failures retain the original supervisor cause', () => {
+  const message = lifecycleFailureSummary({
+    status: 'external-launch-required',
+    lifecycleMode: 'attached',
+    message: 'Cursor is not reachable on CDP 9223.',
+    degradedReason: 'wmi-unknown-8',
+    spawnErrorCode: 8,
+    supervisorErrorKind: 'wmi-unknown',
+    spawnAttempts: 2,
+    supervisorError: 'failed to spawn lifecycle supervisor: WMI Win32_Process.Create failed: 8',
+  }, 'Cursor lifecycle failed');
+  assert.match(message, /status=external-launch-required/);
+  assert.match(message, /degradedReason=wmi-unknown-8/);
+  assert.match(message, /spawnErrorCode=8/);
+  assert.match(message, /spawnAttempts=2/);
+  assert.match(message, /Original supervisor error: .*Win32_Process\.Create failed: 8/);
 });
 
 test('adapter releases the plugin cache cwd into the stable lifecycle directory', (t) => {

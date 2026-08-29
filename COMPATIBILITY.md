@@ -11,9 +11,37 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.17.21** | **5.6.1** | `master` | Current maintained version. Windows 11 post-restart acceptance passed the normal Supervisor path and an isolated Codex `:workspace` sandbox path. The sandbox reproduced `spawnSync powershell.exe EPERM`, then safely attached to the existing Agents Window with `persistent: false`; installed-cache parity and repository binding passed. The legacy IDE/workbench CDP target was not exposed, so that surface is not claimed for this pairing. |
+| **3.17.21** | **5.6.2** | `master` | Current maintained version. It preserves successful attached reuse while retaining original WMI/Supervisor diagnostics when CDP is offline, and retries only WMI `8` / `HRESULT 0x80004005` once. Two fresh Codex `read-only` MCP-host runs created persistent Supervisors through WMI; the stricter command-sandbox control remained `fs-policy-blocked`. Installed-cache, Agents Window, CCE, model, FIFO/parallel, and normal/minimal evidence remains scoped to the recorded acceptance runs. The legacy IDE/workbench target was not exposed. |
 
 ## Historical versions
+
+### Cursor Bridge 5.6.1 — Cursor 3.17.21
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.6.1`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.6.1
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.6.1 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.6.1
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.6.1
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.6.1 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.6.0 — Cursor 3.17.21
 

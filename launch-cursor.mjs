@@ -106,11 +106,13 @@ export async function ensureCursorRunning(options = {}) {
       spawnMethod: null,
       launchReason: local.ok ? 'attached-after-supervisor-blocked' : `attached-${local.status}`,
       supervisorError: error instanceof Error ? error.message : String(error),
+      supervisorStderr: error.stderr || null,
     }, 'attached', {
       degradedReason: error.degradedReason || 'supervisor-unavailable',
       spawnErrorCode: error.errorCode ?? error.returnValue ?? null,
       supervisorErrorKind: error.errorKind || null,
       supervisorCommandLine: error.commandLine || null,
+      spawnAttempts: error.attempts ?? null,
       runtimeUpgradeDeferred: false,
     });
   }

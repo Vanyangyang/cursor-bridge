@@ -18,6 +18,7 @@ import {
   buildHiddenWmiCreateScript,
   allowUnsafeCmdStart,
   classifyOutsideJobSpawnError,
+  shouldRetryOutsideJobSpawn,
   spawnOutsideJob,
 } from '../win-job-breakaway.mjs';
 import {
@@ -296,6 +297,39 @@ test('policy-blocked supervisor spawn falls back to verified attached Cursor', a
   assert.equal(result.spawnErrorCode, 'EPERM');
   assert.equal(result.capabilities.canLaunchCursor, false);
   assert.equal(result.capabilities.canOpenWorkspaceWindow, false);
+});
+
+test('offline attached fallback preserves the original supervisor failure', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-attached-offline-cause-'));
+  const project = join(root, 'project');
+  mkdirSync(project, { recursive: true });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const result = await ensureCursorRunning({
+    dir: join(root, 'lifecycle'),
+    projectPath: project,
+    supervisorScript: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+    spawnNodeOutsideJobImpl: () => ({
+      ok: false,
+      method: 'failed',
+      error: 'WMI Win32_Process.Create failed: Win32_Process.Create failed: 8',
+      errorKind: 'wmi-unknown',
+      degradedReason: 'wmi-unknown-8',
+      errorCode: 8,
+      canAttachFallback: true,
+      stderr: 'Invoke-CimMethod returned 8',
+      attempts: 2,
+    }),
+    cdpUpImpl: async () => false,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'external-launch-required');
+  assert.equal(result.lifecycleMode, 'attached');
+  assert.equal(result.supervisorError, 'failed to spawn lifecycle supervisor: WMI Win32_Process.Create failed: Win32_Process.Create failed: 8');
+  assert.equal(result.supervisorStderr, 'Invoke-CimMethod returned 8');
+  assert.equal(result.degradedReason, 'wmi-unknown-8');
+  assert.equal(result.spawnErrorCode, 8);
+  assert.equal(result.supervisorErrorKind, 'wmi-unknown');
+  assert.equal(result.spawnAttempts, 2);
 });
 
 test('configuration-class supervisor failures do not silently attach', async (t) => {
@@ -623,6 +657,11 @@ test('outside-job errors preserve safe fallback classification and raw WMI codes
   assert.equal(unknown8.degradedReason, 'wmi-unknown-8');
   assert.equal(unknown8.errorCode, 8);
   assert.equal(unknown8.canAttachFallback, true);
+  const hresult = classifyOutsideJobSpawnError(new Error('Invoke-CimMethod failed: HRESULT 0x80004005'));
+  assert.equal(hresult.errorKind, 'wmi-unknown');
+  assert.equal(hresult.degradedReason, 'wmi-hresult-0x80004005');
+  assert.equal(hresult.errorCode, '0x80004005');
+  assert.equal(hresult.canAttachFallback, true);
   for (const value of [9, 21]) {
     const classified = classifyOutsideJobSpawnError(new Error(`Win32_Process.Create failed: ${value}`));
     assert.equal(classified.errorKind, 'configuration');
@@ -632,6 +671,70 @@ test('outside-job errors preserve safe fallback classification and raw WMI codes
   const timedOut = classifyOutsideJobSpawnError(Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }));
   assert.equal(timedOut.degradedReason, 'spawn-timeout');
   assert.equal(timedOut.canAttachFallback, true);
+});
+
+test('WMI unknown return code 8 retries once and can recover', (t) => {
+  if (process.platform !== 'win32') {
+    t.skip('Windows-only WMI retry policy');
+    return;
+  }
+  let calls = 0;
+  const delays = [];
+  const result = spawnOutsideJob(process.execPath, ['-e', 'process.exit(0)'], {
+    execFileSyncImpl() {
+      calls += 1;
+      if (calls === 1) throw new Error('Win32_Process.Create failed: 8');
+      return '4242\n';
+    },
+    retryDelayImpl(ms) { delays.push(ms); },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.pid, 4242);
+  assert.equal(result.attempts, 2);
+  assert.equal(calls, 2);
+  assert.deepEqual(delays, [500]);
+});
+
+test('WMI HRESULT E_FAIL receives the same one bounded retry', (t) => {
+  if (process.platform !== 'win32') {
+    t.skip('Windows-only WMI retry policy');
+    return;
+  }
+  let calls = 0;
+  const result = spawnOutsideJob(process.execPath, ['-e', 'process.exit(0)'], {
+    execFileSyncImpl() {
+      calls += 1;
+      if (calls === 1) throw new Error('Invoke-CimMethod failed: HRESULT 0x80004005');
+      return '4343\n';
+    },
+    retryDelayImpl() {},
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.pid, 4343);
+  assert.equal(result.attempts, 2);
+  assert.equal(calls, 2);
+});
+
+test('WMI unknown return code 8 fails closed after one retry', (t) => {
+  if (process.platform !== 'win32') {
+    t.skip('Windows-only WMI retry policy');
+    return;
+  }
+  let calls = 0;
+  const result = spawnOutsideJob(process.execPath, ['-e', 'process.exit(0)'], {
+    execFileSyncImpl() {
+      calls += 1;
+      throw new Error('Win32_Process.Create failed: 8');
+    },
+    retryDelayImpl() {},
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.errorKind, 'wmi-unknown');
+  assert.equal(result.degradedReason, 'wmi-unknown-8');
+  assert.equal(result.errorCode, 8);
+  assert.equal(result.attempts, 2);
+  assert.equal(calls, 2);
+  assert.equal(shouldRetryOutsideJobSpawn(result, 2, 2), false);
 });
 
 test('legacy unsafe shell fallback switch can no longer be enabled', () => {
