@@ -91,10 +91,12 @@ function wmiReturnValueFromError(error) {
 }
 
 export function classifyOutsideJobSpawnError(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
   const code = error && typeof error === 'object' && error.code != null
     ? String(error.code)
     : null;
   const returnValue = wmiReturnValueFromError(error);
+  const hresultEFail = /(?:HRESULT\s*)?0x80004005|\bE_FAIL\b/i.test(message);
   if (code === 'EPERM' || code === 'EACCES') {
     return {
       errorKind: 'policy-blocked',
@@ -119,6 +121,15 @@ export function classifyOutsideJobSpawnError(error) {
       degradedReason: 'wmi-unknown-8',
       errorCode: returnValue,
       returnValue,
+      canAttachFallback: true,
+    };
+  }
+  if (hresultEFail) {
+    return {
+      errorKind: 'wmi-unknown',
+      degradedReason: 'wmi-hresult-0x80004005',
+      errorCode: '0x80004005',
+      returnValue: null,
       canAttachFallback: true,
     };
   }
@@ -149,6 +160,17 @@ export function classifyOutsideJobSpawnError(error) {
   };
 }
 
+function waitSync(ms) {
+  const timeout = Math.max(0, Number(ms) || 0);
+  if (timeout === 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, timeout);
+}
+
+export function shouldRetryOutsideJobSpawn(classification, attempt, maxAttempts = 2) {
+  return (classification?.returnValue === 8 || classification?.degradedReason === 'wmi-hresult-0x80004005')
+    && attempt < maxAttempts;
+}
+
 /**
  * Spawn a process that should outlive the current Windows job.
  * @returns {{ ok: boolean, method: string, pid?: number, error?: string, commandLine?: string }}
@@ -170,44 +192,64 @@ export function spawnOutsideJob(file, args = [], options = {}) {
     return { ok: true, method: 'detached-spawn', pid: child.pid, commandLine };
   }
 
-  // 1) WMI Win32_Process.Create — documented job breakaway (child not associated with caller's job).
-  try {
-    if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL === '1') {
-      throw new Error('forced WMI failure for tests');
+  // WMI Win32_Process.Create — documented job breakaway (child not associated with caller's job).
+  // Retry only the two opaque WMI failure shapes once; all other failures remain single-attempt.
+  const maxAttempts = Math.max(1, Math.min(2, Number(options.maxWmiAttempts || 2)));
+  const retryDelayImpl = options.retryDelayImpl || waitSync;
+  let lastError = null;
+  let lastClassification = null;
+  let lastStderr = null;
+  let attemptsUsed = 0;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    attemptsUsed = attempt;
+    try {
+      if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL === '1') {
+        throw new Error('forced WMI failure for tests');
+      }
+      if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_RETURN_VALUE) {
+        throw new Error(`Win32_Process.Create failed: ${env.CURSOR_BRIDGE_TEST_FORCE_WMI_RETURN_VALUE}`);
+      }
+      const ps = buildHiddenWmiCreateScript(commandLine, cwd);
+      const run = options.execFileSyncImpl || execFileSync;
+      const out = run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy', 'Bypass',
+        '-Command', ps,
+      ], {
+        encoding: 'utf8',
+        windowsHide: true,
+        env,
+        timeout: 15000,
+      }).trim();
+      const pid = Number(String(out).trim().split(/\r?\n/).pop());
+      if (!Number.isFinite(pid) || pid <= 0) {
+        throw new Error(`unexpected WMI pid output: ${out}`);
+      }
+      return { ok: true, method: 'wmi-win32-process-create', pid, commandLine, attempts: attempt };
+    } catch (wmiError) {
+      lastError = wmiError;
+      lastClassification = classifyOutsideJobSpawnError(wmiError);
+      lastStderr = wmiError && typeof wmiError === 'object' && wmiError.stderr != null
+        ? String(wmiError.stderr).trim() || null
+        : null;
+      if (shouldRetryOutsideJobSpawn(lastClassification, attempt, maxAttempts)) {
+        retryDelayImpl(Math.max(0, Number(options.wmiRetryDelayMs ?? 500)));
+        continue;
+      }
+      break;
     }
-    const ps = buildHiddenWmiCreateScript(commandLine, cwd);
-    const run = options.execFileSyncImpl || execFileSync;
-    const out = run('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy', 'Bypass',
-      '-Command', ps,
-    ], {
-      encoding: 'utf8',
-      windowsHide: true,
-      env,
-      timeout: 15000,
-    }).trim();
-    const pid = Number(String(out).trim().split(/\r?\n/).pop());
-    if (!Number.isFinite(pid) || pid <= 0) {
-      throw new Error(`unexpected WMI pid output: ${out}`);
-    }
-    return { ok: true, method: 'wmi-win32-process-create', pid, commandLine };
-  } catch (wmiError) {
-    const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
-    const classification = classifyOutsideJobSpawnError(wmiError);
-    const stderr = wmiError && typeof wmiError === 'object' && wmiError.stderr != null
-      ? String(wmiError.stderr).trim() || null
-      : null;
-    return {
-      ok: false,
-      method: 'failed',
-      commandLine,
-      ...classification,
-      stderr,
-      error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`,
-    };
   }
+  const wmiMsg = lastError instanceof Error ? lastError.message : String(lastError);
+  return {
+    ok: false,
+    method: 'failed',
+    commandLine,
+    ...lastClassification,
+    stderr: lastStderr,
+    attempts: attemptsUsed,
+    error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`,
+  };
 }
 
 export function spawnNodeOutsideJob(scriptPath, scriptArgs = [], options = {}) {

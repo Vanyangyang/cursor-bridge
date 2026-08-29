@@ -390,6 +390,7 @@ export async function ensureSupervisorConnected(options = {}) {
         canAttachFallback: spawned.canAttachFallback === true,
         commandLine: spawned.commandLine || null,
         stderr: spawned.stderr || null,
+        attempts: spawned.attempts ?? null,
       });
     }
 

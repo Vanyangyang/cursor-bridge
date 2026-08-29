@@ -6,6 +6,18 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.6.2] - 2026-08-29
+
+### Fixed
+
+- Kept the 5.6.1 attached fallback when an existing Cursor CDP endpoint is available, while offline failures now retain the original Supervisor error, stderr, `degradedReason`, `spawnErrorCode`, `supervisorErrorKind`, and bounded attempt count instead of exposing only the generic lifecycle-policy message.
+- WMI `Win32_Process.Create` return code `8` and its `HRESULT 0x80004005` / `E_FAIL` form receive exactly one bounded retry. Every other WMI, configuration, filesystem, or process-policy failure remains single-attempt and fail-closed.
+- The MCP server version now uses the single `PLUGIN_VERSION` constant instead of duplicating the release number at construction.
+
+### Compatibility
+
+- Verified twice through fresh `codex exec -s read-only --ephemeral` MCP hosts on Windows 11: each run created a persistent Supervisor through `wmi-win32-process-create` with no degradation, while an explicitly wrapped `codex sandbox --permission-profile :read-only` lifecycle probe returned `fs-policy-blocked` / `EPERM`. This confirms that Full Access is not a general prerequisite for Cursor Bridge on the tested Codex host and keeps strict command-sandbox behavior distinct from MCP hosting. Cursor PID remained unchanged. No bootstrap service, scheduled task, login item, or new public lifecycle status was added.
+
 ## [5.6.1] - 2026-08-29
 
 ### Fixed
@@ -281,7 +293,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
-[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.1...HEAD
+[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.2...HEAD
+[5.6.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.1...cursor-bridge--v5.6.2
 [5.6.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.0...cursor-bridge--v5.6.1
 [5.6.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.5.0...cursor-bridge--v5.6.0
 [5.5.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.2...cursor-bridge--v5.5.0

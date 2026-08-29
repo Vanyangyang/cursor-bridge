@@ -11,9 +11,37 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.17.21** | **5.6.1** | `master` | 当前维护版本。Windows 11 重启后验收同时通过普通 Supervisor 路径与独立 Codex `:workspace` 沙箱路径。沙箱复现 `spawnSync powershell.exe EPERM` 后安全连接现有 Agents Window，并如实报告 `persistent: false`；安装缓存一致性与仓库绑定均通过。本次运行没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。 |
+| **3.17.21** | **5.6.2** | `master` | 当前维护版本。保留成功的 attached 复用，并在 CDP 离线时保留原始 WMI/Supervisor 诊断；仅对 WMI `8` / `HRESULT 0x80004005` 重试一次。两次全新的 Codex `read-only` MCP host 运行均通过 WMI 创建持久 Supervisor；更严格的命令沙箱对照仍返回 `fs-policy-blocked`。安装缓存、Agents Window、CCE、模型、FIFO/parallel 及 normal/minimal 证据仍以已记录验收为边界。本次运行没有暴露旧版 IDE/workbench。 |
 
 ## 历史版本
+
+### Cursor Bridge 5.6.1 — Cursor 3.17.21
+
+状态：**已归档；不再维护。** 不可变 Git ref：`cursor-bridge--v5.6.1`。
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.6.1
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.6.1 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.6.1
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.6.1
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.6.1 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.6.0 — Cursor 3.17.21
 

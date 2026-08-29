@@ -11768,8 +11768,10 @@ function wmiReturnValueFromError(error2) {
   return match ? Number(match[1]) : null;
 }
 function classifyOutsideJobSpawnError(error2) {
+  const message = error2 instanceof Error ? error2.message : String(error2 || "");
   const code = error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null;
   const returnValue = wmiReturnValueFromError(error2);
+  const hresultEFail = /(?:HRESULT\s*)?0x80004005|\bE_FAIL\b/i.test(message);
   if (code === "EPERM" || code === "EACCES") {
     return {
       errorKind: "policy-blocked",
@@ -11794,6 +11796,15 @@ function classifyOutsideJobSpawnError(error2) {
       degradedReason: "wmi-unknown-8",
       errorCode: returnValue,
       returnValue,
+      canAttachFallback: true
+    };
+  }
+  if (hresultEFail) {
+    return {
+      errorKind: "wmi-unknown",
+      degradedReason: "wmi-hresult-0x80004005",
+      errorCode: "0x80004005",
+      returnValue: null,
       canAttachFallback: true
     };
   }
@@ -11823,6 +11834,14 @@ function classifyOutsideJobSpawnError(error2) {
     canAttachFallback: false
   };
 }
+function waitSync(ms) {
+  const timeout = Math.max(0, Number(ms) || 0);
+  if (timeout === 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, timeout);
+}
+function shouldRetryOutsideJobSpawn(classification, attempt, maxAttempts = 2) {
+  return (classification?.returnValue === 8 || classification?.degradedReason === "wmi-hresult-0x80004005") && attempt < maxAttempts;
+}
 function spawnOutsideJob(file, args = [], options = {}) {
   const cwd = options.cwd || process.cwd();
   const env = options.env || process.env;
@@ -11838,43 +11857,62 @@ function spawnOutsideJob(file, args = [], options = {}) {
     child.unref();
     return { ok: true, method: "detached-spawn", pid: child.pid, commandLine };
   }
-  try {
-    if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL === "1") {
-      throw new Error("forced WMI failure for tests");
+  const maxAttempts = Math.max(1, Math.min(2, Number(options.maxWmiAttempts || 2)));
+  const retryDelayImpl = options.retryDelayImpl || waitSync;
+  let lastError = null;
+  let lastClassification = null;
+  let lastStderr = null;
+  let attemptsUsed = 0;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    attemptsUsed = attempt;
+    try {
+      if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_FAIL === "1") {
+        throw new Error("forced WMI failure for tests");
+      }
+      if (env.CURSOR_BRIDGE_TEST_FORCE_WMI_RETURN_VALUE) {
+        throw new Error(`Win32_Process.Create failed: ${env.CURSOR_BRIDGE_TEST_FORCE_WMI_RETURN_VALUE}`);
+      }
+      const ps = buildHiddenWmiCreateScript(commandLine, cwd);
+      const run = options.execFileSyncImpl || execFileSync3;
+      const out = run("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        ps
+      ], {
+        encoding: "utf8",
+        windowsHide: true,
+        env,
+        timeout: 15e3
+      }).trim();
+      const pid = Number(String(out).trim().split(/\r?\n/).pop());
+      if (!Number.isFinite(pid) || pid <= 0) {
+        throw new Error(`unexpected WMI pid output: ${out}`);
+      }
+      return { ok: true, method: "wmi-win32-process-create", pid, commandLine, attempts: attempt };
+    } catch (wmiError) {
+      lastError = wmiError;
+      lastClassification = classifyOutsideJobSpawnError(wmiError);
+      lastStderr = wmiError && typeof wmiError === "object" && wmiError.stderr != null ? String(wmiError.stderr).trim() || null : null;
+      if (shouldRetryOutsideJobSpawn(lastClassification, attempt, maxAttempts)) {
+        retryDelayImpl(Math.max(0, Number(options.wmiRetryDelayMs ?? 500)));
+        continue;
+      }
+      break;
     }
-    const ps = buildHiddenWmiCreateScript(commandLine, cwd);
-    const run = options.execFileSyncImpl || execFileSync3;
-    const out = run("powershell.exe", [
-      "-NoProfile",
-      "-NonInteractive",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      ps
-    ], {
-      encoding: "utf8",
-      windowsHide: true,
-      env,
-      timeout: 15e3
-    }).trim();
-    const pid = Number(String(out).trim().split(/\r?\n/).pop());
-    if (!Number.isFinite(pid) || pid <= 0) {
-      throw new Error(`unexpected WMI pid output: ${out}`);
-    }
-    return { ok: true, method: "wmi-win32-process-create", pid, commandLine };
-  } catch (wmiError) {
-    const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
-    const classification = classifyOutsideJobSpawnError(wmiError);
-    const stderr = wmiError && typeof wmiError === "object" && wmiError.stderr != null ? String(wmiError.stderr).trim() || null : null;
-    return {
-      ok: false,
-      method: "failed",
-      commandLine,
-      ...classification,
-      stderr,
-      error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`
-    };
   }
+  const wmiMsg = lastError instanceof Error ? lastError.message : String(lastError);
+  return {
+    ok: false,
+    method: "failed",
+    commandLine,
+    ...lastClassification,
+    stderr: lastStderr,
+    attempts: attemptsUsed,
+    error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`
+  };
 }
 function spawnNodeOutsideJob(scriptPath, scriptArgs = [], options = {}) {
   const node = whichNode();
@@ -12232,7 +12270,8 @@ async function ensureSupervisorConnected(options = {}) {
         returnValue: spawned.returnValue ?? null,
         canAttachFallback: spawned.canAttachFallback === true,
         commandLine: spawned.commandLine || null,
-        stderr: spawned.stderr || null
+        stderr: spawned.stderr || null,
+        attempts: spawned.attempts ?? null
       });
     }
     const deadline = Date.now() + createWaitMs;
@@ -12419,12 +12458,14 @@ async function ensureCursorRunning(options = {}) {
       createdSupervisor: false,
       spawnMethod: null,
       launchReason: local.ok ? "attached-after-supervisor-blocked" : `attached-${local.status}`,
-      supervisorError: error2 instanceof Error ? error2.message : String(error2)
+      supervisorError: error2 instanceof Error ? error2.message : String(error2),
+      supervisorStderr: error2.stderr || null
     }, "attached", {
       degradedReason: error2.degradedReason || "supervisor-unavailable",
       spawnErrorCode: error2.errorCode ?? error2.returnValue ?? null,
       supervisorErrorKind: error2.errorKind || null,
       supervisorCommandLine: error2.commandLine || null,
+      spawnAttempts: error2.attempts ?? null,
       runtimeUpgradeDeferred: false
     });
   }
@@ -21142,7 +21183,7 @@ function updateCursorModelPreferences(filePath, { action, target, model, effort 
 init_workspace_binding();
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.6.1";
+var PLUGIN_VERSION = "5.6.2";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -22036,6 +22077,9 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     degradedReason: result.degradedReason || null,
     spawnErrorCode: result.spawnErrorCode ?? null,
     supervisorErrorKind: result.supervisorErrorKind || null,
+    supervisorError: result.supervisorError || null,
+    supervisorStderr: result.supervisorStderr || null,
+    spawnAttempts: result.spawnAttempts ?? null,
     capabilities: result.capabilities || null,
     cursorPid: result.cursorPid || null,
     runtimeMode: result.runtimeMode || fallbackRuntimeMode,
@@ -22055,6 +22099,19 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     runtimeScript: result.runtimeScript || null,
     runtimeUpgradeDeferred: result.runtimeUpgradeDeferred === true
   };
+}
+function lifecycleFailureSummary(lifecycle, fallback) {
+  if (!lifecycle) return fallback;
+  const diagnostic = [
+    `status=${lifecycle.status || "unknown"}`,
+    `lifecycleMode=${lifecycle.lifecycleMode || "unknown"}`,
+    `degradedReason=${lifecycle.degradedReason || "none"}`,
+    `spawnErrorCode=${lifecycle.spawnErrorCode ?? "none"}`,
+    `supervisorErrorKind=${lifecycle.supervisorErrorKind || "none"}`,
+    `spawnAttempts=${lifecycle.spawnAttempts ?? "none"}`
+  ].join(" ");
+  const original = lifecycle.supervisorError ? `Original supervisor error: ${lifecycle.supervisorError}` : null;
+  return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(" ");
 }
 function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
   const target = ensureLifecycleDir(targetDir);
@@ -22141,7 +22198,7 @@ var CursorBridge = class {
         bindingPersisted: true,
         ready: false,
         status: lifecycle.status,
-        message: lifecycle.message || "CCE initialization is not complete, but the workspace binding was saved.",
+        message: lifecycleFailureSummary(lifecycle, "CCE initialization is not complete, but the workspace binding was saved."),
         nextStep: lifecycle.nextStep || "Resolve the reported condition, then run the same initialization command again.",
         retryable: lifecycle.retryable !== false,
         lifecycle
@@ -22604,7 +22661,12 @@ var CursorBridge = class {
         }
         const life = "adapterPid=" + this._lastLifecycle.adapterPid + " supervisorPid=" + this._lastLifecycle.supervisorPid + " reused=" + this._lastLifecycle.reusedSupervisor + " reason=" + this._lastLifecycle.launchReason;
         if ((!rr.ok || this._lastLifecycle.status === "workspace-not-ready") && this._lastLifecycle.status !== "agents-workspace-ready") {
-          throw new Error([rr.message || `Cursor lifecycle failed: ${rr.status}`, rr.nextStep].filter(Boolean).join(" "));
+          const lifecycleError = new Error([
+            lifecycleFailureSummary(this._lastLifecycle, rr.message || `Cursor lifecycle failed: ${rr.status}`),
+            rr.nextStep
+          ].filter(Boolean).join(" "));
+          lifecycleError.lifecycle = this._lastLifecycle;
+          throw lifecycleError;
         }
         if (this._lastLifecycle.status === "agents-workspace-ready") {
           console.error(`\u{1FA9F} Cursor Agents repository ready: ${this._lastLifecycle.projectPath} -> ${this._lastLifecycle.targetId}`);
@@ -24259,7 +24321,7 @@ function buildToolDefinitions(bridgeInstance) {
 var ADAPTER_START_CWD = process.cwd();
 var bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 var server = new Server(
-  { name: "cursor-bridge", version: "5.6.1" },
+  { name: "cursor-bridge", version: PLUGIN_VERSION },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {
@@ -24420,6 +24482,7 @@ export {
   isConfirmedCompletedReply,
   isDurablyRegisteredParallelEntry,
   isTargetedStopConfirmed,
+  lifecycleFailureSummary,
   normalizeAllowedPath,
   normalizeCceSearchResult,
   normalizeCursorModelEffort,
