@@ -34,7 +34,10 @@ if (command === "run" && args[1] === "build:pi-packages") {
 
 if (command === "pack") {
   const manifest = JSON.parse(readFileSync(resolve(args[1], "package.json"), "utf8"));
-  console.log(JSON.stringify([{ name: manifest.name, version: manifest.version, shasum: shasums[manifest.name] }]));
+  const packRecord = { name: manifest.name, version: manifest.version, shasum: shasums[manifest.name] };
+  console.log(JSON.stringify(process.env.FAKE_NPM_PACK_SHAPE === "keyed"
+    ? { [manifest.name]: packRecord }
+    : [packRecord]));
   process.exit(0);
 }
 
@@ -80,6 +83,7 @@ function runPublisherScenario(t, {
   packageNames,
   nodeAuthToken,
   npmToken,
+  packShape,
   shasums = { "pi-cursor-bridge": "cursor-local", "pi-grok-build-supervisor": "grok-local" },
 }) {
   const root = mkdtempSync(join(tmpdir(), "cursor-bridge-pi-publisher-"));
@@ -96,6 +100,7 @@ function runPublisherScenario(t, {
     FAKE_NPM_LOG: logFile,
     FAKE_NPM_LOOKUPS: JSON.stringify(lookups),
     FAKE_NPM_SHASUMS: JSON.stringify(shasums),
+    FAKE_NPM_PACK_SHAPE: packShape || "array",
   };
   delete env.NODE_AUTH_TOKEN;
   delete env.NPM_TOKEN;
@@ -206,6 +211,19 @@ test("Pi publisher accepts setup-node's documented placeholder token in an OIDC 
   const { result, calls } = runPublisherScenario(t, {
     packageNames: ["pi-cursor-bridge"],
     nodeAuthToken: "XXXXX-XXXXX-XXXXX-XXXXX",
+    lookups: {
+      "pi-cursor-bridge@0.1.7": { kind: "missing" },
+    },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(calls.filter(([command]) => command === "publish").length, 1);
+});
+
+test("Pi publisher accepts npm 12's package-keyed pack JSON", (t) => {
+  const { result, calls } = runPublisherScenario(t, {
+    packageNames: ["pi-cursor-bridge"],
+    nodeAuthToken: "XXXXX-XXXXX-XXXXX-XXXXX",
+    packShape: "keyed",
     lookups: {
       "pi-cursor-bridge@0.1.7": { kind: "missing" },
     },
