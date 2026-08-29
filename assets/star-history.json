@@ -2,7 +2,7 @@
   "version": 1,
   "repository": "Vanyangyang/cursor-bridge",
   "repositoryCreatedAt": "2025-07-18T01:47:36.000Z",
-  "updatedAt": "2026-08-26T04:55:15.669Z",
+  "updatedAt": "2026-08-28T16:37:48.467Z",
   "sources": {
     "bootstrap": "Owner-authorized GitHub Stargazers API aggregated by UTC day; no user identities are stored.",
     "updates": "Daily GitHub repository stargazers_count snapshots."
@@ -111,6 +111,11 @@
     {
       "date": "2026-08-26",
       "stars": 35,
+      "kind": "repository-count-snapshot"
+    },
+    {
+      "date": "2026-08-28",
+      "stars": 36,
       "kind": "repository-count-snapshot"
     }
   ]
