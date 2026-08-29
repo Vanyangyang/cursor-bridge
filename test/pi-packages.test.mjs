@@ -75,7 +75,13 @@ process.exit(2);
   return fakeNpmCommand;
 }
 
-function runPublisherScenario(t, { lookups, packageNames, shasums = { "pi-cursor-bridge": "cursor-local", "pi-grok-build-supervisor": "grok-local" } }) {
+function runPublisherScenario(t, {
+  lookups,
+  packageNames,
+  nodeAuthToken,
+  npmToken,
+  shasums = { "pi-cursor-bridge": "cursor-local", "pi-grok-build-supervisor": "grok-local" },
+}) {
   const root = mkdtempSync(join(tmpdir(), "cursor-bridge-pi-publisher-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const logFile = join(root, "npm-calls.jsonl");
@@ -93,6 +99,8 @@ function runPublisherScenario(t, { lookups, packageNames, shasums = { "pi-cursor
   };
   delete env.NODE_AUTH_TOKEN;
   delete env.NPM_TOKEN;
+  if (nodeAuthToken !== undefined) env.NODE_AUTH_TOKEN = nodeAuthToken;
+  if (npmToken !== undefined) env.NPM_TOKEN = npmToken;
   const result = spawnSync("pwsh", args, { cwd: repositoryRoot, encoding: "utf8", env });
   const calls = readFileSync(logFile, "utf8").trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
   return { result, calls };
@@ -147,7 +155,9 @@ test("Pi publisher uses GitHub Actions OIDC without weakening local account veri
   assert.match(script, /\$runningInGitHubActions = \$env:GITHUB_ACTIONS -eq 'true'/);
   assert.match(script, /\$env:ACTIONS_ID_TOKEN_REQUEST_URL/);
   assert.match(script, /requires permissions\.id-token: write/);
-  assert.match(script, /must use npm Trusted Publishing without NODE_AUTH_TOKEN or NPM_TOKEN/);
+  assert.match(script, /nodeAuthTokenIsSetupNodePlaceholder/);
+  assert.match(script, /\^\(\?:X\+\-\?\)\+\$/);
+  assert.match(script, /must use npm Trusted Publishing without a real NODE_AUTH_TOKEN or NPM_TOKEN/);
   assert.match(script, /npm whoami is intentionally skipped/);
   assert.match(script, /else \{\s+\$npmUserOutput = @\(& \$NpmCommand whoami 2>&1\)/);
   assert.match(script, /\$npmUserOutput = @\(& \$NpmCommand whoami 2>&1\)/);
@@ -190,6 +200,29 @@ test("Pi publisher publishes only a registry-confirmed missing package", (t) => 
   assert.deepEqual(calls.filter(([command]) => command === "publish").map(([, packageRoot]) => packageRoot), [
     join(".pi-package-stage", "pi-cursor-bridge"),
   ]);
+});
+
+test("Pi publisher accepts setup-node's documented placeholder token in an OIDC job", (t) => {
+  const { result, calls } = runPublisherScenario(t, {
+    packageNames: ["pi-cursor-bridge"],
+    nodeAuthToken: "XXXXX-XXXXX-XXXXX-XXXXX",
+    lookups: {
+      "pi-cursor-bridge@0.1.7": { kind: "missing" },
+    },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(calls.filter(([command]) => command === "publish").length, 1);
+});
+
+test("Pi publisher rejects a real npm token in an OIDC job", (t) => {
+  const { result, calls } = runPublisherScenario(t, {
+    packageNames: ["pi-cursor-bridge"],
+    nodeAuthToken: "real-token-for-test",
+    lookups: {},
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /without a real NODE_AUTH_TOKEN or NPM_TOKEN/);
+  assert.deepEqual(calls, []);
 });
 
 test("Pi publisher fails closed on an uncertain registry lookup", (t) => {
