@@ -305,6 +305,7 @@ export function startMinimalWindowGuard(pid, options = {}) {
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-EncodedCommand', encodePowerShell(script),
     ], { detached: !lifetime, stdio: 'ignore', windowsHide: true });
+    if (child && typeof child.once === 'function') child.once('error', () => {});
     if (!lifetime && child && typeof child.unref === 'function') child.unref();
     return {
       started: true,

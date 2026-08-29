@@ -73,15 +73,23 @@ function writeRuntimeFile(target, content) {
 }
 
 export function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
-  const source = resolve(sourceScript || resolveSupervisorScript());
-  if (!existsSync(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
-  const content = readFileSync(source);
-  const fingerprint = createHash('sha256').update(content).digest('hex');
+  const described = describeLifecycleSupervisorRuntime({ sourceScript, dir });
+  const { sourceScript: source, content, fingerprint } = described;
   const runtimeRoot = join(ensureLifecycleDir(dir), 'runtime', `supervisor-${fingerprint.slice(0, 20)}`);
   mkdirSync(runtimeRoot, { recursive: true });
   const script = join(runtimeRoot, 'cursor-lifecycle-supervisor.mjs');
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
+}
+
+export function describeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
+  const source = resolve(sourceScript || resolveSupervisorScript());
+  if (!existsSync(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
+  const content = readFileSync(source);
+  const fingerprint = createHash('sha256').update(content).digest('hex');
+  const runtimeRoot = join(dir, 'runtime', `supervisor-${fingerprint.slice(0, 20)}`);
+  const script = join(runtimeRoot, 'cursor-lifecycle-supervisor.mjs');
+  return { sourceScript: source, script, runtimeRoot, fingerprint, content };
 }
 
 function isProcessAlive(pid) {
@@ -180,6 +188,31 @@ async function tryConnect(sock) {
   }
 }
 
+async function tryConnectDetailed(sock, connectImpl = connectSupervisor) {
+  try {
+    return { socket: await connectImpl(sock, 1500), error: null };
+  } catch (error) {
+    return { socket: null, error };
+  }
+}
+
+function lifecycleClientError(message, details = {}, cause = null) {
+  const error = new Error(message, cause ? { cause } : undefined);
+  Object.assign(error, details);
+  return error;
+}
+
+function filesystemFallbackDetails(error) {
+  const code = error && typeof error === 'object' && error.code != null ? String(error.code) : null;
+  const blocked = code === 'EPERM' || code === 'EACCES' || code === 'EROFS';
+  return {
+    errorKind: blocked ? 'policy-blocked' : 'configuration',
+    degradedReason: blocked ? 'fs-policy-blocked' : null,
+    errorCode: code,
+    canAttachFallback: blocked,
+  };
+}
+
 function tryUnlink(path) {
   try { if (path && existsSync(path)) unlinkSync(path); } catch {}
 }
@@ -213,60 +246,96 @@ export function listBootEnvFiles(dir) {
  * Ensure a supervisor is reachable. Creates one outside the Windows job if needed.
  */
 export async function ensureSupervisorConnected(options = {}) {
-  const dir = ensureLifecycleDir(options.dir || defaultLifecycleDir());
+  const dir = options.dir || defaultLifecycleDir();
   const sock = options.sock || supervisorSockPath(dir);
   const pidPath = options.pidPath || supervisorPidPath(dir);
   const lockPath = options.lockPath || supervisorLockPath(dir);
   const createWaitMs = Number(options.createWaitMs || DEFAULT_CREATE_WAIT_MS);
   const sourceScript = options.supervisorScript || resolveSupervisorScript();
-  const runtime = options.persistSupervisorRuntime === false
-    ? {
-        sourceScript: resolve(sourceScript),
-        script: resolve(sourceScript),
-        runtimeRoot: dirname(resolve(sourceScript)),
-        fingerprint: null,
-      }
-    : materializeLifecycleSupervisorRuntime({ sourceScript, dir });
-
-  let socket = await tryConnect(sock);
+  const connectImpl = options.connectSupervisorImpl || connectSupervisor;
+  const initialConnection = await tryConnectDetailed(sock, connectImpl);
+  let socket = initialConnection.socket;
   if (socket) {
     const pid = readPidFile(pidPath);
     let current = null;
-    try { current = await request(socket, { type: 'ping' }, 5000); } catch {}
-    const mismatch = Boolean(runtime.fingerprint
+    try {
+      current = await request(socket, { type: 'ping' }, 5000);
+    } catch (error) {
+      try { socket.destroy(); } catch {}
+      throw lifecycleClientError(`lifecycle supervisor is reachable but unresponsive: ${error instanceof Error ? error.message : String(error)}`, {
+        errorKind: 'supervisor-unresponsive',
+        degradedReason: 'supervisor-unresponsive',
+        errorCode: error && typeof error === 'object' && error.code != null ? String(error.code) : null,
+        canAttachFallback: true,
+      }, error);
+    }
+    let targetRuntime = null;
+    try {
+      targetRuntime = options.persistSupervisorRuntime === false
+        ? {
+            sourceScript: resolve(sourceScript),
+            script: resolve(sourceScript),
+            runtimeRoot: dirname(resolve(sourceScript)),
+            fingerprint: null,
+          }
+        : describeLifecycleSupervisorRuntime({ sourceScript, dir });
+    } catch {
+      // A healthy existing supervisor is usable even when the current plugin source
+      // cannot be read from this sandbox. Do not turn reuse into a filesystem write/read gate.
+    }
+    const mismatch = Boolean(targetRuntime?.fingerprint
       && current?.runtimeFingerprint
-      && current.runtimeFingerprint !== runtime.fingerprint);
-    if (mismatch) {
-      let upgrade = null;
-      try {
-        upgrade = await request(socket, {
-          type: 'shutdown_if_idle',
-          confirmation: 'ROLL_CURSOR_LIFECYCLE_SUPERVISOR',
-          targetRuntimeFingerprint: runtime.fingerprint,
-        }, 5000);
-      } catch {}
-      if (upgrade?.restarting === true) {
-        try { socket.end(); } catch {}
-        try { socket.destroy(); } catch {}
-        socket = null;
-        const deadline = Date.now() + 5000;
-        while (Date.now() < deadline && isProcessAlive(pid)) await sleep(50);
-      }
-    }
-    if (socket) {
-      return {
-        socket,
-        sock,
-        dir,
-        supervisorPid: pid,
-        reusedSupervisor: true,
-        createdSupervisor: false,
-        spawnMethod: null,
-        runtimeFingerprint: current?.runtimeFingerprint || null,
-        runtimeScript: current?.runtimeScript || null,
-        targetRuntimeFingerprint: runtime.fingerprint,
-      };
-    }
+      && current.runtimeFingerprint !== targetRuntime.fingerprint);
+    return {
+      socket,
+      sock,
+      dir,
+      supervisorPid: pid,
+      reusedSupervisor: true,
+      createdSupervisor: false,
+      spawnMethod: null,
+      runtimeFingerprint: current?.runtimeFingerprint || null,
+      runtimeScript: current?.runtimeScript || null,
+      targetRuntimeFingerprint: targetRuntime?.fingerprint || null,
+      runtimeUpgradeDeferred: mismatch,
+    };
+  }
+
+  const connectCode = initialConnection.error && typeof initialConnection.error === 'object'
+    ? String(initialConnection.error.code || '')
+    : '';
+  const connectMessage = initialConnection.error instanceof Error ? initialConnection.error.message : String(initialConnection.error || '');
+  if (connectCode === 'EPERM' || connectCode === 'EACCES') {
+    throw lifecycleClientError(`lifecycle supervisor pipe access was blocked: ${connectMessage || connectCode}`, {
+      errorKind: 'policy-blocked',
+      degradedReason: 'pipe-policy-blocked',
+      errorCode: connectCode,
+      canAttachFallback: true,
+    }, initialConnection.error);
+  }
+  const normalAbsenceCodes = new Set(['ENOENT', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE']);
+  if (initialConnection.error && (!normalAbsenceCodes.has(connectCode) || /connect timeout/i.test(connectMessage))) {
+    throw lifecycleClientError(`lifecycle supervisor pipe is unavailable without a clean absence signal: ${connectMessage || connectCode || 'unknown connect error'}`, {
+      errorKind: 'supervisor-unresponsive',
+      degradedReason: 'supervisor-unresponsive',
+      errorCode: connectCode || null,
+      canAttachFallback: true,
+    }, initialConnection.error);
+  }
+
+  let runtime;
+  try {
+    ensureLifecycleDir(dir);
+    runtime = options.persistSupervisorRuntime === false
+      ? {
+          sourceScript: resolve(sourceScript),
+          script: resolve(sourceScript),
+          runtimeRoot: dirname(resolve(sourceScript)),
+          fingerprint: null,
+        }
+      : (options.materializeRuntimeImpl || materializeLifecycleSupervisorRuntime)({ sourceScript, dir });
+  } catch (error) {
+    throw lifecycleClientError(`failed to prepare lifecycle supervisor runtime: ${error instanceof Error ? error.message : String(error)}`, filesystemFallbackDetails(error), error);
   }
 
   const stalePid = readPidFile(pidPath);
@@ -308,12 +377,20 @@ export async function ensureSupervisorConnected(options = {}) {
       CURSOR_BRIDGE_SUPERVISOR_SOCK: sock,
     };
 
-    const spawned = spawnNodeOutsideJob(script, scriptArgs, {
+    const spawned = (options.spawnNodeOutsideJobImpl || spawnNodeOutsideJob)(script, scriptArgs, {
       cwd: options.cwd || runtime.runtimeRoot,
       env: childEnv,
     });
     if (!spawned.ok) {
-      throw new Error(`failed to spawn lifecycle supervisor: ${spawned.error || spawned.method}`);
+      throw lifecycleClientError(`failed to spawn lifecycle supervisor: ${spawned.error || spawned.method}`, {
+        errorKind: spawned.errorKind || 'unknown',
+        degradedReason: spawned.degradedReason || null,
+        errorCode: spawned.errorCode ?? null,
+        returnValue: spawned.returnValue ?? null,
+        canAttachFallback: spawned.canAttachFallback === true,
+        commandLine: spawned.commandLine || null,
+        stderr: spawned.stderr || null,
+      });
     }
 
     const deadline = Date.now() + createWaitMs;
@@ -335,6 +412,7 @@ export async function ensureSupervisorConnected(options = {}) {
           runtimeFingerprint: runtime.fingerprint,
           runtimeScript: script,
           targetRuntimeFingerprint: runtime.fingerprint,
+          runtimeUpgradeDeferred: false,
         };
       }
       await sleep(100);
@@ -377,6 +455,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
         spawnMethod: conn.spawnMethod,
         runtimeFingerprint: conn.runtimeFingerprint || null,
         runtimeScript: conn.runtimeScript || null,
+        runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true,
       };
     }
 
@@ -405,6 +484,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
       ensureCount: response.ensureCount,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
+      runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true,
     };
   } finally {
     try { conn.socket.end(); } catch {}
@@ -424,6 +504,7 @@ export async function pingSupervisor(options = {}) {
       adapterPid: process.pid,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
+      runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true,
     };
   } finally {
     try { conn.socket.end(); } catch {}

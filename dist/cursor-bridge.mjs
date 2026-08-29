@@ -10786,6 +10786,8 @@ function startMinimalWindowGuard(pid, options = {}) {
       "-EncodedCommand",
       encodePowerShell(script)
     ], { detached: !lifetime, stdio: "ignore", windowsHide: true });
+    if (child && typeof child.once === "function") child.once("error", () => {
+    });
     if (!lifetime && child && typeof child.unref === "function") child.unref();
     return {
       started: true,
@@ -11292,6 +11294,58 @@ async function waitForCdp(maxMs = 3e4, stepMs = 1e3) {
   }
   return false;
 }
+async function spawnDetachedSafely(spawnImpl, file, args, spawnOptions) {
+  let child;
+  try {
+    child = spawnImpl(file, args, spawnOptions);
+  } catch (error2) {
+    return {
+      ok: false,
+      child: null,
+      error: error2,
+      errorCode: error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null
+    };
+  }
+  if (child && typeof child.once === "function") {
+    const startup = await new Promise((resolvePromise) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        child.off?.("spawn", onSpawn);
+        child.off?.("error", onError);
+        resolvePromise(result);
+      };
+      const onSpawn = () => finish({ ok: true });
+      const onError = (error2) => finish({ ok: false, error: error2 });
+      child.once("spawn", onSpawn);
+      child.once("error", onError);
+      if (Number.isInteger(child.pid) && child.pid > 0) queueMicrotask(onSpawn);
+    });
+    if (!startup.ok) {
+      return {
+        ok: false,
+        child,
+        error: startup.error,
+        errorCode: startup.error && typeof startup.error === "object" && startup.error.code != null ? String(startup.error.code) : null
+      };
+    }
+    child.once("error", () => {
+    });
+  }
+  if (child && typeof child.unref === "function") child.unref();
+  return { ok: true, child };
+}
+function attachedPresentation(runtimeMode, port) {
+  if (runtimeMode !== "minimal") return null;
+  return {
+    supported: true,
+    applied: false,
+    action: "hide",
+    port,
+    reason: "attached lifecycle cannot start the PowerShell window guard under the current process policy"
+  };
+}
 async function ensureCursorRunningLocal(options = {}) {
   const waitMs = Number(options.waitMs || 3e4);
   const runtimeMode = options.runtimeMode || "normal";
@@ -11303,12 +11357,14 @@ async function ensureCursorRunningLocal(options = {}) {
   const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve4(String(options.projectPath)) : null : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn2;
+  const allowSpawn = options.allowSpawn !== false;
+  const allowProcessControl = options.allowProcessControl !== false;
   if (await cdpUpImpl()) {
     const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
-      const cursorPid2 = findCursorPidByPort(CDP_PORT);
-      const windowGuard2 = effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
-      const presentation2 = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : null;
+      const cursorPid2 = allowProcessControl ? findCursorPidByPort(CDP_PORT) : null;
+      const windowGuard2 = allowProcessControl && effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
+      const presentation2 = effectiveRuntimeMode === "minimal" ? allowProcessControl ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : attachedPresentation(effectiveRuntimeMode, CDP_PORT) : null;
       const currentTargets = await listCdpPageTargetsImpl();
       const projectKey = normalizeProjectKey(projectPath);
       let targetId2 = projectKey ? PROJECT_TARGETS.get(projectKey) || null : currentTargets[0] && currentTargets[0].id || null;
@@ -11337,6 +11393,22 @@ async function ensureCursorRunningLocal(options = {}) {
         }
       }
       if (projectPath && existsSync2(projectPath) && !targetId2) {
+        if (!allowSpawn) {
+          return {
+            ok: false,
+            status: "workspace-not-ready",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            needsAction: "open_workspace_in_cursor",
+            retryable: true,
+            nextStep: `Open workspace ${projectPath} in the existing Cursor Agents Window, then retry the same operation.`,
+            message: `CCE connected to Cursor, but the current workspace target for ${projectPath} is not ready and the current lifecycle cannot open a new window.`
+          };
+        }
         const cursorExecutable2 = findCursorExeDetailsImpl();
         const exe2 = cursorExecutable2 && cursorExecutable2.path;
         if (!exe2) {
@@ -11356,12 +11428,28 @@ async function ensureCursorRunningLocal(options = {}) {
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
-        const opener = spawnImpl(exe2, ["--new-window", projectPath], {
+        const opened = await spawnDetachedSafely(spawnImpl, exe2, ["--new-window", projectPath], {
           detached: true,
           stdio: "ignore",
           windowsHide: effectiveRuntimeMode === "minimal"
         });
-        opener.unref();
+        if (!opened.ok) {
+          return {
+            ok: false,
+            status: "spawn-blocked",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            errorCode: opened.errorCode,
+            needsAction: "open_workspace_in_cursor",
+            retryable: true,
+            nextStep: `Open workspace ${projectPath} in Cursor, then retry the same operation.`,
+            message: `Cursor Bridge could not open a new workspace window: ${opened.error instanceof Error ? opened.error.message : String(opened.error)}`
+          };
+        }
         workspaceAction = "opened-new-window";
         const openedTarget2 = await waitForNewCdpTarget(beforeTargetIds, 12e3, projectPath, listCdpPageTargetsImpl);
         if (!openedTarget2) {
@@ -11410,6 +11498,21 @@ async function ensureCursorRunningLocal(options = {}) {
       message: `CCE cannot connect to Cursor because required local port ${CDP_PORT} is occupied by another program.`
     };
   }
+  if (!allowSpawn) {
+    return {
+      ok: false,
+      status: "external-launch-required",
+      port: CDP_PORT,
+      cursorPid: null,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      presentation: attachedPresentation(effectiveRuntimeMode, CDP_PORT),
+      needsAction: "launch_cursor_with_cdp",
+      retryable: true,
+      nextStep: `Start Cursor with its remote debugging connection on port ${CDP_PORT}, open ${projectPath || "the target workspace"}, then retry the same operation.`,
+      message: `Cursor is not reachable on the configured CDP port ${CDP_PORT}, and the current lifecycle policy cannot launch it.`
+    };
+  }
   if (cursorRunningImpl()) {
     const cursorExecutable2 = findCursorExeDetailsImpl();
     return {
@@ -11447,13 +11550,29 @@ async function ensureCursorRunningLocal(options = {}) {
     );
   }
   if (projectPath && existsSync2(projectPath)) args.push(projectPath);
-  const child = spawnImpl(exe, args, {
+  const launched = await spawnDetachedSafely(spawnImpl, exe, args, {
     detached: true,
     stdio: "ignore",
     windowsHide: effectiveRuntimeMode === "minimal"
   });
-  child.unref();
-  const startupWindowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child.pid) : null;
+  if (!launched.ok) {
+    return {
+      ok: false,
+      status: "spawn-blocked",
+      exe,
+      port: CDP_PORT,
+      cursorPid: null,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      errorCode: launched.errorCode,
+      needsAction: "launch_cursor_manually",
+      retryable: true,
+      nextStep: `Start Cursor with its remote debugging connection on port ${CDP_PORT}, then retry the same operation.`,
+      message: `Cursor Bridge could not launch Cursor: ${launched.error instanceof Error ? launched.error.message : String(launched.error)}`
+    };
+  }
+  const child = launched.child;
+  const startupWindowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child && child.pid) : null;
   const up = await waitForCdp(waitMs);
   if (!up) {
     return {
@@ -11643,6 +11762,67 @@ function whichNode() {
   }
   return process.execPath;
 }
+function wmiReturnValueFromError(error2) {
+  const message = error2 instanceof Error ? error2.message : String(error2 || "");
+  const match = message.match(/Win32_Process\.Create failed:\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+function classifyOutsideJobSpawnError(error2) {
+  const code = error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null;
+  const returnValue = wmiReturnValueFromError(error2);
+  if (code === "EPERM" || code === "EACCES") {
+    return {
+      errorKind: "policy-blocked",
+      degradedReason: "spawn-policy-blocked",
+      errorCode: code,
+      returnValue,
+      canAttachFallback: true
+    };
+  }
+  if (returnValue === 2 || returnValue === 3) {
+    return {
+      errorKind: "policy-blocked",
+      degradedReason: "wmi-access-denied",
+      errorCode: returnValue,
+      returnValue,
+      canAttachFallback: true
+    };
+  }
+  if (returnValue === 8) {
+    return {
+      errorKind: "wmi-unknown",
+      degradedReason: "wmi-unknown-8",
+      errorCode: returnValue,
+      returnValue,
+      canAttachFallback: true
+    };
+  }
+  if (returnValue === 9 || returnValue === 21) {
+    return {
+      errorKind: "configuration",
+      degradedReason: null,
+      errorCode: returnValue,
+      returnValue,
+      canAttachFallback: false
+    };
+  }
+  if (code === "ETIMEDOUT" || error2 && typeof error2 === "object" && error2.killed === true) {
+    return {
+      errorKind: "timeout",
+      degradedReason: "spawn-timeout",
+      errorCode: code || "ETIMEDOUT",
+      returnValue,
+      canAttachFallback: true
+    };
+  }
+  return {
+    errorKind: "unknown",
+    degradedReason: null,
+    errorCode: code,
+    returnValue,
+    canAttachFallback: false
+  };
+}
 function spawnOutsideJob(file, args = [], options = {}) {
   const cwd = options.cwd || process.cwd();
   const env = options.env || process.env;
@@ -11663,7 +11843,8 @@ function spawnOutsideJob(file, args = [], options = {}) {
       throw new Error("forced WMI failure for tests");
     }
     const ps = buildHiddenWmiCreateScript(commandLine, cwd);
-    const out = execFileSync3("powershell.exe", [
+    const run = options.execFileSyncImpl || execFileSync3;
+    const out = run("powershell.exe", [
       "-NoProfile",
       "-NonInteractive",
       "-ExecutionPolicy",
@@ -11683,10 +11864,14 @@ function spawnOutsideJob(file, args = [], options = {}) {
     return { ok: true, method: "wmi-win32-process-create", pid, commandLine };
   } catch (wmiError) {
     const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
+    const classification = classifyOutsideJobSpawnError(wmiError);
+    const stderr = wmiError && typeof wmiError === "object" && wmiError.stderr != null ? String(wmiError.stderr).trim() || null : null;
     return {
       ok: false,
       method: "failed",
       commandLine,
+      ...classification,
+      stderr,
       error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`
     };
   }
@@ -11760,15 +11945,22 @@ function writeRuntimeFile(target, content) {
   }
 }
 function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
-  const source = resolve5(sourceScript || resolveSupervisorScript());
-  if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
-  const content = readFileSync4(source);
-  const fingerprint = createHash2("sha256").update(content).digest("hex");
+  const described = describeLifecycleSupervisorRuntime({ sourceScript, dir });
+  const { sourceScript: source, content, fingerprint } = described;
   const runtimeRoot = join6(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
   mkdirSync5(runtimeRoot, { recursive: true });
   const script = join6(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
+}
+function describeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
+  const source = resolve5(sourceScript || resolveSupervisorScript());
+  if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
+  const content = readFileSync4(source);
+  const fingerprint = createHash2("sha256").update(content).digest("hex");
+  const runtimeRoot = join6(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  const script = join6(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  return { sourceScript: source, script, runtimeRoot, fingerprint, content };
 }
 function isProcessAlive(pid) {
   if (!pid || !Number.isFinite(pid)) return false;
@@ -11867,6 +12059,28 @@ async function tryConnect(sock) {
     return null;
   }
 }
+async function tryConnectDetailed(sock, connectImpl = connectSupervisor) {
+  try {
+    return { socket: await connectImpl(sock, 1500), error: null };
+  } catch (error2) {
+    return { socket: null, error: error2 };
+  }
+}
+function lifecycleClientError(message, details = {}, cause = null) {
+  const error2 = new Error(message, cause ? { cause } : void 0);
+  Object.assign(error2, details);
+  return error2;
+}
+function filesystemFallbackDetails(error2) {
+  const code = error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null;
+  const blocked = code === "EPERM" || code === "EACCES" || code === "EROFS";
+  return {
+    errorKind: blocked ? "policy-blocked" : "configuration",
+    degradedReason: blocked ? "fs-policy-blocked" : null,
+    errorCode: code,
+    canAttachFallback: blocked
+  };
+}
 function tryUnlink(path) {
   try {
     if (path && existsSync4(path)) unlinkSync(path);
@@ -11890,65 +12104,87 @@ function writeBootEnv(dir, extra = {}) {
   return bootPath;
 }
 async function ensureSupervisorConnected(options = {}) {
-  const dir = ensureLifecycleDir(options.dir || defaultLifecycleDir());
+  const dir = options.dir || defaultLifecycleDir();
   const sock = options.sock || supervisorSockPath(dir);
   const pidPath = options.pidPath || supervisorPidPath(dir);
   const lockPath = options.lockPath || supervisorLockPath(dir);
   const createWaitMs = Number(options.createWaitMs || DEFAULT_CREATE_WAIT_MS);
   const sourceScript = options.supervisorScript || resolveSupervisorScript();
-  const runtime = options.persistSupervisorRuntime === false ? {
-    sourceScript: resolve5(sourceScript),
-    script: resolve5(sourceScript),
-    runtimeRoot: dirname4(resolve5(sourceScript)),
-    fingerprint: null
-  } : materializeLifecycleSupervisorRuntime({ sourceScript, dir });
-  let socket = await tryConnect(sock);
+  const connectImpl = options.connectSupervisorImpl || connectSupervisor;
+  const initialConnection = await tryConnectDetailed(sock, connectImpl);
+  let socket = initialConnection.socket;
   if (socket) {
     const pid = readPidFile(pidPath);
     let current = null;
     try {
       current = await request(socket, { type: "ping" }, 5e3);
-    } catch {
-    }
-    const mismatch = Boolean(runtime.fingerprint && current?.runtimeFingerprint && current.runtimeFingerprint !== runtime.fingerprint);
-    if (mismatch) {
-      let upgrade = null;
+    } catch (error2) {
       try {
-        upgrade = await request(socket, {
-          type: "shutdown_if_idle",
-          confirmation: "ROLL_CURSOR_LIFECYCLE_SUPERVISOR",
-          targetRuntimeFingerprint: runtime.fingerprint
-        }, 5e3);
+        socket.destroy();
       } catch {
       }
-      if (upgrade?.restarting === true) {
-        try {
-          socket.end();
-        } catch {
-        }
-        try {
-          socket.destroy();
-        } catch {
-        }
-        socket = null;
-        const deadline = Date.now() + 5e3;
-        while (Date.now() < deadline && isProcessAlive(pid)) await sleep(50);
-      }
+      throw lifecycleClientError(`lifecycle supervisor is reachable but unresponsive: ${error2 instanceof Error ? error2.message : String(error2)}`, {
+        errorKind: "supervisor-unresponsive",
+        degradedReason: "supervisor-unresponsive",
+        errorCode: error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null,
+        canAttachFallback: true
+      }, error2);
     }
-    if (socket) {
-      return {
-        socket,
-        sock,
-        dir,
-        supervisorPid: pid,
-        reusedSupervisor: true,
-        createdSupervisor: false,
-        spawnMethod: null,
-        runtimeFingerprint: current?.runtimeFingerprint || null,
-        runtimeScript: current?.runtimeScript || null,
-        targetRuntimeFingerprint: runtime.fingerprint
-      };
+    let targetRuntime = null;
+    try {
+      targetRuntime = options.persistSupervisorRuntime === false ? {
+        sourceScript: resolve5(sourceScript),
+        script: resolve5(sourceScript),
+        runtimeRoot: dirname4(resolve5(sourceScript)),
+        fingerprint: null
+      } : describeLifecycleSupervisorRuntime({ sourceScript, dir });
+    } catch {
     }
+    const mismatch = Boolean(targetRuntime?.fingerprint && current?.runtimeFingerprint && current.runtimeFingerprint !== targetRuntime.fingerprint);
+    return {
+      socket,
+      sock,
+      dir,
+      supervisorPid: pid,
+      reusedSupervisor: true,
+      createdSupervisor: false,
+      spawnMethod: null,
+      runtimeFingerprint: current?.runtimeFingerprint || null,
+      runtimeScript: current?.runtimeScript || null,
+      targetRuntimeFingerprint: targetRuntime?.fingerprint || null,
+      runtimeUpgradeDeferred: mismatch
+    };
+  }
+  const connectCode = initialConnection.error && typeof initialConnection.error === "object" ? String(initialConnection.error.code || "") : "";
+  const connectMessage = initialConnection.error instanceof Error ? initialConnection.error.message : String(initialConnection.error || "");
+  if (connectCode === "EPERM" || connectCode === "EACCES") {
+    throw lifecycleClientError(`lifecycle supervisor pipe access was blocked: ${connectMessage || connectCode}`, {
+      errorKind: "policy-blocked",
+      degradedReason: "pipe-policy-blocked",
+      errorCode: connectCode,
+      canAttachFallback: true
+    }, initialConnection.error);
+  }
+  const normalAbsenceCodes = /* @__PURE__ */ new Set(["ENOENT", "ECONNREFUSED", "ECONNRESET", "EPIPE"]);
+  if (initialConnection.error && (!normalAbsenceCodes.has(connectCode) || /connect timeout/i.test(connectMessage))) {
+    throw lifecycleClientError(`lifecycle supervisor pipe is unavailable without a clean absence signal: ${connectMessage || connectCode || "unknown connect error"}`, {
+      errorKind: "supervisor-unresponsive",
+      degradedReason: "supervisor-unresponsive",
+      errorCode: connectCode || null,
+      canAttachFallback: true
+    }, initialConnection.error);
+  }
+  let runtime;
+  try {
+    ensureLifecycleDir(dir);
+    runtime = options.persistSupervisorRuntime === false ? {
+      sourceScript: resolve5(sourceScript),
+      script: resolve5(sourceScript),
+      runtimeRoot: dirname4(resolve5(sourceScript)),
+      fingerprint: null
+    } : (options.materializeRuntimeImpl || materializeLifecycleSupervisorRuntime)({ sourceScript, dir });
+  } catch (error2) {
+    throw lifecycleClientError(`failed to prepare lifecycle supervisor runtime: ${error2 instanceof Error ? error2.message : String(error2)}`, filesystemFallbackDetails(error2), error2);
   }
   const stalePid = readPidFile(pidPath);
   if (stalePid && !isProcessAlive(stalePid)) {
@@ -11984,12 +12220,20 @@ async function ensureSupervisorConnected(options = {}) {
       CURSOR_BRIDGE_LIFECYCLE_DIR: dir,
       CURSOR_BRIDGE_SUPERVISOR_SOCK: sock
     };
-    const spawned = spawnNodeOutsideJob(script, scriptArgs, {
+    const spawned = (options.spawnNodeOutsideJobImpl || spawnNodeOutsideJob)(script, scriptArgs, {
       cwd: options.cwd || runtime.runtimeRoot,
       env: childEnv
     });
     if (!spawned.ok) {
-      throw new Error(`failed to spawn lifecycle supervisor: ${spawned.error || spawned.method}`);
+      throw lifecycleClientError(`failed to spawn lifecycle supervisor: ${spawned.error || spawned.method}`, {
+        errorKind: spawned.errorKind || "unknown",
+        degradedReason: spawned.degradedReason || null,
+        errorCode: spawned.errorCode ?? null,
+        returnValue: spawned.returnValue ?? null,
+        canAttachFallback: spawned.canAttachFallback === true,
+        commandLine: spawned.commandLine || null,
+        stderr: spawned.stderr || null
+      });
     }
     const deadline = Date.now() + createWaitMs;
     while (Date.now() < deadline) {
@@ -12009,7 +12253,8 @@ async function ensureSupervisorConnected(options = {}) {
           unsafe: !!spawned.unsafe,
           runtimeFingerprint: runtime.fingerprint,
           runtimeScript: script,
-          targetRuntimeFingerprint: runtime.fingerprint
+          targetRuntimeFingerprint: runtime.fingerprint,
+          runtimeUpgradeDeferred: false
         };
       }
       await sleep(100);
@@ -12045,7 +12290,8 @@ async function ensureCursorViaSupervisor(options = {}) {
         launchReason: "supervisor-error",
         spawnMethod: conn.spawnMethod,
         runtimeFingerprint: conn.runtimeFingerprint || null,
-        runtimeScript: conn.runtimeScript || null
+        runtimeScript: conn.runtimeScript || null,
+        runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true
       };
     }
     return {
@@ -12070,7 +12316,8 @@ async function ensureCursorViaSupervisor(options = {}) {
       spawnMethod: conn.spawnMethod,
       ensureCount: response.ensureCount,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
-      runtimeScript: response.runtimeScript || conn.runtimeScript || null
+      runtimeScript: response.runtimeScript || conn.runtimeScript || null,
+      runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true
     };
   } finally {
     try {
@@ -12109,6 +12356,26 @@ __export(launch_cursor_exports, {
   waitForCdp: () => waitForCdp
 });
 import { pathToFileURL } from "url";
+function lifecycleCapabilities(mode) {
+  if (mode === "supervised") {
+    return { canLaunchCursor: true, canOpenWorkspaceWindow: true, survivesHostExit: "cursor-yes-tasks-no" };
+  }
+  if (mode === "attached") {
+    return { canLaunchCursor: false, canOpenWorkspaceWindow: false, survivesHostExit: "cursor-yes-tasks-no" };
+  }
+  return { canLaunchCursor: true, canOpenWorkspaceWindow: true, survivesHostExit: "not-guaranteed" };
+}
+function withLifecycle(result, mode, extra = {}) {
+  return {
+    ...result,
+    lifecycleMode: mode,
+    persistent: mode === "supervised",
+    degradedReason: extra.degradedReason || null,
+    spawnErrorCode: extra.spawnErrorCode ?? null,
+    capabilities: lifecycleCapabilities(mode),
+    ...extra
+  };
+}
 async function ensureCursorRunning(options = {}) {
   const bindingFile = options.workspaceFile || resolveWorkspaceBindingFile();
   const bindingKey = options.workspaceKey || resolveWorkspaceBindingKey();
@@ -12120,19 +12387,47 @@ async function ensureCursorRunning(options = {}) {
   const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === "1" || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === "1") {
     const local = await ensureCursorRunningLocal(ensureOptions);
-    return {
+    return withLifecycle({
       ...local,
       adapterPid: process.pid,
       supervisorPid: null,
       reusedSupervisor: false,
       createdSupervisor: false,
       launchReason: local.status === "launched" ? "inline-spawned-cursor" : `inline-${local.status}`
-    };
+    }, "inline");
   }
-  return ensureCursorViaSupervisor({
-    ...ensureOptions,
-    reason: options.reason || "ensureCursorRunning"
-  });
+  try {
+    const supervised = await ensureCursorViaSupervisor({
+      ...ensureOptions,
+      reason: options.reason || "ensureCursorRunning"
+    });
+    return withLifecycle(supervised, "supervised", {
+      runtimeUpgradeDeferred: supervised.runtimeUpgradeDeferred === true
+    });
+  } catch (error2) {
+    if (error2?.canAttachFallback !== true) throw error2;
+    const local = await ensureCursorRunningLocal({
+      ...ensureOptions,
+      allowSpawn: false,
+      allowProcessControl: false
+    });
+    return withLifecycle({
+      ...local,
+      adapterPid: process.pid,
+      supervisorPid: null,
+      reusedSupervisor: false,
+      createdSupervisor: false,
+      spawnMethod: null,
+      launchReason: local.ok ? "attached-after-supervisor-blocked" : `attached-${local.status}`,
+      supervisorError: error2 instanceof Error ? error2.message : String(error2)
+    }, "attached", {
+      degradedReason: error2.degradedReason || "supervisor-unavailable",
+      spawnErrorCode: error2.errorCode ?? error2.returnValue ?? null,
+      supervisorErrorKind: error2.errorKind || null,
+      supervisorCommandLine: error2.commandLine || null,
+      runtimeUpgradeDeferred: false
+    });
+  }
 }
 var isMain;
 var init_launch_cursor = __esm({
@@ -21727,6 +22022,40 @@ function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
     retryable: false
   };
 }
+function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
+  return {
+    adapterPid: result.adapterPid ?? process.pid,
+    supervisorPid: result.supervisorPid ?? null,
+    reusedSupervisor: !!result.reusedSupervisor,
+    createdSupervisor: !!result.createdSupervisor,
+    launchReason: result.launchReason || result.status,
+    status: result.status,
+    spawnMethod: result.spawnMethod || null,
+    lifecycleMode: result.lifecycleMode || null,
+    persistent: result.persistent === true,
+    degradedReason: result.degradedReason || null,
+    spawnErrorCode: result.spawnErrorCode ?? null,
+    supervisorErrorKind: result.supervisorErrorKind || null,
+    capabilities: result.capabilities || null,
+    cursorPid: result.cursorPid || null,
+    runtimeMode: result.runtimeMode || fallbackRuntimeMode,
+    projectPath: result.projectPath || null,
+    targetId: result.targetId || null,
+    workspaceAction: result.workspaceAction || null,
+    presentation: result.presentation || null,
+    windowGuard: result.windowGuard || null,
+    startupWindowGuard: result.startupWindowGuard || null,
+    message: result.message || null,
+    needsAction: result.needsAction || null,
+    nextStep: result.nextStep || null,
+    retryable: result.retryable === true,
+    cursorExecutable: result.cursorExecutable || null,
+    cursorExecutableSource: result.cursorExecutableSource || null,
+    runtimeFingerprint: result.runtimeFingerprint || null,
+    runtimeScript: result.runtimeScript || null,
+    runtimeUpgradeDeferred: result.runtimeUpgradeDeferred === true
+  };
+}
 function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
   const target = ensureLifecycleDir(targetDir);
   chdir(target);
@@ -21801,7 +22130,9 @@ var CursorBridge = class {
         "port-not-cursor",
         "no-exe",
         "timeout",
-        "workspace-not-ready"
+        "workspace-not-ready",
+        "external-launch-required",
+        "spawn-blocked"
       ]);
       if (!lifecycle || !recoverableStatuses.has(lifecycle.status)) throw error2;
       return {
@@ -22244,33 +22575,26 @@ var CursorBridge = class {
           adapterStartCwd: this.adapterStartCwd,
           ...this.projectPath ? { projectPath: this.projectPath } : {}
         });
-        this._lastLifecycle = {
-          adapterPid: rr.adapterPid ?? process.pid,
-          supervisorPid: rr.supervisorPid ?? null,
-          reusedSupervisor: !!rr.reusedSupervisor,
-          createdSupervisor: !!rr.createdSupervisor,
-          launchReason: rr.launchReason || rr.status,
-          status: rr.status,
-          spawnMethod: rr.spawnMethod || null,
-          cursorPid: rr.cursorPid || null,
-          runtimeMode: rr.runtimeMode || this.runtimeMode,
-          projectPath: rr.projectPath || null,
-          targetId: rr.targetId || null,
-          workspaceAction: rr.workspaceAction || null,
-          presentation: rr.presentation || null,
-          message: rr.message || null,
-          needsAction: rr.needsAction || null,
-          nextStep: rr.nextStep || null,
-          retryable: rr.retryable === true,
-          cursorExecutable: rr.cursorExecutable || null,
-          cursorExecutableSource: rr.cursorExecutableSource || null,
-          runtimeFingerprint: rr.runtimeFingerprint || null,
-          runtimeScript: rr.runtimeScript || null
-        };
+        this._lastLifecycle = lifecycleFromEnsureResult(rr, this.runtimeMode);
         if (!rr.ok && rr.status === "workspace-not-ready" && rr.projectPath) {
           const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
           if (agentsWorkspace) {
             this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
+          }
+        }
+        if (rr.ok && rr.lifecycleMode === "attached" && rr.workspaceAction === "reused-agents-window" && rr.projectPath) {
+          const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
+          if (agentsWorkspace) {
+            this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
+          } else {
+            this._lastLifecycle = {
+              ...this._lastLifecycle,
+              status: "workspace-not-ready",
+              message: `Cursor is reachable, but Cursor Bridge could not verify workspace ${rr.projectPath} in the attached Agents Window.`,
+              needsAction: "open_workspace_in_cursor",
+              nextStep: `Open workspace ${rr.projectPath} in Cursor, then retry the same operation.`,
+              retryable: true
+            };
           }
         }
         if (this.runtimeMode === "minimal") {
@@ -22279,7 +22603,7 @@ var CursorBridge = class {
           await this.recoverNormalAgentsPresentation(this._lastLifecycle);
         }
         const life = "adapterPid=" + this._lastLifecycle.adapterPid + " supervisorPid=" + this._lastLifecycle.supervisorPid + " reused=" + this._lastLifecycle.reusedSupervisor + " reason=" + this._lastLifecycle.launchReason;
-        if (!rr.ok && this._lastLifecycle.status !== "agents-workspace-ready") {
+        if ((!rr.ok || this._lastLifecycle.status === "workspace-not-ready") && this._lastLifecycle.status !== "agents-workspace-ready") {
           throw new Error([rr.message || `Cursor lifecycle failed: ${rr.status}`, rr.nextStep].filter(Boolean).join(" "));
         }
         if (this._lastLifecycle.status === "agents-workspace-ready") {
@@ -23821,6 +24145,11 @@ var CursorBridge = class {
         launchReason: null,
         status: null,
         spawnMethod: null,
+        lifecycleMode: null,
+        persistent: null,
+        degradedReason: null,
+        spawnErrorCode: null,
+        capabilities: null,
         cursorPid: null,
         runtimeMode: this.runtimeMode,
         presentation: null
@@ -23942,31 +24271,7 @@ async function ensureBridgeCursor(targetBridge, reason) {
     adapterStartCwd: targetBridge.adapterStartCwd,
     ...targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}
   });
-  targetBridge._lastLifecycle = {
-    adapterPid: r.adapterPid ?? process.pid,
-    supervisorPid: r.supervisorPid ?? null,
-    reusedSupervisor: !!r.reusedSupervisor,
-    createdSupervisor: !!r.createdSupervisor,
-    launchReason: r.launchReason || r.status,
-    status: r.status,
-    spawnMethod: r.spawnMethod || null,
-    cursorPid: r.cursorPid || null,
-    runtimeMode: r.runtimeMode || targetBridge.runtimeMode,
-    projectPath: r.projectPath || null,
-    targetId: r.targetId || null,
-    workspaceAction: r.workspaceAction || null,
-    presentation: r.presentation || null,
-    windowGuard: r.windowGuard || null,
-    startupWindowGuard: r.startupWindowGuard || null,
-    message: r.message || null,
-    needsAction: r.needsAction || null,
-    nextStep: r.nextStep || null,
-    retryable: r.retryable === true,
-    cursorExecutable: r.cursorExecutable || null,
-    cursorExecutableSource: r.cursorExecutableSource || null,
-    runtimeFingerprint: r.runtimeFingerprint || null,
-    runtimeScript: r.runtimeScript || null
-  };
+  targetBridge._lastLifecycle = lifecycleFromEnsureResult(r, targetBridge.runtimeMode);
   if (targetBridge.runtimeMode === "minimal") {
     targetBridge._lastPresentation = r.presentation ? { ...r.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await targetBridge.applyRuntimePresentation("hide");
   }

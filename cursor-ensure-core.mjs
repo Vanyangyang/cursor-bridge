@@ -253,6 +253,62 @@ export async function waitForCdp(maxMs = 30000, stepMs = 1000) {
   return false;
 }
 
+async function spawnDetachedSafely(spawnImpl, file, args, spawnOptions) {
+  let child;
+  try {
+    child = spawnImpl(file, args, spawnOptions);
+  } catch (error) {
+    return {
+      ok: false,
+      child: null,
+      error,
+      errorCode: error && typeof error === 'object' && error.code != null ? String(error.code) : null,
+    };
+  }
+  if (child && typeof child.once === 'function') {
+    const startup = await new Promise((resolvePromise) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        child.off?.('spawn', onSpawn);
+        child.off?.('error', onError);
+        resolvePromise(result);
+      };
+      const onSpawn = () => finish({ ok: true });
+      const onError = (error) => finish({ ok: false, error });
+      child.once('spawn', onSpawn);
+      child.once('error', onError);
+      if (Number.isInteger(child.pid) && child.pid > 0) queueMicrotask(onSpawn);
+    });
+    if (!startup.ok) {
+      return {
+        ok: false,
+        child,
+        error: startup.error,
+        errorCode: startup.error && typeof startup.error === 'object' && startup.error.code != null
+          ? String(startup.error.code)
+          : null,
+      };
+    }
+    // A post-spawn ChildProcess error must never become an uncaught EventEmitter error.
+    child.once('error', () => {});
+  }
+  if (child && typeof child.unref === 'function') child.unref();
+  return { ok: true, child };
+}
+
+function attachedPresentation(runtimeMode, port) {
+  if (runtimeMode !== 'minimal') return null;
+  return {
+    supported: true,
+    applied: false,
+    action: 'hide',
+    port,
+    reason: 'attached lifecycle cannot start the PowerShell window guard under the current process policy',
+  };
+}
+
 /**
  * Ensure Cursor is listening with CDP. Idempotent. Never kills a running Cursor.
  * status: 'already' | 'launched' | 'running-no-debug' | 'port-not-cursor' | 'no-exe' | 'timeout'
@@ -270,15 +326,19 @@ export async function ensureCursorRunningLocal(options = {}) {
     : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn;
+  const allowSpawn = options.allowSpawn !== false;
+  const allowProcessControl = options.allowProcessControl !== false;
   if (await cdpUpImpl()) {
     const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
-      const cursorPid = findCursorPidByPort(CDP_PORT);
-      const windowGuard = effectiveRuntimeMode === 'minimal' && cursorPid
+      const cursorPid = allowProcessControl ? findCursorPidByPort(CDP_PORT) : null;
+      const windowGuard = allowProcessControl && effectiveRuntimeMode === 'minimal' && cursorPid
         ? startMinimalWindowGuard(cursorPid)
         : null;
       const presentation = effectiveRuntimeMode === 'minimal'
-        ? setCursorWindowPresentation({ action: 'hide', port: CDP_PORT, pid: cursorPid })
+        ? (allowProcessControl
+            ? setCursorWindowPresentation({ action: 'hide', port: CDP_PORT, pid: cursorPid })
+            : attachedPresentation(effectiveRuntimeMode, CDP_PORT))
         : null;
       const currentTargets = await listCdpPageTargetsImpl();
       const projectKey = normalizeProjectKey(projectPath);
@@ -308,6 +368,22 @@ export async function ensureCursorRunningLocal(options = {}) {
         }
       }
       if (projectPath && existsSync(projectPath) && !targetId) {
+        if (!allowSpawn) {
+          return {
+            ok: false,
+            status: 'workspace-not-ready',
+            port: CDP_PORT,
+            cursorPid,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation,
+            windowGuard,
+            needsAction: 'open_workspace_in_cursor',
+            retryable: true,
+            nextStep: `Open workspace ${projectPath} in the existing Cursor Agents Window, then retry the same operation.`,
+            message: `CCE connected to Cursor, but the current workspace target for ${projectPath} is not ready and the current lifecycle cannot open a new window.`,
+          };
+        }
         const cursorExecutable = findCursorExeDetailsImpl();
         const exe = cursorExecutable && cursorExecutable.path;
         if (!exe) {
@@ -327,12 +403,28 @@ export async function ensureCursorRunningLocal(options = {}) {
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target) => target.id));
-        const opener = spawnImpl(exe, ['--new-window', projectPath], {
+        const opened = await spawnDetachedSafely(spawnImpl, exe, ['--new-window', projectPath], {
           detached: true,
           stdio: 'ignore',
           windowsHide: effectiveRuntimeMode === 'minimal',
         });
-        opener.unref();
+        if (!opened.ok) {
+          return {
+            ok: false,
+            status: 'spawn-blocked',
+            port: CDP_PORT,
+            cursorPid,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation,
+            windowGuard,
+            errorCode: opened.errorCode,
+            needsAction: 'open_workspace_in_cursor',
+            retryable: true,
+            nextStep: `Open workspace ${projectPath} in Cursor, then retry the same operation.`,
+            message: `Cursor Bridge could not open a new workspace window: ${opened.error instanceof Error ? opened.error.message : String(opened.error)}`,
+          };
+        }
         workspaceAction = 'opened-new-window';
         const openedTarget = await waitForNewCdpTarget(beforeTargetIds, 12000, projectPath, listCdpPageTargetsImpl);
         if (!openedTarget) {
@@ -383,6 +475,21 @@ export async function ensureCursorRunningLocal(options = {}) {
       message: `CCE cannot connect to Cursor because required local port ${CDP_PORT} is occupied by another program.`,
     };
   }
+  if (!allowSpawn) {
+    return {
+      ok: false,
+      status: 'external-launch-required',
+      port: CDP_PORT,
+      cursorPid: null,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      presentation: attachedPresentation(effectiveRuntimeMode, CDP_PORT),
+      needsAction: 'launch_cursor_with_cdp',
+      retryable: true,
+      nextStep: `Start Cursor with its remote debugging connection on port ${CDP_PORT}, open ${projectPath || 'the target workspace'}, then retry the same operation.`,
+      message: `Cursor is not reachable on the configured CDP port ${CDP_PORT}, and the current lifecycle policy cannot launch it.`,
+    };
+  }
   if (cursorRunningImpl()) {
     const cursorExecutable = findCursorExeDetailsImpl();
     return {
@@ -423,14 +530,30 @@ export async function ensureCursorRunningLocal(options = {}) {
     );
   }
   if (projectPath && existsSync(projectPath)) args.push(projectPath);
-  const child = spawnImpl(exe, args, {
+  const launched = await spawnDetachedSafely(spawnImpl, exe, args, {
     detached: true,
     stdio: 'ignore',
     windowsHide: effectiveRuntimeMode === 'minimal',
   });
-  child.unref();
+  if (!launched.ok) {
+    return {
+      ok: false,
+      status: 'spawn-blocked',
+      exe,
+      port: CDP_PORT,
+      cursorPid: null,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      errorCode: launched.errorCode,
+      needsAction: 'launch_cursor_manually',
+      retryable: true,
+      nextStep: `Start Cursor with its remote debugging connection on port ${CDP_PORT}, then retry the same operation.`,
+      message: `Cursor Bridge could not launch Cursor: ${launched.error instanceof Error ? launched.error.message : String(launched.error)}`,
+    };
+  }
+  const child = launched.child;
   const startupWindowGuard = effectiveRuntimeMode === 'minimal'
-    ? startMinimalWindowGuard(child.pid)
+    ? startMinimalWindowGuard(child && child.pid)
     : null;
 
   const up = await waitForCdp(waitMs);

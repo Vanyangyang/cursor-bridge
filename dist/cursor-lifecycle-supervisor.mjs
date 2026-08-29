@@ -181,6 +181,8 @@ function startMinimalWindowGuard(pid, options = {}) {
       "-EncodedCommand",
       encodePowerShell(script)
     ], { detached: !lifetime, stdio: "ignore", windowsHide: true });
+    if (child && typeof child.once === "function") child.once("error", () => {
+    });
     if (!lifetime && child && typeof child.unref === "function") child.unref();
     return {
       started: true,
@@ -542,6 +544,58 @@ async function waitForCdp(maxMs = 3e4, stepMs = 1e3) {
   }
   return false;
 }
+async function spawnDetachedSafely(spawnImpl, file, args, spawnOptions) {
+  let child;
+  try {
+    child = spawnImpl(file, args, spawnOptions);
+  } catch (error) {
+    return {
+      ok: false,
+      child: null,
+      error,
+      errorCode: error && typeof error === "object" && error.code != null ? String(error.code) : null
+    };
+  }
+  if (child && typeof child.once === "function") {
+    const startup = await new Promise((resolvePromise) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        child.off?.("spawn", onSpawn);
+        child.off?.("error", onError);
+        resolvePromise(result);
+      };
+      const onSpawn = () => finish({ ok: true });
+      const onError = (error) => finish({ ok: false, error });
+      child.once("spawn", onSpawn);
+      child.once("error", onError);
+      if (Number.isInteger(child.pid) && child.pid > 0) queueMicrotask(onSpawn);
+    });
+    if (!startup.ok) {
+      return {
+        ok: false,
+        child,
+        error: startup.error,
+        errorCode: startup.error && typeof startup.error === "object" && startup.error.code != null ? String(startup.error.code) : null
+      };
+    }
+    child.once("error", () => {
+    });
+  }
+  if (child && typeof child.unref === "function") child.unref();
+  return { ok: true, child };
+}
+function attachedPresentation(runtimeMode, port) {
+  if (runtimeMode !== "minimal") return null;
+  return {
+    supported: true,
+    applied: false,
+    action: "hide",
+    port,
+    reason: "attached lifecycle cannot start the PowerShell window guard under the current process policy"
+  };
+}
 async function ensureCursorRunningLocal(options = {}) {
   const waitMs = Number(options.waitMs || 3e4);
   const runtimeMode = options.runtimeMode || "normal";
@@ -553,12 +607,14 @@ async function ensureCursorRunningLocal(options = {}) {
   const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve2(String(options.projectPath)) : null : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn2;
+  const allowSpawn = options.allowSpawn !== false;
+  const allowProcessControl = options.allowProcessControl !== false;
   if (await cdpUpImpl()) {
     const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
-      const cursorPid2 = findCursorPidByPort(CDP_PORT);
-      const windowGuard2 = effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
-      const presentation2 = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : null;
+      const cursorPid2 = allowProcessControl ? findCursorPidByPort(CDP_PORT) : null;
+      const windowGuard2 = allowProcessControl && effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
+      const presentation2 = effectiveRuntimeMode === "minimal" ? allowProcessControl ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : attachedPresentation(effectiveRuntimeMode, CDP_PORT) : null;
       const currentTargets = await listCdpPageTargetsImpl();
       const projectKey = normalizeProjectKey(projectPath);
       let targetId2 = projectKey ? PROJECT_TARGETS.get(projectKey) || null : currentTargets[0] && currentTargets[0].id || null;
@@ -587,6 +643,22 @@ async function ensureCursorRunningLocal(options = {}) {
         }
       }
       if (projectPath && existsSync(projectPath) && !targetId2) {
+        if (!allowSpawn) {
+          return {
+            ok: false,
+            status: "workspace-not-ready",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            needsAction: "open_workspace_in_cursor",
+            retryable: true,
+            nextStep: `Open workspace ${projectPath} in the existing Cursor Agents Window, then retry the same operation.`,
+            message: `CCE connected to Cursor, but the current workspace target for ${projectPath} is not ready and the current lifecycle cannot open a new window.`
+          };
+        }
         const cursorExecutable2 = findCursorExeDetailsImpl();
         const exe2 = cursorExecutable2 && cursorExecutable2.path;
         if (!exe2) {
@@ -606,12 +678,28 @@ async function ensureCursorRunningLocal(options = {}) {
           };
         }
         const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
-        const opener = spawnImpl(exe2, ["--new-window", projectPath], {
+        const opened = await spawnDetachedSafely(spawnImpl, exe2, ["--new-window", projectPath], {
           detached: true,
           stdio: "ignore",
           windowsHide: effectiveRuntimeMode === "minimal"
         });
-        opener.unref();
+        if (!opened.ok) {
+          return {
+            ok: false,
+            status: "spawn-blocked",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            errorCode: opened.errorCode,
+            needsAction: "open_workspace_in_cursor",
+            retryable: true,
+            nextStep: `Open workspace ${projectPath} in Cursor, then retry the same operation.`,
+            message: `Cursor Bridge could not open a new workspace window: ${opened.error instanceof Error ? opened.error.message : String(opened.error)}`
+          };
+        }
         workspaceAction = "opened-new-window";
         const openedTarget2 = await waitForNewCdpTarget(beforeTargetIds, 12e3, projectPath, listCdpPageTargetsImpl);
         if (!openedTarget2) {
@@ -660,6 +748,21 @@ async function ensureCursorRunningLocal(options = {}) {
       message: `CCE cannot connect to Cursor because required local port ${CDP_PORT} is occupied by another program.`
     };
   }
+  if (!allowSpawn) {
+    return {
+      ok: false,
+      status: "external-launch-required",
+      port: CDP_PORT,
+      cursorPid: null,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      presentation: attachedPresentation(effectiveRuntimeMode, CDP_PORT),
+      needsAction: "launch_cursor_with_cdp",
+      retryable: true,
+      nextStep: `Start Cursor with its remote debugging connection on port ${CDP_PORT}, open ${projectPath || "the target workspace"}, then retry the same operation.`,
+      message: `Cursor is not reachable on the configured CDP port ${CDP_PORT}, and the current lifecycle policy cannot launch it.`
+    };
+  }
   if (cursorRunningImpl()) {
     const cursorExecutable2 = findCursorExeDetailsImpl();
     return {
@@ -697,13 +800,29 @@ async function ensureCursorRunningLocal(options = {}) {
     );
   }
   if (projectPath && existsSync(projectPath)) args.push(projectPath);
-  const child = spawnImpl(exe, args, {
+  const launched = await spawnDetachedSafely(spawnImpl, exe, args, {
     detached: true,
     stdio: "ignore",
     windowsHide: effectiveRuntimeMode === "minimal"
   });
-  child.unref();
-  const startupWindowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child.pid) : null;
+  if (!launched.ok) {
+    return {
+      ok: false,
+      status: "spawn-blocked",
+      exe,
+      port: CDP_PORT,
+      cursorPid: null,
+      runtimeMode: effectiveRuntimeMode,
+      projectPath,
+      errorCode: launched.errorCode,
+      needsAction: "launch_cursor_manually",
+      retryable: true,
+      nextStep: `Start Cursor with its remote debugging connection on port ${CDP_PORT}, then retry the same operation.`,
+      message: `Cursor Bridge could not launch Cursor: ${launched.error instanceof Error ? launched.error.message : String(launched.error)}`
+    };
+  }
+  const child = launched.child;
+  const startupWindowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child && child.pid) : null;
   const up = await waitForCdp(waitMs);
   if (!up) {
     return {
@@ -1048,7 +1167,8 @@ async function startSupervisor(options = {}) {
     tryRemove(sock);
   }
   const ensureLocal = await loadEnsure(ensureModule);
-  let ensureInflight = null;
+  const ensureInflight = /* @__PURE__ */ new Map();
+  let ensureTail = Promise.resolve();
   let ensureCount = 0;
   let lastEnsure = null;
   const clients = /* @__PURE__ */ new Set();
@@ -1074,14 +1194,17 @@ async function startSupervisor(options = {}) {
     if (typeof idleTimer.unref === "function") idleTimer.unref();
   };
   const runEnsure = async (request = {}) => {
-    if (ensureInflight) return ensureInflight;
-    ensureInflight = (async () => {
+    const requestRuntimeMode = request.runtimeMode || "normal";
+    const requestProjectPath = Object.hasOwn(request, "projectPath") ? request.projectPath : null;
+    const ensureKey = JSON.stringify([requestRuntimeMode, requestProjectPath]);
+    if (ensureInflight.has(ensureKey)) return ensureInflight.get(ensureKey);
+    const task = ensureTail.then(async () => {
       ensureCount += 1;
       const waitMs = Number(request.waitMs || 3e4);
       const result = await ensureLocal({
         waitMs,
-        runtimeMode: request.runtimeMode || "normal",
-        projectPath: Object.hasOwn(request, "projectPath") ? request.projectPath : null
+        runtimeMode: requestRuntimeMode,
+        projectPath: requestProjectPath
       });
       lastEnsure = {
         ...result,
@@ -1089,8 +1212,8 @@ async function startSupervisor(options = {}) {
         at: (/* @__PURE__ */ new Date()).toISOString(),
         requestReason: request.reason || null,
         requestAdapterPid: request.adapterPid || null,
-        requestRuntimeMode: request.runtimeMode || "normal",
-        requestProjectPath: request.projectPath || null
+        requestRuntimeMode,
+        requestProjectPath
       };
       writeSupervisorDiag(logPath, "ensure-result", {
         ok: !!result.ok,
@@ -1100,11 +1223,14 @@ async function startSupervisor(options = {}) {
         ensureCount
       });
       return lastEnsure;
-    })();
+    });
+    ensureInflight.set(ensureKey, task);
+    ensureTail = task.catch(() => {
+    });
     try {
-      return await ensureInflight;
+      return await task;
     } finally {
-      ensureInflight = null;
+      if (ensureInflight.get(ensureKey) === task) ensureInflight.delete(ensureKey);
     }
   };
   const server = net.createServer((socket) => {

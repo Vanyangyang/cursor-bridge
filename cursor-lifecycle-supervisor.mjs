@@ -202,7 +202,8 @@ export async function startSupervisor(options = {}) {
   }
 
   const ensureLocal = await loadEnsure(ensureModule);
-  let ensureInflight = null;
+  const ensureInflight = new Map();
+  let ensureTail = Promise.resolve();
   let ensureCount = 0;
   let lastEnsure = null;
   const clients = new Set();
@@ -230,14 +231,17 @@ export async function startSupervisor(options = {}) {
   };
 
   const runEnsure = async (request = {}) => {
-    if (ensureInflight) return ensureInflight;
-    ensureInflight = (async () => {
+    const requestRuntimeMode = request.runtimeMode || 'normal';
+    const requestProjectPath = Object.hasOwn(request, 'projectPath') ? request.projectPath : null;
+    const ensureKey = JSON.stringify([requestRuntimeMode, requestProjectPath]);
+    if (ensureInflight.has(ensureKey)) return ensureInflight.get(ensureKey);
+    const task = ensureTail.then(async () => {
       ensureCount += 1;
       const waitMs = Number(request.waitMs || 30000);
       const result = await ensureLocal({
         waitMs,
-        runtimeMode: request.runtimeMode || 'normal',
-        projectPath: Object.hasOwn(request, 'projectPath') ? request.projectPath : null,
+        runtimeMode: requestRuntimeMode,
+        projectPath: requestProjectPath,
       });
       lastEnsure = {
         ...result,
@@ -245,8 +249,8 @@ export async function startSupervisor(options = {}) {
         at: new Date().toISOString(),
         requestReason: request.reason || null,
         requestAdapterPid: request.adapterPid || null,
-        requestRuntimeMode: request.runtimeMode || 'normal',
-        requestProjectPath: request.projectPath || null,
+        requestRuntimeMode,
+        requestProjectPath,
       };
       writeSupervisorDiag(logPath, 'ensure-result', {
         ok: !!result.ok,
@@ -256,11 +260,13 @@ export async function startSupervisor(options = {}) {
         ensureCount,
       });
       return lastEnsure;
-    })();
+    });
+    ensureInflight.set(ensureKey, task);
+    ensureTail = task.catch(() => {});
     try {
-      return await ensureInflight;
+      return await task;
     } finally {
-      ensureInflight = null;
+      if (ensureInflight.get(ensureKey) === task) ensureInflight.delete(ensureKey);
     }
   };
 
