@@ -84,6 +84,71 @@ export function allowUnsafeCmdStart() {
   return false;
 }
 
+function wmiReturnValueFromError(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const match = message.match(/Win32_Process\.Create failed:\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+export function classifyOutsideJobSpawnError(error) {
+  const code = error && typeof error === 'object' && error.code != null
+    ? String(error.code)
+    : null;
+  const returnValue = wmiReturnValueFromError(error);
+  if (code === 'EPERM' || code === 'EACCES') {
+    return {
+      errorKind: 'policy-blocked',
+      degradedReason: 'spawn-policy-blocked',
+      errorCode: code,
+      returnValue,
+      canAttachFallback: true,
+    };
+  }
+  if (returnValue === 2 || returnValue === 3) {
+    return {
+      errorKind: 'policy-blocked',
+      degradedReason: 'wmi-access-denied',
+      errorCode: returnValue,
+      returnValue,
+      canAttachFallback: true,
+    };
+  }
+  if (returnValue === 8) {
+    return {
+      errorKind: 'wmi-unknown',
+      degradedReason: 'wmi-unknown-8',
+      errorCode: returnValue,
+      returnValue,
+      canAttachFallback: true,
+    };
+  }
+  if (returnValue === 9 || returnValue === 21) {
+    return {
+      errorKind: 'configuration',
+      degradedReason: null,
+      errorCode: returnValue,
+      returnValue,
+      canAttachFallback: false,
+    };
+  }
+  if (code === 'ETIMEDOUT' || (error && typeof error === 'object' && error.killed === true)) {
+    return {
+      errorKind: 'timeout',
+      degradedReason: 'spawn-timeout',
+      errorCode: code || 'ETIMEDOUT',
+      returnValue,
+      canAttachFallback: true,
+    };
+  }
+  return {
+    errorKind: 'unknown',
+    degradedReason: null,
+    errorCode: code,
+    returnValue,
+    canAttachFallback: false,
+  };
+}
+
 /**
  * Spawn a process that should outlive the current Windows job.
  * @returns {{ ok: boolean, method: string, pid?: number, error?: string, commandLine?: string }}
@@ -111,7 +176,8 @@ export function spawnOutsideJob(file, args = [], options = {}) {
       throw new Error('forced WMI failure for tests');
     }
     const ps = buildHiddenWmiCreateScript(commandLine, cwd);
-    const out = execFileSync('powershell.exe', [
+    const run = options.execFileSyncImpl || execFileSync;
+    const out = run('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy', 'Bypass',
@@ -129,10 +195,16 @@ export function spawnOutsideJob(file, args = [], options = {}) {
     return { ok: true, method: 'wmi-win32-process-create', pid, commandLine };
   } catch (wmiError) {
     const wmiMsg = wmiError instanceof Error ? wmiError.message : String(wmiError);
+    const classification = classifyOutsideJobSpawnError(wmiError);
+    const stderr = wmiError && typeof wmiError === 'object' && wmiError.stderr != null
+      ? String(wmiError.stderr).trim() || null
+      : null;
     return {
       ok: false,
       method: 'failed',
       commandLine,
+      ...classification,
+      stderr,
       error: `WMI Win32_Process.Create failed: ${wmiMsg}. Launch stopped without a shell fallback so Cursor Bridge cannot flash a console or create an unreliable orphan.`,
     };
   }

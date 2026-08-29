@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 
 import {
@@ -16,6 +17,7 @@ import {
   buildCommandLine,
   buildHiddenWmiCreateScript,
   allowUnsafeCmdStart,
+  classifyOutsideJobSpawnError,
   spawnOutsideJob,
 } from '../win-job-breakaway.mjs';
 import {
@@ -43,6 +45,7 @@ import {
   targetCanServeProject,
   targetTitleMatchesProject,
 } from '../cursor-ensure-core.mjs';
+import { ensureCursorRunning } from '../launch-cursor.mjs';
 import {
   normalizeWorkspacePath,
   isAbsoluteWorkspacePath,
@@ -97,6 +100,64 @@ test('lifecycle supervisor runtime is content-addressed outside the plugin sourc
   const changed = materializeLifecycleSupervisorRuntime({ sourceScript: source, dir: state });
   assert.notEqual(changed.fingerprint, first.fingerprint);
   assert.notEqual(changed.script, first.script);
+});
+
+class FakeSupervisorSocket extends EventEmitter {
+  constructor(ping = {}) {
+    super();
+    this.ping = ping;
+    this.requestTypes = [];
+  }
+  write(line) {
+    const request = JSON.parse(String(line).trim());
+    this.requestTypes.push(request.type);
+    queueMicrotask(() => this.emit('data', `${JSON.stringify({
+      id: request.id,
+      type: 'pong',
+      ok: true,
+      ...this.ping,
+    })}\n`));
+    return true;
+  }
+  end() {}
+  destroy() {}
+}
+
+test('healthy supervisor reuse is side-effect free and defers runtime replacement', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-reuse-first-'));
+  const dir = join(root, 'must-not-be-created');
+  const socket = new FakeSupervisorSocket({
+    runtimeFingerprint: 'old-runtime',
+    runtimeScript: 'old-supervisor.mjs',
+  });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const connection = await ensureSupervisorConnected({
+    dir,
+    supervisorScript: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+    connectSupervisorImpl: async () => socket,
+    materializeRuntimeImpl: () => { throw new Error('must not materialize while reusing'); },
+  });
+  assert.equal(connection.reusedSupervisor, true);
+  assert.equal(connection.runtimeUpgradeDeferred, true);
+  assert.deepEqual(socket.requestTypes, ['ping']);
+  assert.equal(existsSync(dir), false);
+});
+
+test('an unresponsive supervisor pipe degrades without attempting a competing spawn', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-unresponsive-supervisor-'));
+  let spawned = false;
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  await assert.rejects(() => ensureSupervisorConnected({
+    dir: join(root, 'lifecycle'),
+    supervisorScript: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+    connectSupervisorImpl: async () => { throw new Error('supervisor connect timeout (1500ms)'); },
+    spawnNodeOutsideJobImpl: () => { spawned = true; return { ok: true, method: 'test', pid: 1 }; },
+  }), (error) => {
+    assert.equal(error.errorKind, 'supervisor-unresponsive');
+    assert.equal(error.canAttachFallback, true);
+    return true;
+  });
+  assert.equal(spawned, false);
 });
 
 test('existing Editor targets can recover a project binding while generic Agents titles cannot', () => {
@@ -165,6 +226,100 @@ test('ensure reuses an already-open Agents Window and never opens an IDE window'
   });
   assert.equal(again.workspaceAction, 'reused-agents-window');
   assert.equal(spawned.length, 0);
+});
+
+test('attached ensure never spawns and reports an external launch requirement when CDP is absent', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-attached-offline-'));
+  let spawned = 0;
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    allowSpawn: false,
+    allowProcessControl: false,
+    cdpUpImpl: async () => false,
+    spawnImpl: () => { spawned += 1; throw new Error('must not spawn'); },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'external-launch-required');
+  assert.equal(result.needsAction, 'launch_cursor_with_cdp');
+  assert.equal(spawned, 0);
+});
+
+test('async child spawn EPERM becomes a structured failure instead of an uncaught error', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-spawn-error-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => true,
+    cdpIsCursorImpl: async () => true,
+    listCdpPageTargetsImpl: async () => [{ id: 'other', title: 'other-project - Cursor', type: 'page' }],
+    findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
+    spawnImpl: () => {
+      const child = new EventEmitter();
+      child.unref = () => {};
+      queueMicrotask(() => child.emit('error', Object.assign(new Error('spawn denied'), { code: 'EPERM' })));
+      return child;
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'spawn-blocked');
+  assert.equal(result.errorCode, 'EPERM');
+  assert.equal(result.needsAction, 'open_workspace_in_cursor');
+});
+
+test('policy-blocked supervisor spawn falls back to verified attached Cursor', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-attached-fallback-'));
+  const project = join(root, 'project');
+  mkdirSync(project, { recursive: true });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const result = await ensureCursorRunning({
+    dir: join(root, 'lifecycle'),
+    projectPath: project,
+    supervisorScript: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+    spawnNodeOutsideJobImpl: () => ({
+      ok: false,
+      method: 'failed',
+      error: 'spawnSync powershell.exe EPERM',
+      errorKind: 'policy-blocked',
+      degradedReason: 'spawn-policy-blocked',
+      errorCode: 'EPERM',
+      canAttachFallback: true,
+    }),
+    cdpUpImpl: async () => true,
+    cdpIsCursorImpl: async () => true,
+    listCdpPageTargetsImpl: async () => [{ id: 'agents', title: 'Cursor Agents', type: 'page' }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.lifecycleMode, 'attached');
+  assert.equal(result.persistent, false);
+  assert.equal(result.degradedReason, 'spawn-policy-blocked');
+  assert.equal(result.spawnErrorCode, 'EPERM');
+  assert.equal(result.capabilities.canLaunchCursor, false);
+  assert.equal(result.capabilities.canOpenWorkspaceWindow, false);
+});
+
+test('configuration-class supervisor failures do not silently attach', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-no-config-fallback-'));
+  const project = join(root, 'project');
+  mkdirSync(project, { recursive: true });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  await assert.rejects(() => ensureCursorRunning({
+    dir: join(root, 'lifecycle'),
+    projectPath: project,
+    supervisorScript: join(REPO, 'cursor-lifecycle-supervisor.mjs'),
+    spawnNodeOutsideJobImpl: () => ({
+      ok: false,
+      method: 'failed',
+      error: 'Win32_Process.Create failed: 21',
+      errorKind: 'configuration',
+      errorCode: 21,
+      returnValue: 21,
+      canAttachFallback: false,
+    }),
+    cdpUpImpl: async () => true,
+    cdpIsCursorImpl: async () => true,
+    listCdpPageTargetsImpl: async () => [{ id: 'agents', title: 'Cursor Agents', type: 'page' }],
+  }), /failed to spawn lifecycle supervisor/);
 });
 
 test('ensure still opens a new workbench window when only another project editor is present', async (t) => {
@@ -446,6 +601,37 @@ test('WMI create script starts console processes without a visible window', () =
   assert.match(script, /ShowWindow = \[uint16\]0/);
   assert.match(script, /ProcessStartupInformation = \$startup/);
   assert.match(script, /it''s here/);
+});
+
+test('outside-job errors preserve safe fallback classification and raw WMI codes', () => {
+  const denied = classifyOutsideJobSpawnError(Object.assign(new Error('spawnSync powershell.exe EPERM'), { code: 'EPERM' }));
+  assert.deepEqual(denied, {
+    errorKind: 'policy-blocked',
+    degradedReason: 'spawn-policy-blocked',
+    errorCode: 'EPERM',
+    returnValue: null,
+    canAttachFallback: true,
+  });
+  for (const value of [2, 3]) {
+    const classified = classifyOutsideJobSpawnError(new Error(`Win32_Process.Create failed: ${value}`));
+    assert.equal(classified.errorKind, 'policy-blocked');
+    assert.equal(classified.returnValue, value);
+    assert.equal(classified.canAttachFallback, true);
+  }
+  const unknown8 = classifyOutsideJobSpawnError(new Error('Win32_Process.Create failed: 8'));
+  assert.equal(unknown8.errorKind, 'wmi-unknown');
+  assert.equal(unknown8.degradedReason, 'wmi-unknown-8');
+  assert.equal(unknown8.errorCode, 8);
+  assert.equal(unknown8.canAttachFallback, true);
+  for (const value of [9, 21]) {
+    const classified = classifyOutsideJobSpawnError(new Error(`Win32_Process.Create failed: ${value}`));
+    assert.equal(classified.errorKind, 'configuration');
+    assert.equal(classified.errorCode, value);
+    assert.equal(classified.canAttachFallback, false);
+  }
+  const timedOut = classifyOutsideJobSpawnError(Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }));
+  assert.equal(timedOut.degradedReason, 'spawn-timeout');
+  assert.equal(timedOut.canAttachFallback, true);
 });
 
 test('legacy unsafe shell fallback switch can no longer be enabled', () => {

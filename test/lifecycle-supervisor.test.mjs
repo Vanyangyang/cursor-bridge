@@ -219,6 +219,29 @@ test('singleton reconnect after supervisor restart', async () => {
   }
 });
 
+test('concurrent ensures for different projects are serialized without sharing results', async () => {
+  const { dir, counter } = makeLifecycleSandbox();
+  const env = envFor(dir, counter);
+  const projectA = join(dir, 'project-a');
+  const projectB = join(dir, 'project-b');
+  try {
+    await withEnv(env, async () => {
+      const ready = await pingSupervisor();
+      assert.equal(ready.ok, true);
+      const [resultA, resultB] = await Promise.all([
+        ensureCursorViaSupervisor({ reason: 'project-a', waitMs: 1000, projectPath: projectA }),
+        ensureCursorViaSupervisor({ reason: 'project-b', waitMs: 1000, projectPath: projectB }),
+      ]);
+      assert.equal(resultA.projectPath, projectA);
+      assert.equal(resultB.projectPath, projectB);
+      assert.equal(readCount(counter), 2);
+    });
+  } finally {
+    await stopSupervisor(dir);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('idle lifecycle supervisor rolls to a new content-addressed runtime', async () => {
   const { dir, counter } = makeLifecycleSandbox();
   const pluginCache = mkdtempSync(join(tmpdir(), 'cb-versioned-plugin-cache-'));
@@ -229,6 +252,7 @@ test('idle lifecycle supervisor rolls to a new content-addressed runtime', async
   const env = {
     ...envFor(dir, counter),
     CURSOR_BRIDGE_SUPERVISOR_SCRIPT: sourceScript,
+    CURSOR_BRIDGE_SUPERVISOR_IDLE_MS: '300',
   };
   try {
     await withEnv(env, async () => {
@@ -243,10 +267,19 @@ test('idle lifecycle supervisor rolls to a new content-addressed runtime', async
       writeFileSync(sourceScript, `${bundled}\n// runtime-b\n`, 'utf8');
       const second = await pingSupervisor();
       assert.equal(second.ok, true);
-      assert.notEqual(second.runtimeFingerprint, first.runtimeFingerprint);
-      assert.notEqual(second.runtimeScript, first.runtimeScript);
-      assert.notEqual(second.supervisorPid, first.supervisorPid);
-      assert.equal(second.createdSupervisor, true);
+      assert.equal(second.runtimeFingerprint, first.runtimeFingerprint);
+      assert.equal(second.runtimeScript, first.runtimeScript);
+      assert.equal(second.supervisorPid, first.supervisorPid);
+      assert.equal(second.reusedSupervisor, true);
+      assert.equal(second.runtimeUpgradeDeferred, true);
+
+      await new Promise((r) => setTimeout(r, 900));
+      const third = await pingSupervisor();
+      assert.equal(third.ok, true);
+      assert.notEqual(third.runtimeFingerprint, first.runtimeFingerprint);
+      assert.notEqual(third.runtimeScript, first.runtimeScript);
+      assert.notEqual(third.supervisorPid, first.supervisorPid);
+      assert.equal(third.createdSupervisor, true);
     });
   } finally {
     await stopSupervisor(dir);

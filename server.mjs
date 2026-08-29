@@ -987,6 +987,41 @@ function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
   };
 }
 
+function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
+  return {
+    adapterPid: result.adapterPid ?? process.pid,
+    supervisorPid: result.supervisorPid ?? null,
+    reusedSupervisor: !!result.reusedSupervisor,
+    createdSupervisor: !!result.createdSupervisor,
+    launchReason: result.launchReason || result.status,
+    status: result.status,
+    spawnMethod: result.spawnMethod || null,
+    lifecycleMode: result.lifecycleMode || null,
+    persistent: result.persistent === true,
+    degradedReason: result.degradedReason || null,
+    spawnErrorCode: result.spawnErrorCode ?? null,
+    supervisorErrorKind: result.supervisorErrorKind || null,
+    capabilities: result.capabilities || null,
+    cursorPid: result.cursorPid || null,
+    runtimeMode: result.runtimeMode || fallbackRuntimeMode,
+    projectPath: result.projectPath || null,
+    targetId: result.targetId || null,
+    workspaceAction: result.workspaceAction || null,
+    presentation: result.presentation || null,
+    windowGuard: result.windowGuard || null,
+    startupWindowGuard: result.startupWindowGuard || null,
+    message: result.message || null,
+    needsAction: result.needsAction || null,
+    nextStep: result.nextStep || null,
+    retryable: result.retryable === true,
+    cursorExecutable: result.cursorExecutable || null,
+    cursorExecutableSource: result.cursorExecutableSource || null,
+    runtimeFingerprint: result.runtimeFingerprint || null,
+    runtimeScript: result.runtimeScript || null,
+    runtimeUpgradeDeferred: result.runtimeUpgradeDeferred === true,
+  };
+}
+
 function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
   const target = ensureLifecycleDir(targetDir);
   chdir(target);
@@ -1095,6 +1130,8 @@ class CursorBridge {
         'no-exe',
         'timeout',
         'workspace-not-ready',
+        'external-launch-required',
+        'spawn-blocked',
       ]);
       if (!lifecycle || !recoverableStatuses.has(lifecycle.status)) throw error;
       return {
@@ -1577,33 +1614,26 @@ class CursorBridge {
           adapterStartCwd: this.adapterStartCwd,
           ...(this.projectPath ? { projectPath: this.projectPath } : {}),
         });
-        this._lastLifecycle = {
-          adapterPid: rr.adapterPid ?? process.pid,
-          supervisorPid: rr.supervisorPid ?? null,
-          reusedSupervisor: !!rr.reusedSupervisor,
-          createdSupervisor: !!rr.createdSupervisor,
-          launchReason: rr.launchReason || rr.status,
-          status: rr.status,
-          spawnMethod: rr.spawnMethod || null,
-          cursorPid: rr.cursorPid || null,
-          runtimeMode: rr.runtimeMode || this.runtimeMode,
-          projectPath: rr.projectPath || null,
-          targetId: rr.targetId || null,
-          workspaceAction: rr.workspaceAction || null,
-          presentation: rr.presentation || null,
-          message: rr.message || null,
-          needsAction: rr.needsAction || null,
-          nextStep: rr.nextStep || null,
-          retryable: rr.retryable === true,
-          cursorExecutable: rr.cursorExecutable || null,
-          cursorExecutableSource: rr.cursorExecutableSource || null,
-          runtimeFingerprint: rr.runtimeFingerprint || null,
-          runtimeScript: rr.runtimeScript || null,
-        };
+        this._lastLifecycle = lifecycleFromEnsureResult(rr, this.runtimeMode);
         if (!rr.ok && rr.status === 'workspace-not-ready' && rr.projectPath) {
           const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
           if (agentsWorkspace) {
             this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
+          }
+        }
+        if (rr.ok && rr.lifecycleMode === 'attached' && rr.workspaceAction === 'reused-agents-window' && rr.projectPath) {
+          const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
+          if (agentsWorkspace) {
+            this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
+          } else {
+            this._lastLifecycle = {
+              ...this._lastLifecycle,
+              status: 'workspace-not-ready',
+              message: `Cursor is reachable, but Cursor Bridge could not verify workspace ${rr.projectPath} in the attached Agents Window.`,
+              needsAction: 'open_workspace_in_cursor',
+              nextStep: `Open workspace ${rr.projectPath} in Cursor, then retry the same operation.`,
+              retryable: true,
+            };
           }
         }
         if (this.runtimeMode === 'minimal') {
@@ -1614,7 +1644,7 @@ class CursorBridge {
           await this.recoverNormalAgentsPresentation(this._lastLifecycle);
         }
         const life = 'adapterPid=' + this._lastLifecycle.adapterPid + ' supervisorPid=' + this._lastLifecycle.supervisorPid + ' reused=' + this._lastLifecycle.reusedSupervisor + ' reason=' + this._lastLifecycle.launchReason;
-        if (!rr.ok && this._lastLifecycle.status !== 'agents-workspace-ready') {
+        if ((!rr.ok || this._lastLifecycle.status === 'workspace-not-ready') && this._lastLifecycle.status !== 'agents-workspace-ready') {
           throw new Error([rr.message || `Cursor lifecycle failed: ${rr.status}`, rr.nextStep].filter(Boolean).join(' '));
         }
         if (this._lastLifecycle.status === 'agents-workspace-ready') {
@@ -3215,6 +3245,11 @@ class CursorBridge {
         launchReason: null,
         status: null,
         spawnMethod: null,
+        lifecycleMode: null,
+        persistent: null,
+        degradedReason: null,
+        spawnErrorCode: null,
+        capabilities: null,
         cursorPid: null,
         runtimeMode: this.runtimeMode,
         presentation: null,
@@ -3360,31 +3395,7 @@ async function ensureBridgeCursor(targetBridge, reason) {
     adapterStartCwd: targetBridge.adapterStartCwd,
     ...(targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}),
   });
-  targetBridge._lastLifecycle = {
-    adapterPid: r.adapterPid ?? process.pid,
-    supervisorPid: r.supervisorPid ?? null,
-    reusedSupervisor: !!r.reusedSupervisor,
-    createdSupervisor: !!r.createdSupervisor,
-    launchReason: r.launchReason || r.status,
-    status: r.status,
-    spawnMethod: r.spawnMethod || null,
-    cursorPid: r.cursorPid || null,
-    runtimeMode: r.runtimeMode || targetBridge.runtimeMode,
-    projectPath: r.projectPath || null,
-    targetId: r.targetId || null,
-    workspaceAction: r.workspaceAction || null,
-    presentation: r.presentation || null,
-    windowGuard: r.windowGuard || null,
-    startupWindowGuard: r.startupWindowGuard || null,
-    message: r.message || null,
-    needsAction: r.needsAction || null,
-    nextStep: r.nextStep || null,
-    retryable: r.retryable === true,
-    cursorExecutable: r.cursorExecutable || null,
-    cursorExecutableSource: r.cursorExecutableSource || null,
-    runtimeFingerprint: r.runtimeFingerprint || null,
-    runtimeScript: r.runtimeScript || null,
-  };
+  targetBridge._lastLifecycle = lifecycleFromEnsureResult(r, targetBridge.runtimeMode);
   if (targetBridge.runtimeMode === 'minimal') {
     targetBridge._lastPresentation = r.presentation
       ? { ...r.presentation, at: new Date().toISOString() }

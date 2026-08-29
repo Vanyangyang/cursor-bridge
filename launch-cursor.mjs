@@ -19,6 +19,28 @@ import {
   resolveWorkspaceBindingKey,
 } from './workspace-binding.mjs';
 
+function lifecycleCapabilities(mode) {
+  if (mode === 'supervised') {
+    return { canLaunchCursor: true, canOpenWorkspaceWindow: true, survivesHostExit: 'cursor-yes-tasks-no' };
+  }
+  if (mode === 'attached') {
+    return { canLaunchCursor: false, canOpenWorkspaceWindow: false, survivesHostExit: 'cursor-yes-tasks-no' };
+  }
+  return { canLaunchCursor: true, canOpenWorkspaceWindow: true, survivesHostExit: 'not-guaranteed' };
+}
+
+function withLifecycle(result, mode, extra = {}) {
+  return {
+    ...result,
+    lifecycleMode: mode,
+    persistent: mode === 'supervised',
+    degradedReason: extra.degradedReason || null,
+    spawnErrorCode: extra.spawnErrorCode ?? null,
+    capabilities: lifecycleCapabilities(mode),
+    ...extra,
+  };
+}
+
 export {
   CDP_PORT,
   CDP_ORIGIN,
@@ -51,19 +73,47 @@ export async function ensureCursorRunning(options = {}) {
   const ensureOptions = { ...options, projectPath };
   if (process.env.CURSOR_BRIDGE_INLINE_ENSURE === '1' || process.env.CURSOR_BRIDGE_NO_SUPERVISOR === '1') {
     const local = await ensureCursorRunningLocal(ensureOptions);
-    return {
+    return withLifecycle({
       ...local,
       adapterPid: process.pid,
       supervisorPid: null,
       reusedSupervisor: false,
       createdSupervisor: false,
       launchReason: local.status === 'launched' ? 'inline-spawned-cursor' : `inline-${local.status}`,
-    };
+    }, 'inline');
   }
-  return ensureCursorViaSupervisor({
-    ...ensureOptions,
-    reason: options.reason || 'ensureCursorRunning',
-  });
+  try {
+    const supervised = await ensureCursorViaSupervisor({
+      ...ensureOptions,
+      reason: options.reason || 'ensureCursorRunning',
+    });
+    return withLifecycle(supervised, 'supervised', {
+      runtimeUpgradeDeferred: supervised.runtimeUpgradeDeferred === true,
+    });
+  } catch (error) {
+    if (error?.canAttachFallback !== true) throw error;
+    const local = await ensureCursorRunningLocal({
+      ...ensureOptions,
+      allowSpawn: false,
+      allowProcessControl: false,
+    });
+    return withLifecycle({
+      ...local,
+      adapterPid: process.pid,
+      supervisorPid: null,
+      reusedSupervisor: false,
+      createdSupervisor: false,
+      spawnMethod: null,
+      launchReason: local.ok ? 'attached-after-supervisor-blocked' : `attached-${local.status}`,
+      supervisorError: error instanceof Error ? error.message : String(error),
+    }, 'attached', {
+      degradedReason: error.degradedReason || 'supervisor-unavailable',
+      spawnErrorCode: error.errorCode ?? error.returnValue ?? null,
+      supervisorErrorKind: error.errorKind || null,
+      supervisorCommandLine: error.commandLine || null,
+      runtimeUpgradeDeferred: false,
+    });
+  }
 }
 
 // 仅在「直接 node launch-cursor.mjs」时自执行。文件名守卫不可省：被 esbuild 打进 server 单文件后，
