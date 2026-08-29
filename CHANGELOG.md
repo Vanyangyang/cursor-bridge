@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Pi package releases now support token-free npm Trusted Publishing from the GitHub-hosted `publish-pi.yml` workflow. Each component tag selects only its matching Pi package, registry state is fully preflighted before any publish, and a guarded manual dispatch can republish an exact existing component tag; local publishing remains an interactive WebAuthn/2FA fallback.
+
 ## [5.6.2] - 2026-08-29
 
 ### Fixed
