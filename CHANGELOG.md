@@ -6,9 +6,18 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.6.1] - 2026-08-29
+
 ### Fixed
 
+- Codex workspace-sandbox hosts no longer need permanent Full Access merely to reuse an already-running Cursor. When PowerShell or WMI blocks creation of the persistent lifecycle Supervisor, Cursor Bridge classifies the original error, verifies the configured Cursor CDP endpoint, and safely continues in an explicit `attached` mode with `persistent: false` instead of hiding the lifecycle boundary.
+- Existing lifecycle Supervisors are now contacted before runtime files are materialized, fingerprint upgrades are deferred instead of killing a healthy Supervisor before a replacement is known to be launchable, and unresponsive pipes degrade without spawning a competing singleton.
+- Cursor and workspace child-process failures are observed as structured results instead of uncaught `ChildProcess` errors, while concurrent Supervisor ensures are deduplicated only for the same runtime mode and project rather than sharing one project's result with another host.
 - Bumped the `pi-grok-build-supervisor` wrapper to 0.1.4 so npm can publish the adapter `packageVersion` synchronization fix without attempting to overwrite the immutable 0.1.3 tarball.
+
+### Compatibility
+
+- Revalidated Cursor **3.17.21** on Windows 11 after a Codex App restart. The installed-cache Supervisor path passed, and an isolated `codex.exe sandbox --permission-profile :workspace` probe reproduced `spawnSync powershell.exe EPERM` before returning `ok: true`, `lifecycleMode: "attached"`, `persistent: false`, and the verified Agents repository. The complete repository suite passed after the remote Star History update was normally merged.
 
 ## [5.6.0] - 2026-08-27
 
@@ -272,7 +281,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
-[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.0...HEAD
+[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.1...HEAD
+[5.6.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.0...cursor-bridge--v5.6.1
 [5.6.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.5.0...cursor-bridge--v5.6.0
 [5.5.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.2...cursor-bridge--v5.5.0
 [5.4.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.4.1...cursor-bridge--v5.4.2
