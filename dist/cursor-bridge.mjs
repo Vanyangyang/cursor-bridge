@@ -21142,7 +21142,7 @@ function updateCursorModelPreferences(filePath, { action, target, model, effort 
 init_workspace_binding();
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.6.0";
+var PLUGIN_VERSION = "5.6.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -24259,7 +24259,7 @@ function buildToolDefinitions(bridgeInstance) {
 var ADAPTER_START_CWD = process.cwd();
 var bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 var server = new Server(
-  { name: "cursor-bridge", version: "5.6.0" },
+  { name: "cursor-bridge", version: "5.6.1" },
   { capabilities: { tools: { listChanged: true } } }
 );
 async function ensureBridgeCursor(targetBridge, reason) {

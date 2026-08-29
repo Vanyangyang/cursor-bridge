@@ -158,7 +158,7 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.21** | **5.6.0** (`master`, current) | Live-tested on Windows 11 by reusing the user-setup Agents Window already carrying CDP port 9223: workspace binding, CCE, FIFO, independent parallel Agent execution, exact Agent IDs, persistent per-tool model/effort selection, and CCE across normal/minimal presentation all passed. The legacy IDE/workbench was not exposed by this run. |
+| **3.17.21** | **5.6.1** (`master`, current) | Live-tested on Windows 11 after a fresh Codex host reload. The normal Supervisor path passed workspace binding, and an isolated Codex `:workspace` sandbox reproduced `spawnSync powershell.exe EPERM` before safely attaching to the existing Agents Window with `persistent: false`. Existing CCE, FIFO, independent parallel Agent, exact Agent ID, persistent model/effort, and normal/minimal behavior remains covered by the 5.6.0 acceptance and regression suite. The legacy IDE/workbench was not exposed by these runs. |
 
 Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.5.0 / Cursor 3.17.19, Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 

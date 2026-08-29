@@ -54,7 +54,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.6.0';
+const PLUGIN_VERSION = '5.6.1';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -3382,7 +3382,7 @@ function buildToolDefinitions(bridgeInstance) {
 const ADAPTER_START_CWD = process.cwd();
 const bridge = new CursorBridge({ adapterStartCwd: ADAPTER_START_CWD });
 const server = new Server(
-  { name: 'cursor-bridge', version: '5.6.0' },
+  { name: 'cursor-bridge', version: '5.6.1' },
   { capabilities: { tools: { listChanged: true } } },
 );
 

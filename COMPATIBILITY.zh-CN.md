@@ -11,9 +11,37 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.17.21** | **5.6.0** | `master` | 当前维护版本。Windows 11 实机验收复用了 user setup 中已经携带 CDP 9223 端口的 Agents Window，并通过工作区绑定、CCE、FIFO、独立 parallel Agent、精确 Agent ID、按工具持久保存并应用模型/思考程度，以及 normal/minimal 切换期间的 CCE。本次运行没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。 |
+| **3.17.21** | **5.6.1** | `master` | 当前维护版本。Windows 11 重启后验收同时通过普通 Supervisor 路径与独立 Codex `:workspace` 沙箱路径。沙箱复现 `spawnSync powershell.exe EPERM` 后安全连接现有 Agents Window，并如实报告 `persistent: false`；安装缓存一致性与仓库绑定均通过。本次运行没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。 |
 
 ## 历史版本
+
+### Cursor Bridge 5.6.0 — Cursor 3.17.21
+
+状态：**已归档；不再维护。** 不可变 Git ref：`cursor-bridge--v5.6.0`。
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.6.0
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.6.0 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.6.0
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.6.0
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.6.0 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.5.0 — Cursor 3.17.19
 

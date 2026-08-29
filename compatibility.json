@@ -3,7 +3,7 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.17.21",
-    "cursorBridgeVersion": "5.6.0",
+    "cursorBridgeVersion": "5.6.1",
     "sourceRef": "master",
     "status": "current",
     "acceptance": {
@@ -13,6 +13,12 @@
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.17.21",
+      "cursorBridgeVersion": "5.6.0",
+      "gitRef": "cursor-bridge--v5.6.0",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.17.19",
       "cursorBridgeVersion": "5.5.0",

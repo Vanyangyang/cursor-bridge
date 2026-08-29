@@ -158,7 +158,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.17.21** | **5.6.0**（`master`，当前版本） | 已在 Windows 11 上复用 user setup 中携带 CDP 9223 端口的 Agents Window，实机验证工作区绑定、CCE、FIFO、独立 parallel Agent、精确 Agent ID、按工具持久保存并应用模型/思考程度，以及 normal/minimal 切换期间的 CCE；本次运行没有暴露旧版 IDE/workbench。 |
+| **3.17.21** | **5.6.1**（`master`，当前版本） | 已在 Windows 11 上完成重启 Codex host 后的实机验收：普通 Supervisor 路径通过工作区绑定；独立 Codex `:workspace` 沙箱复现 `spawnSync powershell.exe EPERM` 后，安全降级为连接现有 Agents Window，并如实报告 `persistent: false`。CCE、FIFO、独立 parallel Agent、精确 Agent ID、按工具持久保存模型/思考程度及 normal/minimal 行为继续由 5.6.0 实机验收和完整回归套件覆盖；这些运行均未暴露旧版 IDE/workbench。 |
 
 不再主动维护旧 Cursor 版本。Cursor Bridge 5.5.0 / Cursor 3.17.19、Cursor Bridge 5.4.2 / Cursor 3.17.8、Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
