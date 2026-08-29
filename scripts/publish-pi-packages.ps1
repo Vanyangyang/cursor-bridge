@@ -19,8 +19,12 @@ if ($runningInGitHubActions) {
     if ([string]::IsNullOrWhiteSpace($env:ACTIONS_ID_TOKEN_REQUEST_URL)) {
         throw 'GitHub Actions publishing requires permissions.id-token: write so npm Trusted Publishing can obtain an OIDC credential.'
     }
-    if (-not [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN) -or -not [string]::IsNullOrWhiteSpace($env:NPM_TOKEN)) {
-        throw 'GitHub Actions publishing must use npm Trusted Publishing without NODE_AUTH_TOKEN or NPM_TOKEN.'
+    $nodeAuthTokenIsSetupNodePlaceholder = -not [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN) `
+        -and $env:NODE_AUTH_TOKEN -match '^(?:X+-?)+$'
+    $hasRealNodeAuthToken = -not [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN) `
+        -and -not $nodeAuthTokenIsSetupNodePlaceholder
+    if ($hasRealNodeAuthToken -or -not [string]::IsNullOrWhiteSpace($env:NPM_TOKEN)) {
+        throw 'GitHub Actions publishing must use npm Trusted Publishing without a real NODE_AUTH_TOKEN or NPM_TOKEN.'
     }
     Write-Host 'Using npm Trusted Publishing (OIDC); npm whoami is intentionally skipped because OIDC is exchanged only during npm publish.' -ForegroundColor DarkGray
 } else {
