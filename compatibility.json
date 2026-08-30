@@ -3,19 +3,27 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.17.21",
-    "cursorBridgeVersion": "5.6.2",
+    "cursorBridgeVersion": "5.7.0",
     "sourceRef": "master",
     "status": "current",
     "acceptance": {
       "ideWorkbench": "not-exposed-in-live-run",
-      "agentsWindow": "live-tested-existing-cdp-9223",
+      "agentsWindow": "live-tested-cold-single-window-cdp-9223",
       "modelPreferences": "live-tested",
-      "readOnlyMcpSupervisor": "live-tested-cold-wmi",
+      "readOnlyMcpSupervisor": "live-tested-cold-wmi-plugin-cache-fallback",
       "attachedFallback": "regression-tested",
-      "lifecycleDiagnostics": "regression-tested"
+      "lifecycleDiagnostics": "live-tested",
+      "parallelAgentIdentity": "live-tested-stable",
+      "singleWindow": "live-tested-cold-init-agent"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.17.21",
+      "cursorBridgeVersion": "5.6.2",
+      "gitRef": "cursor-bridge--v5.6.2",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.17.21",
       "cursorBridgeVersion": "5.6.1",

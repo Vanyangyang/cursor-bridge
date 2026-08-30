@@ -337,8 +337,8 @@ test('Windows Supervisor bootstrap cwd avoids sandbox-created lifecycle runtime 
 
 test('plugin-local lifecycle fallback stays inside the installed plugin root', () => {
   assert.equal(
-    resolvePluginLocalLifecycleDir('C:\\cache\\cursor-bridge\\5.6.2\\dist\\cursor-lifecycle-supervisor.mjs'),
-    'C:\\cache\\cursor-bridge\\5.6.2\\.cursor-bridge-lifecycle',
+    resolvePluginLocalLifecycleDir('C:\\cache\\cursor-bridge\\5.7.0\\dist\\cursor-lifecycle-supervisor.mjs'),
+    'C:\\cache\\cursor-bridge\\5.7.0\\.cursor-bridge-lifecycle',
   );
 });
 
@@ -362,7 +362,7 @@ test('outside-job cwd probe preserves the exact WMI result', () => {
 test('shared lifecycle WMI 8 selects plugin-local storage before Supervisor spawn', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'cb-plugin-local-fallback-'));
   const shared = join(root, 'shared-lifecycle');
-  const pluginRoot = join(root, 'plugin-cache', '5.6.2');
+  const pluginRoot = join(root, 'plugin-cache', '5.7.0');
   const dist = join(pluginRoot, 'dist');
   const source = join(dist, 'cursor-lifecycle-supervisor.mjs');
   mkdirSync(dist, { recursive: true });
