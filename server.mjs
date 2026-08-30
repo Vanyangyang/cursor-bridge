@@ -1043,8 +1043,12 @@ function lifecycleFailureSummary(lifecycle, fallback) {
   return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(' ');
 }
 
-function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
-  const target = ensureLifecycleDir(targetDir);
+function releaseAdapterWorkingDirectory({ targetDir = null, chdir = process.chdir } = {}) {
+  // Do not create the lifecycle directory here. On Codex hosts that directory inherits
+  // AppContainer ACLs, while the WMI-launched Supervisor runs outside the sandbox. The lifecycle
+  // client owns first creation through its outside-job bootstrap. The Node executable directory is
+  // stable, already exists, and safely releases the plugin cache cwd without creating state.
+  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname(process.execPath);
   chdir(target);
   return target;
 }
