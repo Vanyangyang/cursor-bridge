@@ -371,4 +371,4 @@ npm run build
 
 ## Star History
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=29bed719b8ce)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=0dec6e028ea1)](https://github.com/Vanyangyang/cursor-bridge)
