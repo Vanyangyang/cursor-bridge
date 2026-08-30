@@ -30,8 +30,6 @@ import {
   exprCreateAgentForWorkspace,
   exprInspectWorkspaceRepository,
   EXPR_PAGE_CAPABILITIES,
-  EXPR_INSTALL_AGENTS_HELP_RELEASE_GUARD,
-  installAgentsHelpReleaseGuardInPage,
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
   EXPR_CLICK_SEND,
@@ -172,99 +170,6 @@ test('normal Agents reuse requests a bounded non-activating compositor recovery'
   assert.equal(showCalls, 1);
   assert.equal(await bridge.recoverNormalAgentsPresentation(lifecycle, now + 1000), null);
   assert.equal(showCalls, 1);
-});
-
-test('Cursor Agents Help guard suppresses only the trusted opening release on the presentation layer', () => {
-  const listeners = new Map();
-  const removed = [];
-  const documentObject = {
-    addEventListener(type, listener, capture) {
-      assert.equal(capture, true);
-      listeners.set(type, listener);
-    },
-    removeEventListener(type, listener, capture) {
-      assert.equal(capture, true);
-      assert.equal(listeners.get(type), listener);
-      removed.push(type);
-    },
-  };
-  const windowObject = {};
-  let time = 100;
-  let expanded = 'false';
-  const trigger = {
-    textContent: 'Help',
-    closest(selector) { return selector === 'button[aria-haspopup="menu"]' ? this : null; },
-    getAttribute(name) { return name === 'aria-expanded' ? expanded : null; },
-  };
-  const presentation = {
-    closest(selector) { return selector === '[role="presentation"]' ? this : null; },
-  };
-  const root = { closest() { return null; } };
-  const scheduled = [];
-  const first = installAgentsHelpReleaseGuardInPage(
-    windowObject,
-    documentObject,
-    () => time,
-    (callback, delay) => scheduled.push({ callback, delay }),
-  );
-  assert.equal(first.installed, true);
-  assert.equal(first.alreadyInstalled, false);
-  assert.match(EXPR_INSTALL_AGENTS_HELP_RELEASE_GUARD, /__cursorBridgeAgentsHelpReleaseGuardV1/);
-  assert.deepEqual([...listeners.keys()], ['pointerdown', 'pointerup', 'mouseup', 'click']);
-  assert.equal(scheduled.length, 0);
-
-  const again = installAgentsHelpReleaseGuardInPage(windowObject, documentObject, () => time);
-  assert.equal(again.alreadyInstalled, true);
-  assert.deepEqual([...listeners.keys()], ['pointerdown', 'pointerup', 'mouseup', 'click']);
-
-  const event = (type, target, overrides = {}) => {
-    const calls = { preventDefault: 0, stopImmediatePropagation: 0, stopPropagation: 0 };
-    return {
-      type,
-      target,
-      isTrusted: true,
-      button: 0,
-      pointerId: 7,
-      clientX: 20,
-      clientY: 10,
-      preventDefault() { calls.preventDefault++; },
-      stopImmediatePropagation() { calls.stopImmediatePropagation++; },
-      stopPropagation() { calls.stopPropagation++; },
-      calls,
-      ...overrides,
-    };
-  };
-
-  listeners.get('pointerdown')(event('pointerdown', trigger));
-  assert.equal(scheduled.length, 1);
-  assert.equal(scheduled[0].delay, 1600);
-  expanded = 'true';
-  time += 80;
-  const pointerUp = event('pointerup', presentation);
-  listeners.get('pointerup')(pointerUp);
-  const mouseUp = event('mouseup', presentation, { pointerId: undefined });
-  listeners.get('mouseup')(mouseUp);
-  const click = event('click', root);
-  listeners.get('click')(click);
-  for (const released of [pointerUp, mouseUp, click]) {
-    assert.deepEqual(released.calls, { preventDefault: 1, stopImmediatePropagation: 1, stopPropagation: 1 });
-  }
-  assert.deepEqual(windowObject.__cursorBridgeAgentsHelpReleaseGuardV1.stats, {
-    armed: 1,
-    blockedPointerUp: 1,
-    blockedMouseUp: 1,
-    blockedClick: 1,
-  });
-
-  expanded = 'false';
-  time += 100;
-  listeners.get('pointerdown')(event('pointerdown', trigger, { pointerId: 8 }));
-  const futureFixedRelease = event('pointerup', presentation, { pointerId: 8 });
-  listeners.get('pointerup')(futureFixedRelease);
-  assert.deepEqual(futureFixedRelease.calls, { preventDefault: 0, stopImmediatePropagation: 0, stopPropagation: 0 });
-
-  windowObject.__cursorBridgeAgentsHelpReleaseGuardV1.cleanup();
-  assert.deepEqual(removed, ['pointerdown', 'pointerup', 'mouseup', 'click']);
 });
 
 test('page capability scoring prefers Cursor Agents and pins an existing target', () => {

@@ -9,7 +9,6 @@ The project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Normal-mode Agents reuse no longer resizes or redraws an already-visible Cursor top-level window, which could immediately dismiss an open Help menu or another Electron popover. Hidden-window restoration still uses the bounded non-activating compositor pulse required after `SW_HIDE`.
-- Cursor Agents on Windows now installs an idempotent Help-menu release guard after lifecycle ensure. It suppresses only the trusted opening gesture's short `pointerup` / `mouseup` / `click` chain when Cursor's new `[role="presentation"]` layer replaces the Help trigger before release; menu-item clicks, other controls, synthetic Bridge input, workbench windows, and non-Windows hosts remain untouched.
 
 ### Compatibility
 
