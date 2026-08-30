@@ -152,6 +152,10 @@ public static class CursorBridgeWindowControl {
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
       if (show) {
+        // An already-visible Cursor window is user-owned. Resizing or redrawing
+        // it dismisses active Electron menus and popovers, so presentation
+        // recovery must be a strict no-op unless SW_HIDE actually hid it.
+        if (visible) return true;
         // SWP_SHOWWINDOW + SWP_NOACTIVATE preserves minimized/maximized/arranged
         // placement without taking keyboard focus from the requesting app.
         bool restored = SetWindowPos(hWnd, IntPtr.Zero, 0, 0, 0, 0, SHOW_NO_ACTIVATE_FLAGS);

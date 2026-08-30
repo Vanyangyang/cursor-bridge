@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Normal-mode Agents reuse no longer resizes or redraws an already-visible Cursor top-level window, which could immediately dismiss an open Help menu or another Electron popover. Hidden-window restoration still uses the bounded non-activating compositor pulse required after `SW_HIDE`.
+
 ### Compatibility
 
 - Post-release live acceptance updates the maintained pairing to Cursor **3.18.9** with Cursor Bridge **5.7.0**. With Cursor fully closed, Bridge cold-launched the installed 3.18.9 executable on CDP `127.0.0.1:9223`; workspace initialization, source-anchored CCE, FIFO, independent `parallel_agent`, stable Agent IDs, and CCE across `minimal` / restored `normal` passed without lifecycle degradation or provider errors. The run retained one top-level Cursor Agents window and one CDP page target, and a machine-token follow-up confirmed exact parallel result delivery. The legacy IDE/workbench target was not exposed, and model/effort selection was not live-rechecked. No runtime or package changes were required; the 5.7.0 GitHub Release carries the same compatibility note.
