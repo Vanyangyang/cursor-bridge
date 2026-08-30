@@ -2,19 +2,23 @@
   "schemaVersion": 1,
   "policy": "latest-only",
   "current": {
-    "cursorVersion": "3.17.21",
+    "cursorVersion": "3.18.9",
     "cursorBridgeVersion": "5.7.0",
     "sourceRef": "master",
     "status": "current",
     "acceptance": {
+      "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
       "agentsWindow": "live-tested-cold-single-window-cdp-9223",
-      "modelPreferences": "live-tested",
-      "readOnlyMcpSupervisor": "live-tested-cold-wmi-plugin-cache-fallback",
-      "attachedFallback": "regression-tested",
+      "modelPreferences": "not-live-rechecked-on-3.18.9",
+      "readOnlyMcpSupervisor": "live-tested-reused-supervisor-cold-cursor-launch",
+      "attachedFallback": "regression-tested-not-live-rechecked-on-3.18.9",
       "lifecycleDiagnostics": "live-tested",
+      "fifoExecution": "live-tested",
+      "parallelExecution": "live-tested",
       "parallelAgentIdentity": "live-tested-stable",
-      "singleWindow": "live-tested-cold-init-agent"
+      "singleWindow": "live-tested-cold-init-agent",
+      "minimalNormalRuntime": "live-tested-restored-normal"
     }
   },
   "history": [

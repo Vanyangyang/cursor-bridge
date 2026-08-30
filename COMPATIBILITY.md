@@ -11,7 +11,7 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.17.21** | **5.7.0** | `master` | Current maintained version. A fresh GitHub Codex marketplace install can recover from WMI return code `8` by selecting a verified plugin-cache lifecycle root and stable Supervisor working directory, without ACL changes or privilege elevation. Parallel Agents keep one identity while provisional and durable rows converge, and cold launch, workspace binding, CCE, and Agent execution reuse one stabilized Cursor Agents target instead of opening a second top-level window. The recorded Windows 11 cold-start acceptance remained `supervised`, persistent, and undegraded; the legacy IDE/workbench target was not exposed. |
+| **3.18.9** | **5.7.0** | `master` | Current maintained version. The installed Cursor executable reported product and file version 3.18.9. With Cursor fully closed, the published Bridge cold-launched it on CDP 9223 and remained `supervised`, persistent, and undegraded. Workspace initialization, source-anchored CCE, FIFO, independent `parallel_agent` execution, stable Agent identities, and CCE across `minimal` / restored `normal` all passed while retaining one Cursor Agents window and one CDP page target. The legacy IDE/workbench target was not exposed, and the model/effort picker was not live-rechecked in this refresh. |
 
 ## Historical versions
 

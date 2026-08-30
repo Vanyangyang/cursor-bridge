@@ -65,7 +65,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.17.21** user setup, reusing its existing Agents Window process carrying `--remote-debugging-port=9223`. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. This run did not expose a legacy IDE/workbench CDP target, so that surface is not claimed for this pairing. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.18.9**, identified from the installed executable's product and file versions and cold-launched by the published Cursor Bridge 5.7.0 runtime with `--remote-debugging-port=9223`. The run passed workspace binding, source-anchored CCE, read-only FIFO and independent `parallel_agent` execution with stable Agent IDs, and `minimal` / `normal` recovery while retaining one top-level Cursor Agents window and one CDP page target. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, the model/effort picker was not live-rechecked in this refresh, and macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -158,7 +158,7 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.21** | **5.7.0** (`master`, current) | Fresh GitHub marketplace installs recover from WMI return code `8` by selecting a verified plugin-cache lifecycle root and stable Supervisor working directory, without ACL changes or privilege elevation. Parallel Agents keep one identity while provisional and durable rows converge. With Cursor fully closed, the recorded Windows 11 acceptance auto-launched a supervised persistent runtime and kept one Cursor Agents target and one top-level window through workspace binding, CCE, and Agent execution. |
+| **3.18.9** | **5.7.0** (`master`, current) | With Cursor fully closed, the published Bridge cold-launched Cursor 3.18.9 on CDP 9223 and remained `supervised`, persistent, and undegraded. Workspace initialization, source-anchored CCE, FIFO, independent `parallel_agent` execution, stable Agent identities, and CCE across `minimal` / restored `normal` all passed while retaining one Cursor Agents window and one CDP page target. The legacy IDE/workbench target was not exposed, and the model/effort picker was not live-rechecked in this compatibility refresh. |
 
 Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
