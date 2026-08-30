@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, win32 as win32Path } from 'node:path';
 import {
   defaultLifecycleDir,
   ensureLifecycleDir,
@@ -23,9 +23,23 @@ import {
   supervisorPidPath,
   supervisorLockPath,
 } from './lifecycle-paths.mjs';
-import { spawnNodeOutsideJob } from './win-job-breakaway.mjs';
+import { spawnNodeOutsideJob, whichNode } from './win-job-breakaway.mjs';
 
 const DEFAULT_CREATE_WAIT_MS = 20000;
+
+export function resolveSupervisorSpawnCwd({
+  requestedCwd = null,
+  runtimeRoot = null,
+  nodeExecutable = whichNode(),
+  platform = process.platform,
+} = {}) {
+  if (requestedCwd) return requestedCwd;
+  if (platform === 'win32') {
+    const nodeDir = win32Path.dirname(String(nodeExecutable || ''));
+    if (win32Path.isAbsolute(nodeDir)) return nodeDir;
+  }
+  return runtimeRoot;
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -377,8 +391,18 @@ export async function ensureSupervisorConnected(options = {}) {
       CURSOR_BRIDGE_SUPERVISOR_SOCK: sock,
     };
 
+    // A lifecycle directory created by a Codex sandbox can inherit AppContainer-only ACLs.
+    // WMI launches the Supervisor outside that sandbox and returns Win32 error 8 when such a
+    // directory is used as CurrentDirectory, even though every launch argument is absolute.
+    // Bootstrap from the Node executable directory on Windows; keep the historical runtime cwd
+    // elsewhere and preserve an explicit caller override.
+    const spawnCwd = resolveSupervisorSpawnCwd({
+      requestedCwd: options.cwd,
+      runtimeRoot: runtime.runtimeRoot,
+      nodeExecutable: whichNode(),
+    });
     const spawned = (options.spawnNodeOutsideJobImpl || spawnNodeOutsideJob)(script, scriptArgs, {
-      cwd: options.cwd || runtime.runtimeRoot,
+      cwd: spawnCwd,
       env: childEnv,
     });
     if (!spawned.ok) {
@@ -389,6 +413,7 @@ export async function ensureSupervisorConnected(options = {}) {
         returnValue: spawned.returnValue ?? null,
         canAttachFallback: spawned.canAttachFallback === true,
         commandLine: spawned.commandLine || null,
+        spawnCwd: spawned.spawnCwd || spawnCwd || null,
         stderr: spawned.stderr || null,
         attempts: spawned.attempts ?? null,
       });
@@ -408,6 +433,7 @@ export async function ensureSupervisorConnected(options = {}) {
           createdSupervisor: true,
           spawnMethod: spawned.method,
           spawnPid: spawned.pid,
+          supervisorSpawnCwd: spawned.spawnCwd || spawnCwd || null,
           degraded: !!spawned.degraded,
           unsafe: !!spawned.unsafe,
           runtimeFingerprint: runtime.fingerprint,
@@ -454,6 +480,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
         createdSupervisor: conn.createdSupervisor,
         launchReason: 'supervisor-error',
         spawnMethod: conn.spawnMethod,
+        supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
         runtimeFingerprint: conn.runtimeFingerprint || null,
         runtimeScript: conn.runtimeScript || null,
         runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true,
@@ -482,6 +509,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
         ? (response.status === 'launched' ? 'created-supervisor-and-spawned-cursor' : 'created-supervisor')
         : (response.launchReason || (response.status === 'launched' ? 'reused-supervisor-spawned-cursor' : 'reused-supervisor')),
       spawnMethod: conn.spawnMethod,
+      supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
       ensureCount: response.ensureCount,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
@@ -502,6 +530,7 @@ export async function pingSupervisor(options = {}) {
       reusedSupervisor: conn.reusedSupervisor,
       createdSupervisor: conn.createdSupervisor,
       spawnMethod: conn.spawnMethod,
+      supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
       adapterPid: process.pid,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
