@@ -45,6 +45,7 @@ import {
   resolveProjectPath,
   selectAgentsWindowTarget,
   selectNewCdpTarget,
+  selectReusableProjectTarget,
   isAgentsWindowTitle,
   targetCanServeProject,
   targetTitleMatchesProject,
@@ -72,6 +73,12 @@ test('new Cursor CDP targets bind a newly opened project without relying on gene
     { id: 'generic-new', title: 'Cursor Agents' },
     { id: 'vesperix-target', title: 'VESPERIX - Cursor' },
   ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'vesperix-target');
+  assert.equal(selectNewCdpTarget(before, [
+    { id: 'generic-new', title: 'Cursor Agents' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'generic-new');
+  assert.equal(selectNewCdpTarget(before, [
+    { id: 'wrong-project', title: 'other-app - Cursor' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX'), null);
   assert.equal(selectNewCdpTarget(before, [{ id: 'existing-target' }]), null);
 });
 
@@ -176,6 +183,10 @@ test('existing Editor targets can recover a project binding while generic Agents
     { id: 'settings', title: 'Cursor Settings - cursor-bridge - Cursor' },
     { id: 'agents', title: 'Cursor Agents' },
   ]).id, 'agents');
+  assert.equal(selectReusableProjectTarget([
+    { id: 'agents', title: 'Cursor Agents' },
+    { id: 'project', title: 'VESPERIX - Cursor' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'project');
 });
 
 function fakeSpawnRecorder() {
@@ -451,7 +462,7 @@ test('configuration-class supervisor failures do not silently attach', async (t)
   }), /failed to spawn lifecycle supervisor/);
 });
 
-test('ensure still opens a new workbench window when only another project editor is present', async (t) => {
+test('ensure reuses an existing workbench window when only another project editor is present', async (t) => {
   const project = mkdtempSync(join(tmpdir(), 'cb-new-window-'));
   t.after(() => rmSync(project, { recursive: true, force: true }));
   const { spawned, spawnImpl } = fakeSpawnRecorder();
@@ -462,12 +473,13 @@ test('ensure still opens a new workbench window when only another project editor
     cdpIsCursorImpl: async () => true,
     async listCdpPageTargetsImpl() {
       calls += 1;
-      if (calls === 1) return [{ id: 'other', title: 'other-app - Cursor', type: 'page' }];
+      if (calls <= 9) return [{ id: 'other', title: 'other-app - Cursor', type: 'page' }];
       return [
         { id: 'other', title: 'other-app - Cursor', type: 'page' },
         { id: 'opened', title: `${project.split(/[\\/]/).pop()} - Cursor`, type: 'page' },
       ];
     },
+    targetSettleDelayMs: 0,
     spawnImpl,
     findCursorExeDetailsImpl: () => ({
       path: 'C:\\Program Files\\Cursor\\Cursor.exe',
@@ -476,10 +488,56 @@ test('ensure still opens a new workbench window when only another project editor
     }),
   });
   assert.equal(result.ok, true);
-  assert.equal(result.workspaceAction, 'opened-new-window');
+  assert.equal(result.workspaceAction, 'reused-window-for-project');
   assert.equal(result.targetId, 'opened');
   assert.equal(spawned.length, 1);
-  assert.deepEqual(spawned[0].args, ['--new-window', resolve(project)]);
+  assert.deepEqual(spawned[0].args, ['--reuse-window', resolve(project)]);
+});
+
+test('ensure waits for a loading Agents target before considering a workspace CLI handoff', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-loading-agents-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const { spawned, spawnImpl } = fakeSpawnRecorder();
+  let calls = 0;
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => true,
+    cdpIsCursorImpl: async () => true,
+    listCdpPageTargetsImpl: async () => ++calls === 1
+      ? [{ id: 'loading', title: '', type: 'page' }]
+      : [{ id: 'agents', title: 'Cursor Agents', type: 'page' }],
+    targetSettleDelayMs: 0,
+    spawnImpl,
+    findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.workspaceAction, 'reused-agents-window');
+  assert.equal(result.targetId, 'agents');
+  assert.equal(spawned.length, 0);
+});
+
+test('cold launch starts one CDP Cursor without passing a second project-window argument', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-single-window-launch-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const { spawned, spawnImpl } = fakeSpawnRecorder();
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => false,
+    cursorRunningImpl: () => false,
+    findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
+    spawnImpl,
+    waitForCdpImpl: async () => true,
+    findCursorPidByPortImpl: () => 4242,
+    listCdpPageTargetsImpl: async () => [{ id: 'agents', title: 'Cursor Agents', type: 'page' }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.workspaceAction, 'launched-agents-window');
+  assert.equal(result.targetId, 'agents');
+  assert.equal(spawned.length, 1);
+  assert.deepEqual(spawned[0].args, [
+    '--remote-debugging-port=9223',
+    '--remote-allow-origins=http://localhost:9223',
+  ]);
 });
 
 test('Codex thread cwd escapes plugin-cache cwd without exposing a workspace tool parameter', (t) => {
