@@ -103,6 +103,7 @@ test('window presentation passes an exact PID and action to PowerShell', () => {
   assert.match(script, /SWP_ASYNCWINDOWPOS/);
   assert.match(script, /SHOW_NO_ACTIVATE_FLAGS/);
   assert.match(script, /COMPOSITOR_PULSE_FLAGS/);
+  assert.match(script, /if \(show\) \{\s*\/\/ An already-visible Cursor window is user-owned[\s\S]*?if \(visible\) return true;/);
   assert.match(script, /width \+ 1/);
   assert.match(script, /Thread\.Sleep\(80\)/);
   assert.doesNotMatch(script, /SetForegroundWindow/);

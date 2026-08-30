@@ -11152,6 +11152,10 @@ public static class CursorBridgeWindowControl {
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
       bool visible = IsWindowVisible(hWnd);
       if (show) {
+        // An already-visible Cursor window is user-owned. Resizing or redrawing
+        // it dismisses active Electron menus and popovers, so presentation
+        // recovery must be a strict no-op unless SW_HIDE actually hid it.
+        if (visible) return true;
         // SWP_SHOWWINDOW + SWP_NOACTIVATE preserves minimized/maximized/arranged
         // placement without taking keyboard focus from the requesting app.
         bool restored = SetWindowPos(hWnd, IntPtr.Zero, 0, 0, 0, 0, SHOW_NO_ACTIVATE_FLAGS);
@@ -22424,7 +22428,7 @@ function updateCursorModelPreferences(filePath, { action, target, model, effort 
 init_workspace_binding();
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.7.0";
+var PLUGIN_VERSION = "5.7.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
