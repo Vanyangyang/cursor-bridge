@@ -163,17 +163,17 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '5.6.2');
-  assert.match(codexCursorManifest.version, /^5\.6\.2\+codex\./);
-  assert.equal(claudeCursorManifest.version, '5.6.2');
-  assert.match(serverSource, /const PLUGIN_VERSION = '5\.6\.2';/);
+  assert.equal(rootPackage.version, '5.7.0');
+  assert.match(codexCursorManifest.version, /^5\.7\.0\+codex\./);
+  assert.equal(claudeCursorManifest.version, '5.7.0');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.7\.0';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.6.2');
+  assert.equal(claudeCursor?.version, '5.7.0');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.3.7');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
@@ -378,7 +378,7 @@ test('bilingual compatibility docs keep Cursor 3.17.21 acceptance evidence scope
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history archives 5.6.1 and keeps 5.6.2 current for Cursor 3.17.21', () => {
+test('compatibility history archives 5.6.2 and keeps 5.7.0 current for Cursor 3.17.21', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -387,16 +387,24 @@ test('compatibility history archives 5.6.1 and keeps 5.6.2 current for Cursor 3.
 
   assert.equal(data.policy, 'latest-only');
   assert.equal(data.current.cursorVersion, '3.17.21');
-  assert.equal(data.current.cursorBridgeVersion, '5.6.2');
+  assert.equal(data.current.cursorBridgeVersion, '5.7.0');
   assert.equal(data.current.sourceRef, 'master');
   assert.equal(data.current.status, 'current');
   assert.equal(data.current.acceptance.ideWorkbench, 'not-exposed-in-live-run');
-  assert.equal(data.current.acceptance.agentsWindow, 'live-tested-existing-cdp-9223');
+  assert.equal(data.current.acceptance.agentsWindow, 'live-tested-cold-single-window-cdp-9223');
   assert.equal(data.current.acceptance.modelPreferences, 'live-tested');
-  assert.equal(data.current.acceptance.readOnlyMcpSupervisor, 'live-tested-cold-wmi');
+  assert.equal(data.current.acceptance.readOnlyMcpSupervisor, 'live-tested-cold-wmi-plugin-cache-fallback');
   assert.equal(data.current.acceptance.attachedFallback, 'regression-tested');
-  assert.equal(data.current.acceptance.lifecycleDiagnostics, 'regression-tested');
+  assert.equal(data.current.acceptance.lifecycleDiagnostics, 'live-tested');
+  assert.equal(data.current.acceptance.parallelAgentIdentity, 'live-tested-stable');
+  assert.equal(data.current.acceptance.singleWindow, 'live-tested-cold-init-agent');
   assert.deepEqual(data.history, [
+    {
+      cursorVersion: '3.17.21',
+      cursorBridgeVersion: '5.6.2',
+      gitRef: 'cursor-bridge--v5.6.2',
+      status: 'archived',
+    },
     {
       cursorVersion: '3.17.21',
       cursorBridgeVersion: '5.6.1',
@@ -441,6 +449,9 @@ test('compatibility history archives 5.6.1 and keeps 5.6.2 current for Cursor 3.
   assert.match(chinese, /只维护 Cursor 最新版本/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
+  assert.match(english, /Cursor Bridge 5\.6\.2 — Cursor 3\.17\.21/);
+  assert.match(chinese, /Cursor Bridge 5\.6\.2 — Cursor 3\.17\.21/);
+  assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.6\.2/);
   assert.match(english, /Cursor Bridge 5\.6\.1 — Cursor 3\.17\.21/);
   assert.match(chinese, /Cursor Bridge 5\.6\.1 — Cursor 3\.17\.21/);
   assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.6\.1/);
