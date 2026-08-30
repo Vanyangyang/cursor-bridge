@@ -28,9 +28,10 @@ import {
 import {
   listBootEnvFiles,
   ensureSupervisorConnected,
-  normalizeLifecycleTreeOutsideJob,
   materializeLifecycleSupervisorRuntime,
   pingSupervisor,
+  probeOutsideJobCwd,
+  resolvePluginLocalLifecycleDir,
   resolveSupervisorSpawnCwd,
 } from '../cursor-lifecycle-client.mjs';
 import {
@@ -323,45 +324,72 @@ test('Windows Supervisor bootstrap cwd avoids sandbox-created lifecycle runtime 
   }), '/tmp/cursor-bridge/runtime/supervisor-deadbeef');
 });
 
-test('Windows lifecycle ACL normalization waits for an outside-job cwd probe', async (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'cb-lifecycle-acl-'));
-  const stateRoot = join(root, 'cursor-bridge');
-  const dir = join(stateRoot, 'lifecycle');
-  const runtimeRoot = join(dir, 'runtime', 'supervisor-deadbeef');
-  const icacls = join(root, 'icacls.exe');
-  const commandInterpreter = join(root, 'cmd.exe');
-  mkdirSync(runtimeRoot, { recursive: true });
-  writeFileSync(icacls, '', 'utf8');
-  writeFileSync(commandInterpreter, '', 'utf8');
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  let spawnOptions = null;
-  let probes = 0;
-  const result = await normalizeLifecycleTreeOutsideJob(dir, runtimeRoot, {
+test('plugin-local lifecycle fallback stays inside the installed plugin root', () => {
+  assert.equal(
+    resolvePluginLocalLifecycleDir('C:\\cache\\cursor-bridge\\5.6.2\\dist\\cursor-lifecycle-supervisor.mjs'),
+    'C:\\cache\\cursor-bridge\\5.6.2\\.cursor-bridge-lifecycle',
+  );
+});
+
+test('outside-job cwd probe preserves the exact WMI result', () => {
+  let captured = null;
+  const result = probeOutsideJobCwd('C:\\probe', {
     platform: 'win32',
-    icaclsExecutable: icacls,
-    commandInterpreter,
-    nodeExecutable: 'C:\\Program Files\\nodejs\\node.exe',
-    userIdentity: 'TEST\\user',
-    stateRoot,
-    spawnOutsideJobImpl(_file, args, options) {
-      spawnOptions = { args, options };
-      return { ok: true, method: 'wmi-win32-process-create', pid: 4242, spawnCwd: options.cwd };
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    existsImpl: () => true,
+    spawnOutsideJobImpl(file, args, options) {
+      captured = { file, args, options };
+      return { ok: false, returnValue: 8, degradedReason: 'wmi-unknown-8', spawnCwd: options.cwd };
     },
-    probeOutsideJobImpl() {
-      probes += 1;
-      return probes === 1
-        ? { ok: false, method: 'failed', errorCode: 8 }
-        : { ok: true, method: 'wmi-win32-process-create', pid: 4343 };
-    },
-    sleepImpl: async () => {},
   });
-  assert.equal(result.method, 'wmi-win32-process-create');
-  assert.equal(result.spawnCwd, 'C:\\Program Files\\nodejs');
-  assert.equal(spawnOptions.options.cwd, 'C:\\Program Files\\nodejs');
-  assert.equal(spawnOptions.args[0], stateRoot);
-  assert.equal(spawnOptions.args.includes('TEST\\user:(OI)(CI)F'), true);
-  assert.equal(probes, 2);
-  assert.equal(result.probeMethod, 'wmi-win32-process-create');
+  assert.equal(result.returnValue, 8);
+  assert.equal(captured.file, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(captured.args, ['/d', '/c', 'exit', '0']);
+  assert.equal(captured.options.cwd, 'C:\\probe');
+});
+
+test('shared lifecycle WMI 8 selects plugin-local storage before Supervisor spawn', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-plugin-local-fallback-'));
+  const shared = join(root, 'shared-lifecycle');
+  const pluginRoot = join(root, 'plugin-cache', '5.6.2');
+  const dist = join(pluginRoot, 'dist');
+  const source = join(dist, 'cursor-lifecycle-supervisor.mjs');
+  mkdirSync(dist, { recursive: true });
+  writeFileSync(source, 'process.exit(0);\n', 'utf8');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fallback = resolvePluginLocalLifecycleDir(source);
+  const probes = [];
+  let spawned = null;
+  await withEnv({ ...process.env, CURSOR_BRIDGE_LIFECYCLE_DIR: shared }, async () => {
+    await assert.rejects(() => ensureSupervisorConnected({
+      platform: 'win32',
+      supervisorScript: source,
+      connectSupervisorImpl: async () => {
+        throw Object.assign(new Error('missing pipe'), { code: 'ENOENT' });
+      },
+      lifecycleCwdProbeImpl(target) {
+        probes.push(target);
+        return target === shared
+          ? { ok: false, returnValue: 8, degradedReason: 'wmi-unknown-8' }
+          : { ok: true, method: 'wmi-win32-process-create', pid: 4242 };
+      },
+      spawnNodeOutsideJobImpl(script, args, options) {
+        spawned = { script, args, options };
+        return {
+          ok: false,
+          method: 'failed',
+          error: 'synthetic stop after fallback selection',
+          errorKind: 'policy-blocked',
+          degradedReason: 'spawn-policy-blocked',
+          errorCode: 'EPERM',
+          canAttachFallback: true,
+        };
+      },
+    }), /synthetic stop after fallback selection/);
+  });
+  assert.deepEqual(probes, [shared, fallback]);
+  assert.equal(spawned.script.startsWith(fallback), true);
+  assert.equal(spawned.args.includes(`--lifecycle-dir=${fallback}`), true);
 });
 
 test('offline attached fallback preserves the original supervisor failure', async (t) => {
