@@ -23348,8 +23348,8 @@ function lifecycleFailureSummary(lifecycle, fallback) {
   const original = lifecycle.supervisorError ? `Original supervisor error: ${lifecycle.supervisorError}` : null;
   return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(" ");
 }
-function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
-  const target = ensureLifecycleDir(targetDir);
+function releaseAdapterWorkingDirectory({ targetDir = null, chdir = process.chdir } = {}) {
+  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname5(process.execPath);
   chdir(target);
   return target;
 }

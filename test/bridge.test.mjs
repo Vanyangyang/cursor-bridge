@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -94,7 +94,7 @@ test('lifecycle failures retain the original supervisor cause', () => {
   assert.match(message, /Original supervisor error: .*Win32_Process\.Create failed: 8/);
 });
 
-test('adapter releases the plugin cache cwd into the stable lifecycle directory', (t) => {
+test('adapter releases the plugin cache cwd into an explicit stable directory', (t) => {
   const target = mkdtempSync(join(tmpdir(), 'cb-adapter-runtime-cwd-'));
   t.after(() => rmSync(target, { recursive: true, force: true }));
   let changedTo = null;
@@ -104,6 +104,15 @@ test('adapter releases the plugin cache cwd into the stable lifecycle directory'
   });
   assert.equal(released, target);
   assert.equal(changedTo, target);
+});
+
+test('adapter default cwd release does not create lifecycle state inside the sandbox', () => {
+  let changedTo = null;
+  const released = releaseAdapterWorkingDirectory({
+    chdir(value) { changedTo = value; },
+  });
+  assert.equal(released, dirname(process.execPath));
+  assert.equal(changedTo, dirname(process.execPath));
 });
 
 test('normal Agents reuse requests a bounded non-activating compositor recovery', async () => {
