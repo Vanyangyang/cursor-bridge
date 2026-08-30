@@ -23199,6 +23199,19 @@ function selectNewAgentEntry(beforeEntries, afterEntries) {
   const pool = selected.length > 0 ? selected : fresh;
   return [...pool].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0) || b._index - a._index)[0];
 }
+function listNewAgentEntries(beforeEntries, afterEntries) {
+  const before = new Set((beforeEntries || []).map((entry) => entry && entry.id).filter(Boolean));
+  return (afterEntries || []).filter((entry) => entry && entry.id && !before.has(entry.id));
+}
+function normalizeAgentIdentityId(id) {
+  return String(id || "").replace(/^local:/i, "");
+}
+function selectUniqueNewAgentEntry(beforeEntries, afterEntries) {
+  const fresh = listNewAgentEntries(beforeEntries, afterEntries);
+  if (fresh.length === 1) return fresh[0];
+  const selected = fresh.filter((entry) => entry.isSelected === true);
+  return selected.length === 1 ? selected[0] : null;
+}
 function isTerminalTask(job) {
   return !!job && ["completed", "failed", "cancelled", "reaped", "abandoned"].includes(job.status);
 }
@@ -23229,6 +23242,25 @@ function selectPromotedFifoEntry(beforeEntries, currentAgentId, afterEntries) {
   const candidate = selectNewAgentEntry(beforeEntries, afterEntries);
   if (!candidate || candidate.id === currentAgentId || candidate.isSelected !== true) return null;
   return isDurablyRegisteredParallelEntry(candidate) ? candidate : null;
+}
+function selectPromotedParallelEntry(beforeEntries, provisionalAgentId, afterEntries) {
+  if (!Array.isArray(beforeEntries) || !Array.isArray(afterEntries)) return null;
+  const fresh = listNewAgentEntries(beforeEntries, afterEntries);
+  if (provisionalAgentId) {
+    const exact = afterEntries.find((entry) => entry && entry.id === provisionalAgentId) || null;
+    if (exact) return isDurablyRegisteredParallelEntry(exact) ? exact : null;
+    const normalized = normalizeAgentIdentityId(provisionalAgentId);
+    const promoted = fresh.filter((entry) => entry.isSelected === true && normalizeAgentIdentityId(entry.id) === normalized && isDurablyRegisteredParallelEntry(entry));
+    if (promoted.length === 1) return promoted[0];
+    if (promoted.length > 1) return null;
+  }
+  const selected = fresh.filter((entry) => entry.isSelected === true && isDurablyRegisteredParallelEntry(entry));
+  if (selected.length === 1) return selected[0];
+  if (!provisionalAgentId) {
+    const durable = fresh.filter(isDurablyRegisteredParallelEntry);
+    if (durable.length === 1) return durable[0];
+  }
+  return null;
 }
 function uncertainSubmissionReservationScope(job, error2) {
   if (error2 && error2.requiresGlobalReservation) return "global";
@@ -23699,6 +23731,7 @@ var CursorBridge = class {
       finishedAt: null,
       sentAt: null,
       agentId: null,
+      provisionalAgentId: null,
       agentLabel: null,
       targetId: null,
       targetUiFlavor: null,
@@ -24492,18 +24525,15 @@ var CursorBridge = class {
       if (!createdForWorkspace) {
         return { fallbackReason: "Cursor New Agent button was not found; downgraded to FIFO before submission" };
       }
-      let agent = null;
-      for (let i = 0; i < 5 && !agent; i++) {
+      let provisionalAgent = null;
+      for (let i = 0; i < 5 && !provisionalAgent; i++) {
         try {
-          agent = selectNewAgentEntry(before, await this._readAgentEntries(c));
+          provisionalAgent = selectUniqueNewAgentEntry(before, await this._readAgentEntries(c));
         } catch {
         }
-        if (!agent) await sleep2(350);
+        if (!provisionalAgent) await sleep2(350);
       }
-      if (agent) {
-        job.agentId = agent.id;
-        job.agentLabel = agent.label || null;
-      }
+      if (provisionalAgent) job.provisionalAgentId = provisionalAgent.id;
       await this._closeHistory(c);
       await this._ensureChatPanel(c);
       this._throwIfCancelledBeforeSend(job);
@@ -24525,31 +24555,34 @@ var CursorBridge = class {
       sent = true;
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
-      agent = null;
-      let provisionalAgent = job.agentId ? { id: job.agentId, label: job.agentLabel } : null;
+      let agent = null;
+      let ambiguousAgentIds = [];
       for (let i = 0; i < 40 && !agent; i++) {
         await sleep2(350);
         await this._throwIfNewProviderError(c, providerErrorBaseline);
         try {
-          const candidate = selectNewAgentEntry(before, await this._readAgentEntries(c));
-          if (candidate && !provisionalAgent) {
-            provisionalAgent = candidate;
-            job.agentId = candidate.id;
-            job.agentLabel = candidate.label || null;
+          const entries = await this._readAgentEntries(c);
+          if (!job.provisionalAgentId) {
+            provisionalAgent = selectUniqueNewAgentEntry(before, entries);
+            if (provisionalAgent) job.provisionalAgentId = provisionalAgent.id;
           }
-          if (isDurablyRegisteredParallelEntry(candidate)) agent = candidate;
+          agent = selectPromotedParallelEntry(before, job.provisionalAgentId, entries);
+          if (!agent) {
+            const fresh = listNewAgentEntries(before, entries);
+            const selectedDurable = fresh.filter((entry) => entry.isSelected === true && isDurablyRegisteredParallelEntry(entry));
+            if (selectedDurable.length > 1) ambiguousAgentIds = selectedDurable.map((entry) => entry.id);
+          }
         } catch {
         }
       }
       if (!agent) {
-        const e = new Error(provisionalAgent ? `Cursor Agent ${provisionalAgent.id} was submitted but did not become a durable Agent History row; the reservation remains held and automatic resubmission is forbidden` : "The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden");
+        const e = new Error(ambiguousAgentIds.length > 1 ? `The task was submitted, but multiple durable Agent History rows matched (${ambiguousAgentIds.join(", ")}); identity was not guessed and the reservation remains held` : job.provisionalAgentId ? `Cursor Agent draft ${job.provisionalAgentId} was submitted but did not promote to one durable Agent History row; the reservation remains held and automatic resubmission is forbidden` : "The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden");
         e.sent = true;
-        e.requiresGlobalReservation = !!provisionalAgent;
-        e.recoveryState = provisionalAgent ? "awaiting_durable_history" : "unbound_agent";
+        e.requiresGlobalReservation = !!job.provisionalAgentId || ambiguousAgentIds.length > 1;
+        e.recoveryState = ambiguousAgentIds.length > 1 ? "ambiguous_agent_identity" : job.provisionalAgentId ? "awaiting_durable_history" : "unbound_agent";
         throw e;
       }
-      job.agentId = agent.id;
-      job.agentLabel = agent.label || null;
+      this._applyAgentIdentity(job, agent);
       return { agent, previousSelectedId };
     } catch (e) {
       if (sent) e.sent = true;
@@ -25707,6 +25740,8 @@ export {
   selectNewAgentEntry,
   selectPageForUiPreference,
   selectPromotedFifoEntry,
+  selectPromotedParallelEntry,
+  selectUniqueNewAgentEntry,
   shouldAutoLaunchCursor,
   shouldRecoverNormalAgentsPresentation,
   summarizeCdpPages,

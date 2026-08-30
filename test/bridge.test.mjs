@@ -22,6 +22,8 @@ import {
   selectCursorPageCandidate,
   selectPageForUiPreference,
   selectNewAgentEntry,
+  selectUniqueNewAgentEntry,
+  selectPromotedParallelEntry,
   selectPromotedFifoEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
@@ -1107,6 +1109,35 @@ test('new agent selection uses ID diff, selected entry, then newest timestamp', 
     { id: 'local:a', timestamp: 20, isSelected: false },
     { id: 'local:b', timestamp: 10, isSelected: false },
   ]).id, 'local:a');
+});
+
+test('parallel agent identity stays provisional until one durable row is confirmed', () => {
+  const before = [{ id: 'local:old' }];
+  const draft = { id: 'local:abc', timestamp: 20, isSelected: true, durable: false, icon: '' };
+  assert.equal(selectUniqueNewAgentEntry(before, [...before, draft]).id, 'local:abc');
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, draft]), null);
+
+  const runningDraft = { ...draft, durable: true, showSpinner: true };
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, runningDraft]).id, 'local:abc');
+
+  const durableId = { id: 'abc', timestamp: 30, isSelected: true, durable: true, showSpinner: true };
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, durableId]).id, 'abc');
+
+  const unrelated = { id: 'local:other', timestamp: 40, isSelected: true, durable: true, showSpinner: true };
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, draft, unrelated]), null);
+  assert.equal(selectUniqueNewAgentEntry(before, [...before, draft, unrelated]), null);
+});
+
+test('parallel task status never publishes a draft identity as agentId', async () => {
+  const bridge = new OfflineBridge();
+  const view = await bridge.doTask('只读草稿身份', { execution: 'parallel_agent', readOnly: true });
+  const job = bridge.tasks.get(view.taskId);
+  job.status = 'running';
+  job.phase = 'submitting';
+  job.provisionalAgentId = 'local:draft';
+  const submitting = bridge._taskView(job);
+  assert.equal(submitting.agentId, null);
+  assert.equal(submitting.provisionalAgentId, 'local:draft');
 });
 
 test('cursor_do defaults to FIFO and keeps background task identity', async () => {
