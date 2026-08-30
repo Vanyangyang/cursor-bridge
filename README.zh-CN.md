@@ -65,7 +65,7 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.17.21** user setup，复用其已经携带 `--remote-debugging-port=9223` 的 Agents Window 进程。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次运行没有暴露旧版 IDE/workbench CDP 目标，因此不对该界面作当前组合的验收声明。macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.18.9**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取，并由已发布的 Cursor Bridge 5.7.0 冷启动，携带 `--remote-debugging-port=9223`。本轮通过了工作区绑定、带源码锚点的 CCE、只读 FIFO、独立 `parallel_agent` 与稳定 Agent ID，以及 `minimal` / `normal` 恢复；全程保持一个 Cursor Agents 顶层窗口和一个 CDP page target。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench，也没有重新实测模型/思考程度选择器；macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -158,7 +158,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.17.21** | **5.7.0**（`master`，当前版本） | 全新的 GitHub marketplace 安装在遇到 WMI 返回码 `8` 时，会选择已验证的插件缓存 lifecycle 根目录与稳定 Supervisor 工作目录恢复，无需修改 ACL 或提权。parallel Agents 在 provisional 与 durable 行收敛期间保持同一个身份。已记录的 Windows 11 验收从 Cursor 完全关闭开始，Bridge 自动启动受监督的持久运行时，并在工作区绑定、CCE 和 Agent 执行期间始终只保留一个 Cursor Agents target 与一个顶层窗口。 |
+| **3.18.9** | **5.7.0**（`master`，当前版本） | Cursor 完全关闭时，已发布的 Bridge 通过 CDP 9223 冷启动 Cursor 3.18.9，生命周期始终为 `supervised`、持久且无降级。工作区初始化、带源码锚点的 CCE、FIFO、独立 `parallel_agent`、稳定 Agent 身份，以及 `minimal` 下 CCE 与恢复后的 `normal` 均通过；全程只保留一个 Cursor Agents 窗口和一个 CDP page target。本次没有暴露旧版 IDE/workbench，也没有重新实测模型/思考程度选择器。 |
 
 不再主动维护旧 Cursor Bridge 版本。5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 

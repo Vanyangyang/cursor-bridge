@@ -11,7 +11,7 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.17.21** | **5.7.0** | `master` | 当前维护版本。全新的 GitHub Codex marketplace 安装在遇到 WMI 返回码 `8` 时，可以选择已验证的插件缓存 lifecycle 根目录与稳定 Supervisor 工作目录完成恢复，无需修改 ACL 或提权。parallel Agents 在 provisional 与 durable 行收敛期间保持同一个身份；冷启动、工作区绑定、CCE 和 Agent 执行复用一个稳定的 Cursor Agents target，不再打开第二个顶层窗口。已记录的 Windows 11 冷启动验收持续为 `supervised`、持久且无降级；本次运行没有暴露旧版 IDE/workbench。 |
+| **3.18.9** | **5.7.0** | `master` | 当前维护版本。已安装 Cursor 可执行文件的 ProductVersion 与 FileVersion 均为 3.18.9。Cursor 完全关闭时，已发布的 Bridge 通过 CDP 9223 冷启动它，生命周期始终为 `supervised`、持久且无降级。工作区初始化、带源码锚点的 CCE、FIFO、独立 `parallel_agent`、稳定 Agent 身份，以及 `minimal` 下 CCE 与恢复后的 `normal` 均通过；全程只保留一个 Cursor Agents 窗口和一个 CDP page target。本次没有暴露旧版 IDE/workbench，也没有重新实测模型/思考程度选择器。 |
 
 ## 历史版本
 
