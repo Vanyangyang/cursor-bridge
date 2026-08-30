@@ -22544,78 +22544,6 @@ function isBlankAgentsWindow(page) {
   if (page.probeError || !page.capabilities) return true;
   return page.capabilities.uiFlavor !== "agents_v2" && !page.capabilities.hasWritableInput;
 }
-function installAgentsHelpReleaseGuardInPage(windowObject = window, documentObject = document, now = () => performance.now(), schedule = (callback, delay) => setTimeout(callback, delay)) {
-  const key = "__cursorBridgeAgentsHelpReleaseGuardV1";
-  const existing = windowObject[key];
-  if (existing && existing.version === 1 && typeof existing.cleanup === "function") {
-    return { supported: true, installed: true, alreadyInstalled: true, key, stats: { ...existing.stats } };
-  }
-  try {
-    existing && existing.cleanup && existing.cleanup();
-  } catch {
-  }
-  let armed = null;
-  const removers = [];
-  const stats = { armed: 0, blockedPointerUp: 0, blockedMouseUp: 0, blockedClick: 0 };
-  const triggerFromTarget = (target) => {
-    const trigger = target && typeof target.closest === "function" ? target.closest('button[aria-haspopup="menu"]') : null;
-    return trigger && String(trigger.textContent || "").trim() === "Help" ? trigger : null;
-  };
-  const onPointerDown = (event) => {
-    const trigger = event && event.isTrusted && event.button === 0 ? triggerFromTarget(event.target) : null;
-    if (!trigger) return;
-    const entry = {
-      pointerId: event.pointerId,
-      x: Number(event.clientX),
-      y: Number(event.clientY),
-      trigger,
-      until: now() + 1500,
-      releaseBlocked: false
-    };
-    armed = entry;
-    stats.armed++;
-    schedule(() => {
-      if (armed === entry) armed = null;
-    }, 1600);
-  };
-  const blockOpeningRelease = (event) => {
-    const entry = armed;
-    if (!entry || !event || !event.isTrusted || event.button !== 0 || now() > entry.until) return;
-    if (event.type === "pointerup" && event.pointerId !== entry.pointerId) return;
-    const dx = Number(event.clientX) - entry.x;
-    const dy = Number(event.clientY) - entry.y;
-    if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) > 24) return;
-    if (event.type === "pointerup" || event.type === "mouseup") {
-      const presentation = event.target && typeof event.target.closest === "function" ? event.target.closest('[role="presentation"]') : null;
-      if (!presentation || entry.trigger.getAttribute("aria-expanded") !== "true") return;
-      entry.releaseBlocked = true;
-      if (event.type === "pointerup") stats.blockedPointerUp++;
-      else stats.blockedMouseUp++;
-    } else if (event.type === "click") {
-      if (!entry.releaseBlocked) return;
-      stats.blockedClick++;
-      armed = null;
-    } else {
-      return;
-    }
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    event.stopPropagation();
-  };
-  documentObject.addEventListener("pointerdown", onPointerDown, true);
-  removers.push(() => documentObject.removeEventListener("pointerdown", onPointerDown, true));
-  for (const type of ["pointerup", "mouseup", "click"]) {
-    documentObject.addEventListener(type, blockOpeningRelease, true);
-    removers.push(() => documentObject.removeEventListener(type, blockOpeningRelease, true));
-  }
-  const cleanup = () => {
-    for (const remove of removers) remove();
-    armed = null;
-  };
-  windowObject[key] = { version: 1, cleanup, stats };
-  return { supported: true, installed: true, alreadyInstalled: false, key, stats: { ...stats } };
-}
-var EXPR_INSTALL_AGENTS_HELP_RELEASE_GUARD = `(${installAgentsHelpReleaseGuardInPage.toString()})()`;
 var NORMAL_AGENTS_PRESENTATION_REFRESH_MS = 5 * 60 * 1e3;
 function shouldRecoverNormalAgentsPresentation({
   runtimeMode,
@@ -22691,38 +22619,6 @@ async function recoverBlankAgentsWindows(inspected) {
     recovered.push(await inspectPageTarget(page));
   }
   return recovered;
-}
-async function ensureAgentsHelpReleaseGuard(options = {}) {
-  if ((options.platform || process.platform) !== "win32") {
-    return { supported: false, installed: false, reason: "unsupported-platform" };
-  }
-  let client = null;
-  try {
-    const targets = await httpJson("/json/list");
-    const agentsPages = (Array.isArray(targets) ? targets : []).filter((target) => target && target.type === "page" && target.webSocketDebuggerUrl && isAgentsWindowTitle(target.title));
-    const page = agentsPages.find((target) => target.id === options.targetId) || agentsPages[0] || null;
-    if (!page) return { supported: true, installed: false, reason: "agents-window-not-found" };
-    client = makeClient(page.webSocketDebuggerUrl);
-    const timeoutMs = Math.max(500, Number(options.timeoutMs || 3e3));
-    await Promise.race([
-      client.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("help-release-guard-connect-timeout")), timeoutMs))
-    ]);
-    const result = await Promise.race([
-      evalJS(client, EXPR_INSTALL_AGENTS_HELP_RELEASE_GUARD),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("help-release-guard-install-timeout")), timeoutMs))
-    ]);
-    return {
-      supported: true,
-      installed: !!(result && result.installed),
-      targetId: page.id,
-      ...result
-    };
-  } catch (error2) {
-    return { supported: true, installed: false, reason: error2 instanceof Error ? error2.message : String(error2) };
-  } finally {
-    if (client) client.close();
-  }
 }
 function pagesWithFlavor(pages, flavor) {
   return (Array.isArray(pages) ? pages : []).filter((page) => page && page.capabilities && page.capabilities.uiFlavor === flavor);
@@ -24042,11 +23938,6 @@ var CursorBridge = class {
           this._lastPresentation = rr.presentation ? { ...rr.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await this.applyRuntimePresentation("hide");
         } else {
           await this.recoverNormalAgentsPresentation(this._lastLifecycle);
-          if (rr.ok || this._lastLifecycle.status === "agents-workspace-ready") {
-            this._lastLifecycle.helpMenuReleaseGuard = await ensureAgentsHelpReleaseGuard({
-              targetId: this._lastLifecycle.targetId
-            });
-          }
         }
         const life = "adapterPid=" + this._lastLifecycle.adapterPid + " supervisorPid=" + this._lastLifecycle.supervisorPid + " reused=" + this._lastLifecycle.reusedSupervisor + " reason=" + this._lastLifecycle.launchReason;
         if ((!rr.ok || this._lastLifecycle.status === "workspace-not-ready") && this._lastLifecycle.status !== "agents-workspace-ready") {
@@ -25725,10 +25616,6 @@ async function ensureBridgeCursor(targetBridge, reason) {
   targetBridge._lastLifecycle = lifecycleFromEnsureResult(r, targetBridge.runtimeMode);
   if (targetBridge.runtimeMode === "minimal") {
     targetBridge._lastPresentation = r.presentation ? { ...r.presentation, at: (/* @__PURE__ */ new Date()).toISOString() } : await targetBridge.applyRuntimePresentation("hide");
-  } else if (r.ok) {
-    targetBridge._lastLifecycle.helpMenuReleaseGuard = await ensureAgentsHelpReleaseGuard({
-      targetId: targetBridge._lastLifecycle.targetId
-    });
   }
   return r;
 }
@@ -25852,7 +25739,6 @@ export {
   EXPR_CLICK_SEND,
   EXPR_FIND_NEWAGENT,
   EXPR_HISTORY_ENTRIES,
-  EXPR_INSTALL_AGENTS_HELP_RELEASE_GUARD,
   EXPR_MODEL_PICKER_ROWS,
   EXPR_MODEL_PICKER_TRIGGER,
   EXPR_PAGE_CAPABILITIES,
@@ -25866,14 +25752,12 @@ export {
   classifyParallelTerminalIcon,
   createProviderError,
   cursorStartupBehavior,
-  ensureAgentsHelpReleaseGuard,
   exprClickBoundComposerStop,
   exprClickSelectedAgentStop,
   exprCreateAgentForWorkspace,
   exprFill,
   exprInspectWorkspaceRepository,
   exprOpenAgent,
-  installAgentsHelpReleaseGuardInPage,
   isBlankAgentsWindow,
   isConfirmedCompletedReply,
   isDurablyRegisteredParallelEntry,
