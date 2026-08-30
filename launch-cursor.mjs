@@ -112,6 +112,7 @@ export async function ensureCursorRunning(options = {}) {
       spawnErrorCode: error.errorCode ?? error.returnValue ?? null,
       supervisorErrorKind: error.errorKind || null,
       supervisorCommandLine: error.commandLine || null,
+      supervisorSpawnCwd: error.spawnCwd || null,
       spawnAttempts: error.attempts ?? null,
       runtimeUpgradeDeferred: false,
     });

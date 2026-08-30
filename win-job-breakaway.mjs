@@ -189,7 +189,7 @@ export function spawnOutsideJob(file, args = [], options = {}) {
       windowsHide: true,
     });
     child.unref();
-    return { ok: true, method: 'detached-spawn', pid: child.pid, commandLine };
+    return { ok: true, method: 'detached-spawn', pid: child.pid, commandLine, spawnCwd: cwd };
   }
 
   // WMI Win32_Process.Create — documented job breakaway (child not associated with caller's job).
@@ -226,7 +226,7 @@ export function spawnOutsideJob(file, args = [], options = {}) {
       if (!Number.isFinite(pid) || pid <= 0) {
         throw new Error(`unexpected WMI pid output: ${out}`);
       }
-      return { ok: true, method: 'wmi-win32-process-create', pid, commandLine, attempts: attempt };
+      return { ok: true, method: 'wmi-win32-process-create', pid, commandLine, spawnCwd: cwd, attempts: attempt };
     } catch (wmiError) {
       lastError = wmiError;
       lastClassification = classifyOutsideJobSpawnError(wmiError);
@@ -245,6 +245,7 @@ export function spawnOutsideJob(file, args = [], options = {}) {
     ok: false,
     method: 'failed',
     commandLine,
+    spawnCwd: cwd,
     ...lastClassification,
     stderr: lastStderr,
     attempts: attemptsUsed,

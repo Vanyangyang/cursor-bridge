@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -22,6 +22,8 @@ import {
   selectCursorPageCandidate,
   selectPageForUiPreference,
   selectNewAgentEntry,
+  selectUniqueNewAgentEntry,
+  selectPromotedParallelEntry,
   selectPromotedFifoEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
@@ -94,7 +96,7 @@ test('lifecycle failures retain the original supervisor cause', () => {
   assert.match(message, /Original supervisor error: .*Win32_Process\.Create failed: 8/);
 });
 
-test('adapter releases the plugin cache cwd into the stable lifecycle directory', (t) => {
+test('adapter releases the plugin cache cwd into an explicit stable directory', (t) => {
   const target = mkdtempSync(join(tmpdir(), 'cb-adapter-runtime-cwd-'));
   t.after(() => rmSync(target, { recursive: true, force: true }));
   let changedTo = null;
@@ -104,6 +106,15 @@ test('adapter releases the plugin cache cwd into the stable lifecycle directory'
   });
   assert.equal(released, target);
   assert.equal(changedTo, target);
+});
+
+test('adapter default cwd release does not create lifecycle state inside the sandbox', () => {
+  let changedTo = null;
+  const released = releaseAdapterWorkingDirectory({
+    chdir(value) { changedTo = value; },
+  });
+  assert.equal(released, dirname(process.execPath));
+  assert.equal(changedTo, dirname(process.execPath));
 });
 
 test('normal Agents reuse requests a bounded non-activating compositor recovery', async () => {
@@ -1098,6 +1109,35 @@ test('new agent selection uses ID diff, selected entry, then newest timestamp', 
     { id: 'local:a', timestamp: 20, isSelected: false },
     { id: 'local:b', timestamp: 10, isSelected: false },
   ]).id, 'local:a');
+});
+
+test('parallel agent identity stays provisional until one durable row is confirmed', () => {
+  const before = [{ id: 'local:old' }];
+  const draft = { id: 'local:abc', timestamp: 20, isSelected: true, durable: false, icon: '' };
+  assert.equal(selectUniqueNewAgentEntry(before, [...before, draft]).id, 'local:abc');
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, draft]), null);
+
+  const runningDraft = { ...draft, durable: true, showSpinner: true };
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, runningDraft]).id, 'local:abc');
+
+  const durableId = { id: 'abc', timestamp: 30, isSelected: true, durable: true, showSpinner: true };
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, durableId]).id, 'abc');
+
+  const unrelated = { id: 'local:other', timestamp: 40, isSelected: true, durable: true, showSpinner: true };
+  assert.equal(selectPromotedParallelEntry(before, 'local:abc', [...before, draft, unrelated]), null);
+  assert.equal(selectUniqueNewAgentEntry(before, [...before, draft, unrelated]), null);
+});
+
+test('parallel task status never publishes a draft identity as agentId', async () => {
+  const bridge = new OfflineBridge();
+  const view = await bridge.doTask('只读草稿身份', { execution: 'parallel_agent', readOnly: true });
+  const job = bridge.tasks.get(view.taskId);
+  job.status = 'running';
+  job.phase = 'submitting';
+  job.provisionalAgentId = 'local:draft';
+  const submitting = bridge._taskView(job);
+  assert.equal(submitting.agentId, null);
+  assert.equal(submitting.provisionalAgentId, 'local:draft');
 });
 
 test('cursor_do defaults to FIFO and keeps background task identity', async () => {

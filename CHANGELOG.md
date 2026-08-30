@@ -6,9 +6,22 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.7.0] - 2026-08-30
+
 ### Changed
 
 - Pi package releases now support token-free npm Trusted Publishing from the GitHub-hosted `publish-pi.yml` workflow. Each component tag selects only its matching Pi package, registry state is fully preflighted before any publish, and a guarded manual dispatch can republish an exact existing component tag; local publishing remains an interactive WebAuthn/2FA fallback.
+- `cursor_status` now reports the selected lifecycle storage mode and Supervisor spawn working directory, making the primary user-runtime path and the verified plugin-cache fallback distinguishable without inspecting private files.
+
+### Fixed
+
+- Fresh GitHub marketplace installs no longer degrade to `attached` / `wmi-unknown-8` when a sandbox-authored `%LOCALAPPDATA%` lifecycle directory cannot be opened by `Win32_Process.Create`. Bridge probes candidate runtime roots, chooses the first Supervisor-readable location, and launches from a stable working directory without changing ACLs, elevating, killing Cursor, or leaving an orphan process.
+- Parallel Agents v2 submissions keep a provisional composer identity reserved until one durable History identity is evidenced, then migrate the task exactly once. Concurrent submissions can no longer replace each other's `agentId` while the selected composer and History row converge.
+- Cold startup, workspace initialization, and Agent creation now reuse one stabilized Cursor Agents target. Bridge does not pass the project path on the initial CDP launch, does not select a transient `fresh[0]` target, and does not open a second top-level Cursor window merely to bind the repository.
+
+### Compatibility
+
+- Live-tested Cursor **3.17.21** on Windows 11 through the same fresh GitHub Codex marketplace install path used by external users. With Cursor fully closed, Bridge auto-launched one supervised, persistent Cursor process, selected the plugin-cache lifecycle fallback where required, bound the repository, completed CCE and FIFO/parallel Agent paths with stable identities, and kept exactly one CDP page target and one top-level Cursor window through the recorded cold-start acceptance. The complete repository suite passed with 180 tests.
 
 ## [5.6.2] - 2026-08-29
 
@@ -297,7 +310,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
-[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.2...HEAD
+[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.0...HEAD
+[5.7.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.2...cursor-bridge--v5.7.0
 [5.6.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.1...cursor-bridge--v5.6.2
 [5.6.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.0...cursor-bridge--v5.6.1
 [5.6.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.5.0...cursor-bridge--v5.6.0

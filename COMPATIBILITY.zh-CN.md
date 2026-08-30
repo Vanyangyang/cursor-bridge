@@ -11,9 +11,37 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.17.21** | **5.6.2** | `master` | 当前维护版本。保留成功的 attached 复用，并在 CDP 离线时保留原始 WMI/Supervisor 诊断；仅对 WMI `8` / `HRESULT 0x80004005` 重试一次。两次全新的 Codex `read-only` MCP host 运行均通过 WMI 创建持久 Supervisor；更严格的命令沙箱对照仍返回 `fs-policy-blocked`。安装缓存、Agents Window、CCE、模型、FIFO/parallel 及 normal/minimal 证据仍以已记录验收为边界。本次运行没有暴露旧版 IDE/workbench。 |
+| **3.17.21** | **5.7.0** | `master` | 当前维护版本。全新的 GitHub Codex marketplace 安装在遇到 WMI 返回码 `8` 时，可以选择已验证的插件缓存 lifecycle 根目录与稳定 Supervisor 工作目录完成恢复，无需修改 ACL 或提权。parallel Agents 在 provisional 与 durable 行收敛期间保持同一个身份；冷启动、工作区绑定、CCE 和 Agent 执行复用一个稳定的 Cursor Agents target，不再打开第二个顶层窗口。已记录的 Windows 11 冷启动验收持续为 `supervised`、持久且无降级；本次运行没有暴露旧版 IDE/workbench。 |
 
 ## 历史版本
+
+### Cursor Bridge 5.6.2 — Cursor 3.17.21
+
+状态：**已归档；不再维护。** 不可变 Git ref：`cursor-bridge--v5.6.2`。
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.6.2
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.6.2 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.6.2
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.6.2
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.6.2 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.6.1 — Cursor 3.17.21
 

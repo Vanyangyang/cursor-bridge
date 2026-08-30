@@ -313,6 +313,7 @@ __export(cursor_ensure_core_exports, {
   resolveProjectPath: () => resolveProjectPath,
   selectAgentsWindowTarget: () => selectAgentsWindowTarget,
   selectNewCdpTarget: () => selectNewCdpTarget,
+  selectReusableProjectTarget: () => selectReusableProjectTarget,
   targetCanServeProject: () => targetCanServeProject,
   targetTitleMatchesProject: () => targetTitleMatchesProject,
   waitForCdp: () => waitForCdp
@@ -607,15 +608,18 @@ async function ensureCursorRunningLocal(options = {}) {
   const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve2(String(options.projectPath)) : null : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn2;
+  const sleepImpl = options.sleepImpl || ((ms) => new Promise((resolveWait) => setTimeout(resolveWait, ms)));
+  const waitForCdpImpl = options.waitForCdpImpl || waitForCdp;
+  const findCursorPidByPortImpl = options.findCursorPidByPortImpl || findCursorPidByPort;
   const allowSpawn = options.allowSpawn !== false;
   const allowProcessControl = options.allowProcessControl !== false;
   if (await cdpUpImpl()) {
     const isCursor = await cdpIsCursorImpl();
     if (isCursor) {
-      const cursorPid2 = allowProcessControl ? findCursorPidByPort(CDP_PORT) : null;
+      const cursorPid2 = allowProcessControl ? findCursorPidByPortImpl(CDP_PORT) : null;
       const windowGuard2 = allowProcessControl && effectiveRuntimeMode === "minimal" && cursorPid2 ? startMinimalWindowGuard(cursorPid2) : null;
       const presentation2 = effectiveRuntimeMode === "minimal" ? allowProcessControl ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid2 }) : attachedPresentation(effectiveRuntimeMode, CDP_PORT) : null;
-      const currentTargets = await listCdpPageTargetsImpl();
+      let currentTargets = await listCdpPageTargetsImpl();
       const projectKey = normalizeProjectKey(projectPath);
       let targetId2 = projectKey ? PROJECT_TARGETS.get(projectKey) || null : currentTargets[0] && currentTargets[0].id || null;
       let workspaceAction = projectPath ? "reused-project-target" : "reused-last-workspace";
@@ -627,19 +631,11 @@ async function ensureCursorRunningLocal(options = {}) {
         workspaceAction = "reused-agents-window";
       }
       if (projectPath && !targetId2) {
-        const existingTarget = currentTargets.find((target2) => targetTitleMatchesProject(target2.title, projectPath));
+        const existingTarget = selectReusableProjectTarget(currentTargets, projectPath);
         if (existingTarget) {
           targetId2 = existingTarget.id;
           PROJECT_TARGETS.set(projectKey, targetId2);
-          workspaceAction = "recovered-project-target";
-        }
-      }
-      if (projectPath && !targetId2) {
-        const agentsTarget = selectAgentsWindowTarget(currentTargets);
-        if (agentsTarget) {
-          targetId2 = agentsTarget.id;
-          PROJECT_TARGETS.set(projectKey, targetId2);
-          workspaceAction = "reused-agents-window";
+          workspaceAction = isAgentsWindowTitle(existingTarget.title) ? "reused-agents-window" : "recovered-project-target";
         }
       }
       if (projectPath && existsSync(projectPath) && !targetId2) {
@@ -677,13 +673,39 @@ async function ensureCursorRunningLocal(options = {}) {
             message: `CCE connected to Cursor but cannot open workspace ${projectPath} because the Cursor executable was not found.`
           };
         }
-        const beforeTargetIds = new Set(currentTargets.map((target2) => target2.id));
-        const opened = await spawnDetachedSafely(spawnImpl, exe2, ["--new-window", projectPath], {
+        const settleAttempts = Math.max(1, Number(options.targetSettleAttempts ?? 8));
+        const settleDelayMs = Math.max(0, Number(options.targetSettleDelayMs ?? 250));
+        for (let attempt = 0; attempt < settleAttempts && !targetId2; attempt++) {
+          if (attempt > 0 && settleDelayMs > 0) await sleepImpl(settleDelayMs);
+          currentTargets = await listCdpPageTargetsImpl();
+          const reusable = selectReusableProjectTarget(currentTargets, projectPath);
+          if (reusable) {
+            targetId2 = reusable.id;
+            PROJECT_TARGETS.set(projectKey, targetId2);
+            workspaceAction = isAgentsWindowTitle(reusable.title) ? "reused-agents-window" : "recovered-project-target";
+          }
+        }
+        if (targetId2) {
+          return {
+            ok: true,
+            status: "already",
+            port: CDP_PORT,
+            cursorPid: cursorPid2,
+            runtimeMode: effectiveRuntimeMode,
+            projectPath,
+            presentation: presentation2,
+            windowGuard: windowGuard2,
+            targetId: targetId2,
+            workspaceAction,
+            message: workspaceAction === "reused-agents-window" ? `CDP ${CDP_PORT} responded as Cursor; Agents Window ${targetId2} was reused without opening another IDE window.` : `CDP ${CDP_PORT} responded as Cursor; the target workspace is bound to CDP target ${targetId2}.`
+          };
+        }
+        const reused = await spawnDetachedSafely(spawnImpl, exe2, ["--reuse-window", projectPath], {
           detached: true,
           stdio: "ignore",
           windowsHide: effectiveRuntimeMode === "minimal"
         });
-        if (!opened.ok) {
+        if (!reused.ok) {
           return {
             ok: false,
             status: "spawn-blocked",
@@ -693,16 +715,16 @@ async function ensureCursorRunningLocal(options = {}) {
             projectPath,
             presentation: presentation2,
             windowGuard: windowGuard2,
-            errorCode: opened.errorCode,
+            errorCode: reused.errorCode,
             needsAction: "open_workspace_in_cursor",
             retryable: true,
             nextStep: `Open workspace ${projectPath} in Cursor, then retry the same operation.`,
-            message: `Cursor Bridge could not open a new workspace window: ${opened.error instanceof Error ? opened.error.message : String(opened.error)}`
+            message: `Cursor Bridge could not reuse the existing Cursor window for the workspace: ${reused.error instanceof Error ? reused.error.message : String(reused.error)}`
           };
         }
-        workspaceAction = "opened-new-window";
-        const openedTarget2 = await waitForNewCdpTarget(beforeTargetIds, 12e3, projectPath, listCdpPageTargetsImpl);
-        if (!openedTarget2) {
+        workspaceAction = "reused-window-for-project";
+        const reusedTarget = await waitForProjectCdpTarget(12e3, projectPath, listCdpPageTargetsImpl, sleepImpl);
+        if (!reusedTarget) {
           return {
             ok: false,
             status: "workspace-not-ready",
@@ -721,7 +743,7 @@ async function ensureCursorRunningLocal(options = {}) {
             message: `Cursor opened the project, but CCE has not confirmed that workspace ${projectPath} is ready. Initialization stopped safely to avoid searching the wrong project.`
           };
         }
-        targetId2 = openedTarget2.id;
+        targetId2 = reusedTarget.id;
         PROJECT_TARGETS.set(projectKey, targetId2);
       }
       return {
@@ -799,7 +821,6 @@ async function ensureCursorRunningLocal(options = {}) {
       "--disable-backgrounding-occluded-windows"
     );
   }
-  if (projectPath && existsSync(projectPath)) args.push(projectPath);
   const launched = await spawnDetachedSafely(spawnImpl, exe, args, {
     detached: true,
     stdio: "ignore",
@@ -823,7 +844,7 @@ async function ensureCursorRunningLocal(options = {}) {
   }
   const child = launched.child;
   const startupWindowGuard = effectiveRuntimeMode === "minimal" ? startMinimalWindowGuard(child && child.pid) : null;
-  const up = await waitForCdp(waitMs);
+  const up = await waitForCdpImpl(waitMs);
   if (!up) {
     return {
       ok: false,
@@ -842,7 +863,7 @@ async function ensureCursorRunningLocal(options = {}) {
       message: "Cursor started, but CCE is not ready yet. No port setting needs to be changed."
     };
   }
-  const cursorPid = findCursorPidByPort(CDP_PORT) || child.pid || null;
+  const cursorPid = findCursorPidByPortImpl(CDP_PORT) || child.pid || null;
   const openedTarget = await waitForNewCdpTarget(/* @__PURE__ */ new Set(), 12e3, projectPath, listCdpPageTargetsImpl);
   const targetId = openedTarget && openedTarget.id || null;
   if (projectPath && !targetId) {
@@ -865,7 +886,8 @@ async function ensureCursorRunningLocal(options = {}) {
   }
   if (projectPath && targetId) PROJECT_TARGETS.set(normalizeProjectKey(projectPath), targetId);
   const windowGuard = effectiveRuntimeMode === "minimal" && cursorPid ? startMinimalWindowGuard(cursorPid) : null;
-  const target = projectPath ? `opening ${projectPath}` : "restoring the previous workspace";
+  const launchedIntoAgents = !!(projectPath && openedTarget && isAgentsWindowTitle(openedTarget.title));
+  const target = launchedIntoAgents ? `restoring one Agents Window for ${projectPath}` : projectPath ? `opening ${projectPath}` : "restoring the previous workspace";
   const presentation = effectiveRuntimeMode === "minimal" ? setCursorWindowPresentation({ action: "hide", port: CDP_PORT, pid: cursorPid }) : null;
   return {
     ok: true,
@@ -881,7 +903,7 @@ async function ensureCursorRunningLocal(options = {}) {
     cursorExecutable: exe,
     cursorExecutableSource: cursorExecutable.source,
     targetId,
-    workspaceAction: projectPath ? "launched-project" : "launched-last-workspace",
+    workspaceAction: launchedIntoAgents ? "launched-agents-window" : projectPath ? "launched-project" : "launched-last-workspace",
     message: `Cursor started (${exe}, ${target}); CDP ${CDP_PORT} is ready.`
   };
 }
@@ -906,6 +928,10 @@ function targetCanServeProject(title, projectPath) {
 }
 function selectAgentsWindowTarget(targets) {
   return (Array.isArray(targets) ? targets : []).find((target) => target && target.id && isAgentsWindowTitle(target.title)) || null;
+}
+function selectReusableProjectTarget(targets, projectPath) {
+  const pages = Array.isArray(targets) ? targets : [];
+  return pages.find((target) => target && target.id && targetTitleMatchesProject(target.title, projectPath)) || selectAgentsWindowTarget(pages) || null;
 }
 async function listCdpPageTargets(timeoutMs = 1500) {
   return new Promise((done) => {
@@ -936,7 +962,8 @@ async function listCdpPageTargets(timeoutMs = 1500) {
 function selectNewCdpTarget(beforeTargetIds, targets, projectPath = "") {
   const before = beforeTargetIds instanceof Set ? beforeTargetIds : new Set(beforeTargetIds || []);
   const fresh = (targets || []).filter((target) => target && target.id && !before.has(target.id));
-  return fresh.find((target) => targetTitleMatchesProject(target.title, projectPath)) || fresh[0] || null;
+  if (projectPath) return selectReusableProjectTarget(fresh, projectPath);
+  return fresh[0] || null;
 }
 async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = "", listImpl = listCdpPageTargets) {
   const started = Date.now();
@@ -944,6 +971,15 @@ async function waitForNewCdpTarget(beforeTargetIds, maxMs = 12e3, projectPath = 
     const target = selectNewCdpTarget(beforeTargetIds, await listImpl(), projectPath);
     if (target) return target;
     await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+  }
+  return null;
+}
+async function waitForProjectCdpTarget(maxMs, projectPath, listImpl = listCdpPageTargets, sleepImpl = (ms) => new Promise((resolveWait) => setTimeout(resolveWait, ms))) {
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    const target = selectReusableProjectTarget(await listImpl(), projectPath);
+    if (target) return target;
+    await sleepImpl(300);
   }
   return null;
 }
