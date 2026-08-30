@@ -28,6 +28,7 @@ import {
 import {
   listBootEnvFiles,
   ensureSupervisorConnected,
+  bootstrapLifecycleDirectoryOutsideJob,
   materializeLifecycleSupervisorRuntime,
   pingSupervisor,
   resolveSupervisorSpawnCwd,
@@ -273,6 +274,7 @@ test('policy-blocked supervisor spawn falls back to verified attached Cursor', a
   const root = mkdtempSync(join(tmpdir(), 'cb-attached-fallback-'));
   const project = join(root, 'project');
   mkdirSync(project, { recursive: true });
+  mkdirSync(join(root, 'lifecycle'), { recursive: true });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = await ensureCursorRunning({
     dir: join(root, 'lifecycle'),
@@ -321,10 +323,36 @@ test('Windows Supervisor bootstrap cwd avoids sandbox-created lifecycle runtime 
   }), '/tmp/cursor-bridge/runtime/supervisor-deadbeef');
 });
 
+test('missing Windows lifecycle directory is bootstrapped by an outside-job process', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-lifecycle-bootstrap-'));
+  const dir = join(root, 'missing', 'lifecycle');
+  const powershell = join(root, 'powershell.exe');
+  writeFileSync(powershell, '', 'utf8');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  let spawnOptions = null;
+  const result = await bootstrapLifecycleDirectoryOutsideJob(dir, {
+    platform: 'win32',
+    powershellExecutable: powershell,
+    nodeExecutable: 'C:\\Program Files\\nodejs\\node.exe',
+    spawnOutsideJobImpl(_file, args, options) {
+      spawnOptions = { args, options };
+      mkdirSync(dir, { recursive: true });
+      return { ok: true, method: 'wmi-win32-process-create', pid: 4242, spawnCwd: options.cwd };
+    },
+  });
+  assert.equal(result.created, true);
+  assert.equal(result.method, 'wmi-win32-process-create');
+  assert.equal(result.spawnCwd, 'C:\\Program Files\\nodejs');
+  assert.equal(spawnOptions.options.cwd, 'C:\\Program Files\\nodejs');
+  assert.equal(spawnOptions.args.includes('-EncodedCommand'), true);
+  assert.equal(existsSync(dir), true);
+});
+
 test('offline attached fallback preserves the original supervisor failure', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'cb-attached-offline-cause-'));
   const project = join(root, 'project');
   mkdirSync(project, { recursive: true });
+  mkdirSync(join(root, 'lifecycle'), { recursive: true });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = await ensureCursorRunning({
     dir: join(root, 'lifecycle'),
@@ -358,6 +386,7 @@ test('configuration-class supervisor failures do not silently attach', async (t)
   const root = mkdtempSync(join(tmpdir(), 'cb-no-config-fallback-'));
   const project = join(root, 'project');
   mkdirSync(project, { recursive: true });
+  mkdirSync(join(root, 'lifecycle'), { recursive: true });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   await assert.rejects(() => ensureCursorRunning({
     dir: join(root, 'lifecycle'),
