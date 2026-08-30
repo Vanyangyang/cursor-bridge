@@ -1003,6 +1003,7 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     supervisorErrorKind: result.supervisorErrorKind || null,
     supervisorError: result.supervisorError || null,
     supervisorStderr: result.supervisorStderr || null,
+    supervisorSpawnCwd: result.supervisorSpawnCwd || null,
     spawnAttempts: result.spawnAttempts ?? null,
     capabilities: result.capabilities || null,
     cursorPid: result.cursorPid || null,

@@ -30,6 +30,7 @@ import {
   ensureSupervisorConnected,
   materializeLifecycleSupervisorRuntime,
   pingSupervisor,
+  resolveSupervisorSpawnCwd,
 } from '../cursor-lifecycle-client.mjs';
 import {
   normalizeCodexThreadCwd,
@@ -297,6 +298,27 @@ test('policy-blocked supervisor spawn falls back to verified attached Cursor', a
   assert.equal(result.spawnErrorCode, 'EPERM');
   assert.equal(result.capabilities.canLaunchCursor, false);
   assert.equal(result.capabilities.canOpenWorkspaceWindow, false);
+});
+
+test('Windows Supervisor bootstrap cwd avoids sandbox-created lifecycle runtime directories', () => {
+  const runtimeRoot = 'C:\\Users\\test\\AppData\\Local\\cursor-bridge\\lifecycle\\runtime\\supervisor-deadbeef';
+  const nodeExecutable = 'C:\\Program Files\\nodejs\\node.exe';
+  assert.equal(resolveSupervisorSpawnCwd({
+    runtimeRoot,
+    nodeExecutable,
+    platform: 'win32',
+  }), 'C:\\Program Files\\nodejs');
+  assert.equal(resolveSupervisorSpawnCwd({
+    requestedCwd: 'D:\\explicit-bootstrap',
+    runtimeRoot,
+    nodeExecutable,
+    platform: 'win32',
+  }), 'D:\\explicit-bootstrap');
+  assert.equal(resolveSupervisorSpawnCwd({
+    runtimeRoot: '/tmp/cursor-bridge/runtime/supervisor-deadbeef',
+    nodeExecutable: '/usr/bin/node',
+    platform: 'linux',
+  }), '/tmp/cursor-bridge/runtime/supervisor-deadbeef');
 });
 
 test('offline attached fallback preserves the original supervisor failure', async (t) => {
