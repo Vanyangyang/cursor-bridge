@@ -23,9 +23,10 @@ import {
   supervisorPidPath,
   supervisorLockPath,
 } from './lifecycle-paths.mjs';
-import { spawnNodeOutsideJob, whichNode } from './win-job-breakaway.mjs';
+import { spawnNodeOutsideJob, spawnOutsideJob, whichNode } from './win-job-breakaway.mjs';
 
 const DEFAULT_CREATE_WAIT_MS = 20000;
+const DEFAULT_DIRECTORY_BOOTSTRAP_WAIT_MS = 5000;
 
 export function resolveSupervisorSpawnCwd({
   requestedCwd = null,
@@ -39,6 +40,89 @@ export function resolveSupervisorSpawnCwd({
     if (win32Path.isAbsolute(nodeDir)) return nodeDir;
   }
   return runtimeRoot;
+}
+
+function quotePowerShellSingle(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+export async function bootstrapLifecycleDirectoryOutsideJob(dir, options = {}) {
+  const existsImpl = options.existsImpl || existsSync;
+  if (existsImpl(dir)) return { dir, created: false, method: 'existing' };
+
+  const platform = options.platform || process.platform;
+  if (platform !== 'win32') {
+    ensureLifecycleDir(dir);
+    return { dir, created: true, method: 'filesystem' };
+  }
+
+  const systemRoot = String(options.systemRoot || process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows');
+  const powershell = options.powershellExecutable
+    || win32Path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  if (!existsImpl(powershell)) {
+    throw lifecycleClientError(`Windows PowerShell is unavailable for lifecycle directory bootstrap: ${powershell}`, {
+      errorKind: 'configuration',
+      degradedReason: 'lifecycle-bootstrap-powershell-missing',
+      errorCode: 'ENOENT',
+      canAttachFallback: false,
+    });
+  }
+
+  const payload = `New-Item -ItemType Directory -LiteralPath ${quotePowerShellSingle(dir)} -Force | Out-Null`;
+  const encoded = Buffer.from(payload, 'utf16le').toString('base64');
+  const nodeExecutable = options.nodeExecutable || whichNode();
+  const spawnCwd = resolveSupervisorSpawnCwd({
+    runtimeRoot: dirname(dir),
+    nodeExecutable,
+    platform,
+  });
+  const spawnImpl = options.spawnOutsideJobImpl || spawnOutsideJob;
+  const spawned = spawnImpl(powershell, [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass',
+    '-EncodedCommand', encoded,
+  ], {
+    cwd: spawnCwd,
+    env: options.env || process.env,
+  });
+  if (!spawned.ok) {
+    throw lifecycleClientError(`failed to bootstrap lifecycle directory outside the Codex sandbox: ${spawned.error || spawned.method}`, {
+      errorKind: spawned.errorKind || 'unknown',
+      degradedReason: spawned.degradedReason || 'lifecycle-bootstrap-failed',
+      errorCode: spawned.errorCode ?? null,
+      returnValue: spawned.returnValue ?? null,
+      canAttachFallback: spawned.canAttachFallback === true,
+      commandLine: spawned.commandLine || null,
+      spawnCwd: spawned.spawnCwd || spawnCwd || null,
+      stderr: spawned.stderr || null,
+      attempts: spawned.attempts ?? null,
+    });
+  }
+
+  const sleepImpl = options.sleepImpl || sleep;
+  const waitMs = Math.max(100, Number(options.waitMs || DEFAULT_DIRECTORY_BOOTSTRAP_WAIT_MS));
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    if (existsImpl(dir)) {
+      return {
+        dir,
+        created: true,
+        method: spawned.method,
+        pid: spawned.pid || null,
+        spawnCwd: spawned.spawnCwd || spawnCwd || null,
+      };
+    }
+    await sleepImpl(50);
+  }
+  throw lifecycleClientError(`lifecycle directory bootstrap did not create ${dir} within ${waitMs}ms`, {
+    errorKind: 'bootstrap-failed',
+    degradedReason: 'lifecycle-bootstrap-timeout',
+    errorCode: null,
+    canAttachFallback: true,
+    commandLine: spawned.commandLine || null,
+    spawnCwd: spawned.spawnCwd || spawnCwd || null,
+  });
 }
 
 function sleep(ms) {
@@ -338,7 +422,19 @@ export async function ensureSupervisorConnected(options = {}) {
   }
 
   let runtime;
+  let directoryBootstrap = null;
   try {
+    directoryBootstrap = await bootstrapLifecycleDirectoryOutsideJob(dir, {
+      platform: options.platform || process.platform,
+      powershellExecutable: options.powershellExecutable,
+      systemRoot: options.systemRoot,
+      nodeExecutable: options.nodeExecutable || whichNode(),
+      spawnOutsideJobImpl: options.bootstrapSpawnOutsideJobImpl,
+      existsImpl: options.existsImpl,
+      sleepImpl: options.bootstrapSleepImpl,
+      waitMs: options.bootstrapWaitMs,
+      env: options.env || process.env,
+    });
     ensureLifecycleDir(dir);
     runtime = options.persistSupervisorRuntime === false
       ? {
@@ -434,6 +530,7 @@ export async function ensureSupervisorConnected(options = {}) {
           spawnMethod: spawned.method,
           spawnPid: spawned.pid,
           supervisorSpawnCwd: spawned.spawnCwd || spawnCwd || null,
+          lifecycleDirectoryBootstrapMethod: directoryBootstrap && directoryBootstrap.method || null,
           degraded: !!spawned.degraded,
           unsafe: !!spawned.unsafe,
           runtimeFingerprint: runtime.fingerprint,
@@ -481,6 +578,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
         launchReason: 'supervisor-error',
         spawnMethod: conn.spawnMethod,
         supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
+        lifecycleDirectoryBootstrapMethod: conn.lifecycleDirectoryBootstrapMethod || null,
         runtimeFingerprint: conn.runtimeFingerprint || null,
         runtimeScript: conn.runtimeScript || null,
         runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true,
@@ -510,6 +608,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
         : (response.launchReason || (response.status === 'launched' ? 'reused-supervisor-spawned-cursor' : 'reused-supervisor')),
       spawnMethod: conn.spawnMethod,
       supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
+      lifecycleDirectoryBootstrapMethod: conn.lifecycleDirectoryBootstrapMethod || null,
       ensureCount: response.ensureCount,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
@@ -531,6 +630,7 @@ export async function pingSupervisor(options = {}) {
       createdSupervisor: conn.createdSupervisor,
       spawnMethod: conn.spawnMethod,
       supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
+      lifecycleDirectoryBootstrapMethod: conn.lifecycleDirectoryBootstrapMethod || null,
       adapterPid: process.pid,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
