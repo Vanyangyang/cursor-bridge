@@ -12243,82 +12243,88 @@ function resolveSupervisorSpawnCwd({
   }
   return runtimeRoot;
 }
-function quotePowerShellSingle2(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
-}
-async function bootstrapLifecycleDirectoryOutsideJob(dir, options = {}) {
-  const existsImpl = options.existsImpl || existsSync4;
-  if (existsImpl(dir)) return { dir, created: false, method: "existing" };
+async function normalizeLifecycleTreeOutsideJob(dir, runtimeRoot, options = {}) {
   const platform = options.platform || process.platform;
-  if (platform !== "win32") {
-    ensureLifecycleDir(dir);
-    return { dir, created: true, method: "filesystem" };
-  }
+  if (platform !== "win32") return { method: "not-required", stateRoot: dirname4(dir) };
+  const existsImpl = options.existsImpl || existsSync4;
   const systemRoot = String(options.systemRoot || process.env.SystemRoot || process.env.WINDIR || "C:\\Windows");
-  const powershell = options.powershellExecutable || win32Path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  if (!existsImpl(powershell)) {
-    throw lifecycleClientError(`Windows PowerShell is unavailable for lifecycle directory bootstrap: ${powershell}`, {
+  const icacls = options.icaclsExecutable || win32Path.join(systemRoot, "System32", "icacls.exe");
+  const commandInterpreter = options.commandInterpreter || win32Path.join(systemRoot, "System32", "cmd.exe");
+  if (!existsImpl(icacls) || !existsImpl(commandInterpreter)) {
+    throw lifecycleClientError("Windows ACL normalization tools are unavailable for lifecycle bootstrap", {
       errorKind: "configuration",
-      degradedReason: "lifecycle-bootstrap-powershell-missing",
+      degradedReason: "lifecycle-acl-tools-missing",
       errorCode: "ENOENT",
       canAttachFallback: false
     });
   }
-  const payload = `New-Item -ItemType Directory -LiteralPath ${quotePowerShellSingle2(dir)} -Force | Out-Null`;
-  const encoded = Buffer.from(payload, "utf16le").toString("base64");
-  const nodeExecutable = options.nodeExecutable || whichNode();
-  const spawnCwd = resolveSupervisorSpawnCwd({
-    runtimeRoot: dirname4(dir),
-    nodeExecutable,
-    platform
-  });
-  const spawnImpl = options.spawnOutsideJobImpl || spawnOutsideJob;
-  const spawned = spawnImpl(powershell, [
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-EncodedCommand",
-    encoded
-  ], {
-    cwd: spawnCwd,
-    env: options.env || process.env
-  });
-  if (!spawned.ok) {
-    throw lifecycleClientError(`failed to bootstrap lifecycle directory outside the Codex sandbox: ${spawned.error || spawned.method}`, {
-      errorKind: spawned.errorKind || "unknown",
-      degradedReason: spawned.degradedReason || "lifecycle-bootstrap-failed",
-      errorCode: spawned.errorCode ?? null,
-      returnValue: spawned.returnValue ?? null,
-      canAttachFallback: spawned.canAttachFallback === true,
-      commandLine: spawned.commandLine || null,
-      spawnCwd: spawned.spawnCwd || spawnCwd || null,
-      stderr: spawned.stderr || null,
-      attempts: spawned.attempts ?? null
+  const env = options.env || process.env;
+  const user = String(options.userIdentity || [env.USERDOMAIN, env.USERNAME].filter(Boolean).join("\\") || env.USER || "").trim();
+  if (!user) {
+    throw lifecycleClientError("Current Windows user identity is unavailable for lifecycle ACL normalization", {
+      errorKind: "configuration",
+      degradedReason: "lifecycle-acl-user-missing",
+      errorCode: null,
+      canAttachFallback: false
     });
   }
+  const nodeExecutable = options.nodeExecutable || whichNode();
+  const spawnCwd = resolveSupervisorSpawnCwd({ runtimeRoot, nodeExecutable, platform });
+  const stateRoot = options.stateRoot || dirname4(dir);
+  const spawnImpl = options.spawnOutsideJobImpl || spawnOutsideJob;
+  const normalized = spawnImpl(icacls, [
+    stateRoot,
+    "/inheritance:r",
+    "/grant:r",
+    `${user}:(OI)(CI)F`,
+    "*S-1-5-18:(OI)(CI)F",
+    "*S-1-5-32-544:(OI)(CI)F",
+    "/T",
+    "/C",
+    "/Q"
+  ], { cwd: spawnCwd, env });
+  if (!normalized.ok) {
+    throw lifecycleClientError(`failed to normalize lifecycle ACLs outside the Codex sandbox: ${normalized.error || normalized.method}`, {
+      errorKind: normalized.errorKind || "unknown",
+      degradedReason: normalized.degradedReason || "lifecycle-acl-normalization-failed",
+      errorCode: normalized.errorCode ?? null,
+      returnValue: normalized.returnValue ?? null,
+      canAttachFallback: normalized.canAttachFallback === true,
+      commandLine: normalized.commandLine || null,
+      spawnCwd: normalized.spawnCwd || spawnCwd || null,
+      stderr: normalized.stderr || null,
+      attempts: normalized.attempts ?? null
+    });
+  }
+  const probeImpl = options.probeOutsideJobImpl || ((cwd) => spawnOutsideJob(
+    commandInterpreter,
+    ["/d", "/c", "exit", "0"],
+    { cwd, env }
+  ));
   const sleepImpl = options.sleepImpl || sleep;
-  const waitMs = Math.max(100, Number(options.waitMs || DEFAULT_DIRECTORY_BOOTSTRAP_WAIT_MS));
+  const waitMs = Math.max(500, Number(options.waitMs || DEFAULT_ACL_NORMALIZATION_WAIT_MS));
   const deadline = Date.now() + waitMs;
+  let lastProbe = null;
   while (Date.now() < deadline) {
-    if (existsImpl(dir)) {
+    lastProbe = probeImpl(runtimeRoot);
+    if (lastProbe && lastProbe.ok) {
       return {
-        dir,
-        created: true,
-        method: spawned.method,
-        pid: spawned.pid || null,
-        spawnCwd: spawned.spawnCwd || spawnCwd || null
+        method: normalized.method,
+        pid: normalized.pid || null,
+        spawnCwd: normalized.spawnCwd || spawnCwd || null,
+        stateRoot,
+        probeMethod: lastProbe.method || null
       };
     }
-    await sleepImpl(50);
+    await sleepImpl(100);
   }
-  throw lifecycleClientError(`lifecycle directory bootstrap did not create ${dir} within ${waitMs}ms`, {
+  throw lifecycleClientError(`lifecycle ACL normalization did not make ${runtimeRoot} reachable within ${waitMs}ms`, {
     errorKind: "bootstrap-failed",
-    degradedReason: "lifecycle-bootstrap-timeout",
-    errorCode: null,
+    degradedReason: "lifecycle-acl-normalization-timeout",
+    errorCode: lastProbe && (lastProbe.errorCode ?? lastProbe.returnValue) || null,
     canAttachFallback: true,
-    commandLine: spawned.commandLine || null,
-    spawnCwd: spawned.spawnCwd || spawnCwd || null
+    commandLine: normalized.commandLine || null,
+    spawnCwd: normalized.spawnCwd || spawnCwd || null
   });
 }
 function sleep(ms) {
@@ -12594,19 +12600,7 @@ async function ensureSupervisorConnected(options = {}) {
     }, initialConnection.error);
   }
   let runtime;
-  let directoryBootstrap = null;
   try {
-    directoryBootstrap = await bootstrapLifecycleDirectoryOutsideJob(dir, {
-      platform: options.platform || process.platform,
-      powershellExecutable: options.powershellExecutable,
-      systemRoot: options.systemRoot,
-      nodeExecutable: options.nodeExecutable || whichNode(),
-      spawnOutsideJobImpl: options.bootstrapSpawnOutsideJobImpl,
-      existsImpl: options.existsImpl,
-      sleepImpl: options.bootstrapSleepImpl,
-      waitMs: options.bootstrapWaitMs,
-      env: options.env || process.env
-    });
     ensureLifecycleDir(dir);
     runtime = options.persistSupervisorRuntime === false ? {
       sourceScript: resolve5(sourceScript),
@@ -12631,6 +12625,24 @@ async function ensureSupervisorConnected(options = {}) {
   }
   const bootEnvPath = writeBootEnv(dir, options.bootEnv || {});
   try {
+    let aclNormalization = null;
+    const normalizeAclImpl = options.normalizeLifecycleTreeImpl || (options.spawnNodeOutsideJobImpl ? null : normalizeLifecycleTreeOutsideJob);
+    if (normalizeAclImpl) {
+      aclNormalization = await normalizeAclImpl(dir, runtime.runtimeRoot, {
+        platform: options.platform || process.platform,
+        systemRoot: options.systemRoot,
+        nodeExecutable: options.nodeExecutable || whichNode(),
+        icaclsExecutable: options.icaclsExecutable,
+        commandInterpreter: options.commandInterpreter,
+        userIdentity: options.userIdentity,
+        spawnOutsideJobImpl: options.normalizeSpawnOutsideJobImpl,
+        probeOutsideJobImpl: options.normalizeProbeOutsideJobImpl,
+        existsImpl: options.existsImpl,
+        sleepImpl: options.normalizeSleepImpl,
+        waitMs: options.normalizeWaitMs,
+        env: options.env || process.env
+      });
+    }
     const scriptArgs = [
       "--lifecycle-supervisor",
       `--lifecycle-dir=${dir}`,
@@ -12688,7 +12700,7 @@ async function ensureSupervisorConnected(options = {}) {
           spawnMethod: spawned.method,
           spawnPid: spawned.pid,
           supervisorSpawnCwd: spawned.spawnCwd || spawnCwd || null,
-          lifecycleDirectoryBootstrapMethod: directoryBootstrap && directoryBootstrap.method || null,
+          lifecycleAclNormalizationMethod: aclNormalization && aclNormalization.method || null,
           degraded: !!spawned.degraded,
           unsafe: !!spawned.unsafe,
           runtimeFingerprint: runtime.fingerprint,
@@ -12730,7 +12742,7 @@ async function ensureCursorViaSupervisor(options = {}) {
         launchReason: "supervisor-error",
         spawnMethod: conn.spawnMethod,
         supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
-        lifecycleDirectoryBootstrapMethod: conn.lifecycleDirectoryBootstrapMethod || null,
+        lifecycleAclNormalizationMethod: conn.lifecycleAclNormalizationMethod || null,
         runtimeFingerprint: conn.runtimeFingerprint || null,
         runtimeScript: conn.runtimeScript || null,
         runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true
@@ -12757,7 +12769,7 @@ async function ensureCursorViaSupervisor(options = {}) {
       launchReason: conn.createdSupervisor ? response.status === "launched" ? "created-supervisor-and-spawned-cursor" : "created-supervisor" : response.launchReason || (response.status === "launched" ? "reused-supervisor-spawned-cursor" : "reused-supervisor"),
       spawnMethod: conn.spawnMethod,
       supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
-      lifecycleDirectoryBootstrapMethod: conn.lifecycleDirectoryBootstrapMethod || null,
+      lifecycleAclNormalizationMethod: conn.lifecycleAclNormalizationMethod || null,
       ensureCount: response.ensureCount,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
@@ -12774,13 +12786,13 @@ async function ensureCursorViaSupervisor(options = {}) {
     }
   }
 }
-var DEFAULT_CREATE_WAIT_MS, DEFAULT_DIRECTORY_BOOTSTRAP_WAIT_MS;
+var DEFAULT_CREATE_WAIT_MS, DEFAULT_ACL_NORMALIZATION_WAIT_MS;
 var init_cursor_lifecycle_client = __esm({
   "cursor-lifecycle-client.mjs"() {
     init_lifecycle_paths();
     init_win_job_breakaway();
     DEFAULT_CREATE_WAIT_MS = 2e4;
-    DEFAULT_DIRECTORY_BOOTSTRAP_WAIT_MS = 5e3;
+    DEFAULT_ACL_NORMALIZATION_WAIT_MS = 1e4;
   }
 });
 
@@ -23313,7 +23325,7 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     supervisorError: result.supervisorError || null,
     supervisorStderr: result.supervisorStderr || null,
     supervisorSpawnCwd: result.supervisorSpawnCwd || null,
-    lifecycleDirectoryBootstrapMethod: result.lifecycleDirectoryBootstrapMethod || null,
+    lifecycleAclNormalizationMethod: result.lifecycleAclNormalizationMethod || null,
     spawnAttempts: result.spawnAttempts ?? null,
     capabilities: result.capabilities || null,
     cursorPid: result.cursorPid || null,

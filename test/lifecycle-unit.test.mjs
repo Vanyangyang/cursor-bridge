@@ -28,7 +28,7 @@ import {
 import {
   listBootEnvFiles,
   ensureSupervisorConnected,
-  bootstrapLifecycleDirectoryOutsideJob,
+  normalizeLifecycleTreeOutsideJob,
   materializeLifecycleSupervisorRuntime,
   pingSupervisor,
   resolveSupervisorSpawnCwd,
@@ -323,29 +323,45 @@ test('Windows Supervisor bootstrap cwd avoids sandbox-created lifecycle runtime 
   }), '/tmp/cursor-bridge/runtime/supervisor-deadbeef');
 });
 
-test('missing Windows lifecycle directory is bootstrapped by an outside-job process', async (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'cb-lifecycle-bootstrap-'));
-  const dir = join(root, 'missing', 'lifecycle');
-  const powershell = join(root, 'powershell.exe');
-  writeFileSync(powershell, '', 'utf8');
+test('Windows lifecycle ACL normalization waits for an outside-job cwd probe', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-lifecycle-acl-'));
+  const stateRoot = join(root, 'cursor-bridge');
+  const dir = join(stateRoot, 'lifecycle');
+  const runtimeRoot = join(dir, 'runtime', 'supervisor-deadbeef');
+  const icacls = join(root, 'icacls.exe');
+  const commandInterpreter = join(root, 'cmd.exe');
+  mkdirSync(runtimeRoot, { recursive: true });
+  writeFileSync(icacls, '', 'utf8');
+  writeFileSync(commandInterpreter, '', 'utf8');
   t.after(() => rmSync(root, { recursive: true, force: true }));
   let spawnOptions = null;
-  const result = await bootstrapLifecycleDirectoryOutsideJob(dir, {
+  let probes = 0;
+  const result = await normalizeLifecycleTreeOutsideJob(dir, runtimeRoot, {
     platform: 'win32',
-    powershellExecutable: powershell,
+    icaclsExecutable: icacls,
+    commandInterpreter,
     nodeExecutable: 'C:\\Program Files\\nodejs\\node.exe',
+    userIdentity: 'TEST\\user',
+    stateRoot,
     spawnOutsideJobImpl(_file, args, options) {
       spawnOptions = { args, options };
-      mkdirSync(dir, { recursive: true });
       return { ok: true, method: 'wmi-win32-process-create', pid: 4242, spawnCwd: options.cwd };
     },
+    probeOutsideJobImpl() {
+      probes += 1;
+      return probes === 1
+        ? { ok: false, method: 'failed', errorCode: 8 }
+        : { ok: true, method: 'wmi-win32-process-create', pid: 4343 };
+    },
+    sleepImpl: async () => {},
   });
-  assert.equal(result.created, true);
   assert.equal(result.method, 'wmi-win32-process-create');
   assert.equal(result.spawnCwd, 'C:\\Program Files\\nodejs');
   assert.equal(spawnOptions.options.cwd, 'C:\\Program Files\\nodejs');
-  assert.equal(spawnOptions.args.includes('-EncodedCommand'), true);
-  assert.equal(existsSync(dir), true);
+  assert.equal(spawnOptions.args[0], stateRoot);
+  assert.equal(spawnOptions.args.includes('TEST\\user:(OI)(CI)F'), true);
+  assert.equal(probes, 2);
+  assert.equal(result.probeMethod, 'wmi-win32-process-create');
 });
 
 test('offline attached fallback preserves the original supervisor failure', async (t) => {
