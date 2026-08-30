@@ -158,9 +158,9 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.17.21** | **5.6.2**（`master`，当前版本） | 保留 5.6.1 的 attached fallback，并在 CDP 离线时保留原始 Supervisor/WMI 失败原因。WMI 返回码 `8` 与 `HRESULT 0x80004005` 只进行一次有界重试。两次全新的 `codex exec -s read-only` 均通过 WMI 创建了持久 Supervisor，证明在已测 Codex host 上 Full Access 不是 Cursor Bridge 的普遍前置条件；显式包入 `codex sandbox :read-only` 的对照探针则按预期被阻止。本版本没有增加 bootstrap 服务、计划任务或新的公开生命周期状态。 |
+| **3.17.21** | **5.7.0**（`master`，当前版本） | 全新的 GitHub marketplace 安装在遇到 WMI 返回码 `8` 时，会选择已验证的插件缓存 lifecycle 根目录与稳定 Supervisor 工作目录恢复，无需修改 ACL 或提权。parallel Agents 在 provisional 与 durable 行收敛期间保持同一个身份。已记录的 Windows 11 验收从 Cursor 完全关闭开始，Bridge 自动启动受监督的持久运行时，并在工作区绑定、CCE 和 Agent 执行期间始终只保留一个 Cursor Agents target 与一个顶层窗口。 |
 
-不再主动维护旧 Cursor 版本。Cursor Bridge 5.5.0 / Cursor 3.17.19、Cursor Bridge 5.4.2 / Cursor 3.17.8、Cursor Bridge 5.4.1 / Cursor 3.16.29 与 Cursor Bridge 5.4.0 / Cursor 3.16.17 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor Bridge 版本。5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
@@ -291,6 +291,7 @@ Cursor Agent + project index
 - `cursor_init` 为当前宿主上下文校验并持久化一个工作区；再次执行即可切换项目。
 - 项目索引由 Cursor 自己负责。Bridge 只确保连接，并选择经过校验、与项目匹配的 CDP target。
 - 多个 MCP adapter 共用一个用户级 lifecycle supervisor，并在读取状态或执行生命周期操作前重新同步持久运行模式。
+- 冷启动时，Bridge 只启动带 CDP 的 Cursor 进程，不传项目路径或 `--new-window`；待 target 列表稳定后，再在 Agents v2 内绑定仓库。不会仅因某个临时 target 最先出现，就把它当作标准目标。
 - workbench 和 Agents Window 同时开着时，Bridge 优先在当前项目的 Agents Window 里工作；只有 workbench 时就用 workbench。不会落到 `Home`。
 - Agents Window 已经打开时，ensure 会复用该 CDP 页，不再执行 `Cursor.exe --new-window`。只有 Cursor 已连接、且既没有 Agents Window、也没有标题匹配的编辑器窗口时，才会再开一个 workbench。
 - `cursor_status` 只列 CDP 页标题，不再探测页面 DOM。CCE 会对 DOM 确实为空的 Agents 页 reload 一次；Windows normal 模式复用 Agents Window 时还会进行一次有节流、无抢焦点的原生合成器重绘，避免 DOM 正常却只显示 Electron 白色表面。
@@ -318,6 +319,7 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 - Bridge 会确认 Cursor 是否接受提示。提示仍留在输入框时只尝试一次精确 Send 控件，仍失败则返回 `submit_not_accepted`，不会静默制造孤儿。
 - provider-error 托盘会被保留为失败证据；Bridge 不会自动点击 Retry。
 - 发送后状态不确定时保留占用，不会静默释放或重投。
+- parallel Agents v2 任务会一直保留 provisional composer 身份，直到有证据对应到 durable History 行，再只迁移一次；其他并发提交不能在收敛期间替换这条任务的 `agentId`。
 - `reap` 用于已绑定的并行孤儿。定向 `cancel` 需要精确的已发布 Agent ID。Agents Window 或 Workbench 上的 FIFO 若已发布 Agent ID，也走同一条定向停止。未发布时 Bridge 不会猜测点击 Stop；请先在 Cursor 确认已停止，再 `abandon`。
 - 任务记录只存在于当前进程。MCP 重启后，开始重叠工作前应检查 Agent History 与工作区变化。
 

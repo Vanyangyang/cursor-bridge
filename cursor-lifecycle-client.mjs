@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, win32 as win32Path } from 'node:path';
 import {
   defaultLifecycleDir,
   ensureLifecycleDir,
@@ -23,9 +23,50 @@ import {
   supervisorPidPath,
   supervisorLockPath,
 } from './lifecycle-paths.mjs';
-import { spawnNodeOutsideJob } from './win-job-breakaway.mjs';
+import { spawnNodeOutsideJob, spawnOutsideJob, whichNode } from './win-job-breakaway.mjs';
 
 const DEFAULT_CREATE_WAIT_MS = 20000;
+
+export function resolveSupervisorSpawnCwd({
+  requestedCwd = null,
+  runtimeRoot = null,
+  nodeExecutable = whichNode(),
+  platform = process.platform,
+} = {}) {
+  if (requestedCwd) return requestedCwd;
+  if (platform === 'win32') {
+    const nodeDir = win32Path.dirname(String(nodeExecutable || ''));
+    if (win32Path.isAbsolute(nodeDir)) return nodeDir;
+  }
+  return runtimeRoot;
+}
+
+export function resolvePluginLocalLifecycleDir(sourceScript) {
+  const scriptDir = dirname(resolve(sourceScript));
+  const pluginRoot = basename(scriptDir).toLowerCase() === 'dist' ? dirname(scriptDir) : scriptDir;
+  return join(pluginRoot, '.cursor-bridge-lifecycle');
+}
+
+export function probeOutsideJobCwd(cwd, options = {}) {
+  const platform = options.platform || process.platform;
+  if (platform !== 'win32') return { ok: true, method: 'not-required', spawnCwd: cwd };
+  const env = options.env || process.env;
+  const systemRoot = String(options.systemRoot || env.SystemRoot || env.WINDIR || 'C:\\Windows');
+  const commandInterpreter = options.commandInterpreter || win32Path.join(systemRoot, 'System32', 'cmd.exe');
+  if (!(options.existsImpl || existsSync)(commandInterpreter)) {
+    return {
+      ok: false,
+      method: 'failed',
+      errorKind: 'configuration',
+      degradedReason: 'lifecycle-probe-command-missing',
+      errorCode: 'ENOENT',
+      canAttachFallback: false,
+      spawnCwd: cwd,
+    };
+  }
+  const spawnImpl = options.spawnOutsideJobImpl || spawnOutsideJob;
+  return spawnImpl(commandInterpreter, ['/d', '/c', 'exit', '0'], { cwd, env });
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -246,6 +287,7 @@ export function listBootEnvFiles(dir) {
  * Ensure a supervisor is reachable. Creates one outside the Windows job if needed.
  */
 export async function ensureSupervisorConnected(options = {}) {
+  const platform = options.platform || process.platform;
   const dir = options.dir || defaultLifecycleDir();
   const sock = options.sock || supervisorSockPath(dir);
   const pidPath = options.pidPath || supervisorPidPath(dir);
@@ -298,6 +340,7 @@ export async function ensureSupervisorConnected(options = {}) {
       runtimeScript: current?.runtimeScript || null,
       targetRuntimeFingerprint: targetRuntime?.fingerprint || null,
       runtimeUpgradeDeferred: mismatch,
+      lifecycleStorageMode: options._lifecycleStorageMode || 'shared',
     };
   }
 
@@ -321,6 +364,51 @@ export async function ensureSupervisorConnected(options = {}) {
       errorCode: connectCode || null,
       canAttachFallback: true,
     }, initialConnection.error);
+  }
+
+  const canProbeFallback = platform === 'win32'
+    && options._disablePluginLocalFallback !== true
+    && !options.dir
+    && !options.sock
+    && !options.pidPath
+    && !options.lockPath
+    && (!options.spawnNodeOutsideJobImpl || options.lifecycleCwdProbeImpl);
+  if (canProbeFallback) {
+    ensureLifecycleDir(dir);
+    const runProbe = options.lifecycleCwdProbeImpl || ((target) => probeOutsideJobCwd(target, {
+      platform,
+      systemRoot: options.systemRoot,
+      commandInterpreter: options.commandInterpreter,
+      spawnOutsideJobImpl: options.probeSpawnOutsideJobImpl,
+      existsImpl: options.existsImpl,
+      env: options.env || process.env,
+    }));
+    const sharedProbe = runProbe(dir);
+    const sharedCode = sharedProbe && (sharedProbe.errorCode ?? sharedProbe.returnValue);
+    if (sharedProbe && sharedProbe.ok !== true
+      && (sharedCode === 8 || sharedProbe.degradedReason === 'wmi-unknown-8')) {
+      const fallbackDir = options.pluginLocalLifecycleDir || resolvePluginLocalLifecycleDir(sourceScript);
+      ensureLifecycleDir(fallbackDir);
+      const fallbackProbe = runProbe(fallbackDir);
+      if (!fallbackProbe || fallbackProbe.ok !== true) {
+        throw lifecycleClientError(`shared lifecycle storage is inaccessible to WMI and plugin-local fallback is also unavailable: ${fallbackDir}`, {
+          errorKind: fallbackProbe?.errorKind || sharedProbe.errorKind || 'unknown',
+          degradedReason: fallbackProbe?.degradedReason || 'plugin-local-lifecycle-unavailable',
+          errorCode: fallbackProbe && (fallbackProbe.errorCode ?? fallbackProbe.returnValue) || null,
+          canAttachFallback: true,
+          spawnCwd: fallbackDir,
+        });
+      }
+      return ensureSupervisorConnected({
+        ...options,
+        dir: fallbackDir,
+        sock: undefined,
+        pidPath: undefined,
+        lockPath: undefined,
+        _disablePluginLocalFallback: true,
+        _lifecycleStorageMode: 'plugin-cache-fallback',
+      });
+    }
   }
 
   let runtime;
@@ -377,8 +465,18 @@ export async function ensureSupervisorConnected(options = {}) {
       CURSOR_BRIDGE_SUPERVISOR_SOCK: sock,
     };
 
+    // A lifecycle directory created by a Codex sandbox can inherit AppContainer-only ACLs.
+    // WMI launches the Supervisor outside that sandbox and returns Win32 error 8 when such a
+    // directory is used as CurrentDirectory, even though every launch argument is absolute.
+    // Bootstrap from the Node executable directory on Windows; keep the historical runtime cwd
+    // elsewhere and preserve an explicit caller override.
+    const spawnCwd = resolveSupervisorSpawnCwd({
+      requestedCwd: options.cwd,
+      runtimeRoot: runtime.runtimeRoot,
+      nodeExecutable: whichNode(),
+    });
     const spawned = (options.spawnNodeOutsideJobImpl || spawnNodeOutsideJob)(script, scriptArgs, {
-      cwd: options.cwd || runtime.runtimeRoot,
+      cwd: spawnCwd,
       env: childEnv,
     });
     if (!spawned.ok) {
@@ -389,6 +487,7 @@ export async function ensureSupervisorConnected(options = {}) {
         returnValue: spawned.returnValue ?? null,
         canAttachFallback: spawned.canAttachFallback === true,
         commandLine: spawned.commandLine || null,
+        spawnCwd: spawned.spawnCwd || spawnCwd || null,
         stderr: spawned.stderr || null,
         attempts: spawned.attempts ?? null,
       });
@@ -408,6 +507,8 @@ export async function ensureSupervisorConnected(options = {}) {
           createdSupervisor: true,
           spawnMethod: spawned.method,
           spawnPid: spawned.pid,
+          supervisorSpawnCwd: spawned.spawnCwd || spawnCwd || null,
+          lifecycleStorageMode: options._lifecycleStorageMode || 'shared',
           degraded: !!spawned.degraded,
           unsafe: !!spawned.unsafe,
           runtimeFingerprint: runtime.fingerprint,
@@ -454,6 +555,8 @@ export async function ensureCursorViaSupervisor(options = {}) {
         createdSupervisor: conn.createdSupervisor,
         launchReason: 'supervisor-error',
         spawnMethod: conn.spawnMethod,
+        supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
+        lifecycleStorageMode: conn.lifecycleStorageMode || 'shared',
         runtimeFingerprint: conn.runtimeFingerprint || null,
         runtimeScript: conn.runtimeScript || null,
         runtimeUpgradeDeferred: conn.runtimeUpgradeDeferred === true,
@@ -482,6 +585,8 @@ export async function ensureCursorViaSupervisor(options = {}) {
         ? (response.status === 'launched' ? 'created-supervisor-and-spawned-cursor' : 'created-supervisor')
         : (response.launchReason || (response.status === 'launched' ? 'reused-supervisor-spawned-cursor' : 'reused-supervisor')),
       spawnMethod: conn.spawnMethod,
+      supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
+      lifecycleStorageMode: conn.lifecycleStorageMode || 'shared',
       ensureCount: response.ensureCount,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,
@@ -502,6 +607,8 @@ export async function pingSupervisor(options = {}) {
       reusedSupervisor: conn.reusedSupervisor,
       createdSupervisor: conn.createdSupervisor,
       spawnMethod: conn.spawnMethod,
+      supervisorSpawnCwd: conn.supervisorSpawnCwd || null,
+      lifecycleStorageMode: conn.lifecycleStorageMode || 'shared',
       adapterPid: process.pid,
       runtimeFingerprint: response.runtimeFingerprint || conn.runtimeFingerprint || null,
       runtimeScript: response.runtimeScript || conn.runtimeScript || null,

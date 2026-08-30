@@ -54,7 +54,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.6.2';
+const PLUGIN_VERSION = '5.7.0';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -905,6 +905,22 @@ function selectNewAgentEntry(beforeEntries, afterEntries) {
   return [...pool].sort((a, b) => (Number(b.timestamp || 0) - Number(a.timestamp || 0)) || b._index - a._index)[0];
 }
 
+function listNewAgentEntries(beforeEntries, afterEntries) {
+  const before = new Set((beforeEntries || []).map((entry) => entry && entry.id).filter(Boolean));
+  return (afterEntries || []).filter((entry) => entry && entry.id && !before.has(entry.id));
+}
+
+function normalizeAgentIdentityId(id) {
+  return String(id || '').replace(/^local:/i, '');
+}
+
+function selectUniqueNewAgentEntry(beforeEntries, afterEntries) {
+  const fresh = listNewAgentEntries(beforeEntries, afterEntries);
+  if (fresh.length === 1) return fresh[0];
+  const selected = fresh.filter((entry) => entry.isSelected === true);
+  return selected.length === 1 ? selected[0] : null;
+}
+
 function isTerminalTask(job) {
   return !!job && ['completed', 'failed', 'cancelled', 'reaped', 'abandoned'].includes(job.status);
 }
@@ -942,6 +958,29 @@ function selectPromotedFifoEntry(beforeEntries, currentAgentId, afterEntries) {
   const candidate = selectNewAgentEntry(beforeEntries, afterEntries);
   if (!candidate || candidate.id === currentAgentId || candidate.isSelected !== true) return null;
   return isDurablyRegisteredParallelEntry(candidate) ? candidate : null;
+}
+
+function selectPromotedParallelEntry(beforeEntries, provisionalAgentId, afterEntries) {
+  if (!Array.isArray(beforeEntries) || !Array.isArray(afterEntries)) return null;
+  const fresh = listNewAgentEntries(beforeEntries, afterEntries);
+  if (provisionalAgentId) {
+    const exact = afterEntries.find((entry) => entry && entry.id === provisionalAgentId) || null;
+    if (exact) return isDurablyRegisteredParallelEntry(exact) ? exact : null;
+    const normalized = normalizeAgentIdentityId(provisionalAgentId);
+    const promoted = fresh.filter((entry) =>
+      entry.isSelected === true
+      && normalizeAgentIdentityId(entry.id) === normalized
+      && isDurablyRegisteredParallelEntry(entry));
+    if (promoted.length === 1) return promoted[0];
+    if (promoted.length > 1) return null;
+  }
+  const selected = fresh.filter((entry) => entry.isSelected === true && isDurablyRegisteredParallelEntry(entry));
+  if (selected.length === 1) return selected[0];
+  if (!provisionalAgentId) {
+    const durable = fresh.filter(isDurablyRegisteredParallelEntry);
+    if (durable.length === 1) return durable[0];
+  }
+  return null;
 }
 
 function uncertainSubmissionReservationScope(job, error) {
@@ -1003,6 +1042,8 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     supervisorErrorKind: result.supervisorErrorKind || null,
     supervisorError: result.supervisorError || null,
     supervisorStderr: result.supervisorStderr || null,
+    supervisorSpawnCwd: result.supervisorSpawnCwd || null,
+    lifecycleStorageMode: result.lifecycleStorageMode || null,
     spawnAttempts: result.spawnAttempts ?? null,
     capabilities: result.capabilities || null,
     cursorPid: result.cursorPid || null,
@@ -1041,8 +1082,12 @@ function lifecycleFailureSummary(lifecycle, fallback) {
   return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(' ');
 }
 
-function releaseAdapterWorkingDirectory({ targetDir = defaultLifecycleDir(), chdir = process.chdir } = {}) {
-  const target = ensureLifecycleDir(targetDir);
+function releaseAdapterWorkingDirectory({ targetDir = null, chdir = process.chdir } = {}) {
+  // Do not create the lifecycle directory here. On Codex hosts that directory inherits
+  // AppContainer ACLs, while the WMI-launched Supervisor runs outside the sandbox. The lifecycle
+  // client owns first creation through its outside-job bootstrap. The Node executable directory is
+  // stable, already exists, and safely releases the plugin cache cwd without creating state.
+  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname(process.execPath);
   chdir(target);
   return target;
 }
@@ -1478,6 +1523,7 @@ class CursorBridge {
       finishedAt: null,
       sentAt: null,
       agentId: null,
+      provisionalAgentId: null,
       agentLabel: null,
       targetId: null,
       targetUiFlavor: null,
@@ -2305,16 +2351,14 @@ class CursorBridge {
       return { fallbackReason: 'Cursor New Agent button was not found; downgraded to FIFO before submission' };
       }
 
-      let agent = null;
-      // 大多数 Cursor 版本在点击 New Agent 后即登记 local:<UUID>；先在发送前绑定身份。
-      for (let i = 0; i < 5 && !agent; i++) {
-        try { agent = selectNewAgentEntry(before, await this._readAgentEntries(c)); } catch {}
-        if (!agent) await sleep(350);
+      let provisionalAgent = null;
+      // Cursor may register a local:<UUID> draft before submission. Keep that identity provisional:
+      // publishing it as agentId would let cancel/reap callers observe an ID that can still be replaced.
+      for (let i = 0; i < 5 && !provisionalAgent; i++) {
+        try { provisionalAgent = selectUniqueNewAgentEntry(before, await this._readAgentEntries(c)); } catch {}
+        if (!provisionalAgent) await sleep(350);
       }
-      if (agent) {
-        job.agentId = agent.id;
-        job.agentLabel = agent.label || null;
-      }
+      if (provisionalAgent) job.provisionalAgentId = provisionalAgent.id;
 
       await this._closeHistory(c);
       await this._ensureChatPanel(c);
@@ -2338,32 +2382,39 @@ class CursorBridge {
       // Cursor 3.7 可能只在首次消息发送后才把 composer 登记进 Agent History。
       // 新版还会先登记 draft；只有进入 running/terminal 状态才算发送确认。若同时出现新的
       // provider error tray，则这是明确失败终态，释放占用但不自动重试。
-      agent = null;
-      let provisionalAgent = job.agentId ? { id: job.agentId, label: job.agentLabel } : null;
+      let agent = null;
+      let ambiguousAgentIds = [];
       for (let i = 0; i < 40 && !agent; i++) {
         await sleep(350);
         await this._throwIfNewProviderError(c, providerErrorBaseline);
         try {
-          const candidate = selectNewAgentEntry(before, await this._readAgentEntries(c));
-          if (candidate && !provisionalAgent) {
-            provisionalAgent = candidate;
-            job.agentId = candidate.id;
-            job.agentLabel = candidate.label || null;
+          const entries = await this._readAgentEntries(c);
+          if (!job.provisionalAgentId) {
+            provisionalAgent = selectUniqueNewAgentEntry(before, entries);
+            if (provisionalAgent) job.provisionalAgentId = provisionalAgent.id;
           }
-          if (isDurablyRegisteredParallelEntry(candidate)) agent = candidate;
+          agent = selectPromotedParallelEntry(before, job.provisionalAgentId, entries);
+          if (!agent) {
+            const fresh = listNewAgentEntries(before, entries);
+            const selectedDurable = fresh.filter((entry) => entry.isSelected === true && isDurablyRegisteredParallelEntry(entry));
+            if (selectedDurable.length > 1) ambiguousAgentIds = selectedDurable.map((entry) => entry.id);
+          }
         } catch {}
       }
       if (!agent) {
-      const e = new Error(provisionalAgent
-        ? `Cursor Agent ${provisionalAgent.id} was submitted but did not become a durable Agent History row; the reservation remains held and automatic resubmission is forbidden`
-        : 'The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden');
+      const e = new Error(ambiguousAgentIds.length > 1
+        ? `The task was submitted, but multiple durable Agent History rows matched (${ambiguousAgentIds.join(', ')}); identity was not guessed and the reservation remains held`
+        : job.provisionalAgentId
+          ? `Cursor Agent draft ${job.provisionalAgentId} was submitted but did not promote to one durable Agent History row; the reservation remains held and automatic resubmission is forbidden`
+          : 'The task may have been submitted, but a unique agentId could not be captured from Agent History; the reservation remains held and automatic resubmission is forbidden');
         e.sent = true;
-        e.requiresGlobalReservation = !!provisionalAgent;
-        e.recoveryState = provisionalAgent ? 'awaiting_durable_history' : 'unbound_agent';
+        e.requiresGlobalReservation = !!job.provisionalAgentId || ambiguousAgentIds.length > 1;
+        e.recoveryState = ambiguousAgentIds.length > 1
+          ? 'ambiguous_agent_identity'
+          : job.provisionalAgentId ? 'awaiting_durable_history' : 'unbound_agent';
         throw e;
       }
-      job.agentId = agent.id;
-      job.agentLabel = agent.label || null;
+      this._applyAgentIdentity(job, agent);
       return { agent, previousSelectedId };
     } catch (e) {
       if (sent) e.sent = true;
@@ -3578,6 +3629,8 @@ export {
   selectCursorPageCandidate,
   selectPageForUiPreference,
   selectNewAgentEntry,
+  selectUniqueNewAgentEntry,
+  selectPromotedParallelEntry,
   selectPromotedFifoEntry,
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,

@@ -30,6 +30,9 @@ import {
   ensureSupervisorConnected,
   materializeLifecycleSupervisorRuntime,
   pingSupervisor,
+  probeOutsideJobCwd,
+  resolvePluginLocalLifecycleDir,
+  resolveSupervisorSpawnCwd,
 } from '../cursor-lifecycle-client.mjs';
 import {
   normalizeCodexThreadCwd,
@@ -42,6 +45,7 @@ import {
   resolveProjectPath,
   selectAgentsWindowTarget,
   selectNewCdpTarget,
+  selectReusableProjectTarget,
   isAgentsWindowTitle,
   targetCanServeProject,
   targetTitleMatchesProject,
@@ -69,6 +73,12 @@ test('new Cursor CDP targets bind a newly opened project without relying on gene
     { id: 'generic-new', title: 'Cursor Agents' },
     { id: 'vesperix-target', title: 'VESPERIX - Cursor' },
   ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'vesperix-target');
+  assert.equal(selectNewCdpTarget(before, [
+    { id: 'generic-new', title: 'Cursor Agents' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'generic-new');
+  assert.equal(selectNewCdpTarget(before, [
+    { id: 'wrong-project', title: 'other-app - Cursor' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX'), null);
   assert.equal(selectNewCdpTarget(before, [{ id: 'existing-target' }]), null);
 });
 
@@ -173,6 +183,10 @@ test('existing Editor targets can recover a project binding while generic Agents
     { id: 'settings', title: 'Cursor Settings - cursor-bridge - Cursor' },
     { id: 'agents', title: 'Cursor Agents' },
   ]).id, 'agents');
+  assert.equal(selectReusableProjectTarget([
+    { id: 'agents', title: 'Cursor Agents' },
+    { id: 'project', title: 'VESPERIX - Cursor' },
+  ], 'G:\\u2dProject\\u6project\\VESPERIX').id, 'project');
 });
 
 function fakeSpawnRecorder() {
@@ -272,6 +286,7 @@ test('policy-blocked supervisor spawn falls back to verified attached Cursor', a
   const root = mkdtempSync(join(tmpdir(), 'cb-attached-fallback-'));
   const project = join(root, 'project');
   mkdirSync(project, { recursive: true });
+  mkdirSync(join(root, 'lifecycle'), { recursive: true });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = await ensureCursorRunning({
     dir: join(root, 'lifecycle'),
@@ -299,10 +314,100 @@ test('policy-blocked supervisor spawn falls back to verified attached Cursor', a
   assert.equal(result.capabilities.canOpenWorkspaceWindow, false);
 });
 
+test('Windows Supervisor bootstrap cwd avoids sandbox-created lifecycle runtime directories', () => {
+  const runtimeRoot = 'C:\\Users\\test\\AppData\\Local\\cursor-bridge\\lifecycle\\runtime\\supervisor-deadbeef';
+  const nodeExecutable = 'C:\\Program Files\\nodejs\\node.exe';
+  assert.equal(resolveSupervisorSpawnCwd({
+    runtimeRoot,
+    nodeExecutable,
+    platform: 'win32',
+  }), 'C:\\Program Files\\nodejs');
+  assert.equal(resolveSupervisorSpawnCwd({
+    requestedCwd: 'D:\\explicit-bootstrap',
+    runtimeRoot,
+    nodeExecutable,
+    platform: 'win32',
+  }), 'D:\\explicit-bootstrap');
+  assert.equal(resolveSupervisorSpawnCwd({
+    runtimeRoot: '/tmp/cursor-bridge/runtime/supervisor-deadbeef',
+    nodeExecutable: '/usr/bin/node',
+    platform: 'linux',
+  }), '/tmp/cursor-bridge/runtime/supervisor-deadbeef');
+});
+
+test('plugin-local lifecycle fallback stays inside the installed plugin root', () => {
+  assert.equal(
+    resolvePluginLocalLifecycleDir('C:\\cache\\cursor-bridge\\5.7.0\\dist\\cursor-lifecycle-supervisor.mjs'),
+    'C:\\cache\\cursor-bridge\\5.7.0\\.cursor-bridge-lifecycle',
+  );
+});
+
+test('outside-job cwd probe preserves the exact WMI result', () => {
+  let captured = null;
+  const result = probeOutsideJobCwd('C:\\probe', {
+    platform: 'win32',
+    commandInterpreter: 'C:\\Windows\\System32\\cmd.exe',
+    existsImpl: () => true,
+    spawnOutsideJobImpl(file, args, options) {
+      captured = { file, args, options };
+      return { ok: false, returnValue: 8, degradedReason: 'wmi-unknown-8', spawnCwd: options.cwd };
+    },
+  });
+  assert.equal(result.returnValue, 8);
+  assert.equal(captured.file, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(captured.args, ['/d', '/c', 'exit', '0']);
+  assert.equal(captured.options.cwd, 'C:\\probe');
+});
+
+test('shared lifecycle WMI 8 selects plugin-local storage before Supervisor spawn', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-plugin-local-fallback-'));
+  const shared = join(root, 'shared-lifecycle');
+  const pluginRoot = join(root, 'plugin-cache', '5.7.0');
+  const dist = join(pluginRoot, 'dist');
+  const source = join(dist, 'cursor-lifecycle-supervisor.mjs');
+  mkdirSync(dist, { recursive: true });
+  writeFileSync(source, 'process.exit(0);\n', 'utf8');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fallback = resolvePluginLocalLifecycleDir(source);
+  const probes = [];
+  let spawned = null;
+  await withEnv({ ...process.env, CURSOR_BRIDGE_LIFECYCLE_DIR: shared }, async () => {
+    await assert.rejects(() => ensureSupervisorConnected({
+      platform: 'win32',
+      supervisorScript: source,
+      connectSupervisorImpl: async () => {
+        throw Object.assign(new Error('missing pipe'), { code: 'ENOENT' });
+      },
+      lifecycleCwdProbeImpl(target) {
+        probes.push(target);
+        return target === shared
+          ? { ok: false, returnValue: 8, degradedReason: 'wmi-unknown-8' }
+          : { ok: true, method: 'wmi-win32-process-create', pid: 4242 };
+      },
+      spawnNodeOutsideJobImpl(script, args, options) {
+        spawned = { script, args, options };
+        return {
+          ok: false,
+          method: 'failed',
+          error: 'synthetic stop after fallback selection',
+          errorKind: 'policy-blocked',
+          degradedReason: 'spawn-policy-blocked',
+          errorCode: 'EPERM',
+          canAttachFallback: true,
+        };
+      },
+    }), /synthetic stop after fallback selection/);
+  });
+  assert.deepEqual(probes, [shared, fallback]);
+  assert.equal(spawned.script.startsWith(fallback), true);
+  assert.equal(spawned.args.includes(`--lifecycle-dir=${fallback}`), true);
+});
+
 test('offline attached fallback preserves the original supervisor failure', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'cb-attached-offline-cause-'));
   const project = join(root, 'project');
   mkdirSync(project, { recursive: true });
+  mkdirSync(join(root, 'lifecycle'), { recursive: true });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const result = await ensureCursorRunning({
     dir: join(root, 'lifecycle'),
@@ -336,6 +441,7 @@ test('configuration-class supervisor failures do not silently attach', async (t)
   const root = mkdtempSync(join(tmpdir(), 'cb-no-config-fallback-'));
   const project = join(root, 'project');
   mkdirSync(project, { recursive: true });
+  mkdirSync(join(root, 'lifecycle'), { recursive: true });
   t.after(() => rmSync(root, { recursive: true, force: true }));
   await assert.rejects(() => ensureCursorRunning({
     dir: join(root, 'lifecycle'),
@@ -356,7 +462,7 @@ test('configuration-class supervisor failures do not silently attach', async (t)
   }), /failed to spawn lifecycle supervisor/);
 });
 
-test('ensure still opens a new workbench window when only another project editor is present', async (t) => {
+test('ensure reuses an existing workbench window when only another project editor is present', async (t) => {
   const project = mkdtempSync(join(tmpdir(), 'cb-new-window-'));
   t.after(() => rmSync(project, { recursive: true, force: true }));
   const { spawned, spawnImpl } = fakeSpawnRecorder();
@@ -367,12 +473,13 @@ test('ensure still opens a new workbench window when only another project editor
     cdpIsCursorImpl: async () => true,
     async listCdpPageTargetsImpl() {
       calls += 1;
-      if (calls === 1) return [{ id: 'other', title: 'other-app - Cursor', type: 'page' }];
+      if (calls <= 9) return [{ id: 'other', title: 'other-app - Cursor', type: 'page' }];
       return [
         { id: 'other', title: 'other-app - Cursor', type: 'page' },
         { id: 'opened', title: `${project.split(/[\\/]/).pop()} - Cursor`, type: 'page' },
       ];
     },
+    targetSettleDelayMs: 0,
     spawnImpl,
     findCursorExeDetailsImpl: () => ({
       path: 'C:\\Program Files\\Cursor\\Cursor.exe',
@@ -381,10 +488,56 @@ test('ensure still opens a new workbench window when only another project editor
     }),
   });
   assert.equal(result.ok, true);
-  assert.equal(result.workspaceAction, 'opened-new-window');
+  assert.equal(result.workspaceAction, 'reused-window-for-project');
   assert.equal(result.targetId, 'opened');
   assert.equal(spawned.length, 1);
-  assert.deepEqual(spawned[0].args, ['--new-window', resolve(project)]);
+  assert.deepEqual(spawned[0].args, ['--reuse-window', resolve(project)]);
+});
+
+test('ensure waits for a loading Agents target before considering a workspace CLI handoff', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-loading-agents-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const { spawned, spawnImpl } = fakeSpawnRecorder();
+  let calls = 0;
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => true,
+    cdpIsCursorImpl: async () => true,
+    listCdpPageTargetsImpl: async () => ++calls === 1
+      ? [{ id: 'loading', title: '', type: 'page' }]
+      : [{ id: 'agents', title: 'Cursor Agents', type: 'page' }],
+    targetSettleDelayMs: 0,
+    spawnImpl,
+    findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.workspaceAction, 'reused-agents-window');
+  assert.equal(result.targetId, 'agents');
+  assert.equal(spawned.length, 0);
+});
+
+test('cold launch starts one CDP Cursor without passing a second project-window argument', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-single-window-launch-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const { spawned, spawnImpl } = fakeSpawnRecorder();
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => false,
+    cursorRunningImpl: () => false,
+    findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
+    spawnImpl,
+    waitForCdpImpl: async () => true,
+    findCursorPidByPortImpl: () => 4242,
+    listCdpPageTargetsImpl: async () => [{ id: 'agents', title: 'Cursor Agents', type: 'page' }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.workspaceAction, 'launched-agents-window');
+  assert.equal(result.targetId, 'agents');
+  assert.equal(spawned.length, 1);
+  assert.deepEqual(spawned[0].args, [
+    '--remote-debugging-port=9223',
+    '--remote-allow-origins=http://localhost:9223',
+  ]);
 });
 
 test('Codex thread cwd escapes plugin-cache cwd without exposing a workspace tool parameter', (t) => {

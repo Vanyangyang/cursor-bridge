@@ -158,9 +158,9 @@ Current Cursor compatibility target (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.17.21** | **5.6.2** (`master`, current) | Keeps the 5.6.1 attached fallback while preserving the original Supervisor/WMI failure when CDP is offline. WMI return code `8` and `HRESULT 0x80004005` receive one bounded retry. Two fresh `codex exec -s read-only` runs created persistent Supervisors through WMI, confirming that Full Access is not a general Cursor Bridge prerequisite on the tested Codex host; an explicitly wrapped `codex sandbox :read-only` probe correctly remained blocked. No bootstrap service, scheduled task, or new public lifecycle status was added. |
+| **3.17.21** | **5.7.0** (`master`, current) | Fresh GitHub marketplace installs recover from WMI return code `8` by selecting a verified plugin-cache lifecycle root and stable Supervisor working directory, without ACL changes or privilege elevation. Parallel Agents keep one identity while provisional and durable rows converge. With Cursor fully closed, the recorded Windows 11 acceptance auto-launched a supervised persistent runtime and kept one Cursor Agents target and one top-level window through workspace binding, CCE, and Agent execution. |
 
-Previous Cursor versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived Cursor Bridge 5.5.0 / Cursor 3.17.19, Cursor Bridge 5.4.2 / Cursor 3.17.8, Cursor Bridge 5.4.1 / Cursor 3.16.29, and Cursor Bridge 5.4.0 / Cursor 3.16.17 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
@@ -291,6 +291,7 @@ Cursor Agent + project index
 - `cursor_init` validates and persists one workspace for the current host context. Re-running it switches that context to another workspace.
 - Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
+- On a cold launch, Bridge starts the CDP-enabled Cursor process without a project or `--new-window` argument, waits for the target list to stabilize, then binds the repository inside Agents v2. A transient first target is never treated as canonical merely because it appeared first.
 - When the Agents Window and the workbench are both open, Bridge prefers the Agents Window for the current project. If only the workbench is available, it uses that. It does not create work in `Home`.
 - If Agents Window is already open, ensure reuses that CDP page and does not spawn `Cursor.exe --new-window`. A new workbench window is opened only when Cursor is connected and neither Agents Window nor a matching editor title exists.
 - `cursor_status` lists CDP page titles only. It does not inspect page DOM. CCE reloads a DOM-blank Agents page once. On Windows normal runtime, reusing an Agents Window also performs a throttled, non-activating native compositor refresh so a healthy DOM cannot remain behind a white Electron surface.
@@ -318,6 +319,7 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 - Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.
 - Provider-error trays are retained as terminal evidence; Bridge does not click Retry automatically.
 - Uncertain post-send work retains its reservation. It is not silently released or resubmitted.
+- A parallel Agents v2 task keeps its provisional composer identity reserved until a durable History row is evidenced, then migrates exactly once; another concurrent submission cannot replace that task's `agentId` during convergence.
 - `reap` is for a bound parallel orphan. Targeted `cancel` requires the exact published Agent ID. FIFO tasks on Agents Window or workbench that publish an Agent ID can be stopped the same way. If no ID is published, Bridge will not guess-click Stop; confirm the Cursor chat is stopped, then `abandon`.
 - Task records are process-local. After an MCP restart, inspect Agent History and workspace changes before starting overlapping work.
 
