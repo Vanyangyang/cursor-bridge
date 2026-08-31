@@ -158,9 +158,9 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.18.9** | **5.7.0**（`master`，当前版本） | Cursor 完全关闭时，已发布的 Bridge 通过 CDP 9223 冷启动 Cursor 3.18.9，生命周期始终为 `supervised`、持久且无降级。工作区初始化、带源码锚点的 CCE、FIFO、独立 `parallel_agent`、稳定 Agent 身份，以及 `minimal` 下 CCE 与恢复后的 `normal` 均通过；全程只保留一个 Cursor Agents 窗口和一个 CDP page target。本次没有暴露旧版 IDE/workbench，也没有重新实测模型/思考程度选择器。 |
+| **3.18.9** | **5.7.1**（`master`，当前版本） | Windows 完整重启且 Cursor 关闭后，Bridge 识别 Codex AppContainer 的 `%LOCALAPPDATA%` 重定向，选择 `plugin-cache-fallback`，并启动一个持久 `supervised` Supervisor 和一个 Cursor Agents 窗口；全程只有一个 CDP page target，且没有降级。完整测试为 183/183。5.7.0 的 CCE、FIFO、独立 `parallel_agent`、稳定 Agent ID，以及 `minimal` / 恢复后的 `normal` 证据继续适用；本次纯生命周期补丁没有重新运行模型路径或模型/思考程度选择器。 |
 
-不再主动维护旧 Cursor Bridge 版本。5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor Bridge 版本。5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 

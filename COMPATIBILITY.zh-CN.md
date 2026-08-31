@@ -11,9 +11,37 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.18.9** | **5.7.0** | `master` | 当前维护版本。已安装 Cursor 可执行文件的 ProductVersion 与 FileVersion 均为 3.18.9。Cursor 完全关闭时，已发布的 Bridge 通过 CDP 9223 冷启动它，生命周期始终为 `supervised`、持久且无降级。工作区初始化、带源码锚点的 CCE、FIFO、独立 `parallel_agent`、稳定 Agent 身份，以及 `minimal` 下 CCE 与恢复后的 `normal` 均通过；全程只保留一个 Cursor Agents 窗口和一个 CDP page target。本次没有暴露旧版 IDE/workbench，也没有重新实测模型/思考程度选择器。 |
+| **3.18.9** | **5.7.1** | `master` | 当前维护版本。Windows 完整重启且 Cursor 关闭后，Bridge 识别 Codex AppContainer 的 `%LOCALAPPDATA%` 重定向，选择 `plugin-cache-fallback`，并启动一个持久 `supervised` Supervisor 和一个 Cursor Agents 窗口；全程只有一个 CDP page target，且没有降级。完整测试为 183/183。5.7.0 的 CCE、FIFO、独立 `parallel_agent`、稳定 Agent ID，以及 `minimal` / 恢复后的 `normal` 证据继续适用；本次纯生命周期补丁没有重新运行模型路径或模型/思考程度选择器。 |
 
 ## 历史版本
+
+### Cursor Bridge 5.7.0 — Cursor 3.18.9
+
+状态：**已归档；不再维护。** 不可变 Git ref：`cursor-bridge--v5.7.0`。
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.7.0
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.7.0 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.7.0
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.7.0
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.7.0 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.6.2 — Cursor 3.17.21
 
