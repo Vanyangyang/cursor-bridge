@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Packaged Codex AppContainer hosts now detect when `%LOCALAPPDATA%` runtime materialization is redirected into `Packages\\...\\LocalCache\\Local` and therefore invisible to the WMI-launched Supervisor. Bridge selects the verified plugin-cache lifecycle root before spawning; if a shared Supervisor process exits before opening IPC, exactly one plugin-cache fallback is allowed. The recovery does not change ACLs, elevate, kill Cursor, or retry recursively.
+
 ## [5.7.0] - 2026-08-30
 
 ### Changed
