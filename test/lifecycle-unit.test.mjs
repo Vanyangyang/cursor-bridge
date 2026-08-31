@@ -28,6 +28,7 @@ import {
 import {
   listBootEnvFiles,
   ensureSupervisorConnected,
+  inspectWindowsAppContainerPath,
   materializeLifecycleSupervisorRuntime,
   pingSupervisor,
   probeOutsideJobCwd,
@@ -342,6 +343,27 @@ test('plugin-local lifecycle fallback stays inside the installed plugin root', (
   );
 });
 
+test('AppContainer LocalCache redirection is distinguished from ordinary Windows paths', () => {
+  const requested = 'C:\\Users\\test\\AppData\\Local\\cursor-bridge\\lifecycle\\runtime\\supervisor-a\\cursor-lifecycle-supervisor.mjs';
+  const redirected = 'C:\\Users\\test\\AppData\\Local\\Packages\\OpenAI.Codex_test\\LocalCache\\Local\\cursor-bridge\\lifecycle\\runtime\\supervisor-a\\cursor-lifecycle-supervisor.mjs';
+  assert.deepEqual(inspectWindowsAppContainerPath(requested, {
+    platform: 'win32',
+    realpathImpl: () => redirected,
+  }), {
+    redirected: true,
+    requested,
+    physical: redirected,
+  });
+  assert.equal(inspectWindowsAppContainerPath(requested, {
+    platform: 'win32',
+    realpathImpl: () => requested,
+  }).redirected, false);
+  assert.equal(inspectWindowsAppContainerPath(requested, {
+    platform: 'linux',
+    realpathImpl: () => redirected,
+  }).redirected, false);
+});
+
 test('outside-job cwd probe preserves the exact WMI result', () => {
   let captured = null;
   const result = probeOutsideJobCwd('C:\\probe', {
@@ -401,6 +423,99 @@ test('shared lifecycle WMI 8 selects plugin-local storage before Supervisor spaw
   assert.deepEqual(probes, [shared, fallback]);
   assert.equal(spawned.script.startsWith(fallback), true);
   assert.equal(spawned.args.includes(`--lifecycle-dir=${fallback}`), true);
+});
+
+test('AppContainer-redirected shared runtime selects plugin-local storage before Supervisor spawn', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-appcontainer-fallback-'));
+  const shared = join(root, 'shared-lifecycle');
+  const pluginRoot = join(root, 'plugin-cache', '5.7.0');
+  const dist = join(pluginRoot, 'dist');
+  const source = join(dist, 'cursor-lifecycle-supervisor.mjs');
+  mkdirSync(dist, { recursive: true });
+  writeFileSync(source, 'process.exit(0);\n', 'utf8');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fallback = resolvePluginLocalLifecycleDir(source);
+  const probes = [];
+  let spawned = null;
+  await withEnv({ ...process.env, CURSOR_BRIDGE_LIFECYCLE_DIR: shared }, async () => {
+    await assert.rejects(() => ensureSupervisorConnected({
+      platform: 'win32',
+      supervisorScript: source,
+      connectSupervisorImpl: async () => {
+        throw Object.assign(new Error('missing pipe'), { code: 'ENOENT' });
+      },
+      lifecycleCwdProbeImpl(target) {
+        probes.push(target);
+        return { ok: true, method: 'wmi-win32-process-create', pid: 4242 };
+      },
+      realpathImpl(target) {
+        if (String(target).startsWith(shared)) {
+          return `C:\\Users\\test\\AppData\\Local\\Packages\\OpenAI.Codex_test\\LocalCache\\Local\\${String(target).replace(/^[A-Za-z]:?[\\/]+/, '').replace(/[\\/]/g, '\\')}`;
+        }
+        return target;
+      },
+      spawnNodeOutsideJobImpl(script, args, options) {
+        spawned = { script, args, options };
+        return {
+          ok: false,
+          method: 'failed',
+          error: 'synthetic stop after redirected fallback selection',
+          errorKind: 'policy-blocked',
+          degradedReason: 'spawn-policy-blocked',
+          errorCode: 'EPERM',
+          canAttachFallback: true,
+        };
+      },
+    }), /synthetic stop after redirected fallback selection/);
+  });
+  assert.deepEqual(probes, [shared, fallback]);
+  assert.equal(spawned.script.startsWith(fallback), true);
+  assert.equal(spawned.args.includes(`--lifecycle-dir=${fallback}`), true);
+});
+
+test('a shared Supervisor that exits before IPC gets one plugin-local fallback', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'cb-exited-supervisor-fallback-'));
+  const shared = join(root, 'shared-lifecycle');
+  const pluginRoot = join(root, 'plugin-cache', '5.7.0');
+  const dist = join(pluginRoot, 'dist');
+  const source = join(dist, 'cursor-lifecycle-supervisor.mjs');
+  mkdirSync(dist, { recursive: true });
+  writeFileSync(source, 'process.exit(0);\n', 'utf8');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const fallback = resolvePluginLocalLifecycleDir(source);
+  const spawned = [];
+  await withEnv({ ...process.env, CURSOR_BRIDGE_LIFECYCLE_DIR: shared }, async () => {
+    await assert.rejects(() => ensureSupervisorConnected({
+      platform: 'win32',
+      supervisorScript: source,
+      createWaitMs: 25,
+      connectSupervisorImpl: async () => {
+        throw Object.assign(new Error('missing pipe'), { code: 'ENOENT' });
+      },
+      lifecycleCwdProbeImpl() {
+        return { ok: true, method: 'wmi-win32-process-create', pid: 4242 };
+      },
+      realpathImpl: (target) => target,
+      spawnNodeOutsideJobImpl(script, args, options) {
+        spawned.push({ script, args, options });
+        if (String(script).startsWith(shared)) {
+          return { ok: true, method: 'wmi-win32-process-create', pid: 2147483646 };
+        }
+        return {
+          ok: false,
+          method: 'failed',
+          error: 'synthetic stop after one IPC fallback',
+          errorKind: 'policy-blocked',
+          degradedReason: 'spawn-policy-blocked',
+          errorCode: 'EPERM',
+          canAttachFallback: true,
+        };
+      },
+    }), /synthetic stop after one IPC fallback/);
+  });
+  assert.equal(spawned.length, 2);
+  assert.equal(spawned[0].script.startsWith(shared), true);
+  assert.equal(spawned[1].script.startsWith(fallback), true);
 });
 
 test('offline attached fallback preserves the original supervisor failure', async (t) => {

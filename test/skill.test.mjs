@@ -163,17 +163,17 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '5.7.0');
-  assert.match(codexCursorManifest.version, /^5\.7\.0\+codex\./);
-  assert.equal(claudeCursorManifest.version, '5.7.0');
-  assert.match(serverSource, /const PLUGIN_VERSION = '5\.7\.0';/);
+  assert.equal(rootPackage.version, '5.7.1');
+  assert.match(codexCursorManifest.version, /^5\.7\.1\+codex\./);
+  assert.equal(claudeCursorManifest.version, '5.7.1');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.7\.1';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.7.0');
+  assert.equal(claudeCursor?.version, '5.7.1');
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.3.7');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
