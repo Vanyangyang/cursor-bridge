@@ -3,7 +3,7 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.18.9",
-    "cursorBridgeVersion": "5.7.0",
+    "cursorBridgeVersion": "5.7.1",
     "sourceRef": "master",
     "status": "current",
     "acceptance": {
@@ -11,7 +11,7 @@
       "ideWorkbench": "not-exposed-in-live-run",
       "agentsWindow": "live-tested-cold-single-window-cdp-9223",
       "modelPreferences": "not-live-rechecked-on-3.18.9",
-      "readOnlyMcpSupervisor": "live-tested-reused-supervisor-cold-cursor-launch",
+      "readOnlyMcpSupervisor": "live-tested-appcontainer-plugin-cache-fallback-after-windows-reboot",
       "attachedFallback": "regression-tested-not-live-rechecked-on-3.18.9",
       "lifecycleDiagnostics": "live-tested",
       "fifoExecution": "live-tested",
@@ -22,6 +22,12 @@
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.18.9",
+      "cursorBridgeVersion": "5.7.0",
+      "gitRef": "cursor-bridge--v5.7.0",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.17.21",
       "cursorBridgeVersion": "5.6.2",

@@ -11,9 +11,37 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.18.9** | **5.7.0** | `master` | Current maintained version. The installed Cursor executable reported product and file version 3.18.9. With Cursor fully closed, the published Bridge cold-launched it on CDP 9223 and remained `supervised`, persistent, and undegraded. Workspace initialization, source-anchored CCE, FIFO, independent `parallel_agent` execution, stable Agent identities, and CCE across `minimal` / restored `normal` all passed while retaining one Cursor Agents window and one CDP page target. The legacy IDE/workbench target was not exposed, and the model/effort picker was not live-rechecked in this refresh. |
+| **3.18.9** | **5.7.1** | `master` | Current maintained version. After a full Windows reboot with Cursor closed, Bridge detected the Codex AppContainer `%LOCALAPPDATA%` redirection, selected `plugin-cache-fallback`, and started one persistent `supervised` Supervisor plus one Cursor Agents window with one CDP page target and no degradation. The complete suite passed 183/183. The 5.7.0 CCE, FIFO, independent `parallel_agent`, stable Agent-ID, and `minimal` / restored `normal` evidence remains applicable; model-backed paths and model/effort selection were not live-rerun for this lifecycle-only patch. |
 
 ## Historical versions
+
+### Cursor Bridge 5.7.0 — Cursor 3.18.9
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.7.0`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.7.0
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.7.0 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.7.0
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.7.0
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.7.0 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.6.2 — Cursor 3.17.21
 

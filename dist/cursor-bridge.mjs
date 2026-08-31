@@ -12257,6 +12257,7 @@ import {
   existsSync as existsSync4,
   mkdirSync as mkdirSync5,
   readFileSync as readFileSync4,
+  realpathSync,
   readdirSync,
   renameSync as renameSync4,
   rmSync as rmSync4,
@@ -12282,6 +12283,22 @@ function resolvePluginLocalLifecycleDir(sourceScript) {
   const scriptDir = dirname4(resolve5(sourceScript));
   const pluginRoot = basename4(scriptDir).toLowerCase() === "dist" ? dirname4(scriptDir) : scriptDir;
   return join6(pluginRoot, ".cursor-bridge-lifecycle");
+}
+function inspectWindowsAppContainerPath(target, options = {}) {
+  const platform = options.platform || process.platform;
+  const requested = win32Path.normalize(win32Path.resolve(String(target || "")));
+  if (platform !== "win32") {
+    return { redirected: false, requested, physical: null };
+  }
+  try {
+    const realpathImpl = options.realpathImpl || realpathSync.native || realpathSync;
+    const physical = win32Path.normalize(win32Path.resolve(String(realpathImpl(target))));
+    const physicalLower = physical.toLowerCase();
+    const redirected = requested.toLowerCase() !== physicalLower && physicalLower.includes("\\appdata\\local\\packages\\") && physicalLower.includes("\\localcache\\local\\");
+    return { redirected, requested, physical };
+  } catch {
+    return { redirected: false, requested, physical: null };
+  }
 }
 function probeOutsideJobCwd(cwd, options = {}) {
   const platform = options.platform || process.platform;
@@ -12578,40 +12595,43 @@ async function ensureSupervisorConnected(options = {}) {
     }, initialConnection.error);
   }
   const canProbeFallback = platform === "win32" && options._disablePluginLocalFallback !== true && !options.dir && !options.sock && !options.pidPath && !options.lockPath && (!options.spawnNodeOutsideJobImpl || options.lifecycleCwdProbeImpl);
+  const runProbe = canProbeFallback ? options.lifecycleCwdProbeImpl || ((target) => probeOutsideJobCwd(target, {
+    platform,
+    systemRoot: options.systemRoot,
+    commandInterpreter: options.commandInterpreter,
+    spawnOutsideJobImpl: options.probeSpawnOutsideJobImpl,
+    existsImpl: options.existsImpl,
+    env: options.env || process.env
+  })) : null;
+  const connectPluginLocalFallback = async ({ sharedFailure = null } = {}) => {
+    const fallbackDir = options.pluginLocalLifecycleDir || resolvePluginLocalLifecycleDir(sourceScript);
+    ensureLifecycleDir(fallbackDir);
+    const fallbackProbe = runProbe ? runProbe(fallbackDir) : { ok: true, method: "not-required" };
+    if (!fallbackProbe || fallbackProbe.ok !== true) {
+      throw lifecycleClientError(`shared lifecycle storage cannot host the persistent Supervisor and plugin-local fallback is also unavailable: ${fallbackDir}`, {
+        errorKind: fallbackProbe?.errorKind || sharedFailure?.errorKind || "unknown",
+        degradedReason: fallbackProbe?.degradedReason || "plugin-local-lifecycle-unavailable",
+        errorCode: fallbackProbe && (fallbackProbe.errorCode ?? fallbackProbe.returnValue) || null,
+        canAttachFallback: true,
+        spawnCwd: fallbackDir
+      });
+    }
+    return ensureSupervisorConnected({
+      ...options,
+      dir: fallbackDir,
+      sock: void 0,
+      pidPath: void 0,
+      lockPath: void 0,
+      _disablePluginLocalFallback: true,
+      _lifecycleStorageMode: "plugin-cache-fallback"
+    });
+  };
   if (canProbeFallback) {
     ensureLifecycleDir(dir);
-    const runProbe = options.lifecycleCwdProbeImpl || ((target) => probeOutsideJobCwd(target, {
-      platform,
-      systemRoot: options.systemRoot,
-      commandInterpreter: options.commandInterpreter,
-      spawnOutsideJobImpl: options.probeSpawnOutsideJobImpl,
-      existsImpl: options.existsImpl,
-      env: options.env || process.env
-    }));
     const sharedProbe = runProbe(dir);
     const sharedCode = sharedProbe && (sharedProbe.errorCode ?? sharedProbe.returnValue);
     if (sharedProbe && sharedProbe.ok !== true && (sharedCode === 8 || sharedProbe.degradedReason === "wmi-unknown-8")) {
-      const fallbackDir = options.pluginLocalLifecycleDir || resolvePluginLocalLifecycleDir(sourceScript);
-      ensureLifecycleDir(fallbackDir);
-      const fallbackProbe = runProbe(fallbackDir);
-      if (!fallbackProbe || fallbackProbe.ok !== true) {
-        throw lifecycleClientError(`shared lifecycle storage is inaccessible to WMI and plugin-local fallback is also unavailable: ${fallbackDir}`, {
-          errorKind: fallbackProbe?.errorKind || sharedProbe.errorKind || "unknown",
-          degradedReason: fallbackProbe?.degradedReason || "plugin-local-lifecycle-unavailable",
-          errorCode: fallbackProbe && (fallbackProbe.errorCode ?? fallbackProbe.returnValue) || null,
-          canAttachFallback: true,
-          spawnCwd: fallbackDir
-        });
-      }
-      return ensureSupervisorConnected({
-        ...options,
-        dir: fallbackDir,
-        sock: void 0,
-        pidPath: void 0,
-        lockPath: void 0,
-        _disablePluginLocalFallback: true,
-        _lifecycleStorageMode: "plugin-cache-fallback"
-      });
+      return connectPluginLocalFallback({ sharedFailure: sharedProbe });
     }
   }
   let runtime;
@@ -12625,6 +12645,18 @@ async function ensureSupervisorConnected(options = {}) {
     } : (options.materializeRuntimeImpl || materializeLifecycleSupervisorRuntime)({ sourceScript, dir });
   } catch (error2) {
     throw lifecycleClientError(`failed to prepare lifecycle supervisor runtime: ${error2 instanceof Error ? error2.message : String(error2)}`, filesystemFallbackDetails(error2), error2);
+  }
+  const runtimePath = inspectWindowsAppContainerPath(runtime.script, {
+    platform,
+    realpathImpl: options.realpathImpl
+  });
+  if (canProbeFallback && runtimePath.redirected) {
+    return connectPluginLocalFallback({
+      sharedFailure: {
+        errorKind: "policy-blocked",
+        degradedReason: "appcontainer-path-redirected"
+      }
+    });
   }
   const stalePid = readPidFile(pidPath);
   if (stalePid && !isProcessAlive(stalePid)) {
@@ -12708,7 +12740,20 @@ async function ensureSupervisorConnected(options = {}) {
       }
       await sleep(100);
     }
-    throw new Error(`spawned supervisor (${spawned.method} pid=${spawned.pid}) but IPC not ready within ${createWaitMs}ms sock=${sock}`);
+    if (canProbeFallback && !isProcessAlive(spawned.pid)) {
+      return connectPluginLocalFallback({
+        sharedFailure: {
+          errorKind: "supervisor-start-failed",
+          degradedReason: "supervisor-exited-before-ipc"
+        }
+      });
+    }
+    throw lifecycleClientError(`spawned supervisor (${spawned.method} pid=${spawned.pid}) but IPC not ready within ${createWaitMs}ms sock=${sock}`, {
+      errorKind: "supervisor-unresponsive",
+      degradedReason: "supervisor-ipc-timeout",
+      canAttachFallback: true,
+      spawnCwd: spawned.spawnCwd || spawnCwd || null
+    });
   } finally {
     tryUnlink(bootEnvPath);
   }
@@ -22424,7 +22469,7 @@ function updateCursorModelPreferences(filePath, { action, target, model, effort 
 init_workspace_binding();
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.7.0";
+var PLUGIN_VERSION = "5.7.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
