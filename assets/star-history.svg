@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" role="img" aria-labelledby="title desc">
   <title id="title">cursor-bridge — Star History</title>
-  <desc id="desc">GitHub star observations from Jul 2025 through Aug 2026, latest snapshot 49 stars.</desc>
+  <desc id="desc">GitHub star observations from Jul 2025 through Aug 2026, latest snapshot 57 stars.</desc>
   <style>
     :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --grid: #d8dee4; --line: #1f883d; --dot: #2da44e; --fill: #dafbe1; }
     @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #f0f6fc; --muted: #8b949e; --grid: #30363d; --line: #3fb950; --dot: #56d364; --fill: #12261e; } }
@@ -20,7 +20,7 @@
   </defs>
   <rect width="900" height="500" rx="18" fill="var(--bg)" />
   <text x="62" y="48" font-size="27" font-weight="700">cursor-bridge — Star History</text>
-  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">49 stars</text>
+  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">57 stars</text>
   <g aria-hidden="true">
     <line x1="80" y1="410.00" x2="850" y2="410.00" class="grid" />
     <text x="61" y="416.00" text-anchor="end" font-size="15" class="muted">0</text>
@@ -36,37 +36,38 @@
     <text x="465" y="440" text-anchor="middle" font-size="15" class="muted">Feb 2026</text>
     <text x="850" y="440" text-anchor="end" font-size="15" class="muted">Aug 2026</text>
   </g>
-  <path d="M80 410.00 H93.04 V404.50 H113.75 V399.00 H117.52 V393.50 H119.40 V382.50 H126.93 V377.00 H143.88 V371.50 H448.92 V366.00 H761.50 V349.50 H802.93 V344.00 H804.81 V338.50 H812.34 V327.50 H814.22 V305.50 H816.11 V300.00 H819.87 V278.00 H821.76 V267.00 H827.40 V261.50 H829.29 V256.00 H831.17 V245.00 H834.94 V239.50 H840.59 V228.50 H842.47 V217.50 H846.23 V212.00 H848.12 V184.50 H850.00 V140.50 H850 V410 H80 Z" fill="url(#area)" />
-  <path d="M80 410.00 H93.04 V404.50 H113.75 V399.00 H117.52 V393.50 H119.40 V382.50 H126.93 V377.00 H143.88 V371.50 H448.92 V366.00 H761.50 V349.50 H802.93 V344.00 H804.81 V338.50 H812.34 V327.50 H814.22 V305.50 H816.11 V300.00 H819.87 V278.00 H821.76 V267.00 H827.40 V261.50 H829.29 V256.00 H831.17 V245.00 H834.94 V239.50 H840.59 V228.50 H842.47 V217.50 H846.23 V212.00 H848.12 V184.50 H850.00 V140.50 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
+  <path d="M80 410.00 H93.01 V404.50 H113.67 V399.00 H117.43 V393.50 H119.31 V382.50 H126.82 V377.00 H143.72 V371.50 H448.02 V366.00 H759.84 V349.50 H801.16 V344.00 H803.04 V338.50 H810.55 V327.50 H812.43 V305.50 H814.31 V300.00 H818.07 V278.00 H819.95 V267.00 H825.58 V261.50 H827.46 V256.00 H829.34 V245.00 H833.09 V239.50 H838.73 V228.50 H840.61 V217.50 H844.36 V212.00 H846.24 V184.50 H848.12 V140.50 H850.00 V96.50 H850 V410 H80 Z" fill="url(#area)" />
+  <path d="M80 410.00 H93.01 V404.50 H113.67 V399.00 H117.43 V393.50 H119.31 V382.50 H126.82 V377.00 H143.72 V371.50 H448.02 V366.00 H759.84 V349.50 H801.16 V344.00 H803.04 V338.50 H810.55 V327.50 H812.43 V305.50 H814.31 V300.00 H818.07 V278.00 H819.95 V267.00 H825.58 V261.50 H827.46 V256.00 H829.34 V245.00 H833.09 V239.50 H838.73 V228.50 H840.61 V217.50 H844.36 V212.00 H846.24 V184.50 H848.12 V140.50 H850.00 V96.50 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
   <g fill="var(--dot)" stroke="var(--bg)" stroke-width="2">
-    <circle cx="93.04" cy="404.50" r="5" />
-    <circle cx="113.75" cy="399.00" r="5" />
-    <circle cx="117.52" cy="393.50" r="5" />
-    <circle cx="119.40" cy="382.50" r="5" />
-    <circle cx="126.93" cy="377.00" r="5" />
-    <circle cx="143.88" cy="371.50" r="5" />
-    <circle cx="448.92" cy="366.00" r="5" />
-    <circle cx="761.50" cy="349.50" r="5" />
-    <circle cx="802.93" cy="344.00" r="5" />
-    <circle cx="804.81" cy="338.50" r="5" />
-    <circle cx="812.34" cy="327.50" r="5" />
-    <circle cx="814.22" cy="305.50" r="5" />
-    <circle cx="816.11" cy="300.00" r="5" />
-    <circle cx="819.87" cy="278.00" r="5" />
-    <circle cx="821.76" cy="267.00" r="5" />
-    <circle cx="827.40" cy="261.50" r="5" />
-    <circle cx="829.29" cy="256.00" r="5" />
-    <circle cx="831.17" cy="245.00" r="5" />
-    <circle cx="834.94" cy="239.50" r="5" />
-    <circle cx="840.59" cy="228.50" r="5" />
-    <circle cx="842.47" cy="217.50" r="5" />
-    <circle cx="846.23" cy="212.00" r="5" />
-    <circle cx="848.12" cy="184.50" r="5" />
-    <circle cx="850.00" cy="140.50" r="6" />
+    <circle cx="93.01" cy="404.50" r="5" />
+    <circle cx="113.67" cy="399.00" r="5" />
+    <circle cx="117.43" cy="393.50" r="5" />
+    <circle cx="119.31" cy="382.50" r="5" />
+    <circle cx="126.82" cy="377.00" r="5" />
+    <circle cx="143.72" cy="371.50" r="5" />
+    <circle cx="448.02" cy="366.00" r="5" />
+    <circle cx="759.84" cy="349.50" r="5" />
+    <circle cx="801.16" cy="344.00" r="5" />
+    <circle cx="803.04" cy="338.50" r="5" />
+    <circle cx="810.55" cy="327.50" r="5" />
+    <circle cx="812.43" cy="305.50" r="5" />
+    <circle cx="814.31" cy="300.00" r="5" />
+    <circle cx="818.07" cy="278.00" r="5" />
+    <circle cx="819.95" cy="267.00" r="5" />
+    <circle cx="825.58" cy="261.50" r="5" />
+    <circle cx="827.46" cy="256.00" r="5" />
+    <circle cx="829.34" cy="245.00" r="5" />
+    <circle cx="833.09" cy="239.50" r="5" />
+    <circle cx="838.73" cy="228.50" r="5" />
+    <circle cx="840.61" cy="217.50" r="5" />
+    <circle cx="844.36" cy="212.00" r="5" />
+    <circle cx="846.24" cy="184.50" r="5" />
+    <circle cx="848.12" cy="140.50" r="5" />
+    <circle cx="850.00" cy="96.50" r="6" />
   </g>
   <g transform="translate(814 91)" fill="none" stroke="var(--dot)" stroke-width="2.3" stroke-linejoin="round">
     <path d="M0 -12 L3.6 -3.7 L12 -3.7 L5.2 1.4 L7.8 10 L0 5 L-7.8 10 L-5.2 1.4 L-12 -3.7 L-3.6 -3.7 Z" />
   </g>
-  <text x="830" y="96" font-size="15" class="muted">49</text>
-  <text x="80" y="476" font-size="13" class="muted">Source: GitHub API · automatically updated 2026-08-30</text>
+  <text x="830" y="96" font-size="15" class="muted">57</text>
+  <text x="80" y="476" font-size="13" class="muted">Source: GitHub API · automatically updated 2026-08-31</text>
 </svg>
