@@ -155,7 +155,16 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
 
 function isSessionTurnReplyReady(responseBaseline, snapshot = {}) {
   if (!responseBaseline) return true;
-  return Number(snapshot.messageCount || 0) >= Number(responseBaseline.messageCount || 0) + 2;
+  if (Number(snapshot.messageCount || 0) >= Number(responseBaseline.messageCount || 0) + 2) return true;
+  const replyLength = Number(snapshot.replyLength || 0);
+  return replyLength > 0 && (
+    replyLength !== Number(responseBaseline.replyLength || 0)
+    || Number(snapshot.replyHash || 0) !== Number(responseBaseline.replyHash || 0)
+  );
+}
+
+function shouldScheduleParallelOriginRestore(job) {
+  return String(job && job.sessionMode || 'isolated') === 'isolated';
 }
 
 const DO_DEFAULT_CONTRACT =
@@ -375,7 +384,7 @@ function makeClient(wsUrl) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function evalJS(c, expr) {
-  const r = await c.send('Runtime.evaluate', { expression: expr, returnByValue: true, includeCommandLineAPI: true });
+  const r = await c.send('Runtime.evaluate', { expression: expr, returnByValue: true, includeCommandLineAPI: true, awaitPromise: true });
     if (r.exceptionDetails) throw new Error('Page exception: ' + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
   return r.result && r.result.value;
 }
@@ -767,6 +776,7 @@ const REACT_ADAPTER_BODY = `
   const findV2Props=()=>{
     const found=[]; const seen=new Set();
     let globalSelectAgent=null;
+    let globalSelectedAgentId=null;
     let sectionIdByAgentId=null;
     for(const root of document.querySelectorAll('.glass-sidebar-agent-list-container')){
       const nodes=[]; let n=root;
@@ -778,7 +788,10 @@ const REACT_ADAPTER_BODY = `
           let f=key.startsWith('__reactFiber$')?seed:{memoizedProps:seed,return:null};
           for(let j=0;f&&j<80;j++,f=f.return){
             for(const p of [f.memoizedProps,f.pendingProps,f.stateNode&&f.stateNode.props]){
-              if(p&&typeof p.onSelectAgent==='function'&&!globalSelectAgent)globalSelectAgent=p.onSelectAgent;
+              if(p&&typeof p.onSelectAgent==='function'&&!globalSelectAgent){
+                globalSelectAgent=p.onSelectAgent;
+                globalSelectedAgentId=p.selectedAgentId!==undefined?p.selectedAgentId:p.committedSelectedAgentId;
+              }
               if(p&&p.sectionIdByAgentId&&!sectionIdByAgentId)sectionIdByAgentId=p.sectionIdByAgentId;
               const selectAgent=p&&(typeof p.onSelectAgent==='function'
                 ?p.onSelectAgent
@@ -796,6 +809,7 @@ const REACT_ADAPTER_BODY = `
       }
     }
     found.globalSelectAgent=globalSelectAgent;
+    found.globalSelectedAgentId=globalSelectedAgentId;
     found.sectionIdByAgentId=sectionIdByAgentId;
     return found;
   };
@@ -805,9 +819,10 @@ const REACT_ADAPTER_BODY = `
       return {
         kind:'agents_v2',
         entries:()=>{
-          const entries=[];const seen=new Set();let index=0;let selectedRaw='';
+          const entries=[];const seen=new Set();let index=0;
+          let selectedRaw=String(readScalar(v2.globalSelectedAgentId)||'').replace(/^local:/,'');
           for(const p of v2){
-            const selectedId=readScalar(p.selectedAgentId);
+            const selectedId=readScalar(v2.globalSelectedAgentId)||readScalar(p.selectedAgentId);
             if(!selectedRaw&&selectedId)selectedRaw=String(selectedId).replace(/^local:/,'');
             for(const header of p.section.headers){
               const entry=normalizeV2(header,selectedId,index++,p.section);
@@ -853,15 +868,18 @@ const REACT_ADAPTER_BODY = `
           }
           return entries;
         },
-        open:id=>{
+        open:async id=>{
           const raw=String(id||'').replace(/^local:/,'');
+          if(String(readScalar(v2.globalSelectedAgentId)||'').replace(/^local:/,'')===raw)return true;
           if(v2.some(p=>String(readScalar(p.selectedAgentId)||'').replace(/^local:/,'')===raw))return true;
           for(const p of v2){
             const header=p.section.headers.find(h=>String(readScalar(h&&h.id)||'')===raw);
-            if(header){p.onSelectAgent(header);return true;}
+            if(header){return (await p.onSelectAgent(header))!==false;}
           }
           const registered=v2.sectionIdByAgentId&&(v2.sectionIdByAgentId instanceof Map?v2.sectionIdByAgentId.has(raw):v2.sectionIdByAgentId[raw]!==undefined);
-          if(registered&&typeof v2.globalSelectAgent==='function'){v2.globalSelectAgent(raw);return true;}
+          if(registered&&typeof v2.globalSelectAgent==='function'){
+            return (await v2.globalSelectAgent(raw,{preserveSidebarAction:true}))!==false;
+          }
           return false;
         }
       };
@@ -903,9 +921,9 @@ const EXPR_HISTORY_ENTRIES = `(function(){${REACT_ADAPTER_BODY}
 
 function exprOpenAgent(agentId) {
   const id = JSON.stringify(String(agentId));
-  return `(function(){${REACT_ADAPTER_BODY}
+  return `(async function(){${REACT_ADAPTER_BODY}
     if(!a)return 'REACT_ADAPTER_UNAVAILABLE';
-    return a.open(${id})?'OPENED':'AGENT_NOT_FOUND';
+    return (await a.open(${id}))?'OPENED':'AGENT_NOT_FOUND';
   })()`;
 }
 
@@ -2277,7 +2295,8 @@ class CursorBridge {
               job.sentAt = job.sentAt || new Date().toISOString();
               job.phase = 'running';
               job.reservationScope = job.readOnly ? 'agent' : 'paths';
-              if (!this.parallelRestoreAgentId && submitted.previousSelectedId) {
+              if (shouldScheduleParallelOriginRestore(job)
+                  && !this.parallelRestoreAgentId && submitted.previousSelectedId) {
                 this.parallelRestoreAgentId = submitted.previousSelectedId;
                 this.parallelRestoreTargetId = job.targetId;
               }
@@ -2931,6 +2950,38 @@ class CursorBridge {
     }
   }
 
+  async _readResponseSnapshot(c) {
+    let snapshot = { messageCount: 0, replyLength: 0, replyHash: 0, stop: 0 };
+    try { snapshot = JSON.parse(await evalJS(c, EXPR_SNAP) || '{}'); } catch {}
+    return {
+      messageCount: Number(snapshot.messageCount || 0),
+      replyLength: Number(snapshot.replyLength || 0),
+      replyHash: Number(snapshot.replyHash || 0),
+      stop: Number(snapshot.stop || 0),
+    };
+  }
+
+  async _captureSessionResponseBaseline(c, timeoutMs = 15000, pollMs = 250) {
+    const deadline = Date.now() + timeoutMs;
+    let lastKey = '';
+    while (Date.now() < deadline) {
+      const snapshot = await this._readResponseSnapshot(c);
+      const key = snapshot.messageCount > 0 && snapshot.replyLength > 0 && snapshot.stop === 0
+        ? `${snapshot.messageCount}:${snapshot.replyLength}:${snapshot.replyHash}`
+        : '';
+      if (key && key === lastKey) {
+        return {
+          messageCount: snapshot.messageCount,
+          replyLength: snapshot.replyLength,
+          replyHash: snapshot.replyHash,
+        };
+      }
+      lastKey = key;
+      await sleep(pollMs);
+    }
+    throw cursorSessionError('SESSION_BASELINE_UNAVAILABLE', 'the previous completed reply did not hydrate to a stable snapshot before continuation');
+  }
+
   async _submitSessionTurn(job) {
     if (!job.agentId) throw cursorSessionError('SESSION_AGENT_NOT_BOUND', job.sessionId || 'unknown session');
     const page = await findPage({
@@ -2964,13 +3015,7 @@ class CursorBridge {
       this._throwIfCancelledBeforeSend(job);
       await this._applyModelPreference(c, job.modelPreference, job);
       this._throwIfCancelledBeforeSend(job);
-      let baseline = { messageCount: 0, replyLength: 0, replyHash: 0 };
-      try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
-      job.responseBaseline = {
-        messageCount: Number(baseline.messageCount || 0),
-        replyLength: Number(baseline.replyLength || 0),
-        replyHash: Number(baseline.replyHash || 0),
-      };
+      job.responseBaseline = await this._captureSessionResponseBaseline(c);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
       const filled = await evalJS(c, exprFill(job.prompt));
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') {
@@ -3155,15 +3200,30 @@ class CursorBridge {
     throw new Error(`Cursor parallel_agent task timed out (${job.timeoutMs}ms)${detail}`);
   }
 
-  async _waitForSelectedAgent(c, agentId, timeoutMs = 15000) {
+  async _requestExactAgentSelection(c, agentId) {
+    if (!(await this._ensureHistoryOpen(c))) return 'REACT_ADAPTER_UNAVAILABLE';
+    try {
+      return await evalJS(c, exprOpenAgent(agentId));
+    } finally {
+      await this._closeHistory(c);
+    }
+  }
+
+  async _waitForSelectedAgent(c, agentId, timeoutMs = 15000, retryDelayMs = 2500, pollMs = 250) {
     const deadline = Date.now() + timeoutMs;
+    const retryAt = Date.now() + retryDelayMs;
+    let retried = false;
     while (Date.now() < deadline) {
       const entries = await this._readAgentEntries(c);
       const target = entries.find((e) => e.id === agentId);
       if (target && target.isSelected) return true;
-      await sleep(250);
+      if (!retried && Date.now() >= retryAt) {
+        retried = true;
+        await this._requestExactAgentSelection(c, agentId);
+      }
+      await sleep(pollMs);
     }
-      throw new Error(`After opening ${agentId}, it could not be confirmed as the selected Agent`);
+    throw new Error(`After opening ${agentId}, it could not be confirmed as the selected Agent`);
   }
 
   async _collectParallelAgent(job) {
@@ -3185,8 +3245,7 @@ class CursorBridge {
       // Agent History 已给出完成图标，但打开会话后的 Markdown/虚拟列表仍可能延迟挂载。
       // 给视图约 24 秒稳定时间，并允许只有一个可见 Markdown（常见于用户 prompt 不是 markdown 的情况）。
       for (let i = 0; i < 80; i++) {
-        let snap = { messageCount: 0, replyLength: 0, replyHash: 0 };
-        try { snap = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
+        const snap = await this._readResponseSnapshot(c);
         const candidate = String(await evalJS(c, EXPR_EXTRACT) || '').trim();
         const hasNewTurn = isSessionTurnReplyReady(job.responseBaseline, snap);
         if (candidate && hasNewTurn && Number(snap.stop || 0) === 0) {
@@ -4251,6 +4310,7 @@ export {
   normalizeCceSearchResult,
   isConfirmedCompletedReply,
   isSessionTurnReplyReady,
+  shouldScheduleParallelOriginRestore,
   buildToolDefinitions,
   CURSOR_MODEL_EFFORTS,
   CURSOR_MODEL_TARGETS,

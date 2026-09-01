@@ -50,8 +50,8 @@ restart/update -> ready (reattachable) | needs_attention (reconciliation require
 - One session has at most one active turn.
 - A persisted sender lease contains only the task ID, adapter instance ID, epoch, and expiry.
 - Repeating the latest `request_id` returns the existing turn/session instead of sending again.
-- Before a continued send, Bridge records the visible message count and reply signature.
-- Result collection accepts only an assistant reply appended after that baseline.
+- Before a continued send, Bridge reopens the exact Agent, keeps it selected between session turns, and waits for the previous completed reply to hydrate to a stable visible message-count and reply-signature baseline.
+- Result collection accepts only a stable completed assistant reply that advances the visible message count or changes that reply signature. This supports Cursor's virtualized message list without returning the prior turn.
 - The primary agent still owns real diff inspection, tests, and final acceptance.
 
 ## Storage and update boundary

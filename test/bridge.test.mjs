@@ -16,6 +16,7 @@ import {
   buildToolDefinitions,
   isConfirmedCompletedReply,
   isSessionTurnReplyReady,
+  shouldScheduleParallelOriginRestore,
   normalizeCceSearchResult,
   normalizeAllowedPath,
   normalizeDelegationMode,
@@ -306,7 +307,7 @@ test('chat panel fallback includes the current Cursor Ctrl+I sidepanel shortcut'
   assert.match(CursorBridge.prototype._ensureChatPanel.toString(), /'I', 'KeyI', 73/);
 });
 
-test('Cursor Agents v2 React adapter normalizes headers and opens by header identity', () => {
+test('Cursor Agents v2 React adapter normalizes headers and opens by header identity', async () => {
   const selected = [];
   class ReactiveValue {
     constructor(value) { this._value = value; }
@@ -359,11 +360,11 @@ test('Cursor Agents v2 React adapter normalizes headers and opens by header iden
       ['local:agent-b', 'Beta', 200, false, false, 'check-circled'],
     ],
   );
-  assert.equal(Function('document', `return ${exprOpenAgent('local:agent-b')};`)(document), 'OPENED');
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:agent-b')};`)(document), 'OPENED');
   assert.equal(selected[0], headers[1]);
 });
 
-test('Cursor Agents v2 React adapter supports Cursor 3.17 split row handlers', () => {
+test('Cursor Agents v2 React adapter supports Cursor 3.17 split row handlers', async () => {
   const selected = [];
   class ReactiveValue {
     constructor(value) { this._value = value; }
@@ -411,13 +412,13 @@ test('Cursor Agents v2 React adapter supports Cursor 3.17 split row handlers', (
       ['local:agent-317-b', 'Cursor 3.17 Beta', false],
     ],
   );
-  assert.equal(Function('document', `return ${exprOpenAgent('local:agent-317-b')};`)(document), 'OPENED');
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:agent-317-b')};`)(document), 'OPENED');
   assert.equal(selected.length, 1);
   assert.equal(selected[0][0], headers[1]);
   assert.equal(selected[0][1], undefined);
 });
 
-test('Cursor Agents v2 React adapter exposes a selected 3.17 draft before History inserts it', () => {
+test('Cursor Agents v2 React adapter exposes a selected 3.17 draft before History inserts it', async () => {
   const selected = [];
   const headers = [
     {
@@ -462,21 +463,27 @@ test('Cursor Agents v2 React adapter exposes a selected 3.17 draft before Histor
       ['local:draft-agent', true, false, 'check-circled'],
     ],
   );
-  assert.equal(Function('document', `return ${exprOpenAgent('local:draft-agent')};`)(document), 'OPENED');
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:draft-agent')};`)(document), 'OPENED');
   assert.equal(selected.length, 0);
 });
 
-test('Cursor 3.17.21 section map keeps draft Agents addressable before headers insert them', () => {
+test('Cursor 3.17.21 section map keeps draft Agents addressable before headers insert them', async () => {
   const selected = [];
+  const globalProps = {
+    sectionIdByAgentId: new Map([
+      ['draft-a', 'repo:github.com/vanyangyang/cursor-bridge'],
+      ['draft-b', 'repo:github.com/vanyangyang/cursor-bridge'],
+    ]),
+    selectedAgentId: 'draft-b',
+    async onSelectAgent(id, options) {
+      selected.push([id, options]);
+      globalProps.selectedAgentId = id;
+      return true;
+    },
+  };
   const global = {
     parentElement: null,
-    '__reactProps$global': {
-      sectionIdByAgentId: new Map([
-        ['draft-a', 'repo:github.com/vanyangyang/cursor-bridge'],
-        ['draft-b', 'repo:github.com/vanyangyang/cursor-bridge'],
-      ]),
-      onSelectAgent(id) { selected.push(id); },
-    },
+    '__reactProps$global': globalProps,
   };
   const root = {
     parentElement: global,
@@ -506,8 +513,13 @@ test('Cursor 3.17.21 section map keeps draft Agents addressable before headers i
     ['local:draft-b', true, 'check-circled', true, true],
     ['local:draft-a', false, 'registered', true, true],
   ]);
-  assert.equal(Function('document', `return ${exprOpenAgent('local:draft-a')};`)(document), 'OPENED');
-  assert.deepEqual(selected, ['draft-a']);
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:draft-a')};`)(document), 'OPENED');
+  assert.deepEqual(selected, [['draft-a', { preserveSidebarAction: true }]]);
+  const selectedSnapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.deepEqual(selectedSnapshot.entries.map((entry) => [entry.id, entry.isSelected]), [
+    ['local:draft-a', true],
+    ['local:draft-b', false],
+  ]);
 });
 
 test('provider error tray expression extracts terminal evidence without clicking controls', () => {
@@ -1164,10 +1176,58 @@ test('cursor_do defaults to FIFO and keeps background task identity', async () =
 
 test('continued sessions collect only a reply appended after the pre-send baseline', () => {
   const baseline = { messageCount: 14, replyLength: 120, replyHash: 42 };
-  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 14 }), false);
-  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 15 }), false);
-  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 16 }), true);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 14, replyLength: 120, replyHash: 42 }), false);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 15, replyLength: 120, replyHash: 42 }), false);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 16, replyLength: 120, replyHash: 42 }), true);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 1, replyLength: 88, replyHash: 99 }), true);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 14, replyLength: 0, replyHash: 99 }), false);
   assert.equal(isSessionTurnReplyReady(null, { messageCount: 1 }), true);
+});
+
+test('persistent sessions keep their exact Agent selected between turns', () => {
+  assert.equal(shouldScheduleParallelOriginRestore({ sessionMode: 'isolated' }), true);
+  assert.equal(shouldScheduleParallelOriginRestore({ sessionMode: 'create' }), false);
+  assert.equal(shouldScheduleParallelOriginRestore({ sessionMode: 'continue' }), false);
+  assert.equal(shouldScheduleParallelOriginRestore({}), true);
+});
+
+test('continued sessions wait for the previous reply to hydrate before capturing a baseline', async () => {
+  class BaselineBridge extends OfflineBridge {
+    constructor() {
+      super();
+      this.snapshots = [
+        { messageCount: 0, replyLength: 0, replyHash: 0, stop: 0 },
+        { messageCount: 1, replyLength: 120, replyHash: 42, stop: 0 },
+        { messageCount: 1, replyLength: 120, replyHash: 42, stop: 0 },
+      ];
+    }
+    async _readResponseSnapshot() { return this.snapshots.shift() || this.snapshots.at(-1); }
+  }
+  const bridge = new BaselineBridge();
+  assert.deepEqual(await bridge._captureSessionResponseBaseline(null, 1000, 0), {
+    messageCount: 1,
+    replyLength: 120,
+    replyHash: 42,
+  });
+});
+
+test('selected Agent confirmation retries only the same exact Agent ID once', async () => {
+  class SelectionBridge extends OfflineBridge {
+    constructor() {
+      super();
+      this.requests = [];
+    }
+    async _readAgentEntries() {
+      return [{ id: 'local:exact-agent', isSelected: this.requests.length > 0 }];
+    }
+    async _requestExactAgentSelection(_client, agentId) {
+      this.requests.push(agentId);
+      return 'OPENED';
+    }
+  }
+  const bridge = new SelectionBridge();
+  assert.equal(await bridge._waitForSelectedAgent(null, 'local:exact-agent', 1000, 0, 0), true);
+  assert.deepEqual(bridge.requests, ['local:exact-agent']);
 });
 
 test('persistent cursor_do sessions keep one stable session ID across explicit turns', async (t) => {
