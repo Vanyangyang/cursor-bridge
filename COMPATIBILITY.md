@@ -7,6 +7,12 @@
 
 The machine-readable source for this page is [`compatibility.json`](./compatibility.json).
 
+## 5.8.0 release candidate
+
+| Cursor | Cursor Bridge | Source | Status |
+|---|---|---|---|
+| **3.18.25** | **5.8.0** | `feature/cursor-do-session-continuity` | Release candidate. ProductVersion and FileVersion were read from `D:\\tool\\cursor\\Cursor.exe`. Starting with no Cursor process and CDP `127.0.0.1:9223` refusing connections, `cursor_init` selected that user install, launched it through WMI, and reached an undegraded persistent `supervised` lifecycle using `plugin-cache-fallback`, one Cursor Agents window, and one CDP page target. Grok 4.6/high passed a source-anchored CCE query and a two-adapter persistent `cursor_do` create/continue run with the same `sessionId` and `agentId`, turns 1 and 2, and no workspace change. `minimal` remained connected and `normal` restored the same window. Cursor 3.18.25 now shows only effort text such as `High Fast` in the model trigger, so 5.8.0 reports the verified selected model row as `effectiveModel`. |
+
 ## Current maintained baseline
 
 | Cursor | Cursor Bridge | Source | Status |

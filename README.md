@@ -154,10 +154,11 @@ With Grok Build Supervisor enabled, send your normal implementation task; the cu
 
 ## Compatibility
 
-Current Cursor compatibility target (Windows 11):
+Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
+| **3.18.25** | **5.8.0** (release candidate) | Cold-launched from the user install into one persistent `supervised` Supervisor, one Cursor Agents window, and one CDP page target. Grok 4.6/high passed source-anchored CCE, two-adapter persistent `cursor_do` turns on one exact Agent, and `minimal` / restored `normal`. The 3.18.25 effort-only model trigger is adapted by reporting the verified selected model row. |
 | **3.18.9** | **5.7.1** (`master`, current) | After a full Windows reboot with Cursor closed, Bridge detected the Codex AppContainer `%LOCALAPPDATA%` redirection, selected `plugin-cache-fallback`, and started one persistent `supervised` Supervisor plus one Cursor Agents window with one CDP page target and no degradation. The complete suite passed 183/183. The 5.7.0 CCE, FIFO, independent `parallel_agent`, stable Agent-ID, and `minimal` / restored `normal` evidence remains applicable; model-backed paths and the model/effort picker were not live-rerun for this lifecycle-only patch. |
 
 Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.

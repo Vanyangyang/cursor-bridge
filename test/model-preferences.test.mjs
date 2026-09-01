@@ -102,6 +102,38 @@ test('model picker matching handles model IDs, display names, and effort aliases
   ], 'model-a', 'model'), null);
 });
 
+test('Cursor 3.18.25 reports the verified model row when the trigger shows only effort', async () => {
+  const modelRow = {
+    kind: 'model',
+    text: 'Cursor Grok 4.6 High Fast',
+    selected: true,
+    disabled: false,
+    hasSubmenu: false,
+  };
+  class Cursor31825Bridge extends CursorBridge {
+    constructor() {
+      super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+    }
+    async _openModelPicker() {
+      return { trigger: { found: true, text: 'High Fast', detail: '' }, rows: [modelRow] };
+    }
+    async _findModelPickerModel(_client, snapshot) {
+      return { snapshot, modelRow };
+    }
+    async _readModelPickerTrigger() {
+      return { found: true, text: 'High Fast', detail: '' };
+    }
+    async _closeModelPicker() {}
+  }
+
+  const result = await new Cursor31825Bridge()._applyModelPreference(
+    null,
+    { model: 'Cursor Grok 4.6' },
+  );
+  assert.equal(result.applied, true);
+  assert.equal(result.effectiveModel, 'Cursor Grok 4.6 High Fast');
+});
+
 test('cursor_model is the only persistent mutation surface and status exposes configured versus effective values', () => {
   const bridge = new CursorBridge({
     runtimeFile: null,
