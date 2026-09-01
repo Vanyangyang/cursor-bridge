@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The primary development and default branch is now `main`. The existing `master` branch remains available for historical release references, while current installation, compatibility, publishing, and generated-documentation links target `main`.
+
 ## [5.8.0] - 2026-09-01
 
 ### Added

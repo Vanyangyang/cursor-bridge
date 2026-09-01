@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "author": "Vanyangyang",
-  "homepage": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor",
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge/tree/main/plugins/grok-build-supervisor",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Vanyangyang/cursor-bridge.git",

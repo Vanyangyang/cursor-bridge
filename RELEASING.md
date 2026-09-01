@@ -87,8 +87,8 @@ Also validate both plugin structures with the current Claude/Codex validators, i
 ## Commit, tag, and publish
 
 1. Preserve unrelated dirty work. Stage only reviewed release files; do not use a broad cleanup, automatic stash, reset, rebase, amend, or force-push.
-2. Fetch the remote before publication. If `origin/master` advanced, inspect and normally merge it, rerun validation, then push.
-3. Commit the reviewed product changes and push `master`.
+2. Fetch the remote before publication. If `origin/main` advanced, inspect and normally merge it, rerun validation, then push.
+3. Commit the reviewed product changes and push `main`.
 4. Create annotated component tags at the verified release commit:
 
 ```powershell
@@ -135,7 +135,7 @@ Existing commands are part of the compatibility contract and must remain valid.
 
 ```powershell
 # Codex marketplace, then either or both plugins
-codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref main
 codex plugin add cursor-bridge@vanyangyang
 codex plugin add grok-build-supervisor@vanyangyang
 

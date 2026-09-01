@@ -21,7 +21,7 @@ Grok Build Supervisor 可以单独安装到 Codex、Claude Code 或 Pi。它会�
 Codex：
 
 ```powershell
-codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref main
 codex plugin add grok-build-supervisor@vanyangyang
 ```
 
@@ -62,7 +62,7 @@ claude plugin marketplace update vanyangyang
 claude plugin update grok-build-supervisor@vanyangyang
 ```
 
-如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master`，再执行上面的更新命令。更新后仍需新建任务或重新加载插件，当前任务不会变成新版本。
+如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main`，再执行上面的更新命令。更新后仍需新建任务或重新加载插件，当前任务不会变成新版本。
 
 ## 使用
 

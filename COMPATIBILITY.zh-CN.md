@@ -11,7 +11,7 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.18.25** | **5.8.0** | `master` | 当前维护版本。版本证据来自 `D:\\tool\\cursor\\Cursor.exe` 的 ProductVersion 与 FileVersion。测试从 Cursor 进程不存在、CDP `127.0.0.1:9223` 拒绝连接开始；`cursor_init` 选中该用户安装，通过 WMI 启动，并以 `plugin-cache-fallback` 进入未降级、持久的 `supervised` 生命周期，全程一个 Cursor Agents 窗口和一个 CDP page target。Grok 4.6/high 通过了带源码锚点的 CCE 查询，以及跨两个 Adapter 的持久 `cursor_do` create/continue；两轮保持同一 `sessionId` 与 `agentId`，turn 为 1、2，工作区未变化。`minimal` 保持连接，`normal` 恢复同一窗口。Cursor 3.18.25 的模型触发器只显示 `High Fast` 等思考程度文本，因此 5.8.0 以已验证的选中模型行报告 `effectiveModel`。 |
+| **3.18.25** | **5.8.0** | `main` | 当前维护版本。版本证据来自 `D:\\tool\\cursor\\Cursor.exe` 的 ProductVersion 与 FileVersion。测试从 Cursor 进程不存在、CDP `127.0.0.1:9223` 拒绝连接开始；`cursor_init` 选中该用户安装，通过 WMI 启动，并以 `plugin-cache-fallback` 进入未降级、持久的 `supervised` 生命周期，全程一个 Cursor Agents 窗口和一个 CDP page target。Grok 4.6/high 通过了带源码锚点的 CCE 查询，以及跨两个 Adapter 的持久 `cursor_do` create/continue；两轮保持同一 `sessionId` 与 `agentId`，turn 为 1、2，工作区未变化。`minimal` 保持连接，`normal` 恢复同一窗口。Cursor 3.18.25 的模型触发器只显示 `High Fast` 等思考程度文本，因此 5.8.0 以已验证的选中模型行报告 `effectiveModel`。 |
 
 ## 历史版本
 

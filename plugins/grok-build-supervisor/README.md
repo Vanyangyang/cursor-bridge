@@ -21,7 +21,7 @@ Requirements:
 Codex:
 
 ```powershell
-codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref main
 codex plugin add grok-build-supervisor@vanyangyang
 ```
 
@@ -62,7 +62,7 @@ claude plugin marketplace update vanyangyang
 claude plugin update grok-build-supervisor@vanyangyang
 ```
 
-If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master` once, then retry the commands above. Start a new task or reload plugins afterward; the currently open task remains on its loaded version.
+If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` once, then retry the commands above. Start a new task or reload plugins afterward; the currently open task remains on its loaded version.
 
 ## Use it
 

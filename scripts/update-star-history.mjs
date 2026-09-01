@@ -195,8 +195,8 @@ ${points.slice(1).map((point, index) => `    <circle cx="${scaleX(point.timestam
 
 export function updateReadmeChartCacheKey(content, svg, repository) {
   const cacheKey = createHash('sha256').update(svg).digest('hex').slice(0, 12);
-  const chartUrl = `https://raw.githubusercontent.com/${repository}/master/assets/star-history.svg?v=${cacheKey}`;
-  const chartPattern = /(!\[Cursor Bridge Star History\]\()(?:\.\/assets\/star-history\.svg|https:\/\/raw\.githubusercontent\.com\/[^\s)]+\/master\/assets\/star-history\.svg)(?:\?v=[a-f0-9]+)?(\))/;
+  const chartUrl = `https://raw.githubusercontent.com/${repository}/main/assets/star-history.svg?v=${cacheKey}`;
+  const chartPattern = /(!\[Cursor Bridge Star History\]\()(?:\.\/assets\/star-history\.svg|https:\/\/raw\.githubusercontent\.com\/[^\s)]+\/main\/assets\/star-history\.svg)(?:\?v=[a-f0-9]+)?(\))/;
   if (!chartPattern.test(content)) throw new Error('README does not embed the generated star history chart');
   return content.replace(chartPattern, `$1${chartUrl}$2`);
 }
