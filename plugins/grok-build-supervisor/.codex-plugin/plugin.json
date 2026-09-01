@@ -6,7 +6,7 @@
     "name": "Vanyangyang",
     "url": "https://github.com/Vanyangyang"
   },
-  "homepage": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor",
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge/tree/main/plugins/grok-build-supervisor",
   "repository": "https://github.com/Vanyangyang/cursor-bridge",
   "license": "MIT",
   "keywords": [
@@ -32,7 +32,7 @@
       "Run /grok_execute on to bind this project and immediately open its visible Grok terminal.",
       "Run /grok_execute off to return to normal host execution."
     ],
-    "websiteURL": "https://github.com/Vanyangyang/cursor-bridge/tree/master/plugins/grok-build-supervisor"
+    "websiteURL": "https://github.com/Vanyangyang/cursor-bridge/tree/main/plugins/grok-build-supervisor"
   },
   "mcpServers": {
     "grok-build-supervisor": {

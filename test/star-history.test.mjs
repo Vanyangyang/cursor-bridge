@@ -65,7 +65,7 @@ test('README chart cache key follows the generated SVG content', () => {
   const repeated = updateReadmeChartCacheKey(first, '<svg>20</svg>', 'owner/repo');
   const changed = updateReadmeChartCacheKey(first, '<svg>21</svg>', 'owner/repo');
 
-  assert.match(first, /https:\/\/raw\.githubusercontent\.com\/owner\/repo\/master\/assets\/star-history\.svg\?v=[a-f0-9]{12}/);
+  assert.match(first, /https:\/\/raw\.githubusercontent\.com\/owner\/repo\/main\/assets\/star-history\.svg\?v=[a-f0-9]{12}/);
   assert.equal(repeated, first);
   assert.notEqual(changed, first);
   assert.match(first, /\[Download SVG\]\(\.\/assets\/star-history\.svg\)/);
@@ -88,7 +88,7 @@ test('both READMEs embed the repository-owned generated chart', () => {
   const svg = readFileSync(new URL('assets/star-history.svg', root), 'utf8');
   const canonicalSvg = svg.replaceAll('\r\n', '\n');
   const cacheKey = createHash('sha256').update(canonicalSvg).digest('hex').slice(0, 12);
-  const expectedUrl = `https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=${cacheKey}`;
+  const expectedUrl = `https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=${cacheKey}`;
   for (const readme of ['README.md', 'README.zh-CN.md']) {
     const content = readFileSync(new URL(readme, root), 'utf8');
     assert.ok(content.includes(expectedUrl));

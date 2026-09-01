@@ -4,7 +4,7 @@
   "current": {
     "cursorVersion": "3.18.25",
     "cursorBridgeVersion": "5.8.0",
-    "sourceRef": "master",
+    "sourceRef": "main",
     "status": "current",
     "acceptance": {
       "cursorVersionEvidence": "installed-executable-product-and-file-version",

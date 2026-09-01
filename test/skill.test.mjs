@@ -390,7 +390,7 @@ test('compatibility history keeps 5.8.0 current for Cursor 3.18.25 and archives 
   assert.equal(data.candidate, undefined);
   assert.equal(data.current.cursorVersion, '3.18.25');
   assert.equal(data.current.cursorBridgeVersion, '5.8.0');
-  assert.equal(data.current.sourceRef, 'master');
+  assert.equal(data.current.sourceRef, 'main');
   assert.equal(data.current.status, 'current');
   assert.equal(data.current.acceptance.cursorVersionEvidence, 'installed-executable-product-and-file-version');
   assert.equal(data.current.acceptance.ideWorkbench, 'not-exposed-in-live-run');
@@ -469,8 +469,8 @@ test('compatibility history keeps 5.8.0 current for Cursor 3.18.25 and archives 
   assert.match(chinese, /只维护 Cursor 最新版本/);
   assert.match(english, /Current maintained baseline[\s\S]*3\.18\.25[\s\S]*5\.8\.0[\s\S]*effectiveModel/);
   assert.match(chinese, /当前维护基线[\s\S]*3\.18\.25[\s\S]*5\.8\.0[\s\S]*effectiveModel/);
-  assert.match(englishReadme, /3\.18\.25[\s\S]*5\.8\.0[\s\S]*master[\s\S]*current/);
-  assert.match(chineseReadme, /3\.18\.25[\s\S]*5\.8\.0[\s\S]*master[\s\S]*当前版本/);
+  assert.match(englishReadme, /3\.18\.25[\s\S]*5\.8\.0[\s\S]*main[\s\S]*current/);
+  assert.match(chineseReadme, /3\.18\.25[\s\S]*5\.8\.0[\s\S]*main[\s\S]*当前版本/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
   assert.match(english, /Cursor Bridge 5\.7\.1 — Cursor 3\.18\.9/);

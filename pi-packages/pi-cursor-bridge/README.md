@@ -10,4 +10,4 @@ Restart Pi after installation. Initialize the current project by asking Pi to in
 
 This Pi package embeds Cursor Bridge 5.8.0. Cursor must be installed and signed in. Current end-to-end compatibility claims remain scoped to the environments documented in the main repository.
 
-Full documentation: [English](https://github.com/Vanyangyang/cursor-bridge#readme) · [简体中文](https://github.com/Vanyangyang/cursor-bridge/blob/master/README.zh-CN.md)
+Full documentation: [English](https://github.com/Vanyangyang/cursor-bridge#readme) · [简体中文](https://github.com/Vanyangyang/cursor-bridge/blob/main/README.zh-CN.md)

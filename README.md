@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/Vanyangyang/cursor-bridge"><img alt="30 Star milestone" src="https://img.shields.io/badge/30_STAR_MILESTONE-THANK_YOU!-FFD700?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;labelColor=181717" /></a>
-  <a href="https://github.com/Vanyangyang/cursor-bridge/commits/master"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
+  <a href="https://github.com/Vanyangyang/cursor-bridge/commits/main"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
@@ -86,7 +86,7 @@ The commands are grouped by the client you already use. Cursor Bridge and Grok B
 #### Codex (recommended)
 
 ```bash
-codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref main
 codex plugin add cursor-bridge@vanyangyang
 # Optional: add the Supervisor for the combined Cursor + Grok Build workflow
 codex plugin add grok-build-supervisor@vanyangyang
@@ -158,7 +158,7 @@ Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.18.25** | **5.8.0** (`master`, current) | Cold-launched from the user install into one persistent `supervised` Supervisor, one Cursor Agents window, and one CDP page target. Grok 4.6/high passed source-anchored CCE, two-adapter persistent `cursor_do` turns on one exact Agent, and `minimal` / restored `normal`. The 3.18.25 effort-only model trigger is adapted by reporting the verified selected model row. |
+| **3.18.25** | **5.8.0** (`main`, current) | Cold-launched from the user install into one persistent `supervised` Supervisor, one Cursor Agents window, and one CDP page target. Grok 4.6/high passed source-anchored CCE, two-adapter persistent `cursor_do` turns on one exact Agent, and `minimal` / restored `normal`. The 3.18.25 effort-only model trigger is adapted by reporting the verified selected model row. |
 
 Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
@@ -220,7 +220,7 @@ pi update npm:pi-cursor-bridge
 
 After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, or restart Pi. An already open task does not hot-load new MCP, Skill, or command code.
 
-If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master` once, then retry the Codex commands above.
+If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` once, then retry the Codex commands above.
 
 <a id="one-time-windows-migration"></a>
 
@@ -381,4 +381,4 @@ Advanced lifecycle overrides are compatibility controls. Bypassing the Windows s
 
 ## Star History
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=06db205c9db9)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=06db205c9db9)](https://github.com/Vanyangyang/cursor-bridge)

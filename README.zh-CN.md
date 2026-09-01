@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/Vanyangyang/cursor-bridge"><img alt="30 Star milestone" src="https://img.shields.io/badge/30_STAR_MILESTONE-THANK_YOU!-FFD700?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;labelColor=181717" /></a>
-  <a href="https://github.com/Vanyangyang/cursor-bridge/commits/master"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
+  <a href="https://github.com/Vanyangyang/cursor-bridge/commits/main"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
@@ -86,7 +86,7 @@ Cursor Bridge 不检查或管理 Cursor 订阅。已登录 Cursor 能使用哪�
 #### Codex（推荐）
 
 ```bash
-codex plugin marketplace add Vanyangyang/cursor-bridge --ref master
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref main
 codex plugin add cursor-bridge@vanyangyang
 # 可选：为完整的 Cursor + Grok Build 工作流再安装 Supervisor
 codex plugin add grok-build-supervisor@vanyangyang
@@ -158,7 +158,7 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.18.25** | **5.8.0**（`master`，当前版本） | 从用户安装冷启动为一个持久 `supervised` Supervisor、一个 Cursor Agents 窗口和一个 CDP page target。Grok 4.6/high 通过了带源码锚点的 CCE、跨两个 Adapter 且保持同一精确 Agent 的持久 `cursor_do` 两轮，以及 `minimal` / 恢复后的 `normal`。3.18.25 只显示思考程度的模型触发器已改为报告已验证的选中模型行。 |
+| **3.18.25** | **5.8.0**（`main`，当前版本） | 从用户安装冷启动为一个持久 `supervised` Supervisor、一个 Cursor Agents 窗口和一个 CDP page target。Grok 4.6/high 通过了带源码锚点的 CCE、跨两个 Adapter 且保持同一精确 Agent 的持久 `cursor_do` 两轮，以及 `minimal` / 恢复后的 `normal`。3.18.25 只显示思考程度的模型触发器已改为报告已验证的选中模型行。 |
 
 不再主动维护旧 Cursor Bridge 版本。5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
@@ -220,7 +220,7 @@ pi update npm:pi-cursor-bridge
 
 更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；或者重启 Pi。已经打开的任务不会热加载新 MCP、Skill 或命令。
 
-如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref master`，再重试上面的 Codex 命令。
+如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main`，再重试上面的 Codex 命令。
 
 <a id="one-time-windows-migration"></a>
 
@@ -381,4 +381,4 @@ npm run build
 
 ## Star History
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/master/assets/star-history.svg?v=06db205c9db9)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=06db205c9db9)](https://github.com/Vanyangyang/cursor-bridge)
