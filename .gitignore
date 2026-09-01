@@ -5,6 +5,7 @@ package-lock.json
 __pycache__/
 .artifacts/
 .pi-package-stage/
+.cursor-bridge-lifecycle/
 
 # Local-only repository guidance for coding agents; read before maintenance work.
 LOCAL_MAINTENANCE.md

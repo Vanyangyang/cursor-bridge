@@ -14,6 +14,7 @@
     "build:pi-packages": "node scripts/build-pi-packages.mjs --out .pi-package-stage",
     "test": "node --test test/*.test.mjs",
     "test:live-minimal": "node test/live-minimal-smoke.mjs",
+    "test:live-session": "node test/live-session-continuity.mjs",
     "star-history": "node scripts/update-star-history.mjs"
   },
   "keywords": [

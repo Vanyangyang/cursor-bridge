@@ -11,6 +11,11 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_do` can explicitly create and continue one update-safe persistent Cursor Delivery Session. Each turn retains its own `task_id`; callers continue through a stable `session_id` while Bridge keeps the exact Cursor `agentId` internal, fences stale adapters with a session epoch, and rejects duplicate latest `request_id` submissions.
 - `cursor_status(session_id)` reports the durable association, and `cursor_session_control` closes or explicitly forgets an inactive mapping without stopping or deleting the Cursor Agent.
 
+### Fixed
+
+- Continued turns await Cursor's exact Agent-selection promise, preserve the Agents sidebar action while reopening registered-only rows, verify the global `selectedAgentId`, and retry that same exact ID at most once while a newly completed Agent becomes reactivatable. Persistent sessions keep their bound Agent selected between turns instead of racing the isolated-task origin restore.
+- Reply baselines now wait for the previous completed answer to hydrate and stabilize before sending. Result collection accepts a new stable reply by visible message-count advance or reply-signature change, covering Cursor 3.18 virtualized lists without returning the prior turn.
+
 ### Safety
 
 - Persistent sessions require `parallel_agent`, never downgrade to FIFO, allow only one active turn, freeze workspace/model/scope boundaries, and require every continued turn to repeat `read_only=true` or an `allowed_paths` subset.
