@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.8.0] - 2026-09-01
+
 ### Added
 
 - `cursor_do` can explicitly create and continue one update-safe persistent Cursor Delivery Session. Each turn retains its own `task_id`; callers continue through a stable `session_id` while Bridge keeps the exact Cursor `agentId` internal, fences stale adapters with a session epoch, and rejects duplicate latest `request_id` submissions.
@@ -340,7 +342,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
-[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.1...HEAD
+[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.8.0...HEAD
+[5.8.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.1...cursor-bridge--v5.8.0
 [5.7.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.0...cursor-bridge--v5.7.1
 [5.7.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.2...cursor-bridge--v5.7.0
 [5.6.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.1...cursor-bridge--v5.6.2

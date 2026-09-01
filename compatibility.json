@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "policy": "latest-only",
-  "candidate": {
+  "current": {
     "cursorVersion": "3.18.25",
     "cursorBridgeVersion": "5.8.0",
-    "sourceRef": "feature/cursor-do-session-continuity",
-    "status": "release-candidate",
+    "sourceRef": "master",
+    "status": "current",
     "acceptance": {
       "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
@@ -23,27 +23,13 @@
       "modelPickerTrigger": "adapted-trigger-effort-only-reports-selected-model-row"
     }
   },
-  "current": {
-    "cursorVersion": "3.18.9",
-    "cursorBridgeVersion": "5.7.1",
-    "sourceRef": "master",
-    "status": "current",
-    "acceptance": {
-      "cursorVersionEvidence": "installed-executable-product-and-file-version",
-      "ideWorkbench": "not-exposed-in-live-run",
-      "agentsWindow": "live-tested-cold-single-window-cdp-9223",
-      "modelPreferences": "not-live-rechecked-on-3.18.9",
-      "readOnlyMcpSupervisor": "live-tested-appcontainer-plugin-cache-fallback-after-windows-reboot",
-      "attachedFallback": "regression-tested-not-live-rechecked-on-3.18.9",
-      "lifecycleDiagnostics": "live-tested",
-      "fifoExecution": "live-tested",
-      "parallelExecution": "live-tested",
-      "parallelAgentIdentity": "live-tested-stable",
-      "singleWindow": "live-tested-cold-init-agent",
-      "minimalNormalRuntime": "live-tested-restored-normal"
-    }
-  },
   "history": [
+    {
+      "cursorVersion": "3.18.9",
+      "cursorBridgeVersion": "5.7.1",
+      "gitRef": "cursor-bridge--v5.7.1",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.18.9",
       "cursorBridgeVersion": "5.7.0",

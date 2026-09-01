@@ -8,7 +8,7 @@
     {
       "name": "cursor-bridge",
       "source": ".",
-      "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded, explicitly continuous Cursor Agent execution from Codex, Claude Code, Pi, or Grok Build; released compatibility remains live-tested with Cursor 3.18.9 in the Agents Window.",
+      "description": "Use a workspace-bound adaptive Cursor Context Engine and bounded, explicitly continuous Cursor Agent execution from Codex, Claude Code, Pi, or Grok Build; released compatibility is live-tested with Cursor 3.18.25 in the Agents Window.",
       "version": "5.8.0",
       "author": {
         "name": "Vanyangyang"
