@@ -1,5 +1,4 @@
 <p align="center">
-  <a href="https://github.com/Vanyangyang/cursor-bridge"><img alt="30 Star milestone" src="https://img.shields.io/badge/30_STAR_MILESTONE-THANK_YOU!-FFD700?style=for-the-badge&amp;logo=github&amp;logoColor=white&amp;labelColor=181717" /></a>
   <a href="https://github.com/Vanyangyang/cursor-bridge/commits/main"><img alt="Long-term maintenance commitment" src="https://img.shields.io/badge/LONG--TERM_MAINTENANCE-COMMITTED-8B5CF6?style=for-the-badge&amp;logo=git&amp;logoColor=white" /></a>
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
