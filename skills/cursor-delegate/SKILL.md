@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: "Delegate bounded light-to-medium implementation, limited investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns the direction and risk boundaries. Use when a bounded Cursor pass can save primary-agent time, reduce omissions, or run alongside non-conflicting work; the task needs a clear purpose, allowed scope, invariants, and checkable outcome, but not a fully pre-solved implementation. Collect work by task_id or agent_id and verify it in the primary agent. Do not use when the user opts out, cursor_do is unavailable or administrator-disabled, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
+description: "Delegate bounded light-to-medium implementation, investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns direction and risk boundaries. Also use when the user explicitly asks to create, keep, continue, inspect, or close the same Cursor execution session, including phrases such as '持续会话', '同一个 Cursor 会话', or 'continue the Cursor session'. Generic '继续' is not enough to reuse a session. Collect each turn by task_id and verify it in the primary agent. Do not use when the user opts out, cursor_do is unavailable or administrator-disabled, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
 ---
 
 # Cursor Delegate
@@ -57,12 +57,24 @@ For an exact known-file or known-symbol lookup, establish the cheapest determini
 
 Do not choose parallel execution merely because there are many tasks. When dependency or path relationships are unclear, use `fifo`.
 
+## Choose isolated or continuous delivery
+
+- Keep `session_mode=isolated` as the default. It preserves the existing clean-task behavior.
+- Use `session_mode=create` only when the user explicitly asks to keep later Cursor turns in the same conversation, for example “开启 Cursor 持续会话”, “后续都在同一个 Cursor 会话处理”, or “keep using the same Cursor Agent”.
+- Use `session_mode=continue` only with the exact `session_id` previously returned by Bridge. “继续 Cursor 会话 <session_id>” is explicit. “继续”, “接着做”, “再改一下”, or “发给 Cursor” alone must not select a session.
+- “刚才的 Cursor 会话” may resolve without restating the ID only when the current host task has exactly one ready session for the current workspace. Otherwise report `SESSION_REQUIRED` or `SESSION_AMBIGUOUS`; never guess from the selected, newest, or similarly named Agent.
+- “新开”, “独立”, “干净会话”, or “不要继承上下文” always means isolated/new work and overrides continuity.
+- Start a new session when the workspace, product objective, model/effort, read-only/write boundary, or maximum `allowed_paths` changes. Independent review and final verification also use fresh context.
+- Persistent sessions require `parallel_agent` and never fall back to FIFO. One session permits only one active turn; different sessions remain subject to the existing path-overlap rules.
+- Every continued turn gets a new `task_id`, repeats `read_only=true` or an `allowed_paths` subset, and may provide a `request_id` so an immediate client retry returns the existing turn instead of sending twice.
+- `session_id` is the stable public association. `agent_id` remains internal evidence and may be promoted from a provisional Cursor identity; never use it as the caller's session key.
+
 ## Dispatch a task
 
 1. Record the relevant pre-dispatch workspace state so later review can distinguish existing user changes.
 2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md). Write its narrative instructions in the language of the user's current substantive task unless the user explicitly requests another language. Do not persist an inferred language or replace a clear conversational signal with the host/OS locale.
-3. Call `cursor_do` with `background=true`; do not invent a chat-selection parameter.
-4. Save each returned `task_id`; also save `agent_id` whenever `cursor_status` publishes one.
+3. Call `cursor_do` with `background=true`. Use only the documented `session_mode` and `session_id` fields when continuity is explicit; never infer continuity from the visible chat.
+4. Save each returned `task_id`; for persistent work also save `session_id`. Treat `agent_id` as verification evidence, not the continuation handle.
 5. If a parallel submission does not return a usable `agent_id`, stop expanding the parallel batch and use `fifo` or report the ambiguous state.
 
 The envelope may contain a small number of local implementation `open_questions`, but it must also provide `fixed_decisions`, `allowed_paths`, prohibitions, and acceptance checks. Cursor may solve local questions; it must stop and report any branch that would change product direction, architecture, or scope.
@@ -89,6 +101,9 @@ Read [delegation-contract.md](references/delegation-contract.md) for state inter
 - Use `action=abandon` only after manual verification and an explicit user decision to accept the risk. It requires `confirm=true`, a non-empty reason, `acknowledge_may_still_write=true`, and the exact `expected_agent_id` when one is already bound; report that the underlying Agent may still run or write.
 - If Cursor shows a final UI response but Bridge has not collected it, use explicit `reap` against the original bound task. A `terminal_uncollected` result keeps the reservation for retry. Do not add a completion marker, increase a response-length requirement, or submit the same task again.
 - Task identity and reservations are process-local. After an MCP/Codex restart, do not claim the old `task_id` is recoverable; inspect Cursor Agent History and workspace changes manually before overlapping work.
+- A ready persistent `session_id` is stored outside the versioned plugin cache and may survive MCP/Codex restart or plugin update. Query `cursor_status(session_id)` before continuing. If it reports `needs_attention`, an expired sender lease, or a missing exact Agent binding, do not resubmit or silently create a replacement session.
+- Use `cursor_session_control(action=reconcile)` to check the exact Agent twice after an interrupted adapter. It may return the session to `ready` only from stable terminal evidence; an interrupted completed reply remains explicitly uncollected.
+- `cursor_session_control(action=abandon)` is the last resort for an uncertain session and requires `confirm=true`, a non-empty reason, and `acknowledge_may_still_write=true`. It closes only the Bridge mapping and does not prove that Cursor stopped.
 - If a timed-out task changed files, inspect the changes before deciding whether to continue, retry, or revert.
 - If changes exceed `allowed_paths`, stop accepting the result and report the scope violation.
 - If parallel tasks conflict, stop further integration and return to primary-agent review or serial execution.

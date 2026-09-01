@@ -1,7 +1,7 @@
 {
   "name": "cursor-mcp-bridge",
-  "version": "5.7.1",
-  "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution over CDP.",
+  "version": "5.8.0",
+  "description": "Evidence-backed Cursor Context Engine search and bounded, explicitly continuous Cursor Agent execution over CDP.",
   "type": "module",
   "main": "server.mjs",
   "engines": {

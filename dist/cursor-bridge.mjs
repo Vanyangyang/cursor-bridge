@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve7.call(this, root, ref);
+      let _sch = resolve8.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve7(root, ref) {
+    function resolve8(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3842,7 +3842,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve7(baseURI, relativeURI, options) {
+    function resolve8(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -4204,7 +4204,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve7,
+      resolve: resolve8,
       resolveComponent,
       equal,
       serialize,
@@ -11359,8 +11359,8 @@ var init_workspace_binding = __esm({
 import { spawn as spawn2, execFileSync as execFileSync2 } from "child_process";
 import { existsSync as existsSync2 } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
-import { homedir as homedir5 } from "node:os";
-import { basename as basename3, extname as extname2, join as join5, resolve as resolve4, win32 as winPath, posix as posixPath } from "node:path";
+import { homedir as homedir6 } from "node:os";
+import { basename as basename4, extname as extname2, join as join6, resolve as resolve5, win32 as winPath, posix as posixPath } from "node:path";
 import http from "http";
 function resolveCursorLaunchCdpPort(port = process.env.CURSOR_BRIDGE_CDP_PORT) {
   const parsed = Number(port == null || String(port).trim() === "" ? 9223 : port);
@@ -11387,13 +11387,13 @@ function resolveCodexThreadProjectPath(options = {}) {
   try {
     const lookupThreadCwd = options.lookupThreadCwd || ((id) => {
       const { DatabaseSync } = (options.requireImpl || loadModule)("node:sqlite");
-      const databasePath = options.databasePath || join5(homedir5(), ".codex", "state_5.sqlite");
+      const databasePath = options.databasePath || join6(homedir6(), ".codex", "state_5.sqlite");
       database = new DatabaseSync(databasePath, { readOnly: true });
       return database.prepare("SELECT cwd FROM threads WHERE id = ?").get(id)?.cwd || null;
     });
     const candidate = normalizeCodexThreadCwd(lookupThreadCwd(threadId));
     const existsImpl = options.existsImpl || existsSync2;
-    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve4(candidate) : null;
+    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve5(candidate) : null;
     if (options.useCache !== false) CODEX_THREAD_PROJECTS.set(threadId, resolved);
     return resolved;
   } catch {
@@ -11408,14 +11408,14 @@ function resolveCodexThreadProjectPath(options = {}) {
 }
 function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {}) {
   const explicit = String(value || "").trim();
-  if (explicit) return resolve4(explicit);
+  if (explicit) return resolve5(explicit);
   const persisted = String(options.persistedProjectPath || "").trim();
-  if (persisted) return resolve4(normalizeCodexThreadCwd(persisted));
+  if (persisted) return resolve5(normalizeCodexThreadCwd(persisted));
   const threadProjectPath = options.threadProjectPath === void 0 ? resolveCodexThreadProjectPath(options) : options.threadProjectPath;
-  if (threadProjectPath) return resolve4(normalizeCodexThreadCwd(threadProjectPath));
+  if (threadProjectPath) return resolve5(normalizeCodexThreadCwd(threadProjectPath));
   const cwd = options.cwd ?? process.cwd();
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
-  return resolve4(cwd);
+  return resolve5(cwd);
 }
 function cursorFromRegistry(options = {}) {
   const execFileSyncImpl = options.execFileSyncImpl || execFileSync2;
@@ -11480,7 +11480,7 @@ function findCursorExeDetails(options = {}) {
       existsImpl
     });
     if (fromReg) return { path: fromReg, source: "windows_registry", platform };
-    const localAppData = env.LOCALAPPDATA || join5(homedir5(), "AppData", "Local");
+    const localAppData = env.LOCALAPPDATA || join6(homedir6(), "AppData", "Local");
     const programFiles = env.ProgramFiles || env.PROGRAMFILES || "C:\\Program Files";
     const programFilesX86 = env["ProgramFiles(x86)"] || env.PROGRAMFILES_X86 || "";
     const candidates = [
@@ -11497,7 +11497,7 @@ function findCursorExeDetails(options = {}) {
     return null;
   }
   if (platform === "darwin") {
-    const userHome = env.HOME || homedir5();
+    const userHome = env.HOME || homedir6();
     const candidates = [
       "/Applications/Cursor.app/Contents/MacOS/Cursor",
       userHome && posixPath.join(userHome, "Applications", "Cursor.app", "Contents", "MacOS", "Cursor")
@@ -11516,42 +11516,42 @@ function findCursorExe(options = {}) {
   return findCursorExeDetails(options)?.path || null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve7(res.statusCode === 200);
+      resolve8(res.statusCode === 200);
     });
-    req.on("error", () => resolve7(false));
+    req.on("error", () => resolve8(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve7(false);
+      resolve8(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve7(false);
-          resolve7(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve8(false);
+          resolve8(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve7(false);
+          resolve8(false);
         }
       });
     });
-    req.on("error", () => resolve7(false));
+    req.on("error", () => resolve8(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve7(false);
+      resolve8(false);
     });
   });
 }
@@ -11643,7 +11643,7 @@ async function ensureCursorRunningLocal(options = {}) {
   const cdpIsCursorImpl = options.cdpIsCursorImpl || cdpIsCursor;
   const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
   const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
-  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve4(String(options.projectPath)) : null : resolveProjectPath();
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve5(String(options.projectPath)) : null : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn2;
   const sleepImpl = options.sleepImpl || ((ms) => new Promise((resolveWait) => setTimeout(resolveWait, ms)));
@@ -11946,10 +11946,10 @@ async function ensureCursorRunningLocal(options = {}) {
   };
 }
 function normalizeProjectKey(projectPath) {
-  return projectPath ? resolve4(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
+  return projectPath ? resolve5(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
 }
 function targetTitleMatchesProject(title, projectPath) {
-  const name = basename3(String(projectPath || "")).trim().toLowerCase();
+  const name = basename4(String(projectPath || "")).trim().toLowerCase();
   if (!name) return false;
   const extension2 = extname2(name);
   const candidates = [...new Set([name, extension2 ? name.slice(0, -extension2.length) : name].filter(Boolean))];
@@ -12255,17 +12255,17 @@ import net from "node:net";
 import { createHash as createHash2 } from "node:crypto";
 import {
   existsSync as existsSync4,
-  mkdirSync as mkdirSync5,
-  readFileSync as readFileSync4,
+  mkdirSync as mkdirSync6,
+  readFileSync as readFileSync5,
   realpathSync,
   readdirSync,
-  renameSync as renameSync4,
-  rmSync as rmSync4,
+  renameSync as renameSync5,
+  rmSync as rmSync5,
   unlinkSync,
-  writeFileSync as writeFileSync4
+  writeFileSync as writeFileSync5
 } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { basename as basename4, dirname as dirname4, join as join6, resolve as resolve5, win32 as win32Path } from "node:path";
+import { basename as basename5, dirname as dirname5, join as join7, resolve as resolve6, win32 as win32Path } from "node:path";
 function resolveSupervisorSpawnCwd({
   requestedCwd = null,
   runtimeRoot = null,
@@ -12280,9 +12280,9 @@ function resolveSupervisorSpawnCwd({
   return runtimeRoot;
 }
 function resolvePluginLocalLifecycleDir(sourceScript) {
-  const scriptDir = dirname4(resolve5(sourceScript));
-  const pluginRoot = basename4(scriptDir).toLowerCase() === "dist" ? dirname4(scriptDir) : scriptDir;
-  return join6(pluginRoot, ".cursor-bridge-lifecycle");
+  const scriptDir = dirname5(resolve6(sourceScript));
+  const pluginRoot = basename5(scriptDir).toLowerCase() === "dist" ? dirname5(scriptDir) : scriptDir;
+  return join7(pluginRoot, ".cursor-bridge-lifecycle");
 }
 function inspectWindowsAppContainerPath(target, options = {}) {
   const platform = options.platform || process.platform;
@@ -12325,59 +12325,59 @@ function sleep(ms) {
 }
 function resolveSupervisorScript() {
   if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
-    return resolve5(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+    return resolve6(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
-  const here = dirname4(fileURLToPath(import.meta.url));
+  const here = dirname5(fileURLToPath(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
-    const entryDir = dirname4(resolve5(process.argv[1]));
-    candidates.push(join6(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
-    candidates.push(join6(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    const entryDir = dirname5(resolve6(process.argv[1]));
+    candidates.push(join7(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
+    candidates.push(join7(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join6(here, "dist", "cursor-lifecycle-supervisor.mjs"),
-    join6(here, "cursor-lifecycle-supervisor.mjs")
+    join7(here, "dist", "cursor-lifecycle-supervisor.mjs"),
+    join7(here, "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
     if (existsSync4(c)) return c;
   }
-  return join6(here, "cursor-lifecycle-supervisor.mjs");
+  return join7(here, "cursor-lifecycle-supervisor.mjs");
 }
 function writeRuntimeFile(target, content) {
-  if (existsSync4(target) && readFileSync4(target).equals(content)) return;
+  if (existsSync4(target) && readFileSync5(target).equals(content)) return;
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync4(temporary, content);
+  writeFileSync5(temporary, content);
   try {
-    renameSync4(temporary, target);
+    renameSync5(temporary, target);
   } catch (error2) {
     if (!existsSync4(target)) {
-      rmSync4(temporary, { force: true });
+      rmSync5(temporary, { force: true });
       throw error2;
     }
-    if (readFileSync4(target).equals(content)) {
-      rmSync4(temporary, { force: true });
+    if (readFileSync5(target).equals(content)) {
+      rmSync5(temporary, { force: true });
       return;
     }
-    rmSync4(target, { force: true });
-    renameSync4(temporary, target);
+    rmSync5(target, { force: true });
+    renameSync5(temporary, target);
   }
 }
 function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
   const described = describeLifecycleSupervisorRuntime({ sourceScript, dir });
   const { sourceScript: source, content, fingerprint } = described;
-  const runtimeRoot = join6(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  mkdirSync5(runtimeRoot, { recursive: true });
-  const script = join6(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join7(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  mkdirSync6(runtimeRoot, { recursive: true });
+  const script = join7(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
 }
 function describeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
-  const source = resolve5(sourceScript || resolveSupervisorScript());
+  const source = resolve6(sourceScript || resolveSupervisorScript());
   if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
-  const content = readFileSync4(source);
+  const content = readFileSync5(source);
   const fingerprint = createHash2("sha256").update(content).digest("hex");
-  const runtimeRoot = join6(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  const script = join6(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join7(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  const script = join7(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   return { sourceScript: source, script, runtimeRoot, fingerprint, content };
 }
 function isProcessAlive(pid) {
@@ -12391,7 +12391,7 @@ function isProcessAlive(pid) {
 }
 function readPidFile(pidPath) {
   try {
-    const n = Number(String(readFileSync4(pidPath, "utf8")).trim());
+    const n = Number(String(readFileSync5(pidPath, "utf8")).trim());
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
@@ -12506,7 +12506,7 @@ function tryUnlink(path) {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join6(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join7(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -12517,7 +12517,7 @@ function writeBootEnv(dir, extra = {}) {
   for (const [k, v] of Object.entries(payload)) {
     if (v != null && v !== "") cleaned[k] = String(v);
   }
-  writeFileSync4(bootPath, `${JSON.stringify(cleaned, null, 2)}
+  writeFileSync5(bootPath, `${JSON.stringify(cleaned, null, 2)}
 `, { encoding: "utf8" });
   return bootPath;
 }
@@ -12552,9 +12552,9 @@ async function ensureSupervisorConnected(options = {}) {
     let targetRuntime = null;
     try {
       targetRuntime = options.persistSupervisorRuntime === false ? {
-        sourceScript: resolve5(sourceScript),
-        script: resolve5(sourceScript),
-        runtimeRoot: dirname4(resolve5(sourceScript)),
+        sourceScript: resolve6(sourceScript),
+        script: resolve6(sourceScript),
+        runtimeRoot: dirname5(resolve6(sourceScript)),
         fingerprint: null
       } : describeLifecycleSupervisorRuntime({ sourceScript, dir });
     } catch {
@@ -12638,9 +12638,9 @@ async function ensureSupervisorConnected(options = {}) {
   try {
     ensureLifecycleDir(dir);
     runtime = options.persistSupervisorRuntime === false ? {
-      sourceScript: resolve5(sourceScript),
-      script: resolve5(sourceScript),
-      runtimeRoot: dirname4(resolve5(sourceScript)),
+      sourceScript: resolve6(sourceScript),
+      script: resolve6(sourceScript),
+      runtimeRoot: dirname5(resolve6(sourceScript)),
       fingerprint: null
     } : (options.materializeRuntimeImpl || materializeLifecycleSupervisorRuntime)({ sourceScript, dir });
   } catch (error2) {
@@ -21094,7 +21094,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve7) => setTimeout(resolve7, pollInterval));
+        await new Promise((resolve8) => setTimeout(resolve8, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -21111,7 +21111,7 @@ var Protocol = class {
    */
   request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -21189,7 +21189,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve7(parseResult.data);
+            resolve8(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -21450,12 +21450,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve7, interval);
+      const timeoutId = setTimeout(resolve8, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -22331,19 +22331,19 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve7) => {
+    return new Promise((resolve8) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve7();
+        resolve8();
       } else {
-        this._stdout.once("drain", resolve7);
+        this._stdout.once("drain", resolve8);
       }
     });
   }
 };
 
 // server.mjs
-import { basename as basename5, dirname as dirname5, join as join7, resolve as resolve6 } from "node:path";
+import { basename as basename6, dirname as dirname6, join as join8, resolve as resolve7 } from "node:path";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -22467,9 +22467,144 @@ function updateCursorModelPreferences(filePath, { action, target, model, effort 
 
 // server.mjs
 init_workspace_binding();
+
+// cursor-session-registry.mjs
+import { randomUUID } from "node:crypto";
+import {
+  closeSync,
+  mkdirSync as mkdirSync5,
+  openSync,
+  readFileSync as readFileSync4,
+  renameSync as renameSync4,
+  rmSync as rmSync4,
+  statSync as statSync2,
+  writeFileSync as writeFileSync4
+} from "node:fs";
+import { homedir as homedir5 } from "node:os";
+import { basename as basename3, dirname as dirname4, join as join5, resolve as resolve4 } from "node:path";
+var CURSOR_SESSION_REGISTRY_VERSION = 1;
+var CURSOR_SESSION_MODES = Object.freeze(["isolated", "create", "continue"]);
+function sessionRegistryError(code, message, cause) {
+  const error2 = new Error(`${code}: ${message}`);
+  error2.code = code;
+  if (cause) error2.cause = cause;
+  return error2;
+}
+function normalizeCursorSessionMode(value, fallback = "isolated") {
+  const normalized = String(value || fallback).trim().toLowerCase().replace(/-/g, "_");
+  return CURSOR_SESSION_MODES.includes(normalized) ? normalized : "";
+}
+function createCursorSessionId() {
+  return `cursor-session-${randomUUID()}`;
+}
+function resolveCursorSessionRegistryFile(value, env = process.env) {
+  if (value === void 0) value = env.CURSOR_BRIDGE_SESSION_FILE;
+  const configured = String(value || "").trim();
+  if (configured) return resolve4(configured);
+  const configRoot = process.platform === "win32" && env.APPDATA ? env.APPDATA : env.XDG_CONFIG_HOME || join5(homedir5(), ".config");
+  return join5(configRoot, "cursor-bridge", "sessions-v1.json");
+}
+function emptyCursorSessionRegistry() {
+  return { version: CURSOR_SESSION_REGISTRY_VERSION, sessions: {}, updatedAt: null };
+}
+function readCursorSessionRegistry(filePath) {
+  if (!filePath) return emptyCursorSessionRegistry();
+  try {
+    const parsed = JSON.parse(readFileSync4(filePath, "utf8"));
+    if (!parsed || parsed.version !== CURSOR_SESSION_REGISTRY_VERSION) {
+      throw sessionRegistryError(
+        "SESSION_SCHEMA_UNSUPPORTED",
+        `expected version ${CURSOR_SESSION_REGISTRY_VERSION}, received ${parsed && parsed.version}`
+      );
+    }
+    if (!parsed.sessions || typeof parsed.sessions !== "object" || Array.isArray(parsed.sessions)) {
+      throw sessionRegistryError("SESSION_REGISTRY_INVALID", "sessions must be an object");
+    }
+    return {
+      version: CURSOR_SESSION_REGISTRY_VERSION,
+      sessions: { ...parsed.sessions },
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null
+    };
+  } catch (error2) {
+    if (error2 && error2.code === "ENOENT") return emptyCursorSessionRegistry();
+    if (error2 && /^SESSION_/.test(String(error2.code || ""))) throw error2;
+    throw sessionRegistryError(
+      "SESSION_REGISTRY_INVALID",
+      `failed to read ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`,
+      error2
+    );
+  }
+}
+function writeCursorSessionRegistry(filePath, state, now = (/* @__PURE__ */ new Date()).toISOString()) {
+  if (!filePath) throw sessionRegistryError("SESSION_STORAGE_DISABLED", "persistent session storage is disabled");
+  const target = resolve4(filePath);
+  const normalized = {
+    version: CURSOR_SESSION_REGISTRY_VERSION,
+    sessions: state && state.sessions && typeof state.sessions === "object" ? state.sessions : {},
+    updatedAt: now
+  };
+  mkdirSync5(dirname4(target), { recursive: true });
+  const temporary = join5(dirname4(target), `.${basename3(target)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    writeFileSync4(temporary, `${JSON.stringify(normalized, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+    renameSync4(temporary, target);
+  } catch (error2) {
+    rmSync4(temporary, { force: true });
+    throw sessionRegistryError(
+      "SESSION_REGISTRY_WRITE_FAILED",
+      `failed to persist ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`,
+      error2
+    );
+  }
+  return normalized;
+}
+function acquireRegistryLock(filePath, options = {}) {
+  const lockPath = `${resolve4(filePath)}.lock`;
+  const waitMs = Number(options.waitMs || 2e3);
+  const staleMs = Number(options.staleMs || 3e4);
+  const deadline = Date.now() + waitMs;
+  mkdirSync5(dirname4(lockPath), { recursive: true });
+  for (; ; ) {
+    try {
+      const handle = openSync(lockPath, "wx", 384);
+      closeSync(handle);
+      return () => rmSync4(lockPath, { force: true });
+    } catch (error2) {
+      if (!error2 || error2.code !== "EEXIST") {
+        throw sessionRegistryError("SESSION_REGISTRY_LOCK_FAILED", error2 instanceof Error ? error2.message : String(error2), error2);
+      }
+      try {
+        if (Date.now() - statSync2(lockPath).mtimeMs > staleMs) {
+          rmSync4(lockPath, { force: true });
+          continue;
+        }
+      } catch {
+      }
+      if (Date.now() >= deadline) {
+        throw sessionRegistryError("SESSION_REGISTRY_BUSY", "another Cursor Bridge process is updating the session registry");
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+}
+function updateCursorSessionRegistry(filePath, mutator, options = {}) {
+  if (!filePath) throw sessionRegistryError("SESSION_STORAGE_DISABLED", "persistent session storage is disabled");
+  const release = acquireRegistryLock(filePath, options);
+  try {
+    const state = readCursorSessionRegistry(filePath);
+    const result = mutator(state);
+    writeCursorSessionRegistry(filePath, state, options.now || (/* @__PURE__ */ new Date()).toISOString());
+    return result;
+  } finally {
+    release();
+  }
+}
+
+// server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.7.1";
+var PLUGIN_VERSION = "5.8.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -22477,6 +22612,26 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
   return String(value || "on").trim().toLowerCase() === "off" ? "off" : "on";
 }
 var DELEGATION_MODE = normalizeDelegationMode();
+function cursorSessionError(code, message) {
+  const error2 = new Error(`${code}: ${message}`);
+  error2.code = code;
+  return error2;
+}
+function normalizeSessionRequestId(value) {
+  const id = String(value || "").trim();
+  if (id.length > 200) throw cursorSessionError("SESSION_REQUEST_ID_INVALID", "request_id exceeds 200 characters");
+  return id;
+}
+function sessionPathContains(parent, child) {
+  const base = normalizeAllowedPath(parent);
+  const candidate = normalizeAllowedPath(child);
+  return candidate === base || candidate.startsWith(`${base}/`);
+}
+function sameSessionProject(left, right) {
+  const a = resolve7(String(left || ""));
+  const b = resolve7(String(right || ""));
+  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
 function searchResultContract() {
   return [
     "Return only the minimum sufficient evidence set, ordered by evidence strength. Do not pad the result with similar matches.",
@@ -22522,17 +22677,21 @@ function isConfirmedCompletedReply({ answer, snapshot = {}, sawStop = false, bas
   const hasCompletionEvidence = sawStop || Number(snapshot.messageCount || 0) >= Number(baselineCount || 0) + 2;
   return hasAssistantEvidence && hasCompletionEvidence;
 }
+function isSessionTurnReplyReady(responseBaseline, snapshot = {}) {
+  if (!responseBaseline) return true;
+  return Number(snapshot.messageCount || 0) >= Number(responseBaseline.messageCount || 0) + 2;
+}
 var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. Before finishing, inspect the actual changes and run verification proportional to risk. The final reply must list completed work, changed files, verification results, and remaining risks or blockers.";
 var DO_LANGUAGE_CONTRACT = "\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve7(JSON.parse(d));
+          resolve8(JSON.parse(d));
         } catch {
           reject(new Error("CDP returned a non-JSON response"));
         }
@@ -23024,7 +23183,7 @@ var WORKSPACE_SECTION_BODY = `
   };
 `;
 function exprCreateAgentForWorkspace(projectPath) {
-  const workspaceLabel = JSON.stringify(basename5(String(projectPath || "")).trim().toLowerCase());
+  const workspaceLabel = JSON.stringify(basename6(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
     const wanted=${workspaceLabel};
@@ -23040,7 +23199,7 @@ function exprCreateAgentForWorkspace(projectPath) {
   })()`;
 }
 function exprInspectWorkspaceRepository(projectPath) {
-  const workspaceLabel = JSON.stringify(basename5(String(projectPath || "")).trim().toLowerCase());
+  const workspaceLabel = JSON.stringify(basename6(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
     const wanted=${workspaceLabel};
@@ -23434,16 +23593,16 @@ function lifecycleFailureSummary(lifecycle, fallback) {
   return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(" ");
 }
 function releaseAdapterWorkingDirectory({ targetDir = null, chdir = process.chdir } = {}) {
-  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname5(process.execPath);
+  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname6(process.execPath);
   chdir(target);
   return target;
 }
 var CursorBridge = class {
   constructor(options = {}) {
-    this.adapterStartCwd = resolve6(options.adapterStartCwd || process.cwd());
+    this.adapterStartCwd = resolve7(options.adapterStartCwd || process.cwd());
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     this._syncDelegationState();
-    this.runtimeFile = options.runtimeFile === null ? null : resolve6(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeFile = options.runtimeFile === null ? null : resolve7(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
       "normal"
@@ -23454,14 +23613,18 @@ var CursorBridge = class {
     this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
     this.runtimeModeSource = options.runtimeMode !== void 0 ? "constructor" : persistedRuntimeMode ? "persistent" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
     this.runtimeModeScope = persistedRuntimeMode ? "persistent" : options.runtimeMode !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
-    this.workspaceFile = options.workspaceFile === null ? null : resolve6(options.workspaceFile || resolveWorkspaceBindingFile());
+    this.workspaceFile = options.workspaceFile === null ? null : resolve7(options.workspaceFile || resolveWorkspaceBindingFile());
     this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
     const persistedWorkspace = options.projectPath === void 0 ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey) : null;
-    this.projectPath = options.projectPath !== void 0 ? resolve6(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
+    this.projectPath = options.projectPath !== void 0 ? resolve7(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
     this.workspaceSource = options.projectPath !== void 0 ? "constructor" : persistedWorkspace ? "persistent_init" : "auto_detect";
     this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
-    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve6(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
+    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve7(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
     this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
+    this.sessionFile = options.sessionFile === null ? null : resolve7(options.sessionFile || resolveCursorSessionRegistryFile());
+    this.sessionInstanceId = String(
+      options.sessionInstanceId || `cursor-adapter-${createCursorSessionId().slice("cursor-session-".length)}`
+    );
     this._lastPresentation = null;
     this.busy = false;
     this.queue = [];
@@ -23487,6 +23650,348 @@ var CursorBridge = class {
       interactionPreference: "agents_v2_when_open_else_legacy",
       cursorUiPreferencePreserved: true
     };
+  }
+  sessionRegistryView() {
+    return {
+      sessionStorageFile: this.sessionFile,
+      sessionStoragePersistent: !!this.sessionFile,
+      sessionStorageLocation: this.sessionFile ? "user-config" : "disabled"
+    };
+  }
+  _readSession(sessionId) {
+    const id = String(sessionId || "").trim();
+    if (!id) throw cursorSessionError("SESSION_REQUIRED", "session_id must not be empty");
+    if (!this.sessionFile) throw cursorSessionError("SESSION_STORAGE_DISABLED", "persistent session storage is disabled");
+    return readCursorSessionRegistry(this.sessionFile).sessions[id] || null;
+  }
+  _sessionView(session) {
+    if (!session) return null;
+    return {
+      sessionId: session.id,
+      sessionState: session.state,
+      projectPath: session.projectPath,
+      workspaceKey: session.workspaceKey,
+      agentId: session.agentId || null,
+      agentLabel: session.agentLabel || null,
+      turnIndex: Number(session.turnIndex || 0),
+      activeTaskId: session.activeTaskId || null,
+      lastTask: session.lastTask || null,
+      modelPreference: session.modelPreference || null,
+      readOnly: session.scopeEnvelope && session.scopeEnvelope.readOnly === true,
+      allowedPaths: session.scopeEnvelope && Array.isArray(session.scopeEnvelope.allowedPaths) ? session.scopeEnvelope.allowedPaths : [],
+      createdAt: session.createdAt || null,
+      updatedAt: session.updatedAt || null,
+      closedAt: session.closedAt || null,
+      recoveryState: session.recoveryState || null,
+      attention: session.attention || null
+    };
+  }
+  _claimNewSession({ taskId, projectPath, readOnly, allowedPaths, modelPreference, requestId, timeoutMs }) {
+    if (!this.sessionFile) throw cursorSessionError("SESSION_STORAGE_DISABLED", "persistent session storage is disabled");
+    const sessionId = createCursorSessionId();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const session = {
+      id: sessionId,
+      state: "creating",
+      projectPath,
+      workspaceKey: this.workspaceKey,
+      agentId: null,
+      agentLabel: null,
+      modelPreference: modelPreference ? { ...modelPreference } : null,
+      scopeEnvelope: { readOnly, allowedPaths: [...allowedPaths] },
+      turnIndex: 1,
+      epoch: 1,
+      activeTaskId: taskId,
+      lastRequestId: requestId || null,
+      lastTask: null,
+      lease: {
+        taskId,
+        instanceId: this.sessionInstanceId,
+        epoch: 1,
+        expiresAt: new Date(Date.now() + timeoutMs + 6e4).toISOString()
+      },
+      createdAt: now,
+      updatedAt: now,
+      closedAt: null,
+      recoveryState: null,
+      attention: null
+    };
+    updateCursorSessionRegistry(this.sessionFile, (registry2) => {
+      if (registry2.sessions[sessionId]) throw cursorSessionError("SESSION_ID_COLLISION", sessionId);
+      registry2.sessions[sessionId] = session;
+    }, { now });
+    return session;
+  }
+  _claimExistingSession({ sessionId, taskId, projectPath, readOnly, allowedPaths, requestId, timeoutMs }) {
+    if (!this.sessionFile) throw cursorSessionError("SESSION_STORAGE_DISABLED", "persistent session storage is disabled");
+    const nowMs = Date.now();
+    let expiredLease = false;
+    const result = updateCursorSessionRegistry(this.sessionFile, (registry2) => {
+      const session = registry2.sessions[sessionId];
+      if (!session) throw cursorSessionError("SESSION_NOT_FOUND", sessionId);
+      if (requestId && session.lastRequestId === requestId) {
+        return { duplicate: true, session: { ...session } };
+      }
+      if (!sameSessionProject(session.projectPath, projectPath)) {
+        throw cursorSessionError("SESSION_WORKSPACE_MISMATCH", `session is bound to ${session.projectPath}`);
+      }
+      if (session.state === "closed") throw cursorSessionError("SESSION_CLOSED", sessionId);
+      const leaseExpiresAt = Date.parse(session.lease && session.lease.expiresAt || "");
+      if (session.activeTaskId || session.state === "busy" || session.state === "creating") {
+        if (Number.isFinite(leaseExpiresAt) && leaseExpiresAt <= nowMs) {
+          expiredLease = true;
+          session.state = "needs_attention";
+          session.recoveryState = "expired_sender_lease";
+          session.attention = "The previous sender lease expired. Reconcile the exact Cursor Agent before continuing; no prompt was resent.";
+          session.updatedAt = new Date(nowMs).toISOString();
+          return { duplicate: false, session: { ...session } };
+        }
+        throw cursorSessionError("SESSION_BUSY", `active task ${session.activeTaskId || "unknown"}`);
+      }
+      if (session.state !== "ready") {
+        throw cursorSessionError("SESSION_NOT_READY", `state=${session.state}; recovery=${session.recoveryState || "none"}`);
+      }
+      if (!session.agentId) throw cursorSessionError("SESSION_AGENT_NOT_BOUND", sessionId);
+      const envelope = session.scopeEnvelope || { readOnly: false, allowedPaths: [] };
+      if (envelope.readOnly === true) {
+        if (readOnly !== true || allowedPaths.length > 0) {
+          throw cursorSessionError("SESSION_SCOPE_EXPANSION", "a read-only session must remain explicitly read-only");
+        }
+      } else {
+        if (readOnly === true || allowedPaths.length === 0) {
+          throw cursorSessionError("SESSION_SCOPE_REQUIRED", "a writable continuation must repeat an allowed_paths subset");
+        }
+        const outside = allowedPaths.find((candidate) => !(envelope.allowedPaths || []).some((parent) => sessionPathContains(parent, candidate)));
+        if (outside) throw cursorSessionError("SESSION_SCOPE_EXPANSION", `${outside} is outside the session envelope`);
+      }
+      const epoch = Number(session.epoch || 0) + 1;
+      session.state = "busy";
+      session.turnIndex = Number(session.turnIndex || 0) + 1;
+      session.epoch = epoch;
+      session.activeTaskId = taskId;
+      session.lastRequestId = requestId || null;
+      session.lease = {
+        taskId,
+        instanceId: this.sessionInstanceId,
+        epoch,
+        expiresAt: new Date(nowMs + timeoutMs + 6e4).toISOString()
+      };
+      session.updatedAt = new Date(nowMs).toISOString();
+      session.recoveryState = null;
+      session.attention = null;
+      return { duplicate: false, session: { ...session } };
+    }, { now: new Date(nowMs).toISOString() });
+    if (expiredLease) {
+      throw cursorSessionError("SESSION_RECONCILE_REQUIRED", "the previous sender lease expired; no prompt was sent");
+    }
+    return result;
+  }
+  _bindSessionAgent(job) {
+    if (!job || !job.sessionId || !job.agentId || !this.sessionFile) return;
+    updateCursorSessionRegistry(this.sessionFile, (registry2) => {
+      const session = registry2.sessions[job.sessionId];
+      if (!session || session.activeTaskId !== job.id || Number(session.epoch) !== Number(job.sessionEpoch)) return;
+      session.agentId = job.agentId;
+      session.agentLabel = job.agentLabel || session.agentLabel || null;
+      session.state = "busy";
+      session.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    });
+    job.sessionState = "busy";
+  }
+  _settleSessionJob(job, outcome, options = {}) {
+    if (!job || !job.sessionId || !this.sessionFile) return;
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    updateCursorSessionRegistry(this.sessionFile, (registry2) => {
+      const session = registry2.sessions[job.sessionId];
+      if (!session || session.activeTaskId !== job.id || Number(session.epoch) !== Number(job.sessionEpoch)) return;
+      if (job.agentId) session.agentId = job.agentId;
+      if (job.agentLabel) session.agentLabel = job.agentLabel;
+      session.lastTask = {
+        taskId: job.id,
+        turnIndex: job.sessionTurn,
+        status: outcome,
+        finishedAt: job.finishedAt || now,
+        error: job.error || null,
+        terminalEvidence: job.terminalEvidence || null,
+        resultUnavailable: job.resultUnavailable === true
+      };
+      session.updatedAt = now;
+      if (options.needsAttention === true) {
+        session.state = "needs_attention";
+        session.recoveryState = job.recoveryState || outcome;
+        session.attention = options.attention || job.error || "The exact Cursor Agent requires reconciliation before another turn.";
+        return;
+      }
+      session.activeTaskId = null;
+      session.lease = null;
+      session.recoveryState = null;
+      session.attention = null;
+      session.state = session.agentId ? "ready" : "failed";
+    }, { now });
+    job.sessionState = options.needsAttention === true ? "needs_attention" : job.agentId ? "ready" : "failed";
+  }
+  _safeSettleSessionJob(job, outcome, options = {}) {
+    try {
+      this._settleSessionJob(job, outcome, options);
+    } catch (error2) {
+      job.sessionState = "needs_attention";
+      job.sessionError = error2 instanceof Error ? error2.message : String(error2);
+    }
+  }
+  sessionStatus(sessionId) {
+    const session = this._readSession(sessionId);
+    return {
+      found: !!session,
+      ...this.sessionRegistryView(),
+      ...session ? this._sessionView(session) : { sessionId: String(sessionId || "") }
+    };
+  }
+  async _reconcileSession(sessionId) {
+    const initial = this._readSession(sessionId);
+    if (!initial) return { found: false, action: "reconcile", sessionId };
+    if (initial.state === "ready" || initial.state === "closed" || initial.state === "failed") {
+      return { found: true, changed: false, action: "reconcile", ...this._sessionView(initial) };
+    }
+    if (!initial.agentId) {
+      return {
+        found: true,
+        changed: false,
+        action: "reconcile",
+        state: "agent_missing",
+        attention: "No exact agentId is available. Confirm the Cursor task state manually before explicit abandon.",
+        ...this._sessionView(initial)
+      };
+    }
+    const projectPath = this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null;
+    if (!sameSessionProject(initial.projectPath, projectPath)) {
+      throw cursorSessionError("SESSION_WORKSPACE_MISMATCH", `session is bound to ${initial.projectPath}`);
+    }
+    await this._ensureCursor();
+    const probe = {
+      agentId: initial.agentId,
+      targetId: this._lastLifecycle && this._lastLifecycle.targetId,
+      execution: "parallel_agent",
+      effectiveExecution: "parallel_agent",
+      lastRecoveryAt: null,
+      recoveryState: null,
+      error: null
+    };
+    const observed = await this._readStableParallelEntry(probe);
+    let result;
+    updateCursorSessionRegistry(this.sessionFile, (registry2) => {
+      const session = registry2.sessions[sessionId];
+      if (!session) {
+        result = { found: false, action: "reconcile", sessionId };
+        return;
+      }
+      if (Number(session.epoch || 0) !== Number(initial.epoch || 0) || session.activeTaskId !== initial.activeTaskId) {
+        result = { found: true, changed: false, action: "reconcile", state: "stale_observation", ...this._sessionView(session) };
+        return;
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      if (!observed.stable || !observed.entry) {
+        session.state = "needs_attention";
+        session.recoveryState = probe.recoveryState || "history_unavailable";
+        session.attention = observed.error || "The exact Agent state is not stable.";
+        session.updatedAt = now;
+        result = { found: true, changed: false, action: "reconcile", state: session.recoveryState, ...this._sessionView(session) };
+        return;
+      }
+      const entry = observed.entry;
+      if (entry.showSpinner) {
+        session.state = "needs_attention";
+        session.recoveryState = "running_unowned";
+        session.attention = "The exact Cursor Agent is still running without an attached adapter. Do not submit another turn.";
+        session.updatedAt = now;
+        result = { found: true, changed: false, action: "reconcile", state: "running_unowned", ...this._sessionView(session) };
+        return;
+      }
+      const terminalClass = classifyParallelTerminalIcon(entry.icon);
+      if (!["completed", "cancelled", "failed"].includes(terminalClass)) {
+        session.state = "needs_attention";
+        session.recoveryState = terminalClass === "needs_attention" ? "cursor_needs_attention" : "idle_unconfirmed";
+        session.attention = `The exact Cursor Agent has no confirmed terminal state: ${entry.icon || "unknown"}`;
+        session.updatedAt = now;
+        result = { found: true, changed: false, action: "reconcile", state: session.recoveryState, ...this._sessionView(session) };
+        return;
+      }
+      session.lastTask = {
+        taskId: session.activeTaskId || session.lastTask && session.lastTask.taskId || null,
+        turnIndex: session.turnIndex,
+        status: terminalClass,
+        finishedAt: now,
+        error: terminalClass === "failed" ? `stable_history_icon:${entry.icon}` : null,
+        terminalEvidence: `stable_history_icon:${entry.icon}`,
+        resultUnavailable: terminalClass === "completed"
+      };
+      session.activeTaskId = null;
+      session.lease = null;
+      session.state = "ready";
+      session.recoveryState = terminalClass === "completed" ? "reconciled_result_uncollected" : null;
+      session.attention = terminalClass === "completed" ? "The interrupted turn completed in Cursor, but its reply was not persisted. Inspect that Agent before the next turn." : null;
+      session.updatedAt = now;
+      result = { found: true, changed: true, action: "reconcile", state: terminalClass, ...this._sessionView(session) };
+    });
+    return result;
+  }
+  async sessionControl(sessionId, options = {}) {
+    const id = String(sessionId || "").trim();
+    if (!id) throw cursorSessionError("SESSION_REQUIRED", "session_id must not be empty");
+    const action = String(options.action || "").trim().toLowerCase();
+    if (!["reconcile", "close", "forget", "abandon"].includes(action)) {
+      throw cursorSessionError("SESSION_ACTION_UNSUPPORTED", "expected reconcile, close, forget, or abandon");
+    }
+    if (action === "reconcile") return this._reconcileSession(id);
+    let result;
+    updateCursorSessionRegistry(this.sessionFile, (registry2) => {
+      const session = registry2.sessions[id];
+      if (!session) {
+        result = { found: false, sessionId: id, action };
+        return;
+      }
+      if (action === "forget") {
+        if (options.confirm !== true) throw cursorSessionError("SESSION_CONFIRM_REQUIRED", "forget requires confirm=true");
+        if (session.state !== "closed") throw cursorSessionError("SESSION_NOT_CLOSED", "close the session before forgetting it");
+        delete registry2.sessions[id];
+        result = { found: true, changed: true, action, sessionId: id, state: "forgotten" };
+        return;
+      }
+      if (action === "abandon") {
+        if (options.confirm !== true || options.acknowledgeMayStillWrite !== true || !String(options.reason || "").trim()) {
+          throw cursorSessionError("SESSION_ABANDON_CONFIRM_REQUIRED", "abandon requires confirm=true, acknowledge_may_still_write=true, and a non-empty reason");
+        }
+        session.lastTask = {
+          taskId: session.activeTaskId || session.lastTask && session.lastTask.taskId || null,
+          turnIndex: session.turnIndex,
+          status: "abandoned",
+          finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          error: String(options.reason).trim(),
+          terminalEvidence: "explicit_session_abandon_acknowledgement",
+          resultUnavailable: true
+        };
+        session.activeTaskId = null;
+        session.lease = null;
+        session.state = "closed";
+        session.closedAt = session.lastTask.finishedAt;
+        session.updatedAt = session.closedAt;
+        session.recoveryState = "released_unconfirmed";
+        session.attention = "The Bridge mapping was closed without proving that the Cursor Agent stopped; it may still run or write.";
+        result = { found: true, changed: true, action, warning: session.attention, ...this._sessionView(session) };
+        return;
+      }
+      if (session.activeTaskId || ["busy", "creating", "needs_attention"].includes(session.state)) {
+        throw cursorSessionError("SESSION_CLOSE_BLOCKED", "an active or uncertain Agent must be resolved before close");
+      }
+      if (session.state === "closed") {
+        result = { found: true, changed: false, action, ...this._sessionView(session) };
+        return;
+      }
+      session.state = "closed";
+      session.closedAt = (/* @__PURE__ */ new Date()).toISOString();
+      session.updatedAt = session.closedAt;
+      result = { found: true, changed: true, action, ...this._sessionView(session) };
+    });
+    return result;
   }
   async initializeWorkspace(projectPath) {
     if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
@@ -23719,10 +24224,27 @@ var CursorBridge = class {
     if (this._hasGlobalReservation()) {
       throw new Error("A global Cursor reservation has an unconfirmed Stop state; no new task may be submitted until it is explicitly recovered or released");
     }
-    await this._ensureCursor();
-    const execution = String(options.execution || "fifo");
+    const sessionMode = normalizeCursorSessionMode(options.sessionMode, "isolated");
+    if (!sessionMode) {
+      throw cursorSessionError("SESSION_MODE_INVALID", `expected ${CURSOR_SESSION_MODES.join(", ")}`);
+    }
+    const sessionId = String(options.sessionId || "").trim();
+    if (sessionMode === "continue" && !sessionId) {
+      throw cursorSessionError("SESSION_REQUIRED", "session_mode=continue requires session_id");
+    }
+    if (sessionMode !== "continue" && sessionId) {
+      throw cursorSessionError("SESSION_ID_UNEXPECTED", "session_id is accepted only with session_mode=continue");
+    }
+    const requestId = normalizeSessionRequestId(options.requestId);
+    if (sessionMode === "isolated" && requestId) {
+      throw cursorSessionError("SESSION_REQUEST_ID_UNEXPECTED", "request_id is accepted only for a persistent session turn");
+    }
+    const execution = String(options.execution || (sessionMode === "isolated" ? "fifo" : "parallel_agent"));
     if (execution !== "fifo" && execution !== "parallel_agent") {
       throw new Error(`Unsupported execution value ${execution}; expected fifo or parallel_agent`);
+    }
+    if (sessionMode !== "isolated" && execution !== "parallel_agent") {
+      throw cursorSessionError("SESSION_EXECUTION_INVALID", "persistent sessions require execution=parallel_agent and never fall back to FIFO");
     }
     const readOnly = options.readOnly === true;
     const timeoutMs = Math.max(3e4, Math.min(9e5, Number(options.timeoutMs || 6e5)));
@@ -23737,6 +24259,14 @@ var CursorBridge = class {
       this._validateParallelAllowedPaths(allowedPaths);
       this._assertNoParallelPathConflict(allowedPaths);
     }
+    if (sessionMode === "continue" && options.readOnlySpecified !== true && options.allowedPathsSpecified !== true) {
+      throw cursorSessionError("SESSION_SCOPE_REQUIRED", "repeat read_only=true or an allowed_paths subset for every continued turn");
+    }
+    await this._ensureCursor();
+    const projectPath = this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null;
+    if (sessionMode !== "isolated" && !projectPath) {
+      throw cursorSessionError("SESSION_WORKSPACE_REQUIRED", "initialize one workspace before creating or continuing a session");
+    }
     const contract = String(options.completionContract || "").trim();
     let fullPrompt = text + DO_LANGUAGE_CONTRACT;
     if (readOnly) fullPrompt += "\n\nRead-only boundary: Do not modify, create, or delete files, and do not run commands that change workspace state.";
@@ -23744,14 +24274,56 @@ var CursorBridge = class {
       fullPrompt += "\n\nAllowed modification scope (do not cross this boundary):\n" + allowedPaths.map((x) => "- " + x).join("\n");
     }
     fullPrompt += contract ? "\n\nAcceptance and reporting contract:\n" + contract : DO_DEFAULT_CONTRACT;
+    const taskId = this._nextTaskId();
+    let session = null;
+    let duplicate = false;
+    let modelPreference = this._modelPreferenceFor("cursor_do");
+    if (sessionMode === "create") {
+      session = this._claimNewSession({
+        taskId,
+        projectPath,
+        readOnly,
+        allowedPaths,
+        modelPreference,
+        requestId,
+        timeoutMs
+      });
+    } else if (sessionMode === "continue") {
+      const claimed = this._claimExistingSession({
+        sessionId,
+        taskId,
+        projectPath,
+        readOnly,
+        allowedPaths,
+        requestId,
+        timeoutMs
+      });
+      session = claimed.session;
+      duplicate = claimed.duplicate === true;
+      modelPreference = session.modelPreference || null;
+      if (duplicate) {
+        const existing = this.tasks.get(session.activeTaskId || session.lastTask && session.lastTask.taskId || "");
+        return existing ? { duplicate: true, ...this._taskView(existing, true) } : { duplicate: true, ...this._sessionView(session) };
+      }
+    }
     const job = this._enqueue("do", fullPrompt, {
+      taskId,
       timeoutMs,
-      newChat: true,
+      newChat: sessionMode !== "continue",
       execution,
       readOnly,
       allowedPaths,
       preferLegacyUi: options.preferLegacyUi === true,
-      modelPreference: this._modelPreferenceFor("cursor_do")
+      modelPreference,
+      projectPath,
+      sessionMode,
+      sessionId: session && session.id || null,
+      sessionTurn: session && session.turnIndex || null,
+      sessionEpoch: session && session.epoch || null,
+      sessionState: session && session.state || null,
+      requestId,
+      agentId: sessionMode === "continue" ? session && session.agentId : null,
+      agentLabel: sessionMode === "continue" ? session && session.agentLabel : null
     });
     if (options.background !== false) return this._taskView(job);
     await job.promise;
@@ -23780,12 +24352,15 @@ var CursorBridge = class {
       }
     }
   }
+  _nextTaskId() {
+    return `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
+  }
   _enqueue(kind, prompt, options) {
-    const id = `cursor-${Date.now().toString(36)}-${this.nextTaskId++}`;
+    const id = options.taskId || this._nextTaskId();
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve7, reject) => {
-      resolvePromise = resolve7;
+    const promise = new Promise((resolve8, reject) => {
+      resolvePromise = resolve8;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -23804,15 +24379,22 @@ var CursorBridge = class {
       modelPreference: options.modelPreference ? { ...options.modelPreference } : null,
       modelSelection: options.modelPreference ? { configured: true, applied: false, ...options.modelPreference } : null,
       projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
+      sessionMode: options.sessionMode || "isolated",
+      sessionId: options.sessionId || null,
+      sessionTurn: options.sessionTurn || null,
+      sessionEpoch: options.sessionEpoch || null,
+      sessionState: options.sessionState || null,
+      requestId: options.requestId || null,
+      responseBaseline: null,
       status: "queued",
       phase: "queued",
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       startedAt: null,
       finishedAt: null,
       sentAt: null,
-      agentId: null,
+      agentId: options.agentId || null,
       provisionalAgentId: null,
-      agentLabel: null,
+      agentLabel: options.agentLabel || null,
       targetId: null,
       targetUiFlavor: null,
       fallbackReason: null,
@@ -23853,6 +24435,7 @@ var CursorBridge = class {
     job.recoveryState = null;
     job.cancelRequested = false;
     job.resultUnavailable = false;
+    this._safeSettleSessionJob(job, "completed");
     if (!job.settled) {
       job.settled = true;
       job.resolve(result);
@@ -23870,6 +24453,7 @@ var CursorBridge = class {
     job.recoveryState = null;
     job.cancelRequested = false;
     job.reservationScope = null;
+    this._safeSettleSessionJob(job, "failed");
     if (!job.settled) {
       job.settled = true;
       job.reject(e);
@@ -23890,6 +24474,10 @@ var CursorBridge = class {
     job.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
     job.recoveryState = options.underlyingStopConfirmed === true ? "stopped" : "released_unconfirmed";
     job.reservationScope = null;
+    this._safeSettleSessionJob(job, "cancelled", {
+      needsAttention: options.underlyingStopConfirmed !== true && job.sendState === "sent",
+      attention: "Cancellation did not prove that the exact Cursor Agent stopped."
+    });
     if (!job.settled) {
       job.settled = true;
       job.reject(new Error(message));
@@ -23909,6 +24497,7 @@ var CursorBridge = class {
     job.recoveryState = "unverified";
     job.reservationScope = job.execution === "parallel_agent" && job.agentId ? job.readOnly ? "agent" : "paths" : "global";
     this.activeParallel.set(job.id, job);
+    this._safeSettleSessionJob(job, "needs_attention", { needsAttention: true });
     if (!job.settled) {
       job.settled = true;
       job.reject(e);
@@ -24027,8 +24616,14 @@ var CursorBridge = class {
         try {
           if (job.effectiveExecution === "parallel_agent") {
             job.phase = "submitting";
-            const submitted = await this._withUiLock(() => this._submitParallelAgent(job));
+            const submitted = await this._withUiLock(() => job.sessionMode === "continue" ? this._submitSessionTurn(job) : this._submitParallelAgent(job));
             if (submitted.fallbackReason) {
+              if (job.sessionMode !== "isolated") {
+                throw cursorSessionError(
+                  "SESSION_CONTINUITY_UNAVAILABLE",
+                  `${submitted.fallbackReason}; persistent sessions never fall back to FIFO`
+                );
+              }
               job.effectiveExecution = "fifo";
               job.fallbackReason = submitted.fallbackReason;
               if (this.activeParallel.size > 0) {
@@ -24043,6 +24638,12 @@ var CursorBridge = class {
             } else {
               job.agentId = submitted.agent.id;
               job.agentLabel = submitted.agent.label || null;
+              try {
+                this._bindSessionAgent(job);
+              } catch (error2) {
+                if (job.sendState === "sent" || job.sentAt) error2.sent = true;
+                throw error2;
+              }
               job.sentAt = job.sentAt || (/* @__PURE__ */ new Date()).toISOString();
               job.phase = "running";
               job.reservationScope = job.readOnly ? "agent" : "paths";
@@ -24392,7 +24993,7 @@ var CursorBridge = class {
       const created = JSON.parse(await evalJS(c, exprCreateAgentForWorkspace(options.projectPath)) || "{}");
       if (!created.ok) {
         const available = Array.isArray(created.available) ? `; available=${created.available.join(", ")}` : "";
-        throw new Error(`Cursor Agents workspace binding failed: ${created.state || "unknown"}; wanted=${created.wanted || basename5(options.projectPath)}${available}`);
+        throw new Error(`Cursor Agents workspace binding failed: ${created.state || "unknown"}; wanted=${created.wanted || basename6(options.projectPath)}${available}`);
       }
       await sleep2(1100);
       return true;
@@ -24672,6 +25273,74 @@ var CursorBridge = class {
       c.close();
     }
   }
+  async _submitSessionTurn(job) {
+    if (!job.agentId) throw cursorSessionError("SESSION_AGENT_NOT_BOUND", job.sessionId || "unknown session");
+    const page = await findPage({
+      targetId: this._lastLifecycle && this._lastLifecycle.targetId,
+      purpose: "parallel_agent",
+      preferAgentsV2: true
+    });
+    job.targetId = page.id;
+    job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
+    const c = makeClient(page.webSocketDebuggerUrl);
+    await c.ready;
+    let sent = false;
+    try {
+      this._throwIfCancelledBeforeSend(job);
+      await this._ensureChatPanel(c);
+      const entries = await this._readAgentEntries(c, true);
+      const target = entries.find((entry) => entry && entry.id === job.agentId);
+      if (!target) {
+        throw cursorSessionError("SESSION_AGENT_NOT_FOUND", `Agent History does not contain ${job.agentId}`);
+      }
+      const previousSelectedId = (entries.find((entry) => entry.isSelected) || {}).id || null;
+      if (!target.isSelected) {
+        const opened = await evalJS(c, exprOpenAgent(job.agentId));
+        if (opened !== "OPENED") {
+          throw cursorSessionError("SESSION_AGENT_OPEN_FAILED", `${job.agentId}: ${opened}`);
+        }
+      }
+      await this._closeHistory(c);
+      await this._waitForSelectedAgent(c, job.agentId);
+      await this._ensureChatPanel(c);
+      this._throwIfCancelledBeforeSend(job);
+      await this._applyModelPreference(c, job.modelPreference, job);
+      this._throwIfCancelledBeforeSend(job);
+      let baseline = { messageCount: 0, replyLength: 0, replyHash: 0 };
+      try {
+        baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
+      } catch {
+      }
+      job.responseBaseline = {
+        messageCount: Number(baseline.messageCount || 0),
+        replyLength: Number(baseline.replyLength || 0),
+        replyHash: Number(baseline.replyHash || 0)
+      };
+      const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
+      const filled = await evalJS(c, exprFill(job.prompt));
+      if (filled === "NO_INPUT" || filled === "EXEC_FAIL") {
+        throw cursorSessionError("SESSION_INPUT_FAILED", "failed to enter the continued task");
+      }
+      await sleep2(350);
+      this._throwIfCancelledBeforeSend(job);
+      job.sendState = "dispatching";
+      await chord(c, 0, "Enter", "Enter", 13);
+      await this._confirmSubmission(c, job.responseBaseline.messageCount, providerErrorBaseline);
+      sent = true;
+      job.sendState = "sent";
+      job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
+      return {
+        agent: { id: job.agentId, label: target.label || job.agentLabel || null },
+        previousSelectedId
+      };
+    } catch (error2) {
+      if (sent) error2.sent = true;
+      throw error2;
+    } finally {
+      await this._closeHistory(c);
+      c.close();
+    }
+  }
   async _readParallelEntry(job) {
     return this._withUiLock(async () => {
       const page = await findPage({ targetId: job.targetId, purpose: "parallel_agent" });
@@ -24856,7 +25525,8 @@ var CursorBridge = class {
         } catch {
         }
         const candidate = String(await evalJS(c, EXPR_EXTRACT) || "").trim();
-        if (candidate && Number(snap.stop || 0) === 0) {
+        const hasNewTurn = isSessionTurnReplyReady(job.responseBaseline, snap);
+        if (candidate && hasNewTurn && Number(snap.stop || 0) === 0) {
           const key = `${snap.replyLength}:${snap.replyHash}`;
           if (key === lastKey) stable++;
           else {
@@ -24897,6 +25567,7 @@ var CursorBridge = class {
     job.recoveryState = "terminal_result_uncollected";
     job.reservationScope = uncertainSubmissionReservationScope(job, error2);
     job.recoveryState = error2.recoveryState || "monitoring_uncertain_submission";
+    this._safeSettleSessionJob(job, "terminal_result_uncollected", { needsAttention: true });
   }
   _abandonJob(job, reason) {
     if (isTerminalTask(job)) return this._taskView(job, true);
@@ -24913,6 +25584,10 @@ var CursorBridge = class {
     job.terminalEvidence = "explicit_abandon_acknowledgement";
     job.recoveryState = "released_unconfirmed";
     job.reservationScope = null;
+    this._safeSettleSessionJob(job, "abandoned", {
+      needsAttention: true,
+      attention: "The Bridge released the task reservation without proving that the Cursor Agent stopped. This session cannot continue safely."
+    });
     if (!job.settled) {
       job.settled = true;
       job.reject(new Error(message));
@@ -25448,6 +26123,12 @@ var CursorBridge = class {
       modelPreference: job.modelPreference,
       modelSelection: job.modelSelection,
       projectPath: job.projectPath,
+      sessionMode: job.sessionMode || "isolated",
+      sessionId: job.sessionId || null,
+      sessionTurn: job.sessionTurn || null,
+      sessionState: job.sessionState || null,
+      sessionError: job.sessionError || null,
+      requestId: job.requestId || null,
       agentId: job.agentId,
       provisionalAgentId: job.provisionalAgentId || null,
       agentLabel: job.agentLabel,
@@ -25496,8 +26177,8 @@ var CursorBridge = class {
   async status(taskId = "") {
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView() };
-      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this._taskView(job, true) };
+      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this.sessionRegistryView() };
+      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this.sessionRegistryView(), ...this._taskView(job, true) };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
@@ -25509,6 +26190,7 @@ var CursorBridge = class {
       ...this.delegationView(),
       ...this.runtimeModeView(),
       ...this.modelPreferencesView(),
+      ...this.sessionRegistryView(),
       busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
       uiBusy,
       parallelRunning,
@@ -25576,7 +26258,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
-      description: "Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.",
+      description: "Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Persistent continuity is explicit: session_mode=create starts one durable top-level Agent association, and session_mode=continue requires its exact session_id. Omission keeps the existing isolated behavior. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.",
       inputSchema: {
         type: "object",
         properties: {
@@ -25586,7 +26268,10 @@ function buildToolDefinitions(bridgeInstance) {
           read_only: { type: "boolean", default: false, description: "Set true when Cursor must not change the workspace." },
           timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "How long to wait before timing out, in milliseconds. The default is 10 minutes." },
           allowed_paths: { type: "array", items: { type: "string" }, description: "Workspace-relative paths Cursor may write. Parallel write tasks require non-overlapping paths. This declaration is not a filesystem sandbox." },
-          completion_contract: { type: "string", description: "Optional acceptance checks or a required final-report format." }
+          completion_contract: { type: "string", description: "Optional acceptance checks or a required final-report format." },
+          session_mode: { type: "string", enum: [...CURSOR_SESSION_MODES], default: "isolated", description: "isolated preserves the current clean-task behavior. create starts an update-safe persistent session. continue sends one new turn to the exact session_id." },
+          session_id: { type: "string", description: "Required only for session_mode=continue. This stable Bridge ID is not a Cursor agentId." },
+          request_id: { type: "string", description: "Optional idempotency key for a persistent session turn. Repeating the latest key returns its existing task/session instead of sending again." }
         },
         required: ["prompt"]
       }
@@ -25608,6 +26293,21 @@ function buildToolDefinitions(bridgeInstance) {
       }
     },
     {
+      name: "cursor_session_control",
+      description: "Recover, close, or forget one exact persistent cursor_do session. reconcile checks the exact Agent twice and never resends. close prevents future sends but does not stop or delete the Cursor Agent. An active or uncertain session cannot be closed. abandon is the explicit last resort when exact stop evidence is unavailable. forget requires confirm=true and is allowed only after close; it deletes only the Bridge mapping.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          session_id: { type: "string", description: "The exact session ID returned by cursor_do(session_mode=create)." },
+          action: { type: "string", enum: ["reconcile", "close", "forget", "abandon"], description: "reconcile reads the exact Agent state; close ends safe continuity; forget removes a closed mapping; abandon releases an uncertain mapping without stop proof." },
+          confirm: { type: "boolean", default: false, description: "Required for forget and abandon." },
+          reason: { type: "string", description: "Required and non-empty for abandon." },
+          acknowledge_may_still_write: { type: "boolean", default: false, description: "Required for abandon; acknowledges that the underlying Cursor Agent may still run or write." }
+        },
+        required: ["session_id", "action"]
+      }
+    },
+    {
       name: "cursor_runtime",
       description: "Persistently switch Cursor presentation between normal and minimal. normal is the fresh-install default and restores ordinary visible Cursor use. minimal is the recommended opt-in background experience on tested Windows 11 systems: Cursor and CCE keep running while Cursor windows stay hidden. Before enabling minimal, tell the user that manually opening Cursor will remain hidden until CCE is switched back to normal. This is UI suppression, not a headless reimplementation.",
       inputSchema: {
@@ -25620,7 +26320,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_model",
-      description: "Show, set, or reset persistent Cursor model defaults for CCE and cursor_do. Settings are independent per target and survive host tasks, MCP restarts, and Cursor Bridge restarts until the user explicitly changes or resets them. When configured, Bridge applies the model and optional effort in every newly created Cursor Agent before sending the prompt, then verifies the visible selection. An unavailable, ambiguous, unsupported, or unconfirmed selection fails before prompt submission instead of silently falling back to Auto. Use set/reset only when the user explicitly asks to change these defaults; use show for read-only inspection.",
+      description: "Show, set, or reset persistent Cursor model defaults for CCE and cursor_do. Settings are independent per target and survive host tasks, MCP restarts, and Cursor Bridge restarts until the user explicitly changes or resets them. When configured, Bridge applies the model and optional effort in every newly created Cursor Agent before sending the prompt, then verifies the visible selection. A persistent session freezes that preference and reapplies it on continued turns instead of inheriting later global changes. An unavailable, ambiguous, unsupported, or unconfirmed selection fails before prompt submission instead of silently falling back to Auto. Use set/reset only when the user explicitly asks to change these defaults; use show for read-only inspection.",
       inputSchema: {
         type: "object",
         properties: {
@@ -25634,8 +26334,14 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_status",
-      description: "Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, and normal/minimal runtime presentation. Pass a task ID to read its configured and effective model selection plus any result already collected; this tool never switches Agents, reconciles, or stops work.",
-      inputSchema: { type: "object", properties: { task_id: { type: "string", description: "A task ID returned by cursor_do. Omit it for an overall status view." } } }
+      description: "Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Pass task_id for its configured and effective model selection, or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "A task ID returned by cursor_do." },
+          session_id: { type: "string", description: "A persistent session ID returned by cursor_do(session_mode=create)." }
+        }
+      }
     }
   ].filter(Boolean);
 }
@@ -25681,7 +26387,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
         readOnly: !!(args && args.read_only),
         timeoutMs: args && args.timeout_ms,
         allowedPaths: args && args.allowed_paths,
-        completionContract: args && args.completion_contract
+        completionContract: args && args.completion_contract,
+        sessionMode: args && args.session_mode,
+        sessionId: args && args.session_id,
+        requestId: args && args.request_id,
+        readOnlySpecified: !!(args && Object.hasOwn(args, "read_only")),
+        allowedPathsSpecified: !!(args && Object.hasOwn(args, "allowed_paths"))
       });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
@@ -25689,6 +26400,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       const result = await bridge.taskControl(args && args.task_id, {
         action: args && args.action,
         expectedAgentId: args && args.expected_agent_id,
+        confirm: !!(args && args.confirm),
+        reason: args && args.reason,
+        acknowledgeMayStillWrite: !!(args && args.acknowledge_may_still_write)
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+    if (name === "cursor_session_control") {
+      const result = await bridge.sessionControl(args && args.session_id, {
+        action: args && args.action,
         confirm: !!(args && args.confirm),
         reason: args && args.reason,
         acknowledgeMayStillWrite: !!(args && args.acknowledge_may_still_write)
@@ -25717,11 +26437,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_status") {
+      if (args && args.task_id && args.session_id) {
+        throw cursorSessionError("STATUS_SELECTOR_AMBIGUOUS", "pass task_id or session_id, not both");
+      }
       const statusMs = Math.max(1e3, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8e3));
       let result;
       try {
         result = await Promise.race([
-          bridge.status(args && args.task_id),
+          args && args.session_id ? Promise.resolve(bridge.sessionStatus(args.session_id)) : bridge.status(args && args.task_id),
           new Promise((_, reject) => setTimeout(() => reject(new Error(`cursor_status_timeout_${statusMs}`)), statusMs))
         ]);
       } catch (error2) {
@@ -25732,7 +26455,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
           error: error2 instanceof Error ? error2.message : String(error2),
           ...bridge.workspaceView(),
           ...bridge.delegationView(),
-          ...bridge.runtimeModeView()
+          ...bridge.runtimeModeView(),
+          ...bridge.sessionRegistryView()
         };
       }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
@@ -25802,6 +26526,7 @@ export {
   isBlankAgentsWindow,
   isConfirmedCompletedReply,
   isDurablyRegisteredParallelEntry,
+  isSessionTurnReplyReady,
   isTargetedStopConfirmed,
   lifecycleFailureSummary,
   normalizeAllowedPath,

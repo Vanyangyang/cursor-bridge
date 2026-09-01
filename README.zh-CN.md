@@ -315,13 +315,20 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 - FIFO 即先进先出：普通任务通过一个 UI lock 串行执行，并在干净对话中开始。
 - 独立 `parallel_agent` 使用不同的顶层 Cursor Agent。并行写任务必须提供互不重叠的 `allowed_paths`；只读任务使用 `read_only=true`。
 - 保存返回的 `task_id`，再用 `cursor_status(task_id)` 回收。
+- `session_mode=isolated` 仍是默认值。只有后续轮次必须保留同一 Cursor 上下文时才使用 `session_mode=create`，然后用返回的稳定 `session_id` 配合 `session_mode=continue` 继续。
+- 每个续发轮次都会获得新的 `task_id`，并且必须再次声明 `read_only=true` 或 `allowed_paths` 子集。持续会话只使用 `parallel_agent`、同一时间只允许一个轮次，而且绝不降级到 FIFO。
+- `cursor_status(session_id)` 查看持久关联。`cursor_session_control(action=close)` 只结束 Bridge 连续性，不会停止 Cursor；已关闭的映射可用 `action=forget, confirm=true` 删除。
+- adapter 中断后，`cursor_session_control(action=reconcile)` 会两次核对精确 Agent，绝不重发；只有无法恢复停止证据时，才能显式确认风险后使用 `abandon`。
+- ready 会话的原子注册表位于用户配置目录，因此可跨 MCP 重启和插件缓存替换；不会持久化提示、回复、凭据、插件路径、脚本路径或 CDP target ID。
 - `submitting`、`running`、`collecting` 都是正常非终态。
 - Bridge 会确认 Cursor 是否接受提示。提示仍留在输入框时只尝试一次精确 Send 控件，仍失败则返回 `submit_not_accepted`，不会静默制造孤儿。
 - provider-error 托盘会被保留为失败证据；Bridge 不会自动点击 Retry。
 - 发送后状态不确定时保留占用，不会静默释放或重投。
 - parallel Agents v2 任务会一直保留 provisional composer 身份，直到有证据对应到 durable History 行，再只迁移一次；其他并发提交不能在收敛期间替换这条任务的 `agentId`。
 - `reap` 用于已绑定的并行孤儿。定向 `cancel` 需要精确的已发布 Agent ID。Agents Window 或 Workbench 上的 FIFO 若已发布 Agent ID，也走同一条定向停止。未发布时 Bridge 不会猜测点击 Stop；请先在 Cursor 确认已停止，再 `abandon`。
-- 任务记录只存在于当前进程。MCP 重启后，开始重叠工作前应检查 Agent History 与工作区变化。
+- 任务记录仍只存在于当前进程。MCP 重启后，开始重叠的独立工作前应检查 Agent History 与工作区变化；持续会话只有在 `cursor_status(session_id)` 仍报告 `ready` 且精确 Agent 绑定存在时才能继续。
+
+内部身份、状态、恢复、范围与升级约束见 [Cursor Delivery Session Contract](./docs/CURSOR_SESSION_CONTRACT.md)。
 
 </details>
 
@@ -354,6 +361,7 @@ npm run build
 | `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | 没有持久化选择时的初始模式。 |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | 用户配置目录 | 覆盖持久运行模式文件。 |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | 用户 lifecycle 目录 | 覆盖持久工作区绑定文件。 |
+| `CURSOR_BRIDGE_SESSION_FILE` | 用户配置目录 | 覆盖持续交付会话注册表；不得指向版本化插件缓存。 |
 | `CURSOR_BRIDGE_MODEL_PREFERENCES_FILE` | 用户配置目录 | 覆盖 CCE / `cursor_do` 持久模型与思考程度文件。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 设为 `off` 可禁用并隐藏 `cursor_do`。 |
 | `CURSOR_PROJECT_PATH` | 未设置 | 仅在没有持久初始化时使用的兼容回退。 |

@@ -315,13 +315,20 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 - FIFO means first in, first out: ordinary tasks are serialized through one UI lock and start in a clean chat.
 - Independent `parallel_agent` tasks use separate top-level Cursor Agents. Writable parallel tasks require non-overlapping `allowed_paths`; read-only work uses `read_only=true`.
 - Keep the returned `task_id` and collect it with `cursor_status(task_id)`.
+- `session_mode=isolated` remains the default. Use `session_mode=create` only when later turns must keep the same Cursor context; continue through the returned stable `session_id` with `session_mode=continue`.
+- Every continued turn receives a new `task_id` and must repeat `read_only=true` or an `allowed_paths` subset. Persistent sessions require `parallel_agent`, allow one active turn, and never downgrade to FIFO.
+- `cursor_status(session_id)` inspects the durable association. `cursor_session_control(action=close)` ends Bridge continuity without stopping Cursor; an already-closed mapping may be removed with `action=forget, confirm=true`.
+- After an interrupted adapter, `cursor_session_control(action=reconcile)` checks the exact Agent twice and never resends. `abandon` is an explicitly acknowledged last resort when stop evidence cannot be recovered.
+- Ready session mappings survive MCP restart and plugin-cache replacement because their atomic registry lives in the user configuration directory. Prompts, replies, credentials, plugin paths, scripts, and CDP target IDs are not persisted.
 - `submitting`, `running`, and `collecting` are normal non-terminal states.
 - Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.
 - Provider-error trays are retained as terminal evidence; Bridge does not click Retry automatically.
 - Uncertain post-send work retains its reservation. It is not silently released or resubmitted.
 - A parallel Agents v2 task keeps its provisional composer identity reserved until a durable History row is evidenced, then migrates exactly once; another concurrent submission cannot replace that task's `agentId` during convergence.
 - `reap` is for a bound parallel orphan. Targeted `cancel` requires the exact published Agent ID. FIFO tasks on Agents Window or workbench that publish an Agent ID can be stopped the same way. If no ID is published, Bridge will not guess-click Stop; confirm the Cursor chat is stopped, then `abandon`.
-- Task records are process-local. After an MCP restart, inspect Agent History and workspace changes before starting overlapping work.
+- Task records remain process-local. After an MCP restart, inspect Agent History and workspace changes before starting overlapping isolated work; a persistent session may continue only when `cursor_status(session_id)` still reports `ready` with its exact Agent binding.
+
+Internal identity, state, recovery, scope, and update invariants are defined in [Cursor Delivery Session Contract](./docs/CURSOR_SESSION_CONTRACT.md).
 
 </details>
 
@@ -354,6 +361,7 @@ npm run build
 | `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | Bootstrap mode when no persisted choice exists. |
 | `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override persistent runtime-mode storage. |
 | `CURSOR_BRIDGE_WORKSPACE_FILE` | user lifecycle directory | Override persistent workspace binding storage. |
+| `CURSOR_BRIDGE_SESSION_FILE` | user config directory | Override the Cursor Delivery Session registry. Never point it into a versioned plugin cache. |
 | `CURSOR_BRIDGE_MODEL_PREFERENCES_FILE` | user config directory | Override persistent CCE / `cursor_do` model and effort storage. |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. |
 | `CURSOR_PROJECT_PATH` | unset | Compatibility fallback used only without persisted initialization. |

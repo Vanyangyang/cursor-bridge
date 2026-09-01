@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { readCursorSessionRegistry, updateCursorSessionRegistry } from '../cursor-session-registry.mjs';
 
 import {
   CursorBridge,
@@ -14,6 +15,7 @@ import {
   buildContextEnginePrompt,
   buildToolDefinitions,
   isConfirmedCompletedReply,
+  isSessionTurnReplyReady,
   normalizeCceSearchResult,
   normalizeAllowedPath,
   normalizeDelegationMode,
@@ -607,7 +609,7 @@ test('Agents workspace recovery clears stale failure guidance before reporting r
 
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
-    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, runtimeMode: 'normal', ...options });
+    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, runtimeMode: 'normal', ...options });
   }
 
   async _ensureCursor() {}
@@ -975,6 +977,13 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   const cursorDo = tools.find((tool) => tool.name === 'cursor_do');
   assert.match(cursorDo.description, /first in, first out/);
   assert.equal(Object.hasOwn(cursorDo.inputSchema.properties, 'new_chat'), false);
+  assert.deepEqual(cursorDo.inputSchema.properties.session_mode.enum, ['isolated', 'create', 'continue']);
+  assert.ok(cursorDo.inputSchema.properties.session_id);
+  assert.ok(cursorDo.inputSchema.properties.request_id);
+  const sessionControl = tools.find((tool) => tool.name === 'cursor_session_control');
+  assert.deepEqual(sessionControl.inputSchema.properties.action.enum, ['reconcile', 'close', 'forget', 'abandon']);
+  const status = tools.find((tool) => tool.name === 'cursor_status');
+  assert.deepEqual(Object.keys(status.inputSchema.properties), ['task_id', 'session_id']);
   assert.equal(tools.some((tool) => tool.name === 'cursor_launch'), false);
 });
 
@@ -1085,6 +1094,8 @@ test('bundled MCP exposes a fixed cursor_do contract without cursor_policy', asy
     assert.match(cursorDo.description, /direct user opt-out always wins/i);
     assert.match(cursorDo.description, /first in, first out/i);
     assert.equal(Object.hasOwn(cursorDo.inputSchema.properties, 'new_chat'), false);
+    assert.deepEqual(cursorDo.inputSchema.properties.session_mode.enum, ['isolated', 'create', 'continue']);
+    assert.equal(listed.tools.some((tool) => tool.name === 'cursor_session_control'), true);
     assert.doesNotMatch(cursorDo.description, /manual|auto|active|eager|participation policy/i);
     const status = await first.callTool({ name: 'cursor_status', arguments: { task_id: 'cursor-missing' } });
     const view = JSON.parse(status.content[0].text);
@@ -1149,6 +1160,219 @@ test('cursor_do defaults to FIFO and keeps background task identity', async () =
   assert.equal(Object.hasOwn(view, 'submittedPolicy'), false);
   assert.match(view.taskId, /^cursor-/);
   assert.equal(bridge.tasks.get(view.taskId).newChat, true);
+});
+
+test('continued sessions collect only a reply appended after the pre-send baseline', () => {
+  const baseline = { messageCount: 14, replyLength: 120, replyHash: 42 };
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 14 }), false);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 15 }), false);
+  assert.equal(isSessionTurnReplyReady(baseline, { messageCount: 16 }), true);
+  assert.equal(isSessionTurnReplyReady(null, { messageCount: 1 }), true);
+});
+
+test('persistent cursor_do sessions keep one stable session ID across explicit turns', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-do-session-'));
+  const sessionFile = join(directory, 'sessions-v1.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bridge = new OfflineBridge({ sessionFile, projectPath: process.cwd(), sessionInstanceId: 'adapter-test' });
+
+  const created = await bridge.doTask('建立持续会话', {
+    sessionMode: 'create',
+    readOnly: true,
+    readOnlySpecified: true,
+    requestId: 'turn-1',
+  });
+  assert.equal(created.sessionMode, 'create');
+  assert.equal(created.execution, 'parallel_agent');
+  assert.match(created.sessionId, /^cursor-session-/);
+  assert.equal(created.sessionTurn, 1);
+  const first = bridge.tasks.get(created.taskId);
+  first.agentId = 'durable-agent-1';
+  first.agentLabel = 'Persistent agent';
+  bridge._bindSessionAgent(first);
+  bridge._finishJob(first, 'turn one complete');
+  assert.equal(bridge.sessionStatus(created.sessionId).sessionState, 'ready');
+
+  const restarted = new OfflineBridge({ sessionFile, projectPath: process.cwd(), sessionInstanceId: 'adapter-after-update' });
+  const continued = await restarted.doTask('继续同一个会话', {
+    sessionMode: 'continue',
+    sessionId: created.sessionId,
+    readOnly: true,
+    readOnlySpecified: true,
+    requestId: 'turn-2',
+  });
+  assert.equal(continued.sessionId, created.sessionId);
+  assert.equal(continued.sessionTurn, 2);
+  assert.equal(continued.agentId, 'durable-agent-1');
+  assert.equal(restarted.tasks.get(continued.taskId).newChat, false);
+
+  const taskCount = restarted.tasks.size;
+  const duplicate = await restarted.doTask('网络重试不得再次发送', {
+    sessionMode: 'continue',
+    sessionId: created.sessionId,
+    readOnly: true,
+    readOnlySpecified: true,
+    requestId: 'turn-2',
+  });
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.taskId, continued.taskId);
+  assert.equal(restarted.tasks.size, taskCount);
+});
+
+test('continued sessions fail closed on scope expansion and close before forget', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-do-session-scope-'));
+  const sessionFile = join(directory, 'sessions-v1.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bridge = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
+  const created = await bridge.doTask('只读会话', {
+    sessionMode: 'create',
+    readOnly: true,
+    readOnlySpecified: true,
+  });
+  const first = bridge.tasks.get(created.taskId);
+  first.agentId = 'durable-agent-scope';
+  bridge._bindSessionAgent(first);
+  bridge._finishJob(first, 'done');
+
+  await assert.rejects(
+    bridge.doTask('尝试扩大为写入', {
+      sessionMode: 'continue',
+      sessionId: created.sessionId,
+      readOnly: false,
+      readOnlySpecified: true,
+      allowedPaths: ['src'],
+      allowedPathsSpecified: true,
+    }),
+    /SESSION_SCOPE_EXPANSION/,
+  );
+  assert.equal((await bridge.sessionControl(created.sessionId, { action: 'close' })).sessionState, 'closed');
+  await assert.rejects(
+    bridge.sessionControl(created.sessionId, { action: 'forget' }),
+    /SESSION_CONFIRM_REQUIRED/,
+  );
+  assert.equal((await bridge.sessionControl(created.sessionId, { action: 'forget', confirm: true })).state, 'forgotten');
+  assert.equal(bridge.sessionStatus(created.sessionId).found, false);
+});
+
+test('an interrupted session requires explicit exact-Agent reconciliation without resubmission', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-do-session-reconcile-'));
+  const sessionFile = join(directory, 'sessions-v1.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const beforeRestart = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
+  const created = await beforeRestart.doTask('会在宿主重启前发送', {
+    sessionMode: 'create',
+    readOnly: true,
+    readOnlySpecified: true,
+  });
+  const sent = beforeRestart.tasks.get(created.taskId);
+  sent.agentId = 'durable-agent-reconcile';
+  sent.sendState = 'sent';
+  beforeRestart._bindSessionAgent(sent);
+
+  const restarted = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
+  restarted._readStableParallelEntry = async () => ({
+    stable: true,
+    entry: { id: 'durable-agent-reconcile', showSpinner: false, icon: 'check-circled' },
+  });
+  const reconciled = await restarted.sessionControl(created.sessionId, { action: 'reconcile' });
+  assert.equal(reconciled.changed, true);
+  assert.equal(reconciled.state, 'completed');
+  assert.equal(reconciled.sessionState, 'ready');
+  assert.equal(reconciled.lastTask.resultUnavailable, true);
+  assert.equal(restarted.tasks.size, 0);
+});
+
+test('persistent sessions never downgrade to FIFO when exact Agent continuity is unavailable', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-do-session-no-fallback-'));
+  const sessionFile = join(directory, 'sessions-v1.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  class NoSessionFallbackBridge extends CursorBridge {
+    constructor() {
+      super({
+        runtimeFile: null,
+        workspaceFile: null,
+        modelPreferencesFile: null,
+        sessionFile,
+        runtimeMode: 'normal',
+        projectPath: process.cwd(),
+      });
+      this.fifoRuns = 0;
+    }
+    async _ensureCursor() {}
+    async _submitParallelAgent() { return { fallbackReason: 'Agent adapter unavailable' }; }
+    async _run() { this.fifoRuns++; return 'must not run'; }
+    _maybeRestoreParallelOrigin() {}
+  }
+  const bridge = new NoSessionFallbackBridge();
+  await assert.rejects(
+    bridge.doTask('不能降级', {
+      background: false,
+      sessionMode: 'create',
+      readOnly: true,
+      readOnlySpecified: true,
+    }),
+    /SESSION_CONTINUITY_UNAVAILABLE/,
+  );
+  assert.equal(bridge.fifoRuns, 0);
+  const sessions = Object.values(readCursorSessionRegistry(sessionFile).sessions);
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0].state, 'failed');
+});
+
+test('uncertain sessions cannot close without explicit abandon risk acknowledgement', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-do-session-abandon-'));
+  const sessionFile = join(directory, 'sessions-v1.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bridge = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
+  const created = await bridge.doTask('保持未确认状态', {
+    sessionMode: 'create',
+    readOnly: true,
+    readOnlySpecified: true,
+  });
+  await assert.rejects(
+    bridge.sessionControl(created.sessionId, { action: 'close' }),
+    /SESSION_CLOSE_BLOCKED/,
+  );
+  await assert.rejects(
+    bridge.sessionControl(created.sessionId, { action: 'abandon', confirm: true }),
+    /SESSION_ABANDON_CONFIRM_REQUIRED/,
+  );
+  const abandoned = await bridge.sessionControl(created.sessionId, {
+    action: 'abandon',
+    confirm: true,
+    reason: 'manual verification unavailable',
+    acknowledgeMayStillWrite: true,
+  });
+  assert.equal(abandoned.sessionState, 'closed');
+  assert.match(abandoned.warning, /may still run or write/);
+});
+
+test('an expired sender lease becomes needs_attention without creating a replacement task', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-do-session-expired-'));
+  const sessionFile = join(directory, 'sessions-v1.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const first = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
+  const created = await first.doTask('创建后模拟 adapter 中断', {
+    sessionMode: 'create',
+    readOnly: true,
+    readOnlySpecified: true,
+  });
+  updateCursorSessionRegistry(sessionFile, (registry) => {
+    registry.sessions[created.sessionId].lease.expiresAt = '2000-01-01T00:00:00.000Z';
+  });
+
+  const restarted = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
+  await assert.rejects(
+    restarted.doTask('不能自动重发', {
+      sessionMode: 'continue',
+      sessionId: created.sessionId,
+      readOnly: true,
+      readOnlySpecified: true,
+    }),
+    /SESSION_RECONCILE_REQUIRED/,
+  );
+  assert.equal(restarted.tasks.size, 0);
+  assert.equal(restarted.sessionStatus(created.sessionId).sessionState, 'needs_attention');
 });
 
 test('parallel agent requires read_only or a writable path boundary', async () => {

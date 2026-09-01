@@ -6,6 +6,18 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `cursor_do` can explicitly create and continue one update-safe persistent Cursor Delivery Session. Each turn retains its own `task_id`; callers continue through a stable `session_id` while Bridge keeps the exact Cursor `agentId` internal, fences stale adapters with a session epoch, and rejects duplicate latest `request_id` submissions.
+- `cursor_status(session_id)` reports the durable association, and `cursor_session_control` closes or explicitly forgets an inactive mapping without stopping or deleting the Cursor Agent.
+
+### Safety
+
+- Persistent sessions require `parallel_agent`, never downgrade to FIFO, allow only one active turn, freeze workspace/model/scope boundaries, and require every continued turn to repeat `read_only=true` or an `allowed_paths` subset.
+- Session state is atomically stored under the user configuration directory rather than any versioned plugin cache. It stores no prompt, reply, credential, plugin path, bundled script path, or CDP target ID, and rejects unknown future schemas without overwriting them.
+
+## [5.7.1] - 2026-09-01
+
 ### Fixed
 
 - Packaged Codex AppContainer hosts now detect when `%LOCALAPPDATA%` runtime materialization is redirected into `Packages\\...\\LocalCache\\Local` and therefore invisible to the WMI-launched Supervisor. Bridge selects the verified plugin-cache lifecycle root before spawning; if a shared Supervisor process exits before opening IPC, exactly one plugin-cache fallback is allowed. The recovery does not change ACLs, elevate, kill Cursor, or retry recursively.
@@ -318,7 +330,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 - `cursor_search` keeps its `query`, `scope`, and `max_results` schema.
 - `cursor_search_deep` uses the same schema and lifecycle path.
 
-[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.0...HEAD
+[Unreleased]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.1...HEAD
+[5.7.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.7.0...cursor-bridge--v5.7.1
 [5.7.0]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.2...cursor-bridge--v5.7.0
 [5.6.2]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.1...cursor-bridge--v5.6.2
 [5.6.1]: https://github.com/Vanyangyang/cursor-bridge/compare/cursor-bridge--v5.6.0...cursor-bridge--v5.6.1
