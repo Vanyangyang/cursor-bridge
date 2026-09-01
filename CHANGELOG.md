@@ -15,6 +15,11 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 - Continued turns await Cursor's exact Agent-selection promise, preserve the Agents sidebar action while reopening registered-only rows, verify the global `selectedAgentId`, and retry that same exact ID at most once while a newly completed Agent becomes reactivatable. Persistent sessions keep their bound Agent selected between turns instead of racing the isolated-task origin restore.
 - Reply baselines now wait for the previous completed answer to hydrate and stabilize before sending. Result collection accepts a new stable reply by visible message-count advance or reply-signature change, covering Cursor 3.18 virtualized lists without returning the prior turn.
+- Cursor 3.18.25 model triggers may expose only effort text such as `High Fast`; model selection remains verified from the selected menu row, and `effectiveModel` now reports that complete verified row instead of the incomplete trigger text.
+
+### Compatibility
+
+- Windows 11 acceptance adds Cursor **3.18.25** to the 5.8.0 release candidate. From no running Cursor and a refused CDP port, Bridge cold-launched the verified user install into one undegraded persistent `supervised` lifecycle, one Agents window, and one page target. Grok 4.6/high passed source-anchored CCE, two-adapter persistent `cursor_do` turns on one stable session/Agent, and `minimal` / restored `normal`; the model test left the user's persistent CCE default reset to Auto.
 
 ### Safety
 

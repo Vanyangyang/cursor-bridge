@@ -24977,7 +24977,7 @@ var CursorBridge = class {
       applied: true,
       requestedModel,
       requestedEffort,
-      effectiveModel: trigger.text || modelRow.text,
+      effectiveModel: modelRow.text || trigger.text,
       effectiveEffort,
       pickerDetail: trigger.detail || null,
       verifiedAt: (/* @__PURE__ */ new Date()).toISOString()

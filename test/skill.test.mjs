@@ -387,6 +387,13 @@ test('compatibility history archives 5.7.0 and keeps 5.7.1 current for Cursor 3.
   const data = JSON.parse(readProjectFile('compatibility.json'));
 
   assert.equal(data.policy, 'latest-only');
+  assert.equal(data.candidate.cursorVersion, '3.18.25');
+  assert.equal(data.candidate.cursorBridgeVersion, '5.8.0');
+  assert.equal(data.candidate.sourceRef, 'feature/cursor-do-session-continuity');
+  assert.equal(data.candidate.status, 'release-candidate');
+  assert.equal(data.candidate.acceptance.modelPreferences, 'live-tested-cce-and-cursor-do-grok-4.6-high');
+  assert.equal(data.candidate.acceptance.persistentSessions, 'live-tested-two-adapter-create-continue');
+  assert.equal(data.candidate.acceptance.modelPickerTrigger, 'adapted-trigger-effort-only-reports-selected-model-row');
   assert.equal(data.current.cursorVersion, '3.18.9');
   assert.equal(data.current.cursorBridgeVersion, '5.7.1');
   assert.equal(data.current.sourceRef, 'master');
@@ -458,6 +465,10 @@ test('compatibility history archives 5.7.0 and keeps 5.7.1 current for Cursor 3.
   assert.match(chineseReadme, /href="\.\/COMPATIBILITY\.zh-CN\.md"/);
   assert.match(english, /maintains only the latest Cursor release/);
   assert.match(chinese, /只维护 Cursor 最新版本/);
+  assert.match(english, /5\.8\.0 release candidate[\s\S]*3\.18\.25[\s\S]*Grok 4\.6\/high[\s\S]*effectiveModel/);
+  assert.match(chinese, /5\.8\.0 发布候选[\s\S]*3\.18\.25[\s\S]*Grok 4\.6\/high[\s\S]*effectiveModel/);
+  assert.match(englishReadme, /3\.18\.25[\s\S]*5\.8\.0[\s\S]*release candidate/);
+  assert.match(chineseReadme, /3\.18\.25[\s\S]*5\.8\.0[\s\S]*发布候选/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
   assert.match(english, /Cursor Bridge 5\.7\.0 — Cursor 3\.18\.9/);

@@ -2620,7 +2620,7 @@ class CursorBridge {
       applied: true,
       requestedModel,
       requestedEffort,
-      effectiveModel: trigger.text || modelRow.text,
+      effectiveModel: modelRow.text || trigger.text,
       effectiveEffort,
       pickerDetail: trigger.detail || null,
       verifiedAt: new Date().toISOString(),

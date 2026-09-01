@@ -1,6 +1,28 @@
 {
   "schemaVersion": 1,
   "policy": "latest-only",
+  "candidate": {
+    "cursorVersion": "3.18.25",
+    "cursorBridgeVersion": "5.8.0",
+    "sourceRef": "feature/cursor-do-session-continuity",
+    "status": "release-candidate",
+    "acceptance": {
+      "cursorVersionEvidence": "installed-executable-product-and-file-version",
+      "ideWorkbench": "not-exposed-in-live-run",
+      "agentsWindow": "live-tested-cold-single-window-cdp-9223",
+      "modelPreferences": "live-tested-cce-and-cursor-do-grok-4.6-high",
+      "readOnlyMcpSupervisor": "live-tested-plugin-cache-fallback",
+      "attachedFallback": "regression-tested-not-live-rechecked-on-3.18.25",
+      "lifecycleDiagnostics": "live-tested",
+      "fifoExecution": "live-tested-cce",
+      "parallelExecution": "live-tested-persistent-session-turns-1-and-2",
+      "parallelAgentIdentity": "live-tested-stable-session-agent-id",
+      "persistentSessions": "live-tested-two-adapter-create-continue",
+      "singleWindow": "live-tested-cold-init-agent",
+      "minimalNormalRuntime": "live-tested-hidden-and-restored-normal",
+      "modelPickerTrigger": "adapted-trigger-effort-only-reports-selected-model-row"
+    }
+  },
   "current": {
     "cursorVersion": "3.18.9",
     "cursorBridgeVersion": "5.7.1",
