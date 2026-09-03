@@ -233,12 +233,6 @@ export function summarizeCdpPages(list) {
   };
 }
 
-function isBlankAgentsWindow(page) {
-  if (!page || !isAgentsWindowTitle(page.title)) return false;
-  if (page.probeError || !page.capabilities) return true;
-  return page.capabilities.uiFlavor !== 'agents_v2' && !page.capabilities.hasWritableInput;
-}
-
 const NORMAL_AGENTS_PRESENTATION_REFRESH_MS = 5 * 60 * 1000;
 
 function shouldRecoverNormalAgentsPresentation({
@@ -264,26 +258,6 @@ function shouldRecoverNormalAgentsPresentation({
   return Number(now) - previousAt >= Math.max(0, Number(refreshMs) || 0);
 }
 
-async function reloadPageTarget(page, timeoutMs = 5000) {
-  if (!page || !page.webSocketDebuggerUrl) return false;
-  const c = makeClient(page.webSocketDebuggerUrl);
-  try {
-    await Promise.race([
-      c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out connecting to the CDP target')), timeoutMs)),
-    ]);
-    await Promise.race([
-      c.send('Page.reload', { ignoreCache: true }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out reloading the CDP target')), timeoutMs)),
-    ]);
-    return true;
-  } catch {
-    return false;
-  } finally {
-    c.close();
-  }
-}
-
 async function inspectPageTarget(page) {
   const c = makeClient(page.webSocketDebuggerUrl);
   const probeMs = Number(process.env.CURSOR_BRIDGE_PAGE_PROBE_TIMEOUT || 5000);
@@ -302,25 +276,6 @@ async function inspectPageTarget(page) {
   } finally {
     c.close();
   }
-}
-
-async function recoverBlankAgentsWindows(inspected) {
-  const pages = Array.isArray(inspected) ? inspected : [];
-  const recovered = [];
-  for (const page of pages) {
-    if (!isBlankAgentsWindow(page)) {
-      recovered.push(page);
-      continue;
-    }
-    const reloaded = await reloadPageTarget(page);
-    if (!reloaded) {
-      recovered.push(page);
-      continue;
-    }
-    await sleep(800);
-    recovered.push(await inspectPageTarget(page));
-  }
-  return recovered;
 }
 
 function pagesWithFlavor(pages, flavor) {
@@ -356,7 +311,7 @@ async function findPage(options = {}) {
   if (options.targetId && options.preferAgentsV2 !== true && options.preferLegacy !== true) {
     return selectCursorPageCandidate(pages, options);
   }
-  const inspected = await recoverBlankAgentsWindows(await Promise.all(pages.map(inspectPageTarget)));
+  const inspected = await Promise.all(pages.map(inspectPageTarget));
   return selectPageForUiPreference(inspected, options) || pages[0];
 }
 function makeClient(wsUrl) {
@@ -404,6 +359,71 @@ const INPUT_PICKER_BODY = `
     .filter(e=>e.offsetParent!==null&&!e.disabled&&e.getAttribute('aria-disabled')!=='true'&&e.getAttribute('contenteditable')!=='false')
     .sort((a,b)=>(b.classList&&b.classList.contains('ui-prompt-input-editor__input')?1:0)-(a.classList&&a.classList.contains('ui-prompt-input-editor__input')?1:0))[0]||null;`;
 const EXPR_VISIBLE = `(function(){${INPUT_PICKER_BODY}return !!pickInput();})()`;
+const CHAT_PANEL_NEXT_STEP = 'Complete or close the current Customize/Settings dialog, open Cursor\'s main Agent/Chat panel or New Chat, then retry the same request.';
+
+function classifyChatPanelDiagnostic(snapshot = {}) {
+  const evidence = {
+    writableInputVisible: snapshot.writableInputVisible === true || snapshot.hasWritableInput === true,
+    inputCandidateCount: Number.isFinite(Number(snapshot.inputCandidateCount)) ? Number(snapshot.inputCandidateCount) : 0,
+    settingsOrCustomizeVisible: snapshot.settingsOrCustomizeVisible === true,
+    modalVisible: snapshot.modalVisible === true,
+    modalLabel: snapshot.modalLabel ? String(snapshot.modalLabel) : null,
+    signInVisible: snapshot.signInVisible === true,
+    agentSurfaceVisible: snapshot.agentSurfaceVisible === true,
+    composerCount: Number.isFinite(Number(snapshot.composerCount)) ? Number(snapshot.composerCount) : 0,
+    visibilityState: String(snapshot.visibilityState || 'unknown'),
+    focused: typeof snapshot.focused === 'boolean' ? snapshot.focused : null,
+    pageTitle: snapshot.pageTitle ? String(snapshot.pageTitle) : null,
+    probeError: snapshot.probeError ? String(snapshot.probeError) : null,
+    inputStateChanged: snapshot.inputStateChanged === true,
+  };
+  let state = 'composer_input_unavailable';
+  let needsAction = 'open_new_chat';
+  let message = 'Cursor shows an Agent/Chat surface, but no writable input was detected.';
+  if (evidence.signInVisible) {
+    state = 'sign_in_required';
+    needsAction = 'sign_in_to_cursor';
+    message = 'Cursor is showing a sign-in surface instead of a writable Agent/Chat input.';
+  } else if (evidence.settingsOrCustomizeVisible) {
+    state = 'settings_or_customize_open';
+    needsAction = 'complete_or_close_configuration';
+    message = 'Cursor is showing Customize/Settings instead of a writable Agent/Chat input.';
+  } else if (evidence.modalVisible) {
+    state = 'modal_dialog_open';
+    needsAction = 'complete_or_close_dialog';
+    message = 'A visible Cursor dialog is blocking access to the Agent/Chat input.';
+  } else if (evidence.probeError || ['hidden', 'prerender', 'unloaded'].includes(evidence.visibilityState)) {
+    state = 'cursor_window_unavailable';
+    needsAction = 'make_cursor_window_available';
+    message = 'The selected Cursor page is unavailable or not visible.';
+  } else if (evidence.inputStateChanged) {
+    state = 'input_state_changed';
+    needsAction = 'open_new_chat';
+    message = 'Cursor\'s Agent/Chat input changed while the request was being prepared.';
+  } else if (!evidence.agentSurfaceVisible && evidence.composerCount === 0) {
+    state = 'agent_chat_panel_not_open';
+    needsAction = 'open_agent_chat_panel';
+    message = 'Cursor\'s main Agent/Chat panel is not open.';
+  }
+  return {
+    schemaVersion: 1,
+    code: 'CURSOR_CHAT_PANEL_UNAVAILABLE',
+    state,
+    message,
+    needsAction,
+    nextStep: CHAT_PANEL_NEXT_STEP,
+    retryable: true,
+    evidence,
+  };
+}
+
+function createChatPanelUnavailableError(snapshot) {
+  const uiDiagnostic = classifyChatPanelDiagnostic(snapshot);
+  const error = new Error(`${uiDiagnostic.code}: ${uiDiagnostic.message} ${uiDiagnostic.nextStep}`);
+  error.code = uiDiagnostic.code;
+  error.uiDiagnostic = uiDiagnostic;
+  return error;
+}
 function exprFill(text) {
   const js = JSON.stringify(text);
   return `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});try{inp.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:${js}}));}catch(e){inp.dispatchEvent(new Event('input',{bubbles:true}));}return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
@@ -900,17 +920,41 @@ const REACT_ADAPTER_BODY = `
 
 const EXPR_AGENT_ADAPTER_READY = `(function(){${REACT_ADAPTER_BODY}return !!a;})()`;
 const EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
+  const visible=node=>!!(node&&(node.offsetParent!==null||(typeof node.getClientRects==='function'&&node.getClientRects().length>0)));
+  const label=node=>String(node&&(node.getAttribute&&(
+    node.getAttribute('aria-label')||node.getAttribute('title'))||node.innerText||node.textContent)||'').replace(/\\s+/g,' ').trim();
   const input=pickInput();
+  const inputCandidateCount=[...document.querySelectorAll(${JSON.stringify(CURSOR_INPUT_SELECTOR)})].filter(visible).length;
   const hasV2Sidebar=!!document.querySelector('.glass-sidebar-agent-list-container');
   const hasLegacyInput=!!document.querySelector('.aislash-editor-input');
   const hasLegacyHistory=!!document.querySelector('.compact-agent-history-react-menu-label')||
     [...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].some(e=>/Show Chat History|Chat History|Agent History/i.test((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')));
+  const dialogs=[...document.querySelectorAll('[role="dialog"],dialog[open],.monaco-dialog-box,.quick-input-widget')].filter(visible);
+  const dialog=dialogs[dialogs.length-1]||null;
+  const dialogHeading=dialog&&dialog.querySelector('h1,h2,h3,[role="heading"]');
+  const dialogLabel=dialog?String(dialog.getAttribute('aria-label')||dialog.getAttribute('title')||label(dialogHeading)||'').slice(0,120):null;
+  const pageTitle=String(document.title||'').replace(/\\s+/g,' ').trim();
+  const pagePath=String(globalThis.location&&globalThis.location.pathname||'');
+  const headings=[...document.querySelectorAll('h1,h2,h3,[role="heading"]')]
+    .filter(node=>visible(node)&&!node.closest('.markdown-root,.composer-messages-container,.composer-react-transcript-root,.aichat-container'))
+    .map(label).filter(Boolean).slice(0,40);
+  const configurationText=[pageTitle,pagePath,...headings,label(dialogHeading)].join(' ');
+  const settingsOrCustomizeVisible=[...document.querySelectorAll('.settings-editor,.settings-body,.preferences-editor,[class*="settings-editor"],[class*="preferences-editor"],[data-testid*="customize"]')].some(visible)||/(?:settings?|customize|preferences|设置|設定|自定义|自訂)/i.test(configurationText);
+  const authControls=[...document.querySelectorAll('button,a,[role="button"],[role="link"]')]
+    .filter(node=>visible(node)&&!node.closest('.markdown-root,.composer-messages-container,.composer-react-transcript-root'));
+  const signInVisible=authControls.some(node=>/(?:sign|log)\\s*in(?:\\s+to\\s+cursor)?|authenticate(?:\\s+cursor)?|continue with (?:google|github|email|sso)|登录|登入/i.test(label(node)));
+  const composerCount=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root')].filter(visible).length;
+  const agentSurfaceVisible=composerCount>0||[...document.querySelectorAll('.glass-sidebar-agent-list-container,.compact-agent-history-react-menu-label,.aichat-container')].some(visible)||authControls.some(node=>/(?:New (?:Agent|Chat)|(?:Chat|Agent) History)/i.test(label(node)));
   const uiFlavor=hasV2Sidebar||(input&&input.classList&&input.classList.contains('ui-prompt-input-editor__input'))?'agents_v2':hasLegacyInput?'legacy':'unknown';
   return JSON.stringify({
-    hasWritableInput:!!input,uiFlavor,
+    hasWritableInput:!!input,inputCandidateCount,uiFlavor,
     agentAdapterKind:hasV2Sidebar?'agents_v2':hasLegacyHistory?'legacy':'none',
     hasComposer:!!document.querySelector('.composer-bar[data-composer-id]'),
-    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus(),documentTitle:String(document.title||'')
+    modalVisible:!!dialog,modalLabel:dialogLabel,
+    settingsOrCustomizeVisible,signInVisible,agentSurfaceVisible,composerCount,
+    visibilityState:String(document.visibilityState||'unknown'),
+    visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus(),
+    documentTitle:pageTitle,pageTitle:pageTitle.slice(0,160)
   });
 })()`;
 
@@ -1405,6 +1449,7 @@ class CursorBridge {
         status: outcome,
         finishedAt: job.finishedAt || now,
         error: job.error || null,
+        uiDiagnostic: job.uiDiagnostic || null,
         terminalEvidence: job.terminalEvidence || null,
         resultUnavailable: job.resultUnavailable === true,
       };
@@ -2044,6 +2089,7 @@ class CursorBridge {
       resultUnavailable: false,
       terminalEvidence: null,
       providerError: null,
+      uiDiagnostic: null,
       sendState: 'not_sent',
       reservationScope: null,
       controlTail: Promise.resolve(),
@@ -2080,6 +2126,7 @@ class CursorBridge {
     const e = error instanceof Error ? error : new Error(String(error));
     job.error = e.message;
     if (e.providerError) job.providerError = e.providerError;
+    if (e.uiDiagnostic) job.uiDiagnostic = e.uiDiagnostic;
     if (e.terminalEvidence) job.terminalEvidence = e.terminalEvidence;
     job.status = 'failed';
     job.phase = 'failed';
@@ -2405,6 +2452,7 @@ class CursorBridge {
         await this._applyModelPreference(c, options.modelPreference, options);
         this._throwIfCancelledBeforeSend(options);
         const filled = await evalJS(c, exprFill(prompt));
+        if (filled === 'NO_INPUT') await this._throwChatPanelUnavailableAfterNoInput(c);
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the query because the input state was invalid');
         await sleep(450);
         this._throwIfCancelledBeforeSend(options);
@@ -2629,19 +2677,26 @@ class CursorBridge {
     return result;
   }
 
+  async _readChatPanelDiagnostic(c) {
+    try {
+      return JSON.parse(await evalJS(c, EXPR_PAGE_CAPABILITIES) || '{}');
+    } catch (error) {
+      return { probeError: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   async _ensureChatPanel(c) {
-    let vis = await evalJS(c, EXPR_VISIBLE);
-    if (!vis) {
-      await chord(c, 2, 'L', 'KeyL', 76);
-      await sleep(1300);
-      vis = await evalJS(c, EXPR_VISIBLE);
-    }
-    if (!vis) {
-      await chord(c, 2, 'I', 'KeyI', 73);
-      await sleep(1300);
-      vis = await evalJS(c, EXPR_VISIBLE);
-    }
-    if (!vis) throw new Error('Unable to open the Cursor chat or agent input panel. Confirm that Cursor is signed in and its window is available.');
+    const snapshot = await this._readChatPanelDiagnostic(c);
+    if (snapshot.modalVisible !== true && snapshot.hasWritableInput === true) return snapshot;
+    throw createChatPanelUnavailableError(snapshot);
+  }
+
+  async _throwChatPanelUnavailableAfterNoInput(c) {
+    const snapshot = await this._readChatPanelDiagnostic(c);
+    throw createChatPanelUnavailableError({
+      ...snapshot,
+      inputStateChanged: snapshot.hasWritableInput === true,
+    });
   }
 
   // 清空对话上下文：定位 "New Agent" 钮后【Alt+click】——Alt 修饰使其执行 Replace Agent（清空旧对话），
@@ -2891,6 +2946,7 @@ class CursorBridge {
       await this._applyModelPreference(c, job.modelPreference, job);
       this._throwIfCancelledBeforeSend(job);
       const filled = await evalJS(c, exprFill(job.prompt));
+      if (filled === 'NO_INPUT') await this._throwChatPanelUnavailableAfterNoInput(c);
     if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the parallel_agent task');
       await sleep(350);
       this._throwIfCancelledBeforeSend(job);
@@ -3018,6 +3074,7 @@ class CursorBridge {
       job.responseBaseline = await this._captureSessionResponseBaseline(c);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
       const filled = await evalJS(c, exprFill(job.prompt));
+      if (filled === 'NO_INPUT') await this._throwChatPanelUnavailableAfterNoInput(c);
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') {
         throw cursorSessionError('SESSION_INPUT_FAILED', 'failed to enter the continued task');
       }
@@ -3897,6 +3954,7 @@ class CursorBridge {
       resultUnavailable: job.resultUnavailable,
       terminalEvidence: job.terminalEvidence,
       providerError: job.providerError,
+      uiDiagnostic: job.uiDiagnostic,
       sendState: job.sendState,
       reservationScope: job.reservationScope,
       reservationHeld: this.activeParallel.has(job.id),
@@ -4150,6 +4208,22 @@ async function ensureBridgeCursor(targetBridge, reason) {
   return r;
 }
 
+function toolErrorResult(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error && error.uiDiagnostic) {
+    const payload = {
+      error: { code: error.code || error.uiDiagnostic.code || 'CURSOR_BRIDGE_ERROR', message },
+      uiDiagnostic: error.uiDiagnostic,
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+      structuredContent: payload,
+      isError: true,
+    };
+  }
+  return { content: [{ type: 'text', text: `Error: ${message}` }], isError: true };
+}
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: buildToolDefinitions(bridge),
 }));
@@ -4257,7 +4331,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
         throw new Error(`Unknown tool: ${name}`);
   } catch (error) {
-      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      return toolErrorResult(error);
   }
 });
 
@@ -4321,6 +4395,9 @@ export {
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
   selectPageForUiPreference,
+  classifyChatPanelDiagnostic,
+  createChatPanelUnavailableError,
+  toolErrorResult,
   selectNewAgentEntry,
   selectUniqueNewAgentEntry,
   selectPromotedParallelEntry,
@@ -4348,7 +4425,6 @@ export {
   providerErrorSignature,
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
-  isBlankAgentsWindow,
   shouldRecoverNormalAgentsPresentation,
   releaseAdapterWorkingDirectory,
   lifecycleFailureSummary,

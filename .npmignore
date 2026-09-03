@@ -1,0 +1,10 @@
+node_modules/
+package-lock.json
+!plugins/grok-build-supervisor/package-lock.json
+.autopilot.on
+__pycache__/
+.artifacts/
+.pi-package-stage/
+.cursor-bridge-lifecycle/
+LOCAL_MAINTENANCE.md
+plugins/agy-supervisor/

@@ -24,6 +24,8 @@ import {
   scoreCursorPageCandidate,
   selectCursorPageCandidate,
   selectPageForUiPreference,
+  classifyChatPanelDiagnostic,
+  toolErrorResult,
   selectNewAgentEntry,
   selectUniqueNewAgentEntry,
   selectPromotedParallelEntry,
@@ -50,7 +52,6 @@ import {
   createProviderError,
   promoteAgentsWorkspaceLifecycle,
   summarizeCdpPages,
-  isBlankAgentsWindow,
   shouldRecoverNormalAgentsPresentation,
   releaseAdapterWorkingDirectory,
   lifecycleFailureSummary,
@@ -70,15 +71,6 @@ test('status snapshot lists CDP titles without requiring a live page probe', () 
     'Cursor Agents',
   ]);
   assert.equal(summary.page, 'vscode-file://agents');
-  assert.equal(isBlankAgentsWindow({ title: 'Cursor Agents', probeError: 'CDP target 探测超时' }), true);
-  assert.equal(isBlankAgentsWindow({
-    title: 'Cursor Agents',
-    capabilities: { uiFlavor: 'agents_v2', hasWritableInput: true },
-  }), false);
-  assert.equal(isBlankAgentsWindow({
-    title: 'Cursor Settings - cursor-bridge - Cursor',
-    probeError: 'ignored',
-  }), false);
 });
 
 test('lifecycle failures retain the original supervisor cause', () => {
@@ -216,6 +208,12 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_VISIBLE, /ui-prompt-input-editor__input/);
   assert.match(EXPR_VISIBLE, /tiptap\.ProseMirror/);
   assert.match(EXPR_VISIBLE, /aislash-editor-input/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /role="dialog"/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /settingsOrCustomizeVisible/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /signInVisible/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /agentSurfaceVisible/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /composer-react-transcript-root/);
+  assert.doesNotMatch(EXPR_PAGE_CAPABILITIES, /\|\|!!document\.querySelector\('\.aichat-container'\)/);
   assert.match(exprFill('hello'), /InputEvent/);
   assert.match(EXPR_CLICK_SEND, /ui-prompt-input-submit-button/);
   assert.match(EXPR_CLICK_SEND, /data-state="send"/);
@@ -303,8 +301,98 @@ test('Cursor 3.16.17 Agents Window binds a repo by sidebar head when the legacy 
   assert.deepEqual(missing.available, ['cursor-bridge', 'vesperix']);
 });
 
-test('chat panel fallback includes the current Cursor Ctrl+I sidepanel shortcut', () => {
-  assert.match(CursorBridge.prototype._ensureChatPanel.toString(), /'I', 'KeyI', 73/);
+test('chat panel diagnostics distinguish actionable missing-input states', () => {
+  const cases = [
+    [{ signInVisible: true }, 'sign_in_required', 'sign_in_to_cursor'],
+    [{ settingsOrCustomizeVisible: true, modalVisible: true }, 'settings_or_customize_open', 'complete_or_close_configuration'],
+    [{ modalVisible: true, modalLabel: 'Configure MCP' }, 'modal_dialog_open', 'complete_or_close_dialog'],
+    [{ visibilityState: 'hidden' }, 'cursor_window_unavailable', 'make_cursor_window_available'],
+    [{ inputStateChanged: true, agentSurfaceVisible: true, composerCount: 1 }, 'input_state_changed', 'open_new_chat'],
+    [{ visibilityState: 'visible' }, 'agent_chat_panel_not_open', 'open_agent_chat_panel'],
+    [{ visibilityState: 'visible', agentSurfaceVisible: true, composerCount: 1 }, 'composer_input_unavailable', 'open_new_chat'],
+  ];
+  for (const [snapshot, state, needsAction] of cases) {
+    const diagnostic = classifyChatPanelDiagnostic(snapshot);
+    assert.equal(diagnostic.schemaVersion, 1);
+    assert.equal(diagnostic.code, 'CURSOR_CHAT_PANEL_UNAVAILABLE');
+    assert.equal(diagnostic.state, state);
+    assert.equal(diagnostic.needsAction, needsAction);
+    assert.equal(diagnostic.retryable, true);
+    assert.match(diagnostic.nextStep, /Complete or close the current Customize\/Settings dialog/);
+    assert.match(diagnostic.nextStep, /open Cursor's main Agent\/Chat panel or New Chat/);
+    assert.match(diagnostic.nextStep, /retry the same request/);
+  }
+});
+
+test('missing chat input returns structured diagnostics without navigation or clicks', async () => {
+  const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null });
+  const calls = [];
+  const client = {
+    async send(method, params) {
+      calls.push({ method, params });
+      return {
+        result: {
+          value: JSON.stringify({
+            writableInputVisible: false,
+            settingsOrCustomizeVisible: true,
+            modalVisible: true,
+            modalLabel: 'Customize Cursor',
+            visibilityState: 'visible',
+            focused: true,
+            pageTitle: 'Cursor Settings',
+          }),
+        },
+      };
+    },
+  };
+
+  let failure;
+  try {
+    await bridge._ensureChatPanel(client);
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure);
+  assert.equal(failure.code, 'CURSOR_CHAT_PANEL_UNAVAILABLE');
+  assert.equal(failure.uiDiagnostic.state, 'settings_or_customize_open');
+  assert.deepEqual(calls.map((call) => call.method), ['Runtime.evaluate']);
+
+  const result = toolErrorResult(failure);
+  const payload = JSON.parse(result.content[0].text);
+  assert.equal(result.isError, true);
+  assert.deepEqual(result.structuredContent, payload);
+  assert.equal(payload.error.code, 'CURSOR_CHAT_PANEL_UNAVAILABLE');
+  assert.equal(payload.uiDiagnostic.state, 'settings_or_customize_open');
+  assert.equal(payload.uiDiagnostic.evidence.modalLabel, 'Customize Cursor');
+
+  const job = { id: 'task-panel-diag', kind: 'do', status: 'running', phase: 'running', settled: true };
+  bridge._failJob(job, failure);
+  assert.equal(job.status, 'failed');
+  assert.equal(bridge._taskView(job).uiDiagnostic.state, 'settings_or_customize_open');
+
+  const modalCalls = [];
+  await assert.rejects(
+    bridge._ensureChatPanel({
+      async send(method) {
+        modalCalls.push(method);
+        return { result: { value: JSON.stringify({ hasWritableInput: true, modalVisible: true, modalLabel: 'Confirm' }) } };
+      },
+    }),
+    (error) => error.uiDiagnostic.state === 'modal_dialog_open',
+  );
+  assert.deepEqual(modalCalls, ['Runtime.evaluate']);
+
+  const raceCalls = [];
+  await assert.rejects(
+    bridge._throwChatPanelUnavailableAfterNoInput({
+      async send(method) {
+        raceCalls.push(method);
+        return { result: { value: JSON.stringify({ hasWritableInput: true, agentSurfaceVisible: true, composerCount: 1 }) } };
+      },
+    }),
+    (error) => error.uiDiagnostic.state === 'input_state_changed',
+  );
+  assert.deepEqual(raceCalls, ['Runtime.evaluate']);
 });
 
 test('Cursor Agents v2 React adapter normalizes headers and opens by header identity', async () => {
