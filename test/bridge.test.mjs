@@ -210,6 +210,9 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_VISIBLE, /aislash-editor-input/);
   assert.match(EXPR_PAGE_CAPABILITIES, /role="dialog"/);
   assert.match(EXPR_PAGE_CAPABILITIES, /settingsOrCustomizeVisible/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /ui-customize-view/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /signInControlVisible/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /!node\.closest\(configurationSelector\)/);
   assert.match(EXPR_PAGE_CAPABILITIES, /signInVisible/);
   assert.match(EXPR_PAGE_CAPABILITIES, /agentSurfaceVisible/);
   assert.match(EXPR_PAGE_CAPABILITIES, /composer-react-transcript-root/);
@@ -303,8 +306,8 @@ test('Cursor 3.16.17 Agents Window binds a repo by sidebar head when the legacy 
 
 test('chat panel diagnostics distinguish actionable missing-input states', () => {
   const cases = [
-    [{ signInVisible: true }, 'sign_in_required', 'sign_in_to_cursor'],
-    [{ settingsOrCustomizeVisible: true, modalVisible: true }, 'settings_or_customize_open', 'complete_or_close_configuration'],
+    [{ signInControlVisible: true, signInVisible: true }, 'sign_in_required', 'sign_in_to_cursor'],
+    [{ settingsOrCustomizeVisible: true, signInControlVisible: true, signInVisible: false, agentSurfaceVisible: true, composerCount: 0, pageTitle: 'Cursor Agents' }, 'settings_or_customize_open', 'complete_or_close_configuration'],
     [{ modalVisible: true, modalLabel: 'Configure MCP' }, 'modal_dialog_open', 'complete_or_close_dialog'],
     [{ visibilityState: 'hidden' }, 'cursor_window_unavailable', 'make_cursor_window_available'],
     [{ inputStateChanged: true, agentSurfaceVisible: true, composerCount: 1 }, 'input_state_changed', 'open_new_chat'],
@@ -336,6 +339,8 @@ test('missing chat input returns structured diagnostics without navigation or cl
             writableInputVisible: false,
             settingsOrCustomizeVisible: true,
             modalVisible: true,
+            signInControlVisible: true,
+            signInVisible: false,
             modalLabel: 'Customize Cursor',
             visibilityState: 'visible',
             focused: true,
@@ -364,6 +369,8 @@ test('missing chat input returns structured diagnostics without navigation or cl
   assert.equal(payload.error.code, 'CURSOR_CHAT_PANEL_UNAVAILABLE');
   assert.equal(payload.uiDiagnostic.state, 'settings_or_customize_open');
   assert.equal(payload.uiDiagnostic.evidence.modalLabel, 'Customize Cursor');
+  assert.equal(payload.uiDiagnostic.evidence.signInControlVisible, true);
+  assert.equal(payload.uiDiagnostic.evidence.signInVisible, false);
 
   const job = { id: 'task-panel-diag', kind: 'do', status: 'running', phase: 'running', settled: true };
   bridge._failJob(job, failure);
