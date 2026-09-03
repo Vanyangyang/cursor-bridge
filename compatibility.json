@@ -3,7 +3,7 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.18.25",
-    "cursorBridgeVersion": "5.8.0",
+    "cursorBridgeVersion": "5.8.1",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
@@ -20,10 +20,17 @@
       "persistentSessions": "live-tested-two-adapter-create-continue",
       "singleWindow": "live-tested-cold-init-agent",
       "minimalNormalRuntime": "live-tested-hidden-and-restored-normal",
-      "modelPickerTrigger": "adapted-trigger-effort-only-reports-selected-model-row"
+      "modelPickerTrigger": "adapted-trigger-effort-only-reports-selected-model-row",
+      "chatPanelDiagnostics": "live-tested-settings-blocker-and-manual-return-retry"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.18.25",
+      "cursorBridgeVersion": "5.8.0",
+      "gitRef": "cursor-bridge--v5.8.0",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.18.9",
       "cursorBridgeVersion": "5.7.1",

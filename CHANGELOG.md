@@ -6,9 +6,21 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.8.1] - 2026-09-03
+
 ### Changed
 
 - The primary development and default branch is now `main`. The existing `master` branch remains available for historical release references, while current installation, compatibility, publishing, and generated-documentation links target `main`.
+- The repository root is renamed to the private `cursor-bridge-workspace` tooling package so the retired `cursor-mcp-bridge` distribution cannot be published again. Local Codex marketplace metadata and the independent `agy-supervisor` workspace remain excluded from package previews, while the active Pi package README uses a conventional linked GitHub Star call to action.
+
+### Fixed
+
+- Missing Cursor Agent/Chat input now returns a structured `CURSOR_CHAT_PANEL_UNAVAILABLE` diagnostic through MCP results, task status, and persistent-session status, distinguishing sign-in, Settings/Customize, modal, unavailable-window, changed-input, unopened-panel, and missing-composer states.
+- An `Authenticate` control inside Cursor Settings/Customize remains visible in evidence but no longer misclassifies that configuration surface as a signed-out Cursor session.
+
+### Safety
+
+- Chat-panel diagnosis is observation-only: it does not reload pages, click or close UI, navigate Cursor, or send recovery shortcuts. The user receives one actionable retry step instead.
 
 ## [5.8.0] - 2026-09-01
 

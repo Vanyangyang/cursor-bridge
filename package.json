@@ -1,6 +1,7 @@
 {
-  "name": "cursor-mcp-bridge",
-  "version": "5.8.0",
+  "name": "cursor-bridge-workspace",
+  "version": "5.8.1",
+  "private": true,
   "description": "Evidence-backed Cursor Context Engine search and bounded, explicitly continuous Cursor Agent execution over CDP.",
   "type": "module",
   "main": "server.mjs",
@@ -8,6 +9,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "prepublishOnly": "node -e \"throw new Error('The repository root is private; publish pi-packages only.')\"",
     "start": "node server.mjs",
     "build": "node build.mjs",
     "build:grok-supervisor": "node build.mjs --grok-only",

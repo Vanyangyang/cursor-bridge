@@ -11,9 +11,37 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.18.25** | **5.8.0** | `main` | 当前维护版本。版本证据来自 `D:\\tool\\cursor\\Cursor.exe` 的 ProductVersion 与 FileVersion。测试从 Cursor 进程不存在、CDP `127.0.0.1:9223` 拒绝连接开始；`cursor_init` 选中该用户安装，通过 WMI 启动，并以 `plugin-cache-fallback` 进入未降级、持久的 `supervised` 生命周期，全程一个 Cursor Agents 窗口和一个 CDP page target。Grok 4.6/high 通过了带源码锚点的 CCE 查询，以及跨两个 Adapter 的持久 `cursor_do` create/continue；两轮保持同一 `sessionId` 与 `agentId`，turn 为 1、2，工作区未变化。`minimal` 保持连接，`normal` 恢复同一窗口。Cursor 3.18.25 的模型触发器只显示 `High Fast` 等思考程度文本，因此 5.8.0 以已验证的选中模型行报告 `effectiveModel`。 |
+| **3.18.25** | **5.8.1** | `main` | 当前维护版本。延续 5.8.0 在 Windows 11 + Cursor 3.18.25 上的冷启动、持久会话、模型选择与 `minimal` / `normal` 实机证据。5.8.1 发布的聊天面板诊断还通过全新 Codex 宿主在同一受监督 Cursor 上完成验收：打开 Settings/Customize 且存在可见 `Authenticate` 控件时，返回 `settings_or_customize_open`，其中 `signInControlVisible=true`、`signInVisible=false`；全程没有导航、重载、点击或快捷键恢复；用户手动返回 Agent/Chat 后，同一条有界 CCE 成功。完整仓库测试为 199/199。 |
 
 ## 历史版本
+
+### Cursor Bridge 5.8.0 — Cursor 3.18.25
+
+状态：**已归档；不再维护。** 不可变 Git ref：`cursor-bridge--v5.8.0`。
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.8.0
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.8.0 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.8.0
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.8.0
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.8.0 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.7.1 — Cursor 3.18.9
 
