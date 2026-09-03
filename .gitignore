@@ -6,6 +6,7 @@ __pycache__/
 .artifacts/
 .pi-package-stage/
 .cursor-bridge-lifecycle/
+/plugins/agy-supervisor/
 
 # Local-only repository guidance for coding agents; read before maintenance work.
 LOCAL_MAINTENANCE.md
