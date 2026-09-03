@@ -157,9 +157,9 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.18.25** | **5.8.0**（`main`，当前版本） | 从用户安装冷启动为一个持久 `supervised` Supervisor、一个 Cursor Agents 窗口和一个 CDP page target。Grok 4.6/high 通过了带源码锚点的 CCE、跨两个 Adapter 且保持同一精确 Agent 的持久 `cursor_do` 两轮，以及 `minimal` / 恢复后的 `normal`。3.18.25 只显示思考程度的模型触发器已改为报告已验证的选中模型行。 |
+| **3.18.25** | **5.8.1**（`main`，当前版本） | 延续 5.8.0 的冷启动、持久会话、模型选择与 `minimal` / `normal` 实机证据。5.8.1 补丁还实机验证了 Settings/Customize 阻断分类，以及用户手动返回 Agent/Chat 后成功重试 CCE。 |
 
-不再主动维护旧 Cursor Bridge 版本。5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor Bridge 版本。5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 

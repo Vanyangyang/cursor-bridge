@@ -157,9 +157,9 @@ Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.18.25** | **5.8.0** (`main`, current) | Cold-launched from the user install into one persistent `supervised` Supervisor, one Cursor Agents window, and one CDP page target. Grok 4.6/high passed source-anchored CCE, two-adapter persistent `cursor_do` turns on one exact Agent, and `minimal` / restored `normal`. The 3.18.25 effort-only model trigger is adapted by reporting the verified selected model row. |
+| **3.18.25** | **5.8.1** (`main`, current) | Retains the 5.8.0 cold-launch, persistent-session, model-selection, and `minimal` / `normal` evidence. The 5.8.1 patch additionally live-tested Settings/Customize blocker classification and successful CCE retry after the user manually returned to Agent/Chat. |
 
-Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 

@@ -22604,7 +22604,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.8.0";
+var PLUGIN_VERSION = "5.8.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
