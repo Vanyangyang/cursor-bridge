@@ -368,6 +368,7 @@ function classifyChatPanelDiagnostic(snapshot = {}) {
     settingsOrCustomizeVisible: snapshot.settingsOrCustomizeVisible === true,
     modalVisible: snapshot.modalVisible === true,
     modalLabel: snapshot.modalLabel ? String(snapshot.modalLabel) : null,
+    signInControlVisible: snapshot.signInControlVisible === true,
     signInVisible: snapshot.signInVisible === true,
     agentSurfaceVisible: snapshot.agentSurfaceVisible === true,
     composerCount: Number.isFinite(Number(snapshot.composerCount)) ? Number(snapshot.composerCount) : 0,
@@ -939,10 +940,13 @@ const EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
     .filter(node=>visible(node)&&!node.closest('.markdown-root,.composer-messages-container,.composer-react-transcript-root,.aichat-container'))
     .map(label).filter(Boolean).slice(0,40);
   const configurationText=[pageTitle,pagePath,...headings,label(dialogHeading)].join(' ');
-  const settingsOrCustomizeVisible=[...document.querySelectorAll('.settings-editor,.settings-body,.preferences-editor,[class*="settings-editor"],[class*="preferences-editor"],[data-testid*="customize"]')].some(visible)||/(?:settings?|customize|preferences|设置|設定|自定义|自訂)/i.test(configurationText);
+  const configurationSelector='.ui-customize-view,.settings-editor,.settings-body,.preferences-editor,[class*="settings-editor"],[class*="preferences-editor"],[data-testid*="customize"]';
+  const settingsOrCustomizeVisible=[...document.querySelectorAll(configurationSelector)].some(visible)||/(?:settings?|customize|preferences|设置|設定|自定义|自訂)/i.test(configurationText);
   const authControls=[...document.querySelectorAll('button,a,[role="button"],[role="link"]')]
     .filter(node=>visible(node)&&!node.closest('.markdown-root,.composer-messages-container,.composer-react-transcript-root'));
-  const signInVisible=authControls.some(node=>/(?:sign|log)\\s*in(?:\\s+to\\s+cursor)?|authenticate(?:\\s+cursor)?|continue with (?:google|github|email|sso)|登录|登入/i.test(label(node)));
+  const signInPattern=/(?:sign|log)\\s*in(?:\\s+to\\s+cursor)?|authenticate(?:\\s+cursor)?|continue with (?:google|github|email|sso)|登录|登入/i;
+  const signInControlVisible=authControls.some(node=>signInPattern.test(label(node)));
+  const signInVisible=authControls.some(node=>signInPattern.test(label(node))&&!node.closest(configurationSelector));
   const composerCount=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root')].filter(visible).length;
   const agentSurfaceVisible=composerCount>0||[...document.querySelectorAll('.glass-sidebar-agent-list-container,.compact-agent-history-react-menu-label,.aichat-container')].some(visible)||authControls.some(node=>/(?:New (?:Agent|Chat)|(?:Chat|Agent) History)/i.test(label(node)));
   const uiFlavor=hasV2Sidebar||(input&&input.classList&&input.classList.contains('ui-prompt-input-editor__input'))?'agents_v2':hasLegacyInput?'legacy':'unknown';
@@ -951,7 +955,7 @@ const EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
     agentAdapterKind:hasV2Sidebar?'agents_v2':hasLegacyHistory?'legacy':'none',
     hasComposer:!!document.querySelector('.composer-bar[data-composer-id]'),
     modalVisible:!!dialog,modalLabel:dialogLabel,
-    settingsOrCustomizeVisible,signInVisible,agentSurfaceVisible,composerCount,
+    settingsOrCustomizeVisible,signInControlVisible,signInVisible,agentSurfaceVisible,composerCount,
     visibilityState:String(document.visibilityState||'unknown'),
     visible:document.visibilityState==='visible',focused:typeof document.hasFocus==='function'&&document.hasFocus(),
     documentTitle:pageTitle,pageTitle:pageTitle.slice(0,160)
