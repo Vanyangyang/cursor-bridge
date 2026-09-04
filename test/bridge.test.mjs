@@ -38,7 +38,7 @@ import {
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
   EXPR_CLICK_SEND,
-  exprFill,
+  EXPR_PREPARE_INPUT,
   exprOpenAgent,
   exprClickSelectedAgentStop,
   EXPR_VISIBLE_COMPOSER,
@@ -217,9 +217,10 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_PAGE_CAPABILITIES, /agentSurfaceVisible/);
   assert.match(EXPR_PAGE_CAPABILITIES, /composer-react-transcript-root/);
   assert.doesNotMatch(EXPR_PAGE_CAPABILITIES, /\|\|!!document\.querySelector\('\.aichat-container'\)/);
-  assert.match(exprFill('hello'), /InputEvent/);
+  assert.match(EXPR_PREPARE_INPUT, /selectNodeContents/);
   assert.match(EXPR_CLICK_SEND, /ui-prompt-input-submit-button/);
   assert.match(EXPR_CLICK_SEND, /data-state="send"/);
+  assert.match(EXPR_CLICK_SEND, /aria-label="Send message"/);
   assert.match(EXPR_FIND_NEWAGENT, /innerText/);
   assert.match(EXPR_FIND_NEWAGENT, /glass-sidebar-agent-menu-btn/);
   assert.match(EXPR_PAGE_CAPABILITIES, /glass-sidebar-agent-list-container/);
@@ -325,6 +326,48 @@ test('chat panel diagnostics distinguish actionable missing-input states', () =>
     assert.match(diagnostic.nextStep, /open Cursor's main Agent\/Chat panel or New Chat/);
     assert.match(diagnostic.nextStep, /retry the same request/);
   }
+});
+
+test('trusted prompt fill waits for Cursor to expose an exact send control', async () => {
+  const bridge = new CursorBridge({
+    runtimeFile: null,
+    workspaceFile: null,
+    modelPreferencesFile: null,
+    sessionFile: null,
+  });
+  const snapshots = [
+    JSON.stringify({ inputTextLength: 5, sendReady: false }),
+    JSON.stringify({ inputTextLength: 5, sendReady: true }),
+  ];
+  const calls = [];
+  const client = {
+    async send(method, params) {
+      calls.push({ method, params });
+      if (method === 'Input.insertText') return {};
+      const value = params.expression === EXPR_PREPARE_INPUT
+        ? 'READY'
+        : snapshots.shift() || JSON.stringify({ inputTextLength: 5, sendReady: true });
+      return { result: { value } };
+    },
+  };
+
+  assert.equal(await bridge._fillPrompt(client, 'hello', null, 250), 'hello');
+  assert.deepEqual(calls.find((call) => call.method === 'Input.insertText').params, { text: 'hello' });
+
+  const neverReady = {
+    async send(method, params) {
+      if (method === 'Input.insertText') return {};
+      return { result: { value: params.expression === EXPR_PREPARE_INPUT
+        ? 'READY'
+        : JSON.stringify({ inputTextLength: 5, sendReady: false }) } };
+    },
+  };
+  await assert.rejects(
+    bridge._fillPrompt(neverReady, 'hello', null, 20),
+    (error) => error.code === 'CURSOR_COMPOSER_NOT_SEND_READY'
+      && error.confirmedNotSent === true
+      && error.composerDiagnostic.inputTextLength === 5,
+  );
 });
 
 test('missing chat input returns structured diagnostics without navigation or clicks', async () => {

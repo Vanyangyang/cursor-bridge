@@ -46,7 +46,7 @@ const SNAP = `(function(){
   const stop=[...document.querySelectorAll('[class*=codicon-stop],[class*=debug-stop],[aria-label*=Stop],[aria-label*=stop],[aria-label*=Cancel]')].filter(e=>e.offsetParent!==null).length;
   return JSON.stringify({
     inputText:i?(i.innerText||'').slice(0,40):'NO_INPUT',
-    btn: b?{disabled:!!(b.disabled||b.getAttribute('aria-disabled')==='true'||(b.className||'').toString().includes('disabled')),vis:b.offsetParent!==null,cls:(b.className||'').toString().slice(0,55)}:null,
+    btn: b?{disabled:!!(b.disabled||b.getAttribute('aria-disabled')==='true'||(b.className||'').toString().includes('disabled')),vis:b.offsetParent!==null,state:b.getAttribute('data-state'),aria:b.getAttribute('aria-label'),cls:(b.className||'').toString().slice(0,55)}:null,
     stop
   });
 })()`;
