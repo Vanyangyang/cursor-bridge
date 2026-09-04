@@ -23158,14 +23158,22 @@ function selectModelPickerRow(rows, requested, kind = "model") {
   const candidates = (Array.isArray(rows) ? rows : []).filter((row) => row && row.disabled !== true && (kind === "any" || row.kind === kind)).map((row) => {
     const normalized = normalizeModelPickerText(row.text);
     let score = normalized === wanted ? 1e3 : 0;
-    if (!score && normalized.startsWith(wanted)) score = 800;
-    if (!score && wanted.startsWith(normalized)) score = 700;
-    if (!score && normalized.includes(wanted)) score = 600;
+    if (kind !== "parameter") {
+      if (!score && normalized.startsWith(wanted)) score = 800;
+      if (!score && wanted.startsWith(normalized)) score = 700;
+      if (!score && normalized.includes(wanted)) score = 600;
+    }
     return { row, score, distance: Math.abs(normalized.length - wanted.length) };
   }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score || a.distance - b.distance);
   if (candidates.length === 0) return null;
   if (candidates.length > 1 && candidates[0].score === candidates[1].score && candidates[0].distance === candidates[1].distance) return null;
   return candidates[0].row;
+}
+function createModelSelectionError(message, failureClass, retryable, diagnostic = {}) {
+  const error2 = new Error(message);
+  error2.code = `CURSOR_MODEL_${String(failureClass || "PROBE_ERROR").toUpperCase()}`;
+  error2.modelSelectionFailure = { failureClass, retryable, ...diagnostic };
+  return error2;
 }
 var WORKSPACE_SECTION_BODY = `
   const headText=(el)=>String(el&&(el.innerText||el.textContent)||'').trim();
@@ -24941,25 +24949,83 @@ var CursorBridge = class {
     modelRow = selectModelPickerRow(expanded && expanded.rows, requestedModel, "model");
     return { snapshot: expanded, modelRow };
   }
-  async _selectedEffortRow(c, modelRow, effort) {
-    let snapshot = await this._readModelPickerRows(c);
-    let effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
-    if (!effortRow) {
-      snapshot = await this._openModelPickerControl(c, snapshot, "effort_control");
-      effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
+  _inspectModelPickerRows(snapshot, requested, kind) {
+    const rows = (snapshot && Array.isArray(snapshot.rows) ? snapshot.rows : []).filter((row) => row && row.disabled !== true && row.kind === kind);
+    const wanted = normalizeModelPickerText(requested);
+    const exact = rows.filter((row) => normalizeModelPickerText(row.text) === wanted);
+    return {
+      snapshot,
+      row: exact.length === 1 ? exact[0] : null,
+      ambiguous: exact.length > 1,
+      available: rows.map((row) => row.text)
+    };
+  }
+  async _waitForModelPickerMatch(c, requested, kind, job, options = {}) {
+    const timeoutMs = Math.max(0, Number(options.timeoutMs ?? 700));
+    const pollMs = Math.max(10, Number(options.pollMs ?? 100));
+    const stableMs = Math.max(0, Number(options.stableMs ?? 250));
+    const deadline = Date.now() + timeoutMs;
+    let stableSignature = null;
+    let stableSince = 0;
+    let last = this._inspectModelPickerRows({ open: false, rows: [] }, requested, kind);
+    do {
+      this._throwIfCancelledBeforeSend(job);
+      last = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
+      if (last.row) return { ...last, state: "matched" };
+      const signature = JSON.stringify(last.available);
+      if (last.available.length > 0) {
+        if (signature !== stableSignature) {
+          stableSignature = signature;
+          stableSince = Date.now();
+        } else if (Date.now() - stableSince >= stableMs) {
+          return { ...last, state: last.ambiguous ? "ambiguous" : "unsupported" };
+        }
+      } else {
+        stableSignature = null;
+        stableSince = 0;
+      }
+      if (Date.now() >= deadline) break;
+      await sleep2(Math.min(pollMs, Math.max(0, deadline - Date.now())));
+    } while (Date.now() <= deadline);
+    return { ...last, state: last.ambiguous ? "ambiguous" : "not_rendered" };
+  }
+  async _selectedEffortRow(c, modelRow, effort, job) {
+    const requested = cursorEffortUiValue(effort);
+    const snapshot = await this._readModelPickerRows(c);
+    const immediate = this._inspectModelPickerRows(snapshot, requested, "parameter");
+    if (immediate.row) return { ...immediate, state: "matched", attempts: ["visible"] };
+    const attempts = [];
+    const effortControl = (snapshot.rows || []).find((row) => row.kind === "effort_control" && row.disabled !== true);
+    if (effortControl) {
+      this._throwIfCancelledBeforeSend(job);
+      attempts.push("effort_control");
+      await this._clickModelPickerPoint(c, effortControl);
+      const result2 = await this._waitForModelPickerMatch(c, requested, "parameter", job, { timeoutMs: 700 });
+      if (result2.state !== "not_rendered") return { ...result2, attempts };
     }
-    if (effortRow) return effortRow;
+    this._throwIfCancelledBeforeSend(job);
+    attempts.push("model_hover");
     await this._hoverModelPickerPoint(c, modelRow);
-    await sleep2(400);
-    snapshot = await this._readModelPickerRows(c);
-    effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
-    if (!effortRow && modelRow && modelRow.hasSubmenu) {
+    let result = await this._waitForModelPickerMatch(c, requested, "parameter", job, { timeoutMs: 700 });
+    if (result.state !== "not_rendered") return { ...result, attempts };
+    if (modelRow && modelRow.hasSubmenu) {
+      this._throwIfCancelledBeforeSend(job);
+      attempts.push("model_click");
       await this._clickModelPickerPoint(c, modelRow);
-      await sleep2(350);
-      snapshot = await this._readModelPickerRows(c);
-      effortRow = selectModelPickerRow(snapshot.rows, cursorEffortUiValue(effort), "parameter");
+      result = await this._waitForModelPickerMatch(c, requested, "parameter", job, { timeoutMs: 1100 });
     }
-    return effortRow;
+    return { ...result, attempts };
+  }
+  async _waitForSelectedModelPickerRow(c, requested, kind, job, timeoutMs = 1500) {
+    const deadline = Date.now() + timeoutMs;
+    do {
+      this._throwIfCancelledBeforeSend(job);
+      const inspected = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
+      if (inspected.row && inspected.row.selected) return inspected.row;
+      if (Date.now() >= deadline) break;
+      await sleep2(Math.min(100, Math.max(0, deadline - Date.now())));
+    } while (Date.now() <= deadline);
+    return null;
   }
   async _applyModelPreference(c, preference, job) {
     if (!preference) {
@@ -24968,63 +25034,167 @@ var CursorBridge = class {
     }
     const requestedModel = String(preference.model || "").trim();
     const requestedEffort = preference.effort ? normalizeCursorModelEffort(preference.effort, "") : null;
-    const opened = await this._openModelPicker(c);
-    let located = await this._findModelPickerModel(c, opened, requestedModel);
-    let modelRow = located.modelRow;
-    if (!modelRow) {
-      throw new Error(`Configured Cursor model is unavailable or ambiguous: ${requestedModel}`);
-    }
-    let selectedEffortRow = null;
-    if (requestedEffort && modelRow.hasSubmenu) {
-      selectedEffortRow = await this._selectedEffortRow(c, modelRow, requestedEffort);
-      if (!selectedEffortRow) {
-        throw new Error(`Cursor model ${requestedModel} does not expose effort ${requestedEffort}`);
+    let modelRow = null;
+    let effectiveEffort = null;
+    let primaryError = null;
+    try {
+      const opened = await this._openModelPicker(c);
+      let located = await this._findModelPickerModel(c, opened, requestedModel);
+      modelRow = located.modelRow;
+      if (!modelRow) {
+        throw createModelSelectionError(
+          `Configured Cursor model is unavailable or ambiguous: ${requestedModel}`,
+          "model_unavailable",
+          false,
+          { available: (located.snapshot.rows || []).filter((row) => row.kind === "model").map((row) => row.text) }
+        );
       }
-      if (!selectedEffortRow.selected || !modelRow.selected) {
-        await this._clickModelPickerPoint(c, selectedEffortRow);
+      let effortPickerReopened = false;
+      const resolveEffort = async () => {
+        let outcome = await this._selectedEffortRow(c, modelRow, requestedEffort, job);
+        if (!outcome.row && outcome.state === "not_rendered" && !effortPickerReopened) {
+          effortPickerReopened = true;
+          await this._closeModelPicker(c);
+          const reopened = await this._openModelPicker(c);
+          located = await this._findModelPickerModel(c, reopened, requestedModel);
+          modelRow = located.modelRow;
+          if (!modelRow) {
+            throw createModelSelectionError(
+              `Cursor model row disappeared while applying effort: ${requestedModel}`,
+              "model_unavailable",
+              true
+            );
+          }
+          outcome = await this._selectedEffortRow(c, modelRow, requestedEffort, job);
+          outcome.attempts = ["picker_reopen", ...outcome.attempts || []];
+        }
+        return outcome;
+      };
+      const throwEffortFailure = (outcome) => {
+        const failureClass = outcome.state === "ambiguous" ? "effort_ambiguous" : outcome.state === "unsupported" ? "effort_unsupported" : "effort_menu_not_rendered";
+        const message = failureClass === "effort_menu_not_rendered" ? `Cursor effort menu did not render for model ${requestedModel}` : failureClass === "effort_ambiguous" ? `Cursor model ${requestedModel} exposes ambiguous effort ${requestedEffort}` : `Cursor model ${requestedModel} does not expose effort ${requestedEffort}`;
+        throw createModelSelectionError(
+          message,
+          failureClass,
+          failureClass === "effort_menu_not_rendered",
+          { available: outcome.available || [], attempts: outcome.attempts || [] }
+        );
+      };
+      if (requestedEffort && modelRow.hasSubmenu) {
+        const selectedEffort = await resolveEffort();
+        if (!selectedEffort.row) throwEffortFailure(selectedEffort);
+        if (!selectedEffort.row.selected || !modelRow.selected) {
+          this._throwIfCancelledBeforeSend(job);
+          await this._clickModelPickerPoint(c, selectedEffort.row);
+          await sleep2(550);
+        }
+      } else if (!modelRow.selected) {
+        this._throwIfCancelledBeforeSend(job);
+        await this._clickModelPickerPoint(c, modelRow);
         await sleep2(550);
       }
-    } else if (!modelRow.selected) {
-      await this._clickModelPickerPoint(c, modelRow);
-      await sleep2(550);
-    }
-    let trigger = await this._readModelPickerTrigger(c);
-    if (!trigger.found || !normalizeModelPickerText(trigger.text).includes(normalizeModelPickerText(requestedModel))) {
-      const reopened = await this._openModelPicker(c);
-      located = await this._findModelPickerModel(c, reopened, requestedModel);
-      const selected = selectModelPickerRow(located.snapshot.rows.filter((row) => row.selected), requestedModel, "model");
-      if (!selected) throw new Error(`Cursor did not confirm configured model ${requestedModel}`);
-      modelRow = selected;
-    }
-    let effectiveEffort = null;
-    if (requestedEffort) {
-      const reopened = await this._openModelPicker(c);
-      located = await this._findModelPickerModel(c, reopened, requestedModel);
-      modelRow = located.modelRow;
-      if (!modelRow) throw new Error(`Cursor model row disappeared while applying effort: ${requestedModel}`);
-      let effortRow = await this._selectedEffortRow(c, modelRow, requestedEffort);
-      if (!effortRow) {
-        throw new Error(`Cursor model ${requestedModel} does not expose effort ${requestedEffort}`);
-      }
-      if (!effortRow.selected) {
-        await this._clickModelPickerPoint(c, effortRow);
-        await sleep2(450);
-      }
-      trigger = await this._readModelPickerTrigger(c);
-      const detailMatches = normalizeModelPickerText(`${trigger.detail || ""} ${trigger.text || ""}`).includes(normalizeModelPickerText(requestedEffort));
-      if (!detailMatches) {
-        const verify = await this._openModelPicker(c);
-        const verifiedModel = await this._findModelPickerModel(c, verify, requestedModel);
-        const selectedModel = verifiedModel.modelRow;
-        effortRow = await this._selectedEffortRow(c, selectedModel, requestedEffort);
-        if (!effortRow || !effortRow.selected) {
-          throw new Error(`Cursor did not confirm effort ${requestedEffort} for model ${requestedModel}`);
+      let trigger2 = await this._readModelPickerTrigger(c);
+      if (!trigger2.found || !normalizeModelPickerText(trigger2.text).includes(normalizeModelPickerText(requestedModel))) {
+        const reopened = await this._openModelPicker(c);
+        located = await this._findModelPickerModel(c, reopened, requestedModel);
+        const selected = selectModelPickerRow(located.snapshot.rows.filter((row) => row.selected), requestedModel, "model");
+        if (!selected) {
+          throw createModelSelectionError(
+            `Cursor did not confirm configured model ${requestedModel}`,
+            "model_not_confirmed",
+            true
+          );
         }
+        modelRow = selected;
       }
-      effectiveEffort = requestedEffort;
+      if (requestedEffort) {
+        const reopened = await this._openModelPicker(c);
+        located = await this._findModelPickerModel(c, reopened, requestedModel);
+        modelRow = located.modelRow;
+        if (!modelRow) {
+          throw createModelSelectionError(
+            `Cursor model row disappeared while applying effort: ${requestedModel}`,
+            "model_unavailable",
+            true
+          );
+        }
+        const effortOutcome = await resolveEffort();
+        if (!effortOutcome.row) throwEffortFailure(effortOutcome);
+        let effortRow = effortOutcome.row;
+        if (!effortRow.selected) {
+          effortRow = await this._waitForSelectedModelPickerRow(
+            c,
+            cursorEffortUiValue(requestedEffort),
+            "parameter",
+            job
+          );
+        }
+        if (!effortRow || !effortRow.selected) {
+          throw createModelSelectionError(
+            `Cursor did not confirm effort ${requestedEffort} for model ${requestedModel}`,
+            "effort_not_confirmed",
+            true
+          );
+        }
+        effectiveEffort = requestedEffort;
+      }
+    } catch (error2) {
+      primaryError = error2 instanceof Error ? error2 : new Error(String(error2));
+      let failure = primaryError.modelSelectionFailure;
+      if (!failure) {
+        const pickerUnavailable = /model picker (?:is unavailable|did not open)/i.test(primaryError.message);
+        failure = {
+          failureClass: pickerUnavailable ? "picker_did_not_open" : "probe_error",
+          retryable: true
+        };
+      }
+      const diagnostic = {
+        configured: true,
+        applied: false,
+        requestedModel,
+        requestedEffort,
+        failureClass: failure.failureClass,
+        retryable: failure.retryable === true,
+        errorCode: primaryError.code || `CURSOR_MODEL_${String(failure.failureClass).toUpperCase()}`,
+        available: failure.available || [],
+        attempts: failure.attempts || [],
+        runtimeMode: this.runtimeMode,
+        lastError: primaryError.message,
+        failedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      primaryError.modelSelection = diagnostic;
+      if (job) job.modelSelection = diagnostic;
+      throw primaryError;
+    } finally {
+      try {
+        await this._closeModelPicker(c);
+      } catch (cleanupError) {
+        const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+        if (!primaryError) {
+          const error2 = createModelSelectionError(message, "picker_cleanup_failed", true);
+          const diagnostic = {
+            configured: true,
+            applied: false,
+            requestedModel,
+            requestedEffort,
+            failureClass: "picker_cleanup_failed",
+            retryable: true,
+            errorCode: error2.code,
+            available: [],
+            attempts: [],
+            runtimeMode: this.runtimeMode,
+            lastError: message,
+            failedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+          error2.modelSelection = diagnostic;
+          if (job) job.modelSelection = diagnostic;
+          throw error2;
+        }
+        if (primaryError.modelSelection) primaryError.modelSelection.cleanupError = message;
+        if (job && job.modelSelection) job.modelSelection.cleanupError = message;
+      }
     }
-    await this._closeModelPicker(c);
-    trigger = await this._readModelPickerTrigger(c);
+    const trigger = await this._readModelPickerTrigger(c);
     const result = {
       configured: true,
       applied: true,

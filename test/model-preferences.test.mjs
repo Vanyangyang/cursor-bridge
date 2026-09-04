@@ -95,11 +95,119 @@ test('model picker matching handles model IDs, display names, and effort aliases
   assert.equal(normalizeModelPickerText('Extra High'), 'xhigh');
   assert.equal(selectModelPickerRow(rows, 'gpt-5.6-sol', 'model').text, 'GPT-5.6 Sol');
   assert.equal(selectModelPickerRow(rows, 'xhigh', 'parameter').text, 'Extra High');
+  assert.equal(selectModelPickerRow([
+    { kind: 'parameter', text: 'Extra High', selected: true },
+  ], 'high', 'parameter'), null);
+  assert.equal(selectModelPickerRow([
+    { kind: 'parameter', text: 'High', selected: false },
+    { kind: 'parameter', text: 'High', selected: true },
+  ], 'high', 'parameter'), null);
   assert.equal(selectModelPickerRow(rows, 'missing-model', 'model'), null);
   assert.equal(selectModelPickerRow([
     { kind: 'model', text: 'Model A' },
     { kind: 'model', text: 'Model-A' },
   ], 'model-a', 'model'), null);
+});
+
+test('effort picker waits for delayed rows and distinguishes stable unsupported options', async () => {
+  const modelRow = { kind: 'model', text: 'Claude Fable 5.1', selected: true, hasSubmenu: true };
+  const effortControl = { kind: 'effort_control', text: 'Effort', selected: false };
+
+  class DelayedEffortBridge extends CursorBridge {
+    constructor(snapshots) {
+      super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+      this.snapshots = snapshots;
+      this.clicks = 0;
+    }
+    async _readModelPickerRows() {
+      return this.snapshots.length > 1 ? this.snapshots.shift() : this.snapshots[0];
+    }
+    async _clickModelPickerPoint() { this.clicks++; }
+    async _hoverModelPickerPoint() {}
+  }
+
+  const delayed = new DelayedEffortBridge([
+    { open: true, rows: [effortControl] },
+    { open: true, rows: [] },
+    { open: true, rows: [{ kind: 'parameter', text: 'High', selected: true }] },
+  ]);
+  const matched = await delayed._selectedEffortRow(null, modelRow, 'high', null);
+  assert.equal(matched.state, 'matched');
+  assert.equal(matched.row.text, 'High');
+  assert.deepEqual(matched.attempts, ['effort_control']);
+  assert.equal(delayed.clicks, 1);
+
+  const unsupported = new DelayedEffortBridge([
+    { open: true, rows: [effortControl] },
+    { open: true, rows: [
+      { kind: 'parameter', text: 'Low', selected: false },
+      { kind: 'parameter', text: 'Extra High', selected: true },
+    ] },
+  ]);
+  const missing = await unsupported._selectedEffortRow(null, modelRow, 'high', null);
+  assert.equal(missing.state, 'unsupported');
+  assert.equal(missing.row, null);
+  assert.deepEqual(missing.available, ['Low', 'Extra High']);
+});
+
+test('model selection failures clean up the picker and expose structured diagnostics', async () => {
+  const modelRow = { kind: 'model', text: 'Claude Fable 5.1', selected: true, hasSubmenu: true };
+  class MissingEffortBridge extends CursorBridge {
+    constructor() {
+      super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+      this.closeCalls = 0;
+    }
+    async _openModelPicker() { return { trigger: { found: true }, rows: [modelRow] }; }
+    async _findModelPickerModel(_client, snapshot) { return { snapshot, modelRow }; }
+    async _selectedEffortRow() {
+      return { row: null, state: 'not_rendered', available: [], attempts: ['model_hover'] };
+    }
+    async _closeModelPicker() { this.closeCalls++; }
+  }
+
+  const bridge = new MissingEffortBridge();
+  const job = { cancelRequested: false, sendState: 'not_sent' };
+  await assert.rejects(
+    bridge._applyModelPreference(null, { model: 'Claude Fable 5.1', effort: 'high' }, job),
+    (error) => {
+      assert.equal(error.modelSelection.failureClass, 'effort_menu_not_rendered');
+      assert.equal(error.modelSelection.retryable, true);
+      assert.equal(error.modelSelection.runtimeMode, 'normal');
+      return true;
+    },
+  );
+  assert.equal(job.modelSelection.applied, false);
+  assert.deepEqual(job.modelSelection.attempts, ['picker_reopen', 'model_hover']);
+  assert.equal(bridge.closeCalls, 2);
+});
+
+test('effort confirmation never clicks the same option a second time', async () => {
+  const modelRow = { kind: 'model', text: 'Claude Fable 5.1', selected: true, hasSubmenu: true };
+  const effortRow = { kind: 'parameter', text: 'High', selected: false };
+  class UnconfirmedEffortBridge extends CursorBridge {
+    constructor() {
+      super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+      this.selectionClicks = 0;
+    }
+    async _openModelPicker() { return { trigger: { found: true }, rows: [modelRow] }; }
+    async _findModelPickerModel(_client, snapshot) { return { snapshot, modelRow }; }
+    async _selectedEffortRow() {
+      return { row: effortRow, state: 'matched', available: ['High'], attempts: ['visible'] };
+    }
+    async _clickModelPickerPoint() { this.selectionClicks++; }
+    async _readModelPickerTrigger() {
+      return { found: true, text: 'Claude Fable 5.1 High', detail: 'High' };
+    }
+    async _waitForSelectedModelPickerRow() { return null; }
+    async _closeModelPicker() {}
+  }
+
+  const bridge = new UnconfirmedEffortBridge();
+  await assert.rejects(
+    bridge._applyModelPreference(null, { model: 'Claude Fable 5.1', effort: 'high' }),
+    (error) => error.modelSelection.failureClass === 'effort_not_confirmed',
+  );
+  assert.equal(bridge.selectionClicks, 1);
 });
 
 test('Cursor 3.18.25 reports the verified model row when the trigger shows only effort', async () => {
