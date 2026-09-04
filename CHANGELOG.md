@@ -6,6 +6,21 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.8.2] - 2026-09-04
+
+### Fixed
+
+- Model-effort selection now waits for delayed Cursor menus, requires one exact effort row, performs at most one bounded picker reopen, closes the picker on every outcome, and reports structured retryability instead of misclassifying a temporarily hidden `High` row as unsupported.
+- Prompt submission now uses trusted CDP `Input.insertText`, waits for the active composer to become send-ready, and recognizes Cursor 3.19.7's `.ui-prompt-input` root and `Send message` control in both normal and `minimal` runtime modes.
+
+### Compatibility
+
+- Windows 11 + Cursor **3.19.7** passed a fresh-host `status → init` gate, source-anchored CCE in `minimal`, and isolated FIFO `cursor_do` in both normal and `minimal` with verified Claude Fable 5.1/high selection. Bridge then restored and persisted `normal`; parallel and persistent-session paths retain regression coverage but were not live-rechecked in this acceptance. The complete repository suite passed 203/203.
+
+### Safety
+
+- Selection and submission remain fail-closed before prompt delivery: no model or effort fallback, no duplicate effort click, no automatic window flash, and no orphan Agent when send readiness cannot be confirmed.
+
 ## [5.8.1] - 2026-09-03
 
 ### Changed

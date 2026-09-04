@@ -163,21 +163,21 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '5.8.1');
+  assert.equal(rootPackage.version, '5.8.2');
   assert.equal(rootPackage.name, 'cursor-bridge-workspace');
   assert.equal(rootPackage.private, true);
   assert.match(rootPackage.scripts.prepublishOnly, /repository root is private/);
-  assert.match(codexCursorManifest.version, /^5\.8\.1(?:\+codex\.)?/);
-  assert.equal(claudeCursorManifest.version, '5.8.1');
-  assert.match(serverSource, /const PLUGIN_VERSION = '5\.8\.1';/);
+  assert.match(codexCursorManifest.version, /^5\.8\.2(?:\+codex\.)?/);
+  assert.equal(claudeCursorManifest.version, '5.8.2');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.8\.2';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.8.1');
-  assert.match(claudeCursor?.description || '', /Cursor 3\.18\.25/);
+  assert.equal(claudeCursor?.version, '5.8.2');
+  assert.match(claudeCursor?.description || '', /Cursor 3\.19\.7/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.3.7');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
@@ -199,8 +199,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.match(chineseGrokSection, /负责规划和把关[\s\S]*自动调度 Grok Build[\s\S]*执行任务[\s\S]*跟进过程[\s\S]*核验结果/);
   assert.doesNotMatch(englishGrokSection, /optional/i);
   assert.doesNotMatch(chineseGrokSection, /可选/);
-  assert.match(english, /Cursor \*\*3\.18\.25\*\*[\s\S]*cold-launched[\s\S]*--remote-debugging-port=9223/);
-  assert.match(chinese, /Cursor \*\*3\.18\.25\*\*[\s\S]*冷启动[\s\S]*--remote-debugging-port=9223/);
+  assert.match(english, /Cursor \*\*3\.19\.7\*\*[\s\S]*fresh Codex host[\s\S]*Claude Fable 5\.1\/high/);
+  assert.match(chinese, /Cursor \*\*3\.19\.7\*\*[\s\S]*全新 Codex 宿主[\s\S]*Claude Fable 5\.1\/high/);
   assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
@@ -371,18 +371,20 @@ test('bilingual README promotes the minimal runtime benefit and trade-off', () =
   }
 });
 
-test('bilingual compatibility docs keep Cursor 3.18.25 acceptance evidence scoped', () => {
+test('bilingual compatibility docs keep Cursor 3.19.7 acceptance evidence scoped', () => {
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   const changelog = readProjectFile('CHANGELOG.md');
 
-  assert.match(english, /3\.18\.25[\s\S]*cold-launched[\s\S]*one top-level Cursor Agents window[\s\S]*one CDP page target/);
-  assert.match(chinese, /3\.18\.25[\s\S]*冷启动[\s\S]*一个 Cursor Agents 顶层窗口[\s\S]*一个 CDP page target/);
-  assert.match(changelog, /3\.18\.25[\s\S]*Grok 4\.6\/high[\s\S]*cursor_do[\s\S]*minimal[\s\S]*normal/);
+  assert.match(english, /3\.19\.7[\s\S]*minimal[\s\S]*Claude Fable 5\.1\/high[\s\S]*restored and persisted `normal`/);
+  assert.match(chinese, /3\.19\.7[\s\S]*minimal[\s\S]*Claude Fable 5\.1\/high[\s\S]*恢复并持久化为 `normal`/);
+  for (const pattern of [/3\.19\.7/, /Claude Fable 5\.1\/high/, /cursor_do/, /minimal/, /normal/]) {
+    assert.match(changelog, pattern);
+  }
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history keeps 5.8.1 current for Cursor 3.18.25 and archives 5.8.0', () => {
+test('compatibility history keeps 5.8.2 current for Cursor 3.19.7 and archives 5.8.1', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -391,26 +393,33 @@ test('compatibility history keeps 5.8.1 current for Cursor 3.18.25 and archives 
 
   assert.equal(data.policy, 'latest-only');
   assert.equal(data.candidate, undefined);
-  assert.equal(data.current.cursorVersion, '3.18.25');
-  assert.equal(data.current.cursorBridgeVersion, '5.8.1');
+  assert.equal(data.current.cursorVersion, '3.19.7');
+  assert.equal(data.current.cursorBridgeVersion, '5.8.2');
   assert.equal(data.current.sourceRef, 'main');
   assert.equal(data.current.status, 'current');
   assert.equal(data.current.acceptance.cursorVersionEvidence, 'installed-executable-product-and-file-version');
   assert.equal(data.current.acceptance.ideWorkbench, 'not-exposed-in-live-run');
-  assert.equal(data.current.acceptance.agentsWindow, 'live-tested-cold-single-window-cdp-9223');
-  assert.equal(data.current.acceptance.modelPreferences, 'live-tested-cce-and-cursor-do-grok-4.6-high');
-  assert.equal(data.current.acceptance.readOnlyMcpSupervisor, 'live-tested-plugin-cache-fallback');
-  assert.equal(data.current.acceptance.attachedFallback, 'regression-tested-not-live-rechecked-on-3.18.25');
+  assert.equal(data.current.acceptance.agentsWindow, 'live-tested-existing-supervised-single-window-cdp-9223');
+  assert.equal(data.current.acceptance.modelPreferences, 'live-tested-cce-and-cursor-do-claude-fable-5.1-high');
+  assert.equal(data.current.acceptance.readOnlyMcpSupervisor, 'live-tested-fresh-plugin-cache-host');
+  assert.equal(data.current.acceptance.attachedFallback, 'regression-tested-not-live-rechecked-on-3.19.7');
   assert.equal(data.current.acceptance.lifecycleDiagnostics, 'live-tested');
-  assert.equal(data.current.acceptance.fifoExecution, 'live-tested-cce');
-  assert.equal(data.current.acceptance.parallelExecution, 'live-tested-persistent-session-turns-1-and-2');
-  assert.equal(data.current.acceptance.parallelAgentIdentity, 'live-tested-stable-session-agent-id');
-  assert.equal(data.current.acceptance.persistentSessions, 'live-tested-two-adapter-create-continue');
-  assert.equal(data.current.acceptance.singleWindow, 'live-tested-cold-init-agent');
-  assert.equal(data.current.acceptance.minimalNormalRuntime, 'live-tested-hidden-and-restored-normal');
-  assert.equal(data.current.acceptance.modelPickerTrigger, 'adapted-trigger-effort-only-reports-selected-model-row');
-  assert.equal(data.current.acceptance.chatPanelDiagnostics, 'live-tested-settings-blocker-and-manual-return-retry');
+  assert.equal(data.current.acceptance.fifoExecution, 'live-tested-normal-and-minimal');
+  assert.equal(data.current.acceptance.parallelExecution, 'regression-tested-not-live-rechecked-on-3.19.7');
+  assert.equal(data.current.acceptance.parallelAgentIdentity, 'regression-tested-not-live-rechecked-on-3.19.7');
+  assert.equal(data.current.acceptance.persistentSessions, 'regression-tested-not-live-rechecked-on-3.19.7');
+  assert.equal(data.current.acceptance.singleWindow, 'live-tested-reused-agent-window');
+  assert.equal(data.current.acceptance.minimalNormalRuntime, 'live-tested-hidden-cce-cursor-do-and-restored-normal');
+  assert.equal(data.current.acceptance.modelPickerTrigger, 'live-tested-bounded-exact-effort-selection');
+  assert.equal(data.current.acceptance.chatPanelDiagnostics, 'regression-tested-not-live-rechecked-on-3.19.7');
+  assert.equal(data.current.acceptance.promptSubmission, 'live-tested-trusted-input-send-ready-normal-and-minimal');
   assert.deepEqual(data.history, [
+    {
+      cursorVersion: '3.18.25',
+      cursorBridgeVersion: '5.8.1',
+      gitRef: 'cursor-bridge--v5.8.1',
+      status: 'archived',
+    },
     {
       cursorVersion: '3.18.25',
       cursorBridgeVersion: '5.8.0',
@@ -477,12 +486,15 @@ test('compatibility history keeps 5.8.1 current for Cursor 3.18.25 and archives 
   assert.match(chineseReadme, /href="\.\/COMPATIBILITY\.zh-CN\.md"/);
   assert.match(english, /maintains only the latest Cursor release/);
   assert.match(chinese, /只维护 Cursor 最新版本/);
-  assert.match(english, /Current maintained baseline[\s\S]*3\.18\.25[\s\S]*5\.8\.1[\s\S]*settings_or_customize_open/);
-  assert.match(chinese, /当前维护基线[\s\S]*3\.18\.25[\s\S]*5\.8\.1[\s\S]*settings_or_customize_open/);
-  assert.match(englishReadme, /3\.18\.25[\s\S]*5\.8\.1[\s\S]*main[\s\S]*current/);
-  assert.match(chineseReadme, /3\.18\.25[\s\S]*5\.8\.1[\s\S]*main[\s\S]*当前版本/);
+  assert.match(english, /Current maintained baseline[\s\S]*3\.19\.7[\s\S]*5\.8\.2[\s\S]*trusted prompt submission/);
+  assert.match(chinese, /当前维护基线[\s\S]*3\.19\.7[\s\S]*5\.8\.2[\s\S]*可信 prompt 提交/);
+  assert.match(englishReadme, /3\.19\.7[\s\S]*5\.8\.2[\s\S]*main[\s\S]*current/);
+  assert.match(chineseReadme, /3\.19\.7[\s\S]*5\.8\.2[\s\S]*main[\s\S]*当前版本/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
+  assert.match(english, /Cursor Bridge 5\.8\.1 — Cursor 3\.18\.25/);
+  assert.match(chinese, /Cursor Bridge 5\.8\.1 — Cursor 3\.18\.25/);
+  assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.8\.1/);
   assert.match(english, /Cursor Bridge 5\.8\.0 — Cursor 3\.18\.25/);
   assert.match(chinese, /Cursor Bridge 5\.8\.0 — Cursor 3\.18\.25/);
   assert.match(english, /codex plugin marketplace add Vanyangyang\/cursor-bridge --ref cursor-bridge--v5\.8\.0/);

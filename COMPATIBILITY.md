@@ -11,9 +11,37 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.18.25** | **5.8.1** | `main` | Current maintained version. It retains the 5.8.0 Windows 11 + Cursor 3.18.25 cold-launch, persistent-session, model-selection, and `minimal` / `normal` evidence. The chat-panel diagnostic shipped in 5.8.1 was additionally accepted through a fresh Codex host against the same supervised Cursor: an open Settings/Customize surface with a visible `Authenticate` control returned `settings_or_customize_open` with `signInControlVisible=true` and `signInVisible=false`; no navigation, reload, click, or shortcut recovery occurred; and the same bounded CCE succeeded after the user manually returned to Agent/Chat. The complete repository suite passed 199/199. |
+| **3.19.7** | **5.8.2** | `main` | Current maintained version. A fresh Codex host reused one undegraded persistent supervised Agents Window and passed `status → init`, isolated FIFO `cursor_do` in normal and `minimal`, source-anchored CCE in `minimal`, exact Claude Fable 5.1/high selection, trusted prompt submission, and restored/persisted `normal`. Model-effort selection now waits for delayed hidden menus, matches exact effort rows, cleans up every picker outcome, and never silently falls back. Parallel and persistent sessions retain regression coverage but were not live-rechecked in this acceptance. The complete repository suite passed 203/203. |
 
 ## Historical versions
+
+### Cursor Bridge 5.8.1 — Cursor 3.18.25
+
+Status: **Archived; no maintenance.** Immutable Git ref: `cursor-bridge--v5.8.1`.
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.8.1
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.8.1 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.8.1
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.8.1
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.8.1 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.8.0 — Cursor 3.18.25
 

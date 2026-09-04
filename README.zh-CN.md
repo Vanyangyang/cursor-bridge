@@ -64,7 +64,7 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **实机验证环境：** Windows 11 + Cursor **3.18.25**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取，并由 Cursor Bridge 5.8.0 冷启动，携带 `--remote-debugging-port=9223`。本轮通过了工作区绑定、带源码锚点的 CCE、跨两个 Adapter 且保持同一稳定 Agent ID 的持久 `cursor_do` create/continue、Grok 4.6/high 模型验证，以及 `minimal` / `normal` 恢复；全程保持一个 Cursor Agents 顶层窗口和一个 CDP page target。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.19.7**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取。全新 Codex 宿主复用一个无降级的持久受监督 Agents Window，并通过了工作区绑定、`minimal` 中带源码锚点的 CCE、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、Claude Fable 5.1/high 精确模型验证，以及恢复并持久化为 `normal`。并行与持久会话路径保留回归测试覆盖，但本轮没有再次实机验证。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -157,9 +157,9 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.18.25** | **5.8.1**（`main`，当前版本） | 延续 5.8.0 的冷启动、持久会话、模型选择与 `minimal` / `normal` 实机证据。5.8.1 补丁还实机验证了 Settings/Customize 阻断分类，以及用户手动返回 Agent/Chat 后成功重试 CCE。 |
+| **3.19.7** | **5.8.2**（`main`，当前版本） | 全新宿主验收通过 normal 与 `minimal` FIFO `cursor_do`、`minimal` 中带源码锚点的 CCE、Claude Fable 5.1/high 精确选择、可信 prompt 提交，以及恢复并持久化为 `normal`。并行与持久会话保留回归测试覆盖，但本轮没有再次实机验证。 |
 
-不再主动维护旧 Cursor Bridge 版本。5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor Bridge 版本。5.8.1、5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 

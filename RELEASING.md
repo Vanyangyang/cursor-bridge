@@ -4,9 +4,9 @@ This repository ships two independently installable plugins and two independentl
 
 | Product | Current release target | Distribution |
 |---|---:|---|
-| Cursor Bridge | 5.8.1 | Codex, Claude Code, Grok Build |
+| Cursor Bridge | 5.8.2 | Codex, Claude Code, Grok Build |
 | Grok Build Supervisor | 0.3.7 | Codex, Claude Code |
-| Cursor Bridge for Pi | 0.1.11 | `pi-cursor-bridge` on npm |
+| Cursor Bridge for Pi | 0.1.12 | `pi-cursor-bridge` on npm |
 | Grok Build Supervisor for Pi | 0.1.4 | `pi-grok-build-supervisor` on npm |
 
 The private `cursor-bridge-workspace` root exists only for development, build, and test tooling; do not publish it or the retired `cursor-mcp-bridge` package. The Pi versions are wrapper-package versions; their manifests must also name the exact embedded Cursor Bridge or Grok Build Supervisor version.
@@ -43,7 +43,7 @@ Installed plugins execute these bundles directly; their hosts do not install run
 
 ### Cursor Bridge
 
-Keep 5.8.1 synchronized in:
+Keep 5.8.2 synchronized in:
 
 - `package.json` (the root `package-lock.json` remains an ignored local build input)
 - `server.mjs` (`PLUGIN_VERSION`)
@@ -67,7 +67,7 @@ Keep 0.3.7 synchronized in:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `pi-cursor-bridge`: package and adapter 0.1.11, embedded Cursor Bridge 5.8.1
+- `pi-cursor-bridge`: package and adapter 0.1.12, embedded Cursor Bridge 5.8.2
 - `pi-grok-build-supervisor`: package and adapter 0.1.4, embedded Grok Build Supervisor 0.3.7
 - package READMEs and Pi staging tests
 
@@ -92,14 +92,14 @@ Also validate both plugin structures with the current Claude/Codex validators, i
 4. Create annotated component tags at the verified release commit:
 
 ```powershell
-git tag -a cursor-bridge--v5.8.1 -m "Cursor Bridge 5.8.1"
-git push origin refs/tags/cursor-bridge--v5.8.1
+git tag -a cursor-bridge--v5.8.2 -m "Cursor Bridge 5.8.2"
+git push origin refs/tags/cursor-bridge--v5.8.2
 ```
 
 5. Publish one combined GitHub Release whose title always names both products and marks only changed components with `(New)`, for example:
 
 ```text
-Cursor Bridge 5.8.1 (New) + Grok Build Supervisor 0.3.7
+Cursor Bridge 5.8.2 (New) + Grok Build Supervisor 0.3.7
 ```
 
 6. Configure npm Trusted Publishing once for each existing Pi package. Both packages use the same GitHub Actions trust coordinates, but npm stores the relationship per package:
