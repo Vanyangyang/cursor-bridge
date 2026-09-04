@@ -22974,17 +22974,17 @@ var EXPR_SNAP = `(function(){
   ${INPUT_PICKER_BODY}
   const input=pickInput();
   const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
-  const composer=input&&(input.closest('.composer-bar')||input.parentElement);
+  const composer=input&&(input.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')||input.parentElement);
   const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
-    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar')):[];
+    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')===composer):[];
   return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length,sendReady:sendButtons.length===1});
 })()`;
 var EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
   const input=pickInput();if(!input)return 'NO_INPUT';
-  const composer=input.closest('.composer-bar')||input.parentElement;
+  const composer=input.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')||input.parentElement;
   if(!composer)return 'NO_COMPOSER';
   const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
-    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar'));
+    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')===composer);
   if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
   buttons[0].click();return 'CLICKED';
 })()`;
@@ -23102,7 +23102,7 @@ function exprClickBoundComposerStop(agentId) {
 var EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 var MODEL_PICKER_VISIBLE_BODY = `
   const visible=(node)=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
-  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root')].filter(visible);
+  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root,.agent-prompt-input-root,.ui-prompt-input')].filter(visible);
   const composer=composers[composers.length-1]||document;
 `;
 var EXPR_MODEL_PICKER_TRIGGER = `(function(){

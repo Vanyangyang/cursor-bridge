@@ -221,6 +221,7 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_CLICK_SEND, /ui-prompt-input-submit-button/);
   assert.match(EXPR_CLICK_SEND, /data-state="send"/);
   assert.match(EXPR_CLICK_SEND, /aria-label="Send message"/);
+  assert.match(EXPR_CLICK_SEND, /agent-prompt-input-root/);
   assert.match(EXPR_FIND_NEWAGENT, /innerText/);
   assert.match(EXPR_FIND_NEWAGENT, /glass-sidebar-agent-menu-btn/);
   assert.match(EXPR_PAGE_CAPABILITIES, /glass-sidebar-agent-list-container/);

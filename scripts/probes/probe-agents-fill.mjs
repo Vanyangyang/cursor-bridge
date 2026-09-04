@@ -43,10 +43,13 @@ const INPUT_SEL = `[contenteditable=true].ui-prompt-input-editor__input, .tiptap
 const SNAP = `(function(){
   const i=document.querySelector(${JSON.stringify('[contenteditable=true].ui-prompt-input-editor__input, .tiptap.ProseMirror[contenteditable=true]')});
   const b=document.querySelector('.ui-prompt-input-submit-button, [aria-label="Send message"]');
+  const inputComposer=i&&i.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root');
+  const buttonComposer=b&&b.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root');
   const stop=[...document.querySelectorAll('[class*=codicon-stop],[class*=debug-stop],[aria-label*=Stop],[aria-label*=stop],[aria-label*=Cancel]')].filter(e=>e.offsetParent!==null).length;
   return JSON.stringify({
     inputText:i?(i.innerText||'').slice(0,40):'NO_INPUT',
     btn: b?{disabled:!!(b.disabled||b.getAttribute('aria-disabled')==='true'||(b.className||'').toString().includes('disabled')),vis:b.offsetParent!==null,state:b.getAttribute('data-state'),aria:b.getAttribute('aria-label'),cls:(b.className||'').toString().slice(0,55)}:null,
+    sameComposer:!!(inputComposer&&buttonComposer&&inputComposer===buttonComposer),
     stop
   });
 })()`;
