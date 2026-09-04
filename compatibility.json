@@ -2,29 +2,36 @@
   "schemaVersion": 1,
   "policy": "latest-only",
   "current": {
-    "cursorVersion": "3.18.25",
-    "cursorBridgeVersion": "5.8.1",
+    "cursorVersion": "3.19.7",
+    "cursorBridgeVersion": "5.8.2",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
       "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
-      "agentsWindow": "live-tested-cold-single-window-cdp-9223",
-      "modelPreferences": "live-tested-cce-and-cursor-do-grok-4.6-high",
-      "readOnlyMcpSupervisor": "live-tested-plugin-cache-fallback",
-      "attachedFallback": "regression-tested-not-live-rechecked-on-3.18.25",
+      "agentsWindow": "live-tested-existing-supervised-single-window-cdp-9223",
+      "modelPreferences": "live-tested-cce-and-cursor-do-claude-fable-5.1-high",
+      "readOnlyMcpSupervisor": "live-tested-fresh-plugin-cache-host",
+      "attachedFallback": "regression-tested-not-live-rechecked-on-3.19.7",
       "lifecycleDiagnostics": "live-tested",
-      "fifoExecution": "live-tested-cce",
-      "parallelExecution": "live-tested-persistent-session-turns-1-and-2",
-      "parallelAgentIdentity": "live-tested-stable-session-agent-id",
-      "persistentSessions": "live-tested-two-adapter-create-continue",
-      "singleWindow": "live-tested-cold-init-agent",
-      "minimalNormalRuntime": "live-tested-hidden-and-restored-normal",
-      "modelPickerTrigger": "adapted-trigger-effort-only-reports-selected-model-row",
-      "chatPanelDiagnostics": "live-tested-settings-blocker-and-manual-return-retry"
+      "fifoExecution": "live-tested-normal-and-minimal",
+      "parallelExecution": "regression-tested-not-live-rechecked-on-3.19.7",
+      "parallelAgentIdentity": "regression-tested-not-live-rechecked-on-3.19.7",
+      "persistentSessions": "regression-tested-not-live-rechecked-on-3.19.7",
+      "singleWindow": "live-tested-reused-agent-window",
+      "minimalNormalRuntime": "live-tested-hidden-cce-cursor-do-and-restored-normal",
+      "modelPickerTrigger": "live-tested-bounded-exact-effort-selection",
+      "chatPanelDiagnostics": "regression-tested-not-live-rechecked-on-3.19.7",
+      "promptSubmission": "live-tested-trusted-input-send-ready-normal-and-minimal"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.18.25",
+      "cursorBridgeVersion": "5.8.1",
+      "gitRef": "cursor-bridge--v5.8.1",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.18.25",
       "cursorBridgeVersion": "5.8.0",

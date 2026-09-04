@@ -64,7 +64,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **Live-tested environment:** Windows 11 + Cursor **3.18.25**, identified from the installed executable's product and file versions and cold-launched by Cursor Bridge 5.8.0 with `--remote-debugging-port=9223`. The run passed workspace binding, source-anchored CCE, persistent `cursor_do` create/continue across two adapters with one stable Agent ID, Grok 4.6/high model verification, and `minimal` / `normal` recovery while retaining one top-level Cursor Agents window and one CDP page target. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, and macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.19.7**, identified from the installed executable's product and file versions. A fresh Codex host reused one undegraded persistent supervised Agents Window and passed workspace binding, source-anchored CCE in `minimal`, isolated FIFO `cursor_do` in normal and `minimal` with verified Claude Fable 5.1/high selection, and restored and persisted `normal`. Parallel and persistent-session paths retain regression coverage but were not live-rechecked in this acceptance. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, and macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -157,9 +157,9 @@ Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.18.25** | **5.8.1** (`main`, current) | Retains the 5.8.0 cold-launch, persistent-session, model-selection, and `minimal` / `normal` evidence. The 5.8.1 patch additionally live-tested Settings/Customize blocker classification and successful CCE retry after the user manually returned to Agent/Chat. |
+| **3.19.7** | **5.8.2** (`main`, current) | Fresh-host acceptance passed normal and `minimal` FIFO `cursor_do`, source-anchored `minimal` CCE, exact Claude Fable 5.1/high selection, trusted prompt submission, and restored/persisted `normal`. Parallel and persistent sessions remain regression-tested but were not live-rechecked in this acceptance. |
 
-Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.8.1, 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
