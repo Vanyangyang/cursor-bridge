@@ -22963,10 +22963,7 @@ function createChatPanelUnavailableError(snapshot) {
   error2.uiDiagnostic = uiDiagnostic;
   return error2;
 }
-function exprFill(text) {
-  const js = JSON.stringify(text);
-  return `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});try{inp.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:${js}}));}catch(e){inp.dispatchEvent(new Event('input',{bubbles:true}));}return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
-}
+var EXPR_PREPARE_INPUT = `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}return 'READY';})()`;
 var EXPR_SNAP = `(function(){
   const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
     .filter(e=>e.offsetParent!==null&&!e.closest('.ui-model-picker__trigger,[class*=model-picker]'));
@@ -22977,13 +22974,16 @@ var EXPR_SNAP = `(function(){
   ${INPUT_PICKER_BODY}
   const input=pickInput();
   const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
-  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length});
+  const composer=input&&(input.closest('.composer-bar')||input.parentElement);
+  const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
+    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar')):[];
+  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length,sendReady:sendButtons.length===1});
 })()`;
 var EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
   const input=pickInput();if(!input)return 'NO_INPUT';
   const composer=input.closest('.composer-bar')||input.parentElement;
   if(!composer)return 'NO_COMPOSER';
-  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button[aria-label="Send"]')]
+  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
     .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar'));
   if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
   buttons[0].click();return 'CLICKED';
@@ -24829,7 +24829,7 @@ var CursorBridge = class {
         this._throwIfCancelledBeforeSend(options);
         await this._applyModelPreference(c, options.modelPreference, options);
         this._throwIfCancelledBeforeSend(options);
-        const filled = await evalJS(c, exprFill(prompt));
+        const filled = await this._fillPrompt(c, prompt, options);
         if (filled === "NO_INPUT") await this._throwChatPanelUnavailableAfterNoInput(c);
         if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("Failed to enter the query because the input state was invalid");
         await sleep2(450);
@@ -25373,6 +25373,38 @@ var CursorBridge = class {
       }
     }
   }
+  async _fillPrompt(c, text, job, timeoutMs = 2500) {
+    const prepared = await evalJS(c, EXPR_PREPARE_INPUT);
+    if (prepared !== "READY") return prepared;
+    try {
+      await c.send("Input.insertText", { text: String(text) });
+    } catch {
+      return "EXEC_FAIL";
+    }
+    const deadline = Date.now() + timeoutMs;
+    let snapshot = {};
+    do {
+      this._throwIfCancelledBeforeSend(job);
+      try {
+        snapshot = JSON.parse(await evalJS(c, EXPR_SNAP));
+      } catch {
+      }
+      if (Number(snapshot.inputTextLength || 0) > 0 && snapshot.sendReady === true) {
+        return String(text).slice(0, 30);
+      }
+      if (Date.now() >= deadline) break;
+      await sleep2(Math.min(100, Math.max(0, deadline - Date.now())));
+    } while (Date.now() <= deadline);
+    const error2 = new Error("Cursor composer did not become send-ready after trusted input");
+    error2.code = "CURSOR_COMPOSER_NOT_SEND_READY";
+    error2.confirmedNotSent = true;
+    error2.composerDiagnostic = {
+      inputTextLength: Number(snapshot.inputTextLength || 0),
+      sendReady: snapshot.sendReady === true,
+      runtimeMode: this.runtimeMode
+    };
+    throw error2;
+  }
   async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "") {
     const accepted = async () => {
       await this._throwIfNewProviderError(c, providerErrorBaseline);
@@ -25462,7 +25494,7 @@ var CursorBridge = class {
       this._throwIfCancelledBeforeSend(job);
       await this._applyModelPreference(c, job.modelPreference, job);
       this._throwIfCancelledBeforeSend(job);
-      const filled = await evalJS(c, exprFill(job.prompt));
+      const filled = await this._fillPrompt(c, job.prompt, job);
       if (filled === "NO_INPUT") await this._throwChatPanelUnavailableAfterNoInput(c);
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") throw new Error("Failed to enter the parallel_agent task");
       await sleep2(350);
@@ -25582,7 +25614,7 @@ var CursorBridge = class {
       this._throwIfCancelledBeforeSend(job);
       job.responseBaseline = await this._captureSessionResponseBaseline(c);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
-      const filled = await evalJS(c, exprFill(job.prompt));
+      const filled = await this._fillPrompt(c, job.prompt, job);
       if (filled === "NO_INPUT") await this._throwChatPanelUnavailableAfterNoInput(c);
       if (filled === "NO_INPUT" || filled === "EXEC_FAIL") {
         throw cursorSessionError("SESSION_INPUT_FAILED", "failed to enter the continued task");
@@ -26799,6 +26831,7 @@ export {
   EXPR_MODEL_PICKER_ROWS,
   EXPR_MODEL_PICKER_TRIGGER,
   EXPR_PAGE_CAPABILITIES,
+  EXPR_PREPARE_INPUT,
   EXPR_PROVIDER_ERROR,
   EXPR_VISIBLE,
   EXPR_VISIBLE_COMPOSER,
@@ -26814,7 +26847,6 @@ export {
   exprClickBoundComposerStop,
   exprClickSelectedAgentStop,
   exprCreateAgentForWorkspace,
-  exprFill,
   exprInspectWorkspaceRepository,
   exprOpenAgent,
   isConfirmedCompletedReply,

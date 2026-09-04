@@ -425,10 +425,7 @@ function createChatPanelUnavailableError(snapshot) {
   error.uiDiagnostic = uiDiagnostic;
   return error;
 }
-function exprFill(text) {
-  const js = JSON.stringify(text);
-  return `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}const ok=document.execCommand('insertText',false,${js});try{inp.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:${js}}));}catch(e){inp.dispatchEvent(new Event('input',{bubbles:true}));}return ok?(inp.innerText||'').slice(0,30):'EXEC_FAIL';})()`;
-}
+const EXPR_PREPARE_INPUT = `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}return 'READY';})()`;
 // 生成中/完成信号：stop 钮数量 + 当前会话中最后一个真实消息 markdown。
 // 排除模型选择器里的 markdown，避免短回复被 "Cursor Grok ..." 等模型标签盖过。
 const EXPR_SNAP = `(function(){
@@ -441,13 +438,16 @@ const EXPR_SNAP = `(function(){
   ${INPUT_PICKER_BODY}
   const input=pickInput();
   const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
-  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length});
+  const composer=input&&(input.closest('.composer-bar')||input.parentElement);
+  const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
+    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar')):[];
+  return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length,sendReady:sendButtons.length===1});
 })()`;
 const EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
   const input=pickInput();if(!input)return 'NO_INPUT';
   const composer=input.closest('.composer-bar')||input.parentElement;
   if(!composer)return 'NO_COMPOSER';
-  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button[aria-label="Send"]')]
+  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
     .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===input.closest('.composer-bar'));
   if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
   buttons[0].click();return 'CLICKED';
@@ -2464,7 +2464,7 @@ class CursorBridge {
         this._throwIfCancelledBeforeSend(options);
         await this._applyModelPreference(c, options.modelPreference, options);
         this._throwIfCancelledBeforeSend(options);
-        const filled = await evalJS(c, exprFill(prompt));
+        const filled = await this._fillPrompt(c, prompt, options);
         if (filled === 'NO_INPUT') await this._throwChatPanelUnavailableAfterNoInput(c);
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the query because the input state was invalid');
         await sleep(450);
@@ -3043,6 +3043,36 @@ class CursorBridge {
     }
   }
 
+  async _fillPrompt(c, text, job, timeoutMs = 2500) {
+    const prepared = await evalJS(c, EXPR_PREPARE_INPUT);
+    if (prepared !== 'READY') return prepared;
+    try {
+      await c.send('Input.insertText', { text: String(text) });
+    } catch {
+      return 'EXEC_FAIL';
+    }
+    const deadline = Date.now() + timeoutMs;
+    let snapshot = {};
+    do {
+      this._throwIfCancelledBeforeSend(job);
+      try { snapshot = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
+      if (Number(snapshot.inputTextLength || 0) > 0 && snapshot.sendReady === true) {
+        return String(text).slice(0, 30);
+      }
+      if (Date.now() >= deadline) break;
+      await sleep(Math.min(100, Math.max(0, deadline - Date.now())));
+    } while (Date.now() <= deadline);
+    const error = new Error('Cursor composer did not become send-ready after trusted input');
+    error.code = 'CURSOR_COMPOSER_NOT_SEND_READY';
+    error.confirmedNotSent = true;
+    error.composerDiagnostic = {
+      inputTextLength: Number(snapshot.inputTextLength || 0),
+      sendReady: snapshot.sendReady === true,
+      runtimeMode: this.runtimeMode,
+    };
+    throw error;
+  }
+
   async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = '') {
     const accepted = async () => {
       await this._throwIfNewProviderError(c, providerErrorBaseline);
@@ -3137,7 +3167,7 @@ class CursorBridge {
       this._throwIfCancelledBeforeSend(job);
       await this._applyModelPreference(c, job.modelPreference, job);
       this._throwIfCancelledBeforeSend(job);
-      const filled = await evalJS(c, exprFill(job.prompt));
+      const filled = await this._fillPrompt(c, job.prompt, job);
       if (filled === 'NO_INPUT') await this._throwChatPanelUnavailableAfterNoInput(c);
     if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') throw new Error('Failed to enter the parallel_agent task');
       await sleep(350);
@@ -3265,7 +3295,7 @@ class CursorBridge {
       this._throwIfCancelledBeforeSend(job);
       job.responseBaseline = await this._captureSessionResponseBaseline(c);
       const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
-      const filled = await evalJS(c, exprFill(job.prompt));
+      const filled = await this._fillPrompt(c, job.prompt, job);
       if (filled === 'NO_INPUT') await this._throwChatPanelUnavailableAfterNoInput(c);
       if (filled === 'NO_INPUT' || filled === 'EXEC_FAIL') {
         throw cursorSessionError('SESSION_INPUT_FAILED', 'failed to enter the continued task');
@@ -4604,7 +4634,7 @@ export {
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
   EXPR_CLICK_SEND,
-  exprFill,
+  EXPR_PREPARE_INPUT,
   exprOpenAgent,
   exprClickSelectedAgentStop,
   EXPR_VISIBLE_COMPOSER,
