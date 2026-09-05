@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.19.7** | **5.9.0** | `main` | Current maintained version. Candidate-bundle live testing passed three read-only persistent turns on one exact Agent with Claude Fable 5.1/high, adapter reconnection, unread-reply recovery after restart, and idempotent collection without workspace changes. Broader normal/`minimal` FIFO, CCE and trusted prompt submission evidence is inherited from 5.8.2. Fresh-host pickup of the new install is not yet attested. |
+| **3.19.7** | **5.9.1** | `main` | Current maintained version. Candidate bundle verified Fable 5.1/high and picker cleanup from closed and model-submenu-open live states without sending a prompt. New-host native CCE pickup remains pending. Other runtime evidence is inherited from 5.9.0/5.8.2. |
+| 3.19.7 | 5.9.0 | `cursor-bridge--v5.9.0` | Archived. Three live read-only persistent turns on one exact Agent, adapter reconnection, unread-reply recovery and idempotent collection. |
 
 ## Historical versions
 

@@ -64,7 +64,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **5.9.0 validation:** A real candidate-bundle test on Cursor 3.19.7 completed three read-only persistent turns on one Agent, reconnected adapters, recovered the unread final reply, and verified idempotent collection without workspace changes. The broader environment results below are retained from 5.8.2; fresh-host pickup of 5.9.0 is a separate check.
+> **5.9.1 validation:** Live Cursor 3.19.7 DOM reproduced the model-list classification error. The candidate bundle confirmed Claude Fable 5.1/high and picker cleanup from closed and model-submenu-open states without sending a prompt. Native CCE pickup of the new install remains pending; persistent-session evidence is retained from 5.9.0 and broader environment results from 5.8.2.
 >
 > **Live-tested environment:** Windows 11 + Cursor **3.19.7**, identified from the installed executable's product and file versions. A fresh Codex host reused one undegraded persistent supervised Agents Window and passed workspace binding, source-anchored CCE in `minimal`, isolated FIFO `cursor_do` in normal and `minimal` with verified Claude Fable 5.1/high selection, and restored and persisted `normal`. Parallel and persistent-session paths retain regression coverage but were not live-rechecked in this acceptance. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, and macOS has not yet been live-tested.
 
@@ -159,7 +159,8 @@ Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.19.7** | **5.9.0** (`main`, current) | Candidate-bundle live acceptance passed three persistent turns, exact Claude Fable 5.1/high selection, adapter reconnection, unread-reply recovery and idempotent collection. Broader normal/`minimal` FIFO and CCE evidence is inherited from 5.8.2; newly installed host pickup is separate. |
+| **3.19.7** | **5.9.1** (`main`, current) | Candidate bundle verified exact Fable 5.1/high selection and picker cleanup from two live menu states. Native CCE pickup remains pending; other runtime evidence is inherited from 5.9.0/5.8.2. |
+| 3.19.7 | 5.9.0 (archived) | Three live read-only persistent turns, exact Agent identity, adapter reconnection, unread-reply recovery and idempotent collection. |
 
 Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.8.1, 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 

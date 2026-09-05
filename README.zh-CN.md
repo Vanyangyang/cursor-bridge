@@ -64,7 +64,7 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **5.9.0 验证：** 候选构建包在 Cursor 3.19.7 上完成了同一 Agent 的三轮真实只读会话、适配器重连、未读最终回复补收和幂等收集，工作区无变化。下方较广的环境验证沿用 5.8.2 证据；5.9.0 新安装在宿主中的加载情况另行检查。
+> **5.9.1 验证：** Cursor 3.19.7 现场 DOM 对上了模型列表分类错误。候选 bundle 从菜单关闭、模型子菜单已打开两种状态确认 Fable 5.1/high 并关闭菜单，未发送 prompt。新安装的原生 CCE 加载验收仍待完成；持久会话证据沿用 5.9.0，较广环境结果沿用 5.8.2。
 >
 > **实机验证环境：** Windows 11 + Cursor **3.19.7**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取。全新 Codex 宿主复用一个无降级的持久受监督 Agents Window，并通过了工作区绑定、`minimal` 中带源码锚点的 CCE、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、Claude Fable 5.1/high 精确模型验证，以及恢复并持久化为 `normal`。并行与持久会话路径保留回归测试覆盖，但本轮没有再次实机验证。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
 
@@ -159,7 +159,8 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.19.7** | **5.9.0**（`main`，当前版本） | 候选构建包通过真实三轮持久会话、Claude Fable 5.1/high 精确选择、适配器重连、未读回复补收及幂等收集。较广的 normal/`minimal` FIFO 与 CCE 证据沿用 5.8.2；新安装在宿主中的加载另行检查。 |
+| **3.19.7** | **5.9.1**（`main`，当前版本） | 候选 bundle 在两种现场菜单状态下确认 Fable 5.1/high 并关闭菜单。原生 CCE 加载仍待验收；其他运行证据沿用 5.9.0/5.8.2。 |
+| 3.19.7 | 5.9.0（归档） | 三轮真实只读持久会话、精确 Agent 身份、适配器重连、未读回复补收及幂等收集。 |
 
 不再主动维护旧 Cursor Bridge 版本。5.8.1、5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 

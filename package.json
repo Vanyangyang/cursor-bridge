@@ -1,6 +1,6 @@
 {
   "name": "cursor-bridge-workspace",
-  "version": "5.9.0",
+  "version": "5.9.1",
   "private": true,
   "description": "Evidence-backed Cursor Context Engine search and bounded, explicitly continuous Cursor Agent execution over CDP.",
   "type": "module",

@@ -62,7 +62,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.9.0';
+const PLUGIN_VERSION = '5.9.1';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -593,8 +593,23 @@ const EXPR_MODEL_PICKER_TRIGGER = `(function(){
   return JSON.stringify({found:true,state:'ready',text,detail,x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)});
 })()`;
 
+function classifyModelPickerRowKind(text, hasItemName, menuTestId, submenuTestId, ariaHaspopup, hasParamCheck, inSubmenu) {
+  const menu = String(menuTestId || '').toLowerCase();
+  const submenu = String(submenuTestId || '').toLowerCase();
+  const haystack = menu + ' ' + submenu;
+  if (hasItemName) return 'model';
+  if (/^model(?:\s|$)/i.test(String(text || '')) && ariaHaspopup === 'menu') return 'model_control';
+  if (/^effort(?:\s|$)/i.test(String(text || '')) && ariaHaspopup === 'menu') return 'effort_control';
+  if (haystack.includes('parameter-submenu') || hasParamCheck) return 'parameter';
+  if (/^add models$/i.test(String(text || '').trim())) return 'control';
+  if (haystack.includes('model-list') || haystack.includes('model-picker-menu') || haystack.includes('model-selection')) return 'model';
+  if (inSubmenu) return 'parameter';
+  return 'control';
+}
+
 const EXPR_MODEL_PICKER_ROWS = `(function(){
   ${MODEL_PICKER_VISIBLE_BODY}
+  ${classifyModelPickerRowKind.toString()}
   const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
   const rows=[];
   const seen=new Set();
@@ -605,13 +620,18 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
       const rect=row.getBoundingClientRect();
       const text=String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim();
       if(!text)continue;
-      const menuTestId=String(menu.getAttribute('data-testid')||'').toLowerCase();
-      let kind='control';
-      if(row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'))kind='model';
-      else if(/^model(?:\\s|$)/i.test(text)&&row.getAttribute('aria-haspopup')==='menu')kind='model_control';
-      else if(/^effort(?:\\s|$)/i.test(text)&&row.getAttribute('aria-haspopup')==='menu')kind='effort_control';
-      else if(menuTestId.includes('parameter-submenu')||row.closest('[data-submenu]'))kind='parameter';
-      else if(menuTestId.includes('model-picker-menu')||menuTestId.includes('model-selection'))kind='model';
+      const menuTestId=String(menu.getAttribute('data-testid')||'');
+      const submenuRoot=row.closest('[data-submenu],[data-testid*="parameter-submenu"],[data-testid*="model-list"]');
+      const submenuTestId=String((submenuRoot&&submenuRoot.getAttribute('data-testid'))||'');
+      const kind=classifyModelPickerRowKind(
+        text,
+        !!row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'),
+        menuTestId,
+        submenuTestId,
+        row.getAttribute('aria-haspopup'),
+        !!row.querySelector('.ui-model-picker__param-check,.vscode-model-picker__param-check'),
+        !!row.closest('[data-submenu]')
+      );
       rows.push({
         text,
         kind,
@@ -633,6 +653,16 @@ function normalizeModelPickerText(value) {
     .toLowerCase()
     .replace(/extra[\s_-]*high/g, 'xhigh')
     .replace(/[^a-z0-9]+/g, '');
+}
+
+function isCursorEffortOptionText(text) {
+  return CURSOR_MODEL_EFFORTS.includes(normalizeModelPickerText(text));
+}
+
+function modelPickerAvailableIsDecisive(kind, available) {
+  if (!Array.isArray(available) || available.length === 0) return false;
+  if (kind !== 'parameter') return true;
+  return available.some((text) => isCursorEffortOptionText(text));
 }
 
 function selectModelPickerRow(rows, requested, kind = 'model') {
@@ -2716,7 +2746,7 @@ class CursorBridge {
       last = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
       if (last.row) return { ...last, state: 'matched' };
       const signature = JSON.stringify(last.available);
-      if (last.available.length > 0) {
+      if (modelPickerAvailableIsDecisive(kind, last.available)) {
         if (signature !== stableSignature) {
           stableSignature = signature;
           stableSince = Date.now();
@@ -4751,6 +4781,9 @@ export {
   CURSOR_MODEL_TARGETS,
   normalizeCursorModelEffort,
   normalizeModelPickerText,
+  classifyModelPickerRowKind,
+  isCursorEffortOptionText,
+  modelPickerAvailableIsDecisive,
   selectModelPickerRow,
   pathsOverlap,
   scoreCursorPageCandidate,

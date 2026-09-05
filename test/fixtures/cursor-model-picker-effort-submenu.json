@@ -1,0 +1,67 @@
+{
+  "source": "Diagnostic CDP capture of Cursor Agents effort submenu on 2026-09-05. Used to lock row-kind classification; not a substitute for native acceptance.",
+  "menus": [
+    {
+      "testId": "selected-model-parameters-submenu-menu",
+      "component": "menu-popup",
+      "submenu": null
+    },
+    {
+      "testId": "parameter-submenu-effort",
+      "component": "menu-popup",
+      "submenu": ""
+    }
+  ],
+  "rows": [
+    {
+      "text": "Effort High",
+      "hasItemName": false,
+      "menuTestId": "selected-model-parameters-submenu-menu",
+      "submenuTestId": "",
+      "ariaHaspopup": "menu",
+      "hasParamCheck": false,
+      "inSubmenu": false,
+      "expectedKind": "effort_control"
+    },
+    {
+      "text": "Low",
+      "hasItemName": false,
+      "menuTestId": "parameter-submenu-effort",
+      "submenuTestId": "parameter-submenu-effort",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": true,
+      "expectedKind": "parameter"
+    },
+    {
+      "text": "High",
+      "hasItemName": false,
+      "menuTestId": "parameter-submenu-effort",
+      "submenuTestId": "parameter-submenu-effort",
+      "ariaHaspopup": null,
+      "hasParamCheck": true,
+      "inSubmenu": true,
+      "expectedKind": "parameter"
+    },
+    {
+      "text": "Extra High",
+      "hasItemName": false,
+      "menuTestId": "parameter-submenu-effort",
+      "submenuTestId": "parameter-submenu-effort",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": true,
+      "expectedKind": "parameter"
+    },
+    {
+      "text": "Max",
+      "hasItemName": false,
+      "menuTestId": "parameter-submenu-effort",
+      "submenuTestId": "parameter-submenu-effort",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": true,
+      "expectedKind": "parameter"
+    }
+  ]
+}
