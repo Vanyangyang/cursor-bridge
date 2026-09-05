@@ -269,6 +269,43 @@ test("daemon requires the capability token and never returns it", async (t) => {
   assert.equal(JSON.stringify(ping).includes(token), false);
 });
 
+test("unknown acknowledgment acquires the existing writer lease without an attached session", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-ack-lease-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = daemonPaths(root);
+  const fake = new FakeSupervisor();
+  const daemon = new SupervisorDaemon({ paths, supervisor: fake, runtimeVersion: "test" });
+  await daemon.start();
+  t.after(() => daemon.stop());
+  const first = new SupervisorClient({ paths, clientId: randomUUID(), clientVersion: "test", spawnProcess: noSpawn });
+  const second = new SupervisorClient({ paths, clientId: randomUUID(), clientVersion: "test", spawnProcess: noSpawn });
+  const runId = "01900000-0000-7000-8000-000000000020";
+
+  const acknowledged = await first.control({
+    action: "acknowledge_unknown",
+    sessionId: SESSION_ID,
+    runId,
+    reason: "No related process boundary remains.",
+    confirmation: "CONTROL_GROK_SESSION",
+  });
+  assert.equal(acknowledged.action, "acknowledge_unknown");
+  assert.match(first.leaseToken, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual(fake.calls.at(-1), ["control", {
+    action: "acknowledge_unknown",
+    sessionId: SESSION_ID,
+    runId,
+    reason: "No related process boundary remains.",
+    confirmation: "CONTROL_GROK_SESSION",
+  }]);
+  await assert.rejects(() => second.control({
+    action: "acknowledge_unknown",
+    sessionId: SESSION_ID,
+    runId,
+    reason: "competing writer",
+    confirmation: "CONTROL_GROK_SESSION",
+  }), (error) => error.code === "GROK_WRITER_BUSY");
+});
+
 test("new frontends fail safely against a legacy daemon that lacks host and TUI runtime capabilities", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "grok-supervisor-legacy-capabilities-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

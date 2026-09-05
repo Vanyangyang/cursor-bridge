@@ -4,6 +4,23 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-05
+
+### Added
+
+- `grok_session_control(action=acknowledge_unknown)` durably acknowledges one exact reviewed session/run recovery record through the existing writer lease. It preserves the outcome as unknown and never claims completion or Stop confirmation.
+
+### Fixed
+
+- A cancellation request no longer counts as a terminal outcome after restart or clears an interrupted run prematurely.
+- Recovery acknowledgment rejects active or uncertain process boundaries, distinguishes reused PIDs with recorded process fingerprints, and preserves earlier unreviewed runs.
+- Skills retain exact `/grok_execute on` reactivation after off and no longer request repeated authorization merely because telemetry is quiet.
+
+### Validation
+
+- Source regressions cover cancellation/restart, acknowledgment durability, writer fencing, process-probe errors and PID reuse. Isolated MCP smoke is separate from real Grok prompt or fresh-host acceptance.
+- Pi package `pi-grok-build-supervisor` 0.1.5 embeds Grok Build Supervisor 0.4.0.
+
 ## [0.3.7] - 2026-08-25
 
 ### Added

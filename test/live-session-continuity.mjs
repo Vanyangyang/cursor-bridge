@@ -55,6 +55,7 @@ function parseTool(result, name) {
 
 let first;
 let second;
+let third;
 try {
   first = await openClient('cursor-session-live-first-adapter');
   const initialized = parseTool(await first.callTool({
@@ -111,11 +112,58 @@ try {
   assert.equal(turnTwo.modelSelection?.applied, true);
   assert.match(String(turnTwo.result || ''), /SESSION_TURN_TWO_OK/);
 
-  parseTool(await second.callTool({
+  const turnThree = parseTool(await second.callTool({
+    name: 'cursor_do',
+    arguments: {
+      prompt: '只读第三轮测试：只回复 SESSION_UNREAD_RECOVERY_OK，不使用工具，不修改文件。',
+      background: true,
+      session_mode: 'continue',
+      session_id: turnOne.sessionId,
+      read_only: true,
+      request_id: 'live-turn-3-unread',
+      timeout_ms: 600000,
+    },
+  }, undefined, longRequest), 'cursor_do unread turn');
+  const deadline = Date.now() + 600000;
+  let completedUnread = false;
+  while (Date.now() < deadline) {
+    const snapshot = parseTool(await second.callTool({ name: 'cursor_status', arguments: {} }), 'metadata-only cursor_status');
+    const task = snapshot.recentTasks.find((entry) => entry.taskId === turnThree.taskId);
+    if (!task) throw new Error('The exact unread test task is missing');
+    assert.equal(Object.hasOwn(task, 'result'), false);
+    if (task.status === 'completed') {
+      assert.ok(snapshot.unreadResultTaskIds.includes(turnThree.taskId));
+      completedUnread = true;
+      break;
+    }
+    if (['failed', 'cancelled', 'needs_attention'].includes(task.status)) throw new Error(`Unread test turn ended as ${task.status}: ${task.error || ''}`);
+    await new Promise((done) => setTimeout(done, 1000));
+  }
+  assert.equal(completedUnread, true, 'unread test turn did not finish within its monitoring budget');
+  await second.close();
+  second = null;
+  third = await openClient('cursor-session-live-recovery-adapter');
+  const reconciled = parseTool(await third.callTool({
+    name: 'cursor_session_control', arguments: { session_id: turnOne.sessionId, action: 'reconcile' },
+  }), 'reconcile unread completed turn');
+  assert.equal(reconciled.recoveryState, 'reconciled_result_uncollected');
+  const recovered = parseTool(await third.callTool({
+    name: 'cursor_session_control', arguments: { session_id: turnOne.sessionId, action: 'collect_result' },
+  }, undefined, longRequest), 'collect unread completed turn');
+  assert.match(recovered.result, /SESSION_UNREAD_RECOVERY_OK/);
+  assert.equal(recovered.resultPersisted, false);
+  assert.equal(recovered.uiDiagnostic, null);
+  const repeated = parseTool(await third.callTool({
+    name: 'cursor_session_control', arguments: { session_id: turnOne.sessionId, action: 'collect_result' },
+  }), 'repeat completed collection');
+  assert.equal(repeated.state, 'already_collected');
+  assert.equal(repeated.result, undefined);
+
+  parseTool(await third.callTool({
     name: 'cursor_session_control',
     arguments: { session_id: turnOne.sessionId, action: 'close' },
   }), 'cursor_session_control close');
-  parseTool(await second.callTool({
+  parseTool(await third.callTool({
     name: 'cursor_session_control',
     arguments: { session_id: turnOne.sessionId, action: 'forget', confirm: true },
   }), 'cursor_session_control forget');
@@ -128,13 +176,16 @@ try {
     effort: effort || null,
     sessionId: turnOne.sessionId,
     agentId: turnOne.agentId,
-    turns: [turnOne.sessionTurn, turnTwo.sessionTurn],
+    turns: [turnOne.sessionTurn, turnTwo.sessionTurn, turnThree.sessionTurn],
     modelApplied: [turnOne.modelSelection?.applied, turnTwo.modelSelection?.applied],
-    markers: ['SESSION_TURN_ONE_OK', 'SESSION_TURN_TWO_OK'],
+    markers: ['SESSION_TURN_ONE_OK', 'SESSION_TURN_TWO_OK', 'SESSION_UNREAD_RECOVERY_OK'],
+    unreadReplyRecoveredAfterRestart: true,
+    repeatedCollectionDidNotReadUi: repeated.state === 'already_collected',
     workspaceUnchanged: true,
   }, null, 2));
 } finally {
   if (first) await first.close().catch(() => {});
   if (second) await second.close().catch(() => {});
+  if (third) await third.close().catch(() => {});
   rmSync(temporary, { recursive: true, force: true });
 }

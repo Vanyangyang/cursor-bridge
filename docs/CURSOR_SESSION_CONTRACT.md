@@ -45,6 +45,12 @@ restart/update -> ready (reattachable) | needs_attention (reconciliation require
 
 `cursor_session_control(action=reconcile)` is the only automatic recovery path: it reads the exact bound Agent twice and clears the sender lease only from a stable terminal state. `action=abandon` requires explicit risk acknowledgement and closes only the Bridge mapping; it never claims that Cursor stopped.
 
+After reconciliation confirms a completed turn, `action=collect_result` explicitly retrieves that turn's stable reply before the next turn. It restores the previous Agent selection on success or failure, never sends a prompt, and does not persist response text. A restoration failure is reported separately without replacing the original collection error. Collection fails while the Agent is running and discards the reply if another sender changes the session epoch or active state. After a successful collection, a repeated call returns `already_collected` without reading the UI again. The registry records `resultCollectedAt`; `resultUnavailable` describes the absence of a reply in the current adapter.
+
+Before sending a continued turn, Bridge atomically persists only the prior reply's numeric message count, length, and hash under the sender epoch. Recovery uses these values to reject the prior reply while the new one hydrates. They are deleted after explicit result receipt or when claiming the next turn. Older interrupted continuation turns without these values cannot be collected safely; inspect that original Agent manually before continuing. First turns use their newly created exact Agent identity.
+
+A completed background turn must be explicitly read before continuation. Read its `cursor_status(task_id)` while the adapter is alive; after a restart, reconcile and collect first. The read records a metadata receipt before returning the reply. This is not a transport acknowledgment or an exactly-once delivery guarantee.
+
 ## Sender and result rules
 
 - One session has at most one active turn.
@@ -53,6 +59,8 @@ restart/update -> ready (reattachable) | needs_attention (reconciliation require
 - Before a continued send, Bridge reopens the exact Agent, keeps it selected between session turns, and waits for the previous completed reply to hydrate to a stable visible message-count and reply-signature baseline.
 - Result collection accepts only a stable completed assistant reply that advances the visible message count or changes that reply signature. This supports Cursor's virtualized message list without returning the prior turn.
 - The primary agent still owns real diff inspection, tests, and final acceptance.
+- Automatic recovery shares the original post-submission monitoring deadline. Expiry is an attention condition, not Stop confirmation; only an explicit `reap` may start a fresh monitoring budget.
+- The process retains at most 50 task records. Terminal replies that have not been returned through an explicit result read are not evicted; further submissions fail with `TASK_RETENTION_FULL` until capacity is available. `cursor_status().unreadResultTaskIds` identifies the replies to collect. These records remain process-local.
 
 ## Storage and update boundary
 

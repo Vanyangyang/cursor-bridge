@@ -85,12 +85,15 @@ try {
   const promptTool = listed.tools.find((tool) => tool.name === "grok_session_prompt");
   const inspectTool = listed.tools.find((tool) => tool.name === "grok_session_inspect");
   const respondTool = listed.tools.find((tool) => tool.name === "grok_session_respond");
+  const controlTool = listed.tools.find((tool) => tool.name === "grok_session_control");
   const initProperties = Object.keys(initTool?.inputSchema?.properties || {});
   const openProperties = Object.keys(openTool?.inputSchema?.properties || {});
   const openConfirmations = openTool?.inputSchema?.properties?.confirmation?.enum || [];
   const promptProperties = Object.keys(promptTool?.inputSchema?.properties || {});
   const inspectProperties = Object.keys(inspectTool?.inputSchema?.properties || {});
   const respondProperties = Object.keys(respondTool?.inputSchema?.properties || {});
+  const controlProperties = Object.keys(controlTool?.inputSchema?.properties || {});
+  const controlActions = controlTool?.inputSchema?.properties?.action?.enum || [];
   if (!initProperties.includes("proxyUrl")) {
     throw new Error("Init tool did not expose optional explicit local proxy selection");
   }
@@ -111,6 +114,11 @@ try {
   if (!respondProperties.includes("permissionId") || !respondProperties.includes("elicitationId")
     || !respondProperties.includes("content")) {
     throw new Error("Respond tool did not expose both permission and clarification replies");
+  }
+  if (!controlActions.includes("acknowledge_unknown")
+    || !controlProperties.includes("runId")
+    || !controlProperties.includes("reason")) {
+    throw new Error("Control tool did not expose bounded unknown-after-restart acknowledgment");
   }
   process.stdout.write(`${JSON.stringify({
     toolCount: names.length,
@@ -133,6 +141,8 @@ try {
     promptProperties,
     inspectProperties,
     respondProperties,
+    controlProperties,
+    controlActions,
     configuredCommand,
     configuredArgs,
     configuredCwd,

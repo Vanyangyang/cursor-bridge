@@ -38,7 +38,7 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update. Skills, prompt templates, and slash commands do not hot-load into an existing task. The Pi package is versioned independently and currently embeds Grok Build Supervisor 0.3.7.
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update. Skills, prompt templates, and slash commands do not hot-load into an existing task. The Pi package is versioned independently and currently embeds Grok Build Supervisor 0.4.0.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
@@ -129,6 +129,7 @@ The Supervisor handles the connection details. Users do not manage the underlyin
 - The scripts needed by an already-running session are copied to persistent storage, so refreshing the plugin cache cannot remove them mid-session.
 - A newer plugin waits until an older busy Supervisor is idle before replacing it. Existing work stays connected during the transition.
 - Before reusing or stopping a process, the plugin checks the session, project, process identity, Grok's active-session record, and its own ownership record. A matching process number alone is not enough.
+- A cancellation request is not treated as proof that an interrupted run ended. If a restart leaves a run unknown after all related ACP, Leader, TUI, and registry processes are gone, `acknowledge_unknown` requires the exact session ID, run ID, a bounded reason, and the existing control confirmation. It records a durable acknowledgment and leaves the outcome `unknown`; it does not cancel, resume, send work, stop a process, or claim completion.
 
 ## Safety rules
 

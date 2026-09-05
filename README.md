@@ -64,6 +64,8 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
+> **5.9.0 validation:** A real candidate-bundle test on Cursor 3.19.7 completed three read-only persistent turns on one Agent, reconnected adapters, recovered the unread final reply, and verified idempotent collection without workspace changes. The broader environment results below are retained from 5.8.2; fresh-host pickup of 5.9.0 is a separate check.
+>
 > **Live-tested environment:** Windows 11 + Cursor **3.19.7**, identified from the installed executable's product and file versions. A fresh Codex host reused one undegraded persistent supervised Agents Window and passed workspace binding, source-anchored CCE in `minimal`, isolated FIFO `cursor_do` in normal and `minimal` with verified Claude Fable 5.1/high selection, and restored and persisted `normal`. Parallel and persistent-session paths retain regression coverage but were not live-rechecked in this acceptance. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, and macOS has not yet been live-tested.
 
 ## What is CCE?
@@ -157,7 +159,7 @@ Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.19.7** | **5.8.2** (`main`, current) | Fresh-host acceptance passed normal and `minimal` FIFO `cursor_do`, source-anchored `minimal` CCE, exact Claude Fable 5.1/high selection, trusted prompt submission, and restored/persisted `normal`. Parallel and persistent sessions remain regression-tested but were not live-rechecked in this acceptance. |
+| **3.19.7** | **5.9.0** (`main`, current) | Candidate-bundle live acceptance passed three persistent turns, exact Claude Fable 5.1/high selection, adapter reconnection, unread-reply recovery and idempotent collection. Broader normal/`minimal` FIFO and CCE evidence is inherited from 5.8.2; newly installed host pickup is separate. |
 
 Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.8.1, 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
@@ -318,6 +320,10 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 - Every continued turn receives a new `task_id` and must repeat `read_only=true` or an `allowed_paths` subset. Persistent sessions require `parallel_agent`, allow one active turn, and never downgrade to FIFO.
 - `cursor_status(session_id)` inspects the durable association. `cursor_session_control(action=close)` ends Bridge continuity without stopping Cursor; an already-closed mapping may be removed with `action=forget, confirm=true`.
 - After an interrupted adapter, `cursor_session_control(action=reconcile)` checks the exact Agent twice and never resends. `abandon` is an explicitly acknowledged last resort when stop evidence cannot be recovered.
+- After reconciliation confirms completion, use `cursor_session_control(action=collect_result)` before continuing to retrieve that turn's reply. It restores the previous Agent selection, never sends a prompt, and never persists the reply. A changed epoch invalidates collection; repeating a successful collection returns `already_collected`. Numeric reply signatures and read receipts cover restart recovery, including completion before the first read. Older continuation turns without a saved signature require manual inspection.
+- Up to 50 task records are retained. Unread replies are protected: `TASK_RETENTION_FULL` rejects new submissions instead of dropping them. Read the IDs in `cursor_status().unreadResultTaskIds` with `cursor_status(task_id)` to make those records eligible for eviction.
+- `timeout_ms` is one post-submission monitoring budget shared by FIFO and automatic recovery. Expiry does not cancel Cursor; explicit `reap` may grant a fresh monitoring budget.
+- If the host supplies no workspace identity and Bridge restores the shared `default` binding, submission returns `WORKSPACE_CONFIRMATION_REQUIRED` until `cursor_init` confirms the intended project for this adapter. Identity-scoped bindings retain their normal restart behavior.
 - Ready session mappings survive MCP restart and plugin-cache replacement because their atomic registry lives in the user configuration directory. Prompts, replies, credentials, plugin paths, scripts, and CDP target IDs are not persisted.
 - `submitting`, `running`, and `collecting` are normal non-terminal states.
 - Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.

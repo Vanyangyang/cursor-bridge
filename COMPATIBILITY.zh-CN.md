@@ -11,9 +11,37 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.19.7** | **5.8.2** | `main` | 当前维护版本。全新 Codex 宿主复用一个无降级的持久受监督 Agents Window，并通过 `status → init`、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、`minimal` 中带源码锚点的 CCE、Claude Fable 5.1/high 精确选择、可信 prompt 提交，以及恢复并持久化为 `normal`。模型 effort 选择会等待隐藏状态下延迟出现的菜单、只接受精确行、清理每次 picker 结果且绝不静默降级。并行与持久会话保留回归测试覆盖，但本轮没有再次实机验证。完整仓库测试为 203/203。 |
+| **3.19.7** | **5.9.0** | `main` | 当前维护版本。候选构建包通过同一精确 Agent 的三轮真实只读持久会话、Claude Fable 5.1/high、适配器重连、重启后未读回复补收和幂等收集，工作区无变化。较广的 normal/`minimal` FIFO、CCE 与可信 prompt 提交证据沿用 5.8.2；新安装在全新宿主中的加载尚未验证。 |
 
 ## 历史版本
+
+### Cursor Bridge 5.8.2 — Cursor 3.19.7
+
+状态：**已归档，不再维护。** 固定 Git ref：`cursor-bridge--v5.8.2`。
+
+#### Codex
+
+```bash
+codex plugin marketplace remove vanyangyang
+codex plugin marketplace add Vanyangyang/cursor-bridge --ref cursor-bridge--v5.8.2
+codex plugin add cursor-bridge@vanyangyang
+```
+
+#### Claude Code
+
+```bash
+git clone --depth 1 --branch cursor-bridge--v5.8.2 https://github.com/Vanyangyang/cursor-bridge.git cursor-bridge-5.8.2
+claude plugin marketplace remove vanyangyang
+claude plugin marketplace add ./cursor-bridge-5.8.2
+claude plugin install cursor-bridge@vanyangyang
+```
+
+#### Grok Build
+
+```bash
+grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.8.2 --trust
+grok plugin enable cursor-bridge
+```
 
 ### Cursor Bridge 5.8.1 — Cursor 3.18.25
 
