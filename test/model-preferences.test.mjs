@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   CURSOR_MODEL_EFFORTS,
@@ -11,6 +12,9 @@ import {
   EXPR_MODEL_PICKER_ROWS,
   EXPR_MODEL_PICKER_TRIGGER,
   buildToolDefinitions,
+  classifyModelPickerRowKind,
+  isCursorEffortOptionText,
+  modelPickerAvailableIsDecisive,
   normalizeCursorModelEffort,
   normalizeModelPickerText,
   selectModelPickerRow,
@@ -82,6 +86,44 @@ test('Cursor 3.17.21 model picker contracts expose stable trigger, menu rows, an
   assert.match(EXPR_MODEL_PICKER_ROWS, /menu-submenu-trigger/);
   assert.match(EXPR_MODEL_PICKER_ROWS, /ui-model-picker__item-content-name/);
   assert.match(EXPR_MODEL_PICKER_ROWS, /ui-model-picker__param-check/);
+  assert.match(EXPR_MODEL_PICKER_ROWS, /function classifyModelPickerRowKind/);
+  assert.match(EXPR_MODEL_PICKER_ROWS, /data-testid\*=\"model-list\"/);
+  assert.match(EXPR_MODEL_PICKER_ROWS, /parameter-submenu/);
+});
+
+function loadPickerFixture(name) {
+  const directory = dirname(fileURLToPath(import.meta.url));
+  return JSON.parse(readFileSync(join(directory, 'fixtures', name), 'utf8'));
+}
+
+test('model-list Auto and Add Models are not effort parameters', () => {
+  const modelList = loadPickerFixture('cursor-model-picker-model-list.json');
+  const effort = loadPickerFixture('cursor-model-picker-effort-submenu.json');
+  for (const row of [...modelList.rows, ...effort.rows]) {
+    assert.equal(
+      classifyModelPickerRowKind(
+        row.text,
+        row.hasItemName,
+        row.menuTestId,
+        row.submenuTestId,
+        row.ariaHaspopup,
+        row.hasParamCheck,
+        row.inSubmenu,
+      ),
+      row.expectedKind,
+      row.text,
+    );
+  }
+  const previousCatchAll = classifyModelPickerRowKind(
+    'Auto', false, 'selected-model-list-submenu', 'selected-model-list-submenu', null, false, true,
+  );
+  assert.equal(previousCatchAll, 'model');
+  assert.equal(isCursorEffortOptionText('Auto'), false);
+  assert.equal(isCursorEffortOptionText('Add Models'), false);
+  assert.equal(isCursorEffortOptionText('High'), true);
+  assert.equal(isCursorEffortOptionText('Extra High'), true);
+  assert.equal(modelPickerAvailableIsDecisive('parameter', ['Auto', 'Add Models']), false);
+  assert.equal(modelPickerAvailableIsDecisive('parameter', ['Low', 'Extra High']), true);
 });
 
 test('model picker matching handles model IDs, display names, and effort aliases without guessing ties', () => {
@@ -148,6 +190,77 @@ test('effort picker waits for delayed rows and distinguishes stable unsupported 
   assert.equal(missing.state, 'unsupported');
   assert.equal(missing.row, null);
   assert.deepEqual(missing.available, ['Low', 'Extra High']);
+
+  const chromeThenEffort = new DelayedEffortBridge([
+    { open: true, rows: [effortControl] },
+    { open: true, rows: [
+      { kind: 'parameter', text: 'Auto', selected: false },
+      { kind: 'parameter', text: 'Add Models', selected: false },
+    ] },
+    { open: true, rows: [
+      { kind: 'parameter', text: 'Auto', selected: false },
+      { kind: 'parameter', text: 'Add Models', selected: false },
+    ] },
+    { open: true, rows: [
+      { kind: 'parameter', text: 'Low', selected: false },
+      { kind: 'parameter', text: 'High', selected: true },
+    ] },
+  ]);
+  const recovered = await chromeThenEffort._selectedEffortRow(null, modelRow, 'high', null);
+  assert.equal(recovered.state, 'matched');
+  assert.equal(recovered.row.text, 'High');
+  assert.deepEqual(recovered.attempts, ['effort_control']);
+
+  const chromeOnly = new DelayedEffortBridge([
+    { open: true, rows: [effortControl] },
+    { open: true, rows: [
+      { kind: 'parameter', text: 'Auto', selected: false },
+      { kind: 'parameter', text: 'Add Models', selected: false },
+    ] },
+  ]);
+  const notRendered = await chromeOnly._selectedEffortRow(null, modelRow, 'high', null);
+  assert.equal(notRendered.state, 'not_rendered');
+  assert.equal(notRendered.row, null);
+  assert.deepEqual(notRendered.attempts, ['effort_control', 'model_hover', 'model_click']);
+});
+
+test('native Auto/Add Models parameter chrome is not a non-retryable unsupported effort menu', async () => {
+  const modelRow = { kind: 'model', text: 'Claude Fable 5.1 High', selected: true, hasSubmenu: true };
+  const effortControl = { kind: 'effort_control', text: 'Effort High', selected: false };
+  class NativeChromeBridge extends CursorBridge {
+    constructor() {
+      super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+      this.closeCalls = 0;
+    }
+    async _openModelPicker() {
+      return { trigger: { found: true }, rows: [effortControl, modelRow] };
+    }
+    async _findModelPickerModel(_client, snapshot) { return { snapshot, modelRow }; }
+    async _selectedEffortRow() {
+      return {
+        row: null,
+        state: 'not_rendered',
+        available: ['Auto', 'Add Models'],
+        attempts: ['effort_control', 'model_hover'],
+      };
+    }
+    async _closeModelPicker() { this.closeCalls++; }
+  }
+
+  const bridge = new NativeChromeBridge();
+  const job = { cancelRequested: false, sendState: 'not_sent' };
+  await assert.rejects(
+    bridge._applyModelPreference(null, { model: 'Claude Fable 5.1', effort: 'high' }, job),
+    (error) => {
+      assert.equal(error.modelSelection.failureClass, 'effort_menu_not_rendered');
+      assert.equal(error.modelSelection.retryable, true);
+      assert.deepEqual(error.modelSelection.available, ['Auto', 'Add Models']);
+      assert.notEqual(error.modelSelection.failureClass, 'effort_unsupported');
+      return true;
+    },
+  );
+  assert.equal(job.modelSelection.applied, false);
+  assert.equal(bridge.closeCalls, 2);
 });
 
 test('model selection failures clean up the picker and expose structured diagnostics', async () => {

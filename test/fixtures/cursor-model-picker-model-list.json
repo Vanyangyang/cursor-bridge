@@ -1,0 +1,87 @@
+{
+  "source": "Diagnostic CDP capture of Cursor Agents model submenu on 2026-09-05. Used to lock row-kind classification; not a substitute for native acceptance.",
+  "menus": [
+    {
+      "testId": "selected-model-parameters-submenu-menu",
+      "component": "menu-popup",
+      "submenu": null
+    },
+    {
+      "testId": "selected-model-list-submenu",
+      "component": "menu-popup",
+      "submenu": ""
+    }
+  ],
+  "rows": [
+    {
+      "text": "Thinking",
+      "hasItemName": false,
+      "menuTestId": "selected-model-parameters-submenu-menu",
+      "submenuTestId": "",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": false,
+      "expectedKind": "control"
+    },
+    {
+      "text": "Context 300K",
+      "hasItemName": false,
+      "menuTestId": "selected-model-parameters-submenu-menu",
+      "submenuTestId": "",
+      "ariaHaspopup": "menu",
+      "hasParamCheck": false,
+      "inSubmenu": false,
+      "expectedKind": "control"
+    },
+    {
+      "text": "Effort High",
+      "hasItemName": false,
+      "menuTestId": "selected-model-parameters-submenu-menu",
+      "submenuTestId": "",
+      "ariaHaspopup": "menu",
+      "hasParamCheck": false,
+      "inSubmenu": false,
+      "expectedKind": "effort_control"
+    },
+    {
+      "text": "Model Claude Fable 5.1",
+      "hasItemName": false,
+      "menuTestId": "selected-model-parameters-submenu-menu",
+      "submenuTestId": "",
+      "ariaHaspopup": "menu",
+      "hasParamCheck": false,
+      "inSubmenu": false,
+      "expectedKind": "model_control"
+    },
+    {
+      "text": "Auto",
+      "hasItemName": false,
+      "menuTestId": "selected-model-list-submenu",
+      "submenuTestId": "selected-model-list-submenu",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": true,
+      "expectedKind": "model"
+    },
+    {
+      "text": "Claude Fable 5.1 High",
+      "hasItemName": true,
+      "menuTestId": "selected-model-list-submenu",
+      "submenuTestId": "selected-model-list-submenu",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": true,
+      "expectedKind": "model"
+    },
+    {
+      "text": "Add Models",
+      "hasItemName": false,
+      "menuTestId": "selected-model-list-submenu",
+      "submenuTestId": "selected-model-list-submenu",
+      "ariaHaspopup": null,
+      "hasParamCheck": false,
+      "inSubmenu": true,
+      "expectedKind": "control"
+    }
+  ]
+}

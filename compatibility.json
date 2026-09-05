@@ -3,17 +3,17 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.19.7",
-    "cursorBridgeVersion": "5.9.0",
+    "cursorBridgeVersion": "5.9.1",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
-      "inheritedEvidenceRelease": "5.8.2",
-      "currentReleaseEvidence": "source-bundle-live-three-turn-session-and-unread-reply-recovery; fresh-host-install-pickup-not-yet-attested",
+      "inheritedEvidenceRelease": "5.9.0",
+      "currentReleaseEvidence": "bundled-picker-flow-live-verified-closed-and-model-submenu-open; fresh-host-cce-pickup-pending",
       "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
       "agentsWindow": "live-tested-existing-supervised-single-window-cdp-9223",
-      "modelPreferences": "live-tested-cce-and-cursor-do-claude-fable-5.1-high",
-      "readOnlyMcpSupervisor": "live-tested-fresh-plugin-cache-host",
+      "modelPreferences": "live-tested-bundled-picker-flow-claude-fable-5.1-high; native-cce-pending",
+      "readOnlyMcpSupervisor": "5.9.0-fresh-host-status-verified; 5.9.1-native-pickup-pending",
       "attachedFallback": "regression-tested-not-live-rechecked-on-3.19.7",
       "lifecycleDiagnostics": "live-tested",
       "fifoExecution": "live-tested-normal-and-minimal",
@@ -22,12 +22,18 @@
       "persistentSessions": "live-tested-adapter-restart-unread-reply-recovery-and-idempotent-collection",
       "singleWindow": "live-tested-reused-agent-window",
       "minimalNormalRuntime": "live-tested-hidden-cce-cursor-do-and-restored-normal",
-      "modelPickerTrigger": "live-tested-bounded-exact-effort-selection",
+      "modelPickerTrigger": "live-tested-bundled-closed-and-model-submenu-open-exact-effort-selection",
       "chatPanelDiagnostics": "regression-tested-not-live-rechecked-on-3.19.7",
       "promptSubmission": "live-tested-trusted-input-send-ready-normal-and-minimal"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.19.7",
+      "cursorBridgeVersion": "5.9.0",
+      "gitRef": "cursor-bridge--v5.9.0",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.19.7",
       "cursorBridgeVersion": "5.8.2",

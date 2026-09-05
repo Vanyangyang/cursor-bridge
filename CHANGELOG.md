@@ -6,6 +6,19 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.9.1] - 2026-09-05
+
+### Fixed
+
+- Keep `Auto` and `Add Models` in Cursor's model-list submenu out of effort options. They no longer cause a valid pinned `High` selection to fail as unsupported while the effort submenu is opening.
+- Classify a stable menu as unsupported only when it contains actual effort options. Missing or ambiguous requested efforts still fail before prompt submission, without changing pinned model preferences.
+
+### Validation
+
+- Live Cursor 3.19.7 DOM matched the original failure payload. The candidate bundle verified Claude Fable 5.1/high from both a closed picker and an already-open model submenu, closed the picker, and kept `sendState=not_sent`.
+- This is a standalone adapter picker check. New-host native CCE pickup remains pending; persistent-session and broader runtime evidence is inherited from 5.9.0 and 5.8.2 below.
+- Pi package `pi-cursor-bridge` 0.1.14 embeds Cursor Bridge 5.9.1. Grok Build Supervisor remains 0.4.0.
+
 ## [5.9.0] - 2026-09-05
 
 ### Added
