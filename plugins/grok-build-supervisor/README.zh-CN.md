@@ -38,7 +38,7 @@ Pi：
 pi install npm:pi-grok-build-supervisor
 ```
 
-安装或更新后需要新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi；Skill、提示模板和 slash command 不会热加载到已经打开的任务。Pi 包独立计版本，目前内置 Grok Build Supervisor 0.3.7。
+安装或更新后需要新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi；Skill、提示模板和 slash command 不会热加载到已经打开的任务。Pi 包独立计版本，目前内置 Grok Build Supervisor 0.4.0。
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 
@@ -129,6 +129,7 @@ Grok Build + Windows Terminal 窗口
 - 正在运行的会话所需脚本会复制到持久目录，所以刷新插件缓存不会把脚本从它脚下删掉。
 - 新版插件会等旧的后台监督程序空闲后再替换它，升级过程中不会主动打断现有任务。
 - 复用或停止进程前，插件会同时核对会话、项目目录、进程身份、Grok 的活动记录和自己的启动记录；只有进程号相同远远不够。
+- 取消请求不能证明中断的任务已经结束。重启后，如果关联的 ACP、Leader、TUI 与活动记录进程都已消失，可用 `acknowledge_unknown` 携带精确 session ID、run ID、长度受限的原因和现有控制确认，持久记录对未知状态的确认。结果仍是 `unknown`；该动作不会取消、恢复、发送任务、停止进程或声称任务已完成。
 
 ## 安全规则
 

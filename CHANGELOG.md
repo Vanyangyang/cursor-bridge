@@ -6,6 +6,24 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.9.0] - 2026-09-05
+
+### Added
+
+- Recover an unread completed persistent-session reply with `cursor_session_control(action=collect_result)` after reconciling the original Agent. Numeric reply baselines and read receipts survive adapter restarts without storing response text.
+- Protect unread task replies from the 50-record retention limit, expose `unreadResultTaskIds`, and require explicit project initialization when a shared default binding has no host identity.
+
+### Fixed
+
+- Preserve `terminal_result_uncollected` recovery guidance; ordinary status snapshots no longer include reply bodies.
+- Share one submission deadline between FIFO and automatic recovery, and restore the previous Agent selection even when collection fails.
+
+### Validation
+
+- On Windows 11 / Cursor 3.19.7, a candidate-bundle live test completed three read-only turns with Claude Fable 5.1/high on one exact Agent, reconnected adapters, recovered an unread third reply after restart, and verified idempotent collection and unchanged workspace state.
+- Other normal/minimal FIFO and CCE evidence is inherited from 5.8.2 below. Fresh-host pickup of the newly installed plugin remains a separate verification boundary.
+- Pi package `pi-cursor-bridge` 0.1.13 embeds Cursor Bridge 5.9.0.
+
 ## [5.8.2] - 2026-09-04
 
 ### Fixed

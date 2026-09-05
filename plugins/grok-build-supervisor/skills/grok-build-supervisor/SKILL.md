@@ -18,6 +18,8 @@ Use the `grok-build-supervisor` MCP tools as a guarded transport. A user-level d
 
 ## Workflow
 
+`/grok_execute off` disables new Grok opens, resumes, and prompts for this host task without cancelling existing work or closing the TUI. Read-only inspection remains allowed. After off, only an exact `/grok_execute on` reactivates execution; ordinary “continue”, “resume the task”, “继续”, or “直接开始刚才的任务吧” does not. Current or recovered task authorization does not substitute for this explicit activation switch.
+
 0. Call `grok_init` only for an exact `/grok_init` command or an explicit request to initialize or reinitialize the Grok Supervisor proxy. Empty initialization performs bounded local discovery; an exact loopback `http://` URL verifies that selection. Initialization never opens a session or sends work. Do not initialize implicitly during ordinary preflight. If more than one verified endpoint is returned, show the bounded candidates and require an exact user choice. A listening port alone is not success: require the persisted `ready` result backed by HTTP CONNECT verification. Reinitialization is refused while the Supervisor owns active work.
 1. Call `grok_session_inspect` with its default `interaction` view for an attached session. It intentionally omits process, socket, journal, and ownership diagnostics. When the user names a prior task naturally, use the explicit `summary` view with the absolute project `cwd` and a short `sessionQuery`; use a candidate only when it is unique.
 2. Select the session mode internally without constructing shell text or asking the user to manage the TUI:
@@ -36,7 +38,7 @@ Use the `grok-build-supervisor` MCP tools as a guarded transport. A user-level d
    - Call `grok_session_inspect` with `view: interaction`, the exact `sessionId` and `runId`, the returned `nextAfterSequence`, and `waitMs: 25000`.
    - Replace `afterSequence` with every returned `cursor.nextAfterSequence` before the next call. Never poll again with a stale cursor: operational interaction polls intentionally coalesce all routine stream events up to `latestSequence`.
    - While state is `working` or `cancelling`, use only the compact state and progress metadata. `progress.phase` is the current bounded stage; `responseChars` counts agent text observed without returning it; `lastChunkAt` advances only when agent text arrives; `heartbeatAt` is the latest liveness evaluation; and `newActivity` means journal activity exists beyond the cursor supplied by this caller. It does not by itself prove useful semantic progress. Streamed agent message bodies are suppressed until a terminal result, so do not try to reconstruct the answer from polling updates. A bounded wait timeout is not completion.
-   - One `newActivity: false` timeout is normal. After at least three consecutive full waits where `newActivity` remains false and `lastChunkAt` is unchanged, report that Grok may be stalled and ask whether to continue waiting or cancel. Never cancel automatically from quiet telemetry alone.
+   - Quiet telemetry alone is neither failure nor a reason to ask the user to reauthorize waiting. If repeated waits leave a material liveness question, inspect the exact run's focused diagnostics and continue its authorized work while it remains active; report a confirmed failure, required user action, or unresolved recovery boundary. Never cancel automatically from quiet telemetry alone.
    - For `needs_permission`, explain the request using the user-facing language rule, present the exact returned options without translation, and wait for the user's choice. Use `grok_session_respond` with `ANSWER_GROK_PERMISSION`, then resume the same wait loop.
    - For native `needs_input`, inspect the returned ACP form question. The host agent may answer directly only from verified context already inside its authority; route it to the user when owner authority, a consequential choice, or missing facts are required. Never invent values. Use `grok_session_respond` with `ANSWER_GROK_INPUT`, then resume the same wait loop.
    - If `needs_input` has `source: fallback`, Grok ended the turn with a structured question because ACP elicitation was unavailable. Ask the user, then send the answer as a new authorized prompt in the same session.
@@ -47,7 +49,7 @@ Use the `grok-build-supervisor` MCP tools as a guarded transport. A user-level d
    - For `failed` or `unknown_after_restart`, report the actionable problem without dumping diagnostics.
    - When a requested deliverable is expected to be long, ask Grok in the authorized task brief to write it to an appropriate project file and return only a bounded summary plus the path. Do not require a file for ordinary short results.
 6. Treat Grok's completion text as `AGENT_SUMMARY_CLAIM`; independently verify files, Git, tests, and Unity evidence when the task changes them.
-7. Use `grok_session_control` to cancel, disconnect, or stop the owned Leader. Leader stop still requires the user to exit the visible TUI normally first.
+7. Use `grok_session_control` to cancel, disconnect, or stop the owned Leader only when the user explicitly requested that action. `/grok_execute off` alone does not request it. Leader stop still requires the user to exit the visible TUI normally first.
 
 ## Continuity boundary
 

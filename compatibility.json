@@ -3,10 +3,12 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.19.7",
-    "cursorBridgeVersion": "5.8.2",
+    "cursorBridgeVersion": "5.9.0",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
+      "inheritedEvidenceRelease": "5.8.2",
+      "currentReleaseEvidence": "source-bundle-live-three-turn-session-and-unread-reply-recovery; fresh-host-install-pickup-not-yet-attested",
       "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
       "agentsWindow": "live-tested-existing-supervised-single-window-cdp-9223",
@@ -16,8 +18,8 @@
       "lifecycleDiagnostics": "live-tested",
       "fifoExecution": "live-tested-normal-and-minimal",
       "parallelExecution": "regression-tested-not-live-rechecked-on-3.19.7",
-      "parallelAgentIdentity": "regression-tested-not-live-rechecked-on-3.19.7",
-      "persistentSessions": "regression-tested-not-live-rechecked-on-3.19.7",
+      "parallelAgentIdentity": "live-tested-exact-agent-across-three-persistent-turns",
+      "persistentSessions": "live-tested-adapter-restart-unread-reply-recovery-and-idempotent-collection",
       "singleWindow": "live-tested-reused-agent-window",
       "minimalNormalRuntime": "live-tested-hidden-cce-cursor-do-and-restored-normal",
       "modelPickerTrigger": "live-tested-bounded-exact-effort-selection",
@@ -26,6 +28,12 @@
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.19.7",
+      "cursorBridgeVersion": "5.8.2",
+      "gitRef": "cursor-bridge--v5.8.2",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.18.25",
       "cursorBridgeVersion": "5.8.1",

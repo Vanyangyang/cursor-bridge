@@ -1132,7 +1132,7 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.ok(cursorDo.inputSchema.properties.session_id);
   assert.ok(cursorDo.inputSchema.properties.request_id);
   const sessionControl = tools.find((tool) => tool.name === 'cursor_session_control');
-  assert.deepEqual(sessionControl.inputSchema.properties.action.enum, ['reconcile', 'close', 'forget', 'abandon']);
+  assert.deepEqual(sessionControl.inputSchema.properties.action.enum, ['reconcile', 'collect_result', 'close', 'forget', 'abandon']);
   const status = tools.find((tool) => tool.name === 'cursor_status');
   assert.deepEqual(Object.keys(status.inputSchema.properties), ['task_id', 'session_id']);
   assert.equal(tools.some((tool) => tool.name === 'cursor_launch'), false);
@@ -1391,6 +1391,7 @@ test('persistent cursor_do sessions keep one stable session ID across explicit t
   bridge._bindSessionAgent(first);
   bridge._finishJob(first, 'turn one complete');
   assert.equal(bridge.sessionStatus(created.sessionId).sessionState, 'ready');
+  assert.equal((await bridge.status(first.id)).result, 'turn one complete');
 
   const restarted = new OfflineBridge({ sessionFile, projectPath: process.cwd(), sessionInstanceId: 'adapter-after-update' });
   const continued = await restarted.doTask('继续同一个会话', {
@@ -1432,6 +1433,7 @@ test('continued sessions fail closed on scope expansion and close before forget'
   first.agentId = 'durable-agent-scope';
   bridge._bindSessionAgent(first);
   bridge._finishJob(first, 'done');
+  await bridge.status(first.id);
 
   await assert.rejects(
     bridge.doTask('尝试扩大为写入', {

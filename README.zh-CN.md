@@ -64,6 +64,8 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
+> **5.9.0 验证：** 候选构建包在 Cursor 3.19.7 上完成了同一 Agent 的三轮真实只读会话、适配器重连、未读最终回复补收和幂等收集，工作区无变化。下方较广的环境验证沿用 5.8.2 证据；5.9.0 新安装在宿主中的加载情况另行检查。
+>
 > **实机验证环境：** Windows 11 + Cursor **3.19.7**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取。全新 Codex 宿主复用一个无降级的持久受监督 Agents Window，并通过了工作区绑定、`minimal` 中带源码锚点的 CCE、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、Claude Fable 5.1/high 精确模型验证，以及恢复并持久化为 `normal`。并行与持久会话路径保留回归测试覆盖，但本轮没有再次实机验证。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
 
 ## CCE 是什么？
@@ -157,7 +159,7 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.19.7** | **5.8.2**（`main`，当前版本） | 全新宿主验收通过 normal 与 `minimal` FIFO `cursor_do`、`minimal` 中带源码锚点的 CCE、Claude Fable 5.1/high 精确选择、可信 prompt 提交，以及恢复并持久化为 `normal`。并行与持久会话保留回归测试覆盖，但本轮没有再次实机验证。 |
+| **3.19.7** | **5.9.0**（`main`，当前版本） | 候选构建包通过真实三轮持久会话、Claude Fable 5.1/high 精确选择、适配器重连、未读回复补收及幂等收集。较广的 normal/`minimal` FIFO 与 CCE 证据沿用 5.8.2；新安装在宿主中的加载另行检查。 |
 
 不再主动维护旧 Cursor Bridge 版本。5.8.1、5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
@@ -318,6 +320,10 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 - 每个续发轮次都会获得新的 `task_id`，并且必须再次声明 `read_only=true` 或 `allowed_paths` 子集。持续会话只使用 `parallel_agent`、同一时间只允许一个轮次，而且绝不降级到 FIFO。
 - `cursor_status(session_id)` 查看持久关联。`cursor_session_control(action=close)` 只结束 Bridge 连续性，不会停止 Cursor；已关闭的映射可用 `action=forget, confirm=true` 删除。
 - adapter 中断后，`cursor_session_control(action=reconcile)` 会两次核对精确 Agent，绝不重发；只有无法恢复停止证据时，才能显式确认风险后使用 `abandon`。
+- reconcile 确认完成后，在续发前使用 `cursor_session_control(action=collect_result)` 补收该轮回复。它会还原原选中 Agent，不发送提示、不持久化正文。epoch 变化会使收集无效；成功后重复调用返回 `already_collected`。数值回复签名和读取记录覆盖重启恢复，包括完成后首次读取前中断；没有保存签名的旧版续发轮需要人工检查。
+- 最多保留 50 条任务记录。未读回复受到保护：达到限制后以 `TASK_RETENTION_FULL` 拒绝新提交，不会丢弃未读结果。用 `cursor_status(task_id)` 读取 `cursor_status().unreadResultTaskIds` 中的任务后，相应记录才允许被淘汰。
+- `timeout_ms` 是发送后由 FIFO 和自动恢复共用的监视预算。到期不会取消 Cursor；显式 `reap` 可以给予新的监视预算。
+- 若宿主未提供工作区身份，Bridge 恢复共享 `default` 绑定后会以 `WORKSPACE_CONFIRMATION_REQUIRED` 阻止提交，直到 `cursor_init` 为当前 adapter 确认目标项目。按身份隔离的绑定仍保持原有重启行为。
 - ready 会话的原子注册表位于用户配置目录，因此可跨 MCP 重启和插件缓存替换；不会持久化提示、回复、凭据、插件路径、脚本路径或 CDP target ID。
 - `submitting`、`running`、`collecting` 都是正常非终态。
 - Bridge 会确认 Cursor 是否接受提示。提示仍留在输入框时只尝试一次精确 Send 控件，仍失败则返回 `submit_not_accepted`，不会静默制造孤儿。

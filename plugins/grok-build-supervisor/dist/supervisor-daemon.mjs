@@ -19761,6 +19761,7 @@ var MAX_ACCEPTANCE_PATHS = 50;
 var MAX_ACCEPTANCE_PATH_CHARS = 1200;
 var MAX_ACCEPTANCE_COMMANDS = 20;
 var MAX_ACCEPTANCE_COMMAND_CHARS = 600;
+var MAX_UNKNOWN_ACK_REASON_CHARS = 1e3;
 var WORKSPACE_TRUST_ACP_METHODS = Object.freeze([
   "x.ai/folder_trust/request",
   "_x.ai/folder_trust/request"
@@ -19910,6 +19911,9 @@ function runStatusFromEvent(event) {
   if (event.kind === "prompt_cancel_requested") {
     return "cancel_requested";
   }
+  if (event.kind === "unknown_run_acknowledged") {
+    return "unknown";
+  }
   return event.kind === "prompt_started" ? "running" : null;
 }
 function interactionMessage(state) {
@@ -19925,6 +19929,7 @@ function interactionMessage(state) {
     failed: "Grok failed the task.",
     cancelling: "Grok cancellation is pending.",
     unknown_after_restart: "The Grok task state is unknown after Supervisor restart.",
+    unknown: "The Grok task outcome remains unknown; its recovery block was explicitly acknowledged.",
     not_found: "The requested Grok run was not found."
   }[state] || "Grok supervision state changed.";
 }
@@ -20073,15 +20078,15 @@ function collectActiveSessions(value, output = []) {
   }
   return output;
 }
-function processIsAlive2(pid) {
+function processIsAlive2(pid, probe = process.kill) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
   }
   try {
-    process.kill(pid, 0);
+    probe(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error51) {
+    return error51?.code !== "ESRCH";
   }
 }
 function windowsSystemExecutable(...segments) {
@@ -20487,8 +20492,9 @@ function summarizeEvents(events, stream) {
   };
 }
 function deriveRecoveryState(events) {
-  const terminalRuns = new Set(events.filter((event) => (/* @__PURE__ */ new Set(["prompt_completed", "prompt_failed", "prompt_cancel_requested"])).has(event.kind)).map((event) => event.runId).filter(Boolean));
-  const interruptedRun = [...events].reverse().find((event) => event.kind === "prompt_started" && event.runId && !terminalRuns.has(event.runId));
+  const terminalRuns = new Set(events.filter((event) => (/* @__PURE__ */ new Set(["prompt_completed", "prompt_failed"])).has(event.kind)).map((event) => event.runId).filter(Boolean));
+  const acknowledgedUnknownRuns = new Set(events.filter((event) => event.kind === "unknown_run_acknowledged").map((event) => `${event.sessionId}:${event.runId}`));
+  const interruptedRun = [...events].reverse().find((event) => event.kind === "prompt_started" && event.runId && !terminalRuns.has(event.runId) && !acknowledgedUnknownRuns.has(`${event.sessionId}:${event.runId}`));
   const answeredPermissions = new Set(events.filter((event) => event.kind === "permission_answered").map((event) => event.permissionId));
   const orphanedPermissions = events.filter((event) => event.kind === "permission_requested" && !answeredPermissions.has(event.permissionId)).slice(-20).map((event) => ({
     permissionId: event.permissionId,
@@ -20616,6 +20622,7 @@ var GrokSupervisor = class {
     this.activeRun = null;
     this.availableCommandsSnapshots = /* @__PURE__ */ new Map();
     this.inactiveRunActivity = /* @__PURE__ */ new Map();
+    this.activeSessionsReadError = null;
     this.progressHeartbeatIntervalMs = Math.max(1, Number(options2.progressHeartbeatIntervalMs) || DEFAULT_PROGRESS_HEARTBEAT_INTERVAL_MS);
     this.changeWaiters = /* @__PURE__ */ new Set();
     this.stderrTail = [];
@@ -20887,12 +20894,16 @@ var GrokSupervisor = class {
   readRawActiveSessions() {
     const registry2 = this.activeSessionsRegistryPath();
     if (!existsSync7(registry2)) {
+      this.activeSessionsReadError = null;
       return [];
     }
     try {
-      return collectActiveSessions(JSON.parse(readFileSync7(registry2, "utf8")));
+      const sessions = collectActiveSessions(JSON.parse(readFileSync7(registry2, "utf8")));
+      this.activeSessionsReadError = null;
+      return sessions;
     } catch (error51) {
-      this.record("registry_error", { message: conciseError(error51) });
+      this.activeSessionsReadError = conciseError(error51);
+      this.record("registry_error", { message: this.activeSessionsReadError });
       return [];
     }
   }
@@ -21505,7 +21516,7 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
       if (runId && event.runId !== runId) {
         return false;
       }
-      return ["prompt_started", "prompt_completed", "prompt_failed", "prompt_cancel_requested"].includes(event.kind);
+      return ["prompt_started", "prompt_completed", "prompt_failed", "prompt_cancel_requested", "unknown_run_acknowledged"].includes(event.kind);
     });
     const latest = matching.at(-1);
     if (!latest) {
@@ -21533,8 +21544,8 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
       sessionId: latest.sessionId || started?.sessionId || sessionId,
       status: runStatusFromEvent(latest),
       startedAt: started?.timestamp || null,
-      completedAt: latest.kind === "prompt_started" ? null : latest.timestamp,
-      terminalSequence: latest.kind === "prompt_started" ? null : latest.sequence,
+      completedAt: (/* @__PURE__ */ new Set(["prompt_started", "unknown_run_acknowledged"])).has(latest.kind) ? null : latest.timestamp,
+      terminalSequence: (/* @__PURE__ */ new Set(["prompt_started", "unknown_run_acknowledged"])).has(latest.kind) ? null : latest.sequence,
       stopReason: typeof latest.result?.stopReason === "string" ? latest.result.stopReason : null,
       finalText: typeof latest.finalText === "string" ? latest.finalText : null,
       resultArtifact: latest.resultArtifact && typeof latest.resultArtifact === "object" ? latest.resultArtifact : null,
@@ -21624,6 +21635,8 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
       state = "cancelling";
     } else if (run?.status === "unknown_after_restart") {
       state = "unknown_after_restart";
+    } else if (run?.status === "unknown") {
+      state = "unknown";
     } else if (requestedRunId) {
       state = "not_found";
     } else if (this.acpConnection && !this.acpConnection.signal.aborted && this.attachedSessionId === sessionId) {
@@ -23167,7 +23180,7 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
       throw new Error(`Prompt ${this.activeRun.runId} is still running`);
     }
     if (this.recovery.interruptedRun?.sessionId === sessionId) {
-      throw new Error(`Prompt ${this.recovery.interruptedRun.runId} has unknown state after Supervisor restart; inspect it and explicitly cancel before sending a new prompt`);
+      throw new Error(`Prompt ${this.recovery.interruptedRun.runId} has unknown state after Supervisor restart; inspect it and explicitly acknowledge the unknown outcome before sending a new prompt`);
     }
     if (typeof prompt !== "string" || prompt.trim() === "") {
       throw new Error("prompt must be non-empty");
@@ -23343,14 +23356,136 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
       this.activeRun.status = "cancel_requested";
     }
     this.record("prompt_cancel_requested", { sessionId, runId });
-    if (this.recovery.interruptedRun?.sessionId === sessionId) {
-      this.recovery.interruptedRun = null;
-    }
     this.recovery.orphanedPermissions = this.recovery.orphanedPermissions.filter((permission) => permission.sessionId !== sessionId);
     this.recovery.orphanedElicitations = this.recovery.orphanedElicitations.filter((elicitation) => elicitation.sessionId !== sessionId);
     return { cancelRequested: true, sessionId };
   }
-  async control({ action, sessionId, confirmation }) {
+  unknownAcknowledgementBlockers(sessionId) {
+    const blockers = [];
+    if (this.activeRun && ["running", "cancel_requested"].includes(this.activeRun.status)) {
+      blockers.push(`active_run:${this.activeRun.runId}`);
+    }
+    if (this.acpConnection && !this.acpConnection.signal.aborted || this.acpContext || this.attachedSessionId || this.acpProcess?.pid && this.processIsAlive(this.acpProcess.pid)) {
+      blockers.push("active_or_uncertain_acp");
+    }
+    if (this.pendingAttachCwd) {
+      blockers.push("attachment_starting");
+    }
+    if (this.permissionSummaries().some((entry) => entry.sessionId === sessionId)) {
+      blockers.push("pending_permission");
+    }
+    if (this.elicitationSummaries().some((entry) => entry.sessionId === sessionId)) {
+      blockers.push("pending_input");
+    }
+    if (this.workspaceTrustSummaries().some((entry) => entry.sessionId === sessionId)) {
+      blockers.push("pending_workspace_trust");
+    }
+    const ownership = this.readLeaderOwnership();
+    const leaderLockExists = existsSync7(this.leaderLockPath());
+    const leaderLockPid = this.readLeaderLockPid();
+    const directLeaderPid = this.leaderProcess?.pid;
+    if (Number.isInteger(directLeaderPid) && this.processIsAlive(directLeaderPid)) {
+      blockers.push("live_or_uncertain_owned_leader");
+    }
+    const recordedLeaderPid = ownership.record?.leaderPid;
+    if (Number.isInteger(recordedLeaderPid)) {
+      const recordedFingerprint = ownership.record?.processFingerprint;
+      const recordedLeaderAlive = typeof recordedFingerprint === "string" && recordedFingerprint.length > 0 ? ["matching", "unknown_alive"].includes(this.recordedProcessIdentityState(
+        recordedLeaderPid,
+        recordedFingerprint,
+        ownership.record?.executablePath || null
+      ).state) : this.processIsAlive(recordedLeaderPid);
+      if (recordedLeaderAlive) {
+        blockers.push("live_or_uncertain_owned_leader");
+      }
+    }
+    if (Number.isInteger(leaderLockPid) && leaderLockPid !== recordedLeaderPid && this.processIsAlive(leaderLockPid)) {
+      blockers.push("live_or_uncertain_owned_leader");
+    }
+    if (leaderLockExists && leaderLockPid === null && !ownership.valid) {
+      blockers.push("unverified_leader_lock");
+    }
+    const activeSessions = this.readActiveSessions();
+    if (this.activeSessionsReadError) {
+      blockers.push("unreadable_active_sessions_registry");
+    }
+    if (activeSessions.some((entry) => entry.session_id === sessionId)) {
+      blockers.push("live_session_registry_process");
+    }
+    if ([...this.tuiProcesses.entries()].some(([pid, owned]) => owned?.sessionId === sessionId && this.ownedTuiIdentityMatches(pid, owned))) {
+      blockers.push("live_owned_tui");
+    }
+    const recordedTuiAlive = listTuiStateRecords(this.tuiStateRoot).some(({ value }) => {
+      if (value.sessionId !== sessionId || !LIVE_TUI_STATUSES.has(value.status)) {
+        return false;
+      }
+      if (typeof value.grokProcessFingerprint !== "string" || value.grokProcessFingerprint.length === 0) {
+        return this.processIsAlive(value.grokPid);
+      }
+      return ["matching", "unknown_alive"].includes(this.recordedProcessIdentityState(
+        value.grokPid,
+        value.grokProcessFingerprint,
+        this.grokBinary
+      ).state);
+    });
+    if (recordedTuiAlive) {
+      blockers.push("live_or_uncertain_recorded_tui");
+    }
+    return [...new Set(blockers)];
+  }
+  acknowledgeUnknown({ sessionId, runId, reason }) {
+    validateSessionId(sessionId);
+    if (typeof runId !== "string" || !UUID_RE3.test(runId)) {
+      throw new Error("runId must be an exact UUID, not a partial ID");
+    }
+    if (typeof reason !== "string" || !reason.trim() || reason.length > MAX_UNKNOWN_ACK_REASON_CHARS) {
+      throw new Error(`reason must be non-empty and at most ${MAX_UNKNOWN_ACK_REASON_CHARS} characters`);
+    }
+    const interrupted = this.recovery.interruptedRun;
+    if (!interrupted || interrupted.sessionId !== sessionId || interrupted.runId !== runId) {
+      throw codedError3(
+        "GROK_UNKNOWN_ACK_MISMATCH",
+        "sessionId and runId must exactly match the current unknown-after-restart record",
+        { sessionId, runId }
+      );
+    }
+    const blockers = this.unknownAcknowledgementBlockers(sessionId);
+    if (blockers.length > 0) {
+      throw codedError3(
+        "GROK_UNKNOWN_ACK_ACTIVE_BOUNDARY",
+        "Cannot acknowledge an unknown Grok outcome while a related process or interaction boundary may still be active",
+        { sessionId, runId, blockers }
+      );
+    }
+    if (this.journal.info().durable !== true) {
+      throw codedError3(
+        "GROK_UNKNOWN_ACK_REQUIRES_DURABLE_JOURNAL",
+        "Cannot acknowledge an unknown Grok outcome without a durable event journal"
+      );
+    }
+    const event = this.record("unknown_run_acknowledged", {
+      sessionId,
+      runId,
+      reason: reason.trim(),
+      outcome: "unknown"
+    });
+    if (event.kind !== "unknown_run_acknowledged" || this.journal.info().durable !== true) {
+      throw codedError3(
+        "GROK_UNKNOWN_ACK_NOT_DURABLE",
+        "The unknown-outcome acknowledgment was not durably recorded"
+      );
+    }
+    this.recovery.interruptedRun = deriveRecoveryState(this.events).interruptedRun;
+    return {
+      acknowledged: true,
+      status: "unknown",
+      sessionId,
+      runId,
+      reason: reason.trim(),
+      eventSequence: event.sequence
+    };
+  }
+  async control({ action, sessionId, runId, reason, confirmation }) {
     if (confirmation !== "CONTROL_GROK_SESSION") {
       throw new Error("confirmation must equal CONTROL_GROK_SESSION");
     }
@@ -23363,7 +23498,10 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
     if (action === "stop_leader") {
       return this.stopOwnedLeader({ confirmation: "STOP_OWNED_LEADER" });
     }
-    throw new Error("action must be cancel_prompt, disconnect, or stop_leader");
+    if (action === "acknowledge_unknown") {
+      return this.acknowledgeUnknown({ sessionId, runId, reason });
+    }
+    throw new Error("action must be cancel_prompt, disconnect, stop_leader, or acknowledge_unknown");
   }
   async disconnect() {
     for (const [permissionId, pending] of this.pendingPermissions) {

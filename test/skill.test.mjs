@@ -148,7 +148,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.deepEqual(cursor?.source, { source: 'url', url: './' });
   assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
   assert.equal(grokManifest.name, 'grok-build-supervisor');
-  assert.match(grokManifest.version, /^0\.3\.7\+codex\./);
+  assert.match(grokManifest.version, /^0\.4\.0\+codex\./);
   assert.deepEqual(grokManifest.mcpServers, {
     'grok-build-supervisor': {
       command: 'node',
@@ -163,25 +163,25 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '5.8.2');
+  assert.equal(rootPackage.version, '5.9.0');
   assert.equal(rootPackage.name, 'cursor-bridge-workspace');
   assert.equal(rootPackage.private, true);
   assert.match(rootPackage.scripts.prepublishOnly, /repository root is private/);
-  assert.match(codexCursorManifest.version, /^5\.8\.2(?:\+codex\.)?/);
-  assert.equal(claudeCursorManifest.version, '5.8.2');
-  assert.match(serverSource, /const PLUGIN_VERSION = '5\.8\.2';/);
+  assert.match(codexCursorManifest.version, /^5\.9\.0(?:\+codex\.)?/);
+  assert.equal(claudeCursorManifest.version, '5.9.0');
+  assert.match(serverSource, /const PLUGIN_VERSION = '5\.9\.0';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '5.8.2');
+  assert.equal(claudeCursor?.version, '5.9.0');
   assert.match(claudeCursor?.description || '', /Cursor 3\.19\.7/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.3.7');
+  assert.equal(claudeGrok?.version, '0.4.0');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.3.7');
+  assert.equal(claudeGrokManifest.version, '0.4.0');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
@@ -285,7 +285,7 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   assert.match(executorSkill, /Opening the TUI is authorized by `on`, but sending a development prompt is not/);
   assert.match(supervisorSkill, /Call `grok_session_open` during `\/grok_execute on`/);
   assert.match(supervisorSkill, /`progress\.phase`/);
-  assert.match(supervisorSkill, /three consecutive full waits/);
+  assert.match(supervisorSkill, /Quiet telemetry alone is neither failure nor a reason to ask the user to reauthorize waiting/);
   assert.match(supervisorSkill, /`progress\.changedFiles`/);
   assert.match(supervisionFlow, /`run_progress`/);
   assert.match(supervisionFlow, /`available_commands_changed`/);
@@ -295,7 +295,8 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   assert.match(supervisorSkill, /latest substantive message\/current task/);
   assert.match(supervisorSkill, /Codex, Claude Code, Pi, or neutral host-agent/);
   assert.match(executeCommand, /language of the user's latest substantive message/);
-  for (const content of [executeCommand, executorSkill, supervisorSkill]) {
+  // The supervisor skill includes literal multilingual examples of phrases that do not reactivate execution.
+  for (const content of [executeCommand, executorSkill]) {
     assert.doesNotMatch(content, /[\u3400-\u9fff]/);
   }
   assert.doesNotMatch(supervisorMetadata, /open or resume a guarded Grok TUI/);
@@ -384,7 +385,7 @@ test('bilingual compatibility docs keep Cursor 3.19.7 acceptance evidence scoped
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history keeps 5.8.2 current for Cursor 3.19.7 and archives 5.8.1', () => {
+test('compatibility history keeps 5.9.0 current for Cursor 3.19.7 and archives 5.8.2', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -394,7 +395,7 @@ test('compatibility history keeps 5.8.2 current for Cursor 3.19.7 and archives 5
   assert.equal(data.policy, 'latest-only');
   assert.equal(data.candidate, undefined);
   assert.equal(data.current.cursorVersion, '3.19.7');
-  assert.equal(data.current.cursorBridgeVersion, '5.8.2');
+  assert.equal(data.current.cursorBridgeVersion, '5.9.0');
   assert.equal(data.current.sourceRef, 'main');
   assert.equal(data.current.status, 'current');
   assert.equal(data.current.acceptance.cursorVersionEvidence, 'installed-executable-product-and-file-version');
@@ -406,14 +407,22 @@ test('compatibility history keeps 5.8.2 current for Cursor 3.19.7 and archives 5
   assert.equal(data.current.acceptance.lifecycleDiagnostics, 'live-tested');
   assert.equal(data.current.acceptance.fifoExecution, 'live-tested-normal-and-minimal');
   assert.equal(data.current.acceptance.parallelExecution, 'regression-tested-not-live-rechecked-on-3.19.7');
-  assert.equal(data.current.acceptance.parallelAgentIdentity, 'regression-tested-not-live-rechecked-on-3.19.7');
-  assert.equal(data.current.acceptance.persistentSessions, 'regression-tested-not-live-rechecked-on-3.19.7');
+  assert.equal(data.current.acceptance.inheritedEvidenceRelease, '5.8.2');
+  assert.match(data.current.acceptance.currentReleaseEvidence, /source-bundle-live-three-turn/);
+  assert.equal(data.current.acceptance.parallelAgentIdentity, 'live-tested-exact-agent-across-three-persistent-turns');
+  assert.equal(data.current.acceptance.persistentSessions, 'live-tested-adapter-restart-unread-reply-recovery-and-idempotent-collection');
   assert.equal(data.current.acceptance.singleWindow, 'live-tested-reused-agent-window');
   assert.equal(data.current.acceptance.minimalNormalRuntime, 'live-tested-hidden-cce-cursor-do-and-restored-normal');
   assert.equal(data.current.acceptance.modelPickerTrigger, 'live-tested-bounded-exact-effort-selection');
   assert.equal(data.current.acceptance.chatPanelDiagnostics, 'regression-tested-not-live-rechecked-on-3.19.7');
   assert.equal(data.current.acceptance.promptSubmission, 'live-tested-trusted-input-send-ready-normal-and-minimal');
   assert.deepEqual(data.history, [
+    {
+      cursorVersion: '3.19.7',
+      cursorBridgeVersion: '5.8.2',
+      gitRef: 'cursor-bridge--v5.8.2',
+      status: 'archived',
+    },
     {
       cursorVersion: '3.18.25',
       cursorBridgeVersion: '5.8.1',
@@ -486,10 +495,10 @@ test('compatibility history keeps 5.8.2 current for Cursor 3.19.7 and archives 5
   assert.match(chineseReadme, /href="\.\/COMPATIBILITY\.zh-CN\.md"/);
   assert.match(english, /maintains only the latest Cursor release/);
   assert.match(chinese, /只维护 Cursor 最新版本/);
-  assert.match(english, /Current maintained baseline[\s\S]*3\.19\.7[\s\S]*5\.8\.2[\s\S]*trusted prompt submission/);
-  assert.match(chinese, /当前维护基线[\s\S]*3\.19\.7[\s\S]*5\.8\.2[\s\S]*可信 prompt 提交/);
-  assert.match(englishReadme, /3\.19\.7[\s\S]*5\.8\.2[\s\S]*main[\s\S]*current/);
-  assert.match(chineseReadme, /3\.19\.7[\s\S]*5\.8\.2[\s\S]*main[\s\S]*当前版本/);
+  assert.match(english, /Current maintained baseline[\s\S]*3\.19\.7[\s\S]*5\.9\.0[\s\S]*trusted prompt submission/);
+  assert.match(chinese, /当前维护基线[\s\S]*3\.19\.7[\s\S]*5\.9\.0[\s\S]*可信 prompt 提交/);
+  assert.match(englishReadme, /3\.19\.7[\s\S]*5\.9\.0[\s\S]*main[\s\S]*current/);
+  assert.match(chineseReadme, /3\.19\.7[\s\S]*5\.9\.0[\s\S]*main[\s\S]*当前版本/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
   assert.match(english, /Cursor Bridge 5\.8\.1 — Cursor 3\.18\.25/);

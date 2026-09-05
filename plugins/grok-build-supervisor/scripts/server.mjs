@@ -8,7 +8,7 @@ const supervisor = new SupervisorClient();
 // Release the versioned plugin cache immediately. Persistent work runs from the
 // content-addressed daemon/TUI snapshots under the user-level state directory.
 process.chdir(supervisor.paths.stateRoot);
-const server = new McpServer({ name: "grok-build-supervisor", version: "0.3.7" });
+const server = new McpServer({ name: "grok-build-supervisor", version: "0.4.0" });
 
 function toolResult(data, isError = false) {
   return {
@@ -100,10 +100,12 @@ register("grok_session_respond", {
 }, (args) => supervisor.respond(args));
 
 register("grok_session_control", {
-  description: "Cancel the active prompt, disconnect ACP, or stop the Supervisor-owned Leader. Leader stop refuses while the visible TUI is still running.",
+  description: "Cancel the active prompt, disconnect ACP, stop the Supervisor-owned Leader, or durably acknowledge an exact unknown-after-restart record after all related process boundaries are inactive. Acknowledgment preserves the outcome as unknown and does not cancel, resume, prompt, kill, or claim completion.",
   inputSchema: {
-    action: z.enum(["cancel_prompt", "disconnect", "stop_leader"]),
+    action: z.enum(["cancel_prompt", "disconnect", "stop_leader", "acknowledge_unknown"]),
     sessionId: z.string().optional(),
+    runId: z.string().optional(),
+    reason: z.string().trim().min(1).max(1000).optional(),
     confirmation: z.literal("CONTROL_GROK_SESSION"),
   },
   annotations: { readOnlyHint: false, destructiveHint: true },

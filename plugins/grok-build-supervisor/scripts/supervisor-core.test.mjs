@@ -14,11 +14,13 @@ import {
   collectLiveActiveSessions,
   compactForTransport,
   buildGrokAcpArgs,
+  deriveRecoveryState,
   GrokSupervisor,
   parseLeaderPid,
   parseSupervisorQuestion,
   parseWorkspaceTrustGatewayRequest,
   parseWorkspaceTrustRequest,
+  processIsAlive,
   progressPhaseForToolCall,
   terminateProcessTree,
   validateSessionId,
@@ -250,9 +252,10 @@ test("updates are paged, bounded, and do not duplicate run or permission state",
 
 test("durable supervision marks interrupted runs and permissions unknown after restart", (t) => {
   const root = mkdtempSync(join(tmpdir(), "grok-supervisor-restart-"));
+  const interruptedRunId = "01900000-0000-7000-8000-000000000009";
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const first = new GrokSupervisor({ stateRoot: root, maxSegmentEvents: 2 });
-  first.record("prompt_started", { runId: "run-before-restart", sessionId: SESSION_ID });
+  first.record("prompt_started", { runId: interruptedRunId, sessionId: SESSION_ID });
   first.record("permission_requested", {
     permissionId: "01900000-0000-7000-8000-000000000001",
     sessionId: SESSION_ID,
@@ -269,11 +272,12 @@ test("durable supervision marks interrupted runs and permissions unknown after r
   });
   const recovered = new GrokSupervisor({ stateRoot: root, maxSegmentEvents: 2 });
   assert.equal(recovered.recovery.interruptedRun.status, "unknown_after_restart");
-  assert.equal(recovered.recovery.interruptedRun.runId, "run-before-restart");
+  assert.equal(recovered.recovery.interruptedRun.runId, interruptedRunId);
   assert.equal(recovered.recovery.orphanedPermissions.length, 1);
   assert.equal(recovered.recovery.orphanedWorkspaceTrust.length, 1);
   assert.equal(recovered.permissionSummaries().length, 0);
-  recovered.acpContext = { notify: async () => {} };
+  let cancelNotifications = 0;
+  recovered.acpContext = { notify: async () => { cancelNotifications += 1; } };
   recovered.acpConnection = { signal: { aborted: false } };
   recovered.attachedSessionId = SESSION_ID;
   assert.throws(() => recovered.startPrompt({
@@ -282,9 +286,151 @@ test("durable supervision marks interrupted runs and permissions unknown after r
     confirmation: "SEND_TO_GROK",
   }), /unknown state after Supervisor restart/);
   return recovered.cancelPrompt({ sessionId: SESSION_ID, confirmation: "CANCEL_GROK_PROMPT" }).then(() => {
-    assert.equal(recovered.recovery.interruptedRun, null);
+    assert.equal(recovered.recovery.interruptedRun.runId, interruptedRunId);
     assert.equal(recovered.recovery.orphanedPermissions.length, 0);
+    assert.equal(cancelNotifications, 1);
+    recovered.acpContext = null;
+    recovered.acpConnection = null;
+    recovered.attachedSessionId = null;
+    recovered.readActiveSessions = () => [];
+    const acknowledged = recovered.acknowledgeUnknown({
+      sessionId: SESSION_ID,
+      runId: interruptedRunId,
+      reason: "No owned Grok process or ACP boundary remains after inspection.",
+    });
+    assert.equal(acknowledged.acknowledged, true);
+    assert.equal(acknowledged.status, "unknown");
+    assert.equal(recovered.recovery.interruptedRun, null);
+    assert.equal(cancelNotifications, 1);
+    assert.equal(recovered.events.at(-1).kind, "unknown_run_acknowledged");
+    assert.equal(recovered.interactionSnapshot({ sessionId: SESSION_ID, runId: interruptedRunId }).state, "unknown");
+
+    const restarted = new GrokSupervisor({ stateRoot: root, maxSegmentEvents: 2 });
+    assert.equal(restarted.recovery.interruptedRun, null);
+    assert.equal(restarted.events.some((event) => event.kind === "unknown_run_acknowledged"), true);
   });
+});
+
+test("process liveness fails closed unless the probe explicitly reports ESRCH", () => {
+  assert.equal(processIsAlive(0, () => { throw new Error("probe must not run"); }), false);
+  assert.equal(processIsAlive(42, (pid, signal) => {
+    assert.equal(pid, 42);
+    assert.equal(signal, 0);
+  }), true);
+  assert.equal(processIsAlive(42, () => { throw Object.assign(new Error("gone"), { code: "ESRCH" }); }), false);
+  assert.equal(processIsAlive(42, () => { throw Object.assign(new Error("denied"), { code: "EPERM" }); }), true);
+  assert.equal(processIsAlive(42, () => { throw new Error("probe unavailable"); }), true);
+});
+
+test("recovery treats cancellation as non-terminal but completion and failure as terminal", () => {
+  const runId = "01900000-0000-7000-8000-000000000010";
+  const started = { sequence: 1, timestamp: "2026-08-19T00:00:00Z", kind: "prompt_started", sessionId: SESSION_ID, runId };
+  const cancelled = { sequence: 2, timestamp: "2026-08-19T00:00:01Z", kind: "prompt_cancel_requested", sessionId: SESSION_ID, runId };
+  assert.equal(deriveRecoveryState([started, cancelled]).interruptedRun.runId, runId);
+  assert.equal(deriveRecoveryState([
+    started,
+    cancelled,
+    { sequence: 3, timestamp: "2026-08-19T00:00:02Z", kind: "prompt_completed", sessionId: SESSION_ID, runId },
+  ]).interruptedRun, null);
+  assert.equal(deriveRecoveryState([
+    started,
+    { sequence: 2, timestamp: "2026-08-19T00:00:01Z", kind: "prompt_failed", sessionId: SESSION_ID, runId },
+  ]).interruptedRun, null);
+});
+
+test("unknown acknowledgment requires exact identity, inactive boundaries, and a bounded reason", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-ack-boundaries-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const runId = "01900000-0000-7000-8000-000000000011";
+  const otherRunId = "01900000-0000-7000-8000-000000000012";
+  const otherSessionId = "01900000-0000-7000-8000-000000000013";
+  const first = new GrokSupervisor({ stateRoot: root, processIsAlive: (pid) => pid === 4242 });
+  first.record("prompt_started", { sessionId: SESSION_ID, runId });
+  writeFileSync(join(root, "leader-owner.json"), JSON.stringify({
+    schemaVersion: 1,
+    ownerToken: OWNER_TOKEN,
+    leaderPid: 4242,
+    cwd: process.cwd(),
+    socketPath: join(root, "leader.sock"),
+    processFingerprint: "original-leader",
+    executablePath: "C:\\test\\grok.exe",
+  }));
+  const recovered = new GrokSupervisor({
+    stateRoot: root,
+    processIsAlive: (pid) => pid === 4242,
+    inspectProcessIdentity: (pid) => pid === 4242
+      ? { fingerprint: "owned-tui", executablePath: "C:\\test\\grok.exe" }
+      : null,
+    grokBinary: "C:\\test\\grok.exe",
+  });
+  const activeSessionsPath = join(root, "active-sessions-invalid.json");
+  recovered.activeSessionsRegistryPath = () => activeSessionsPath;
+  writeFileSync(activeSessionsPath, "{}");
+
+  await assert.rejects(() => recovered.control({
+    action: "acknowledge_unknown",
+    sessionId: SESSION_ID,
+    runId,
+    reason: "checked",
+    confirmation: "WRONG_CONFIRMATION",
+  }), /confirmation must equal CONTROL_GROK_SESSION/);
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: otherSessionId, runId, reason: "checked" }), (error) => error.code === "GROK_UNKNOWN_ACK_MISMATCH");
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId: otherRunId, reason: "checked" }), (error) => error.code === "GROK_UNKNOWN_ACK_MISMATCH");
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "   " }), /reason must be non-empty/);
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "x".repeat(1001) }), /at most 1000/);
+
+  recovered.acpContext = {};
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "checked" }), (error) => error.code === "GROK_UNKNOWN_ACK_ACTIVE_BOUNDARY" && error.details.blockers.includes("active_or_uncertain_acp"));
+  recovered.acpContext = null;
+  recovered.activeRun = { runId: otherRunId, status: "running" };
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "checked" }), (error) => error.details.blockers.includes(`active_run:${otherRunId}`));
+  recovered.activeRun = null;
+  recovered.leaderProcess = { pid: 4242 };
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "checked" }), (error) => error.details.blockers.includes("live_or_uncertain_owned_leader"));
+  recovered.leaderProcess = null;
+  writeFileSync(activeSessionsPath, "{invalid-json");
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "checked" }), (error) => error.details.blockers.includes("unreadable_active_sessions_registry"));
+  writeFileSync(activeSessionsPath, "{}");
+  recovered.tuiProcesses.set(4242, { sessionId: SESSION_ID, processFingerprint: "owned-tui" });
+  assert.throws(() => recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId, reason: "checked" }), (error) => error.details.blockers.includes("live_owned_tui"));
+  assert.equal(recovered.events.some((event) => event.kind === "unknown_run_acknowledged"), false);
+  recovered.tuiProcesses.clear();
+  mkdirSync(recovered.tuiStateRoot, { recursive: true });
+  writeFileSync(join(recovered.tuiStateRoot, "reused-pid.json"), JSON.stringify({
+    schemaVersion: 1,
+    launchId: "reused-pid",
+    status: "running",
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    grokPid: 4242,
+    grokProcessFingerprint: "original-tui",
+  }));
+  const acknowledged = await recovered.control({
+    action: "acknowledge_unknown",
+    sessionId: SESSION_ID,
+    runId,
+    reason: "same PID now has a different verified identity",
+    confirmation: "CONTROL_GROK_SESSION",
+  });
+  assert.equal(acknowledged.status, "unknown");
+});
+
+test("acknowledging the newest unknown run reveals an older unresolved run", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-ack-order-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const olderRunId = "01900000-0000-7000-8000-000000000014";
+  const newerRunId = "01900000-0000-7000-8000-000000000015";
+  const first = new GrokSupervisor({ stateRoot: root, processIsAlive: () => false });
+  first.record("prompt_started", { sessionId: SESSION_ID, runId: olderRunId });
+  first.record("prompt_started", { sessionId: SESSION_ID, runId: newerRunId });
+  const recovered = new GrokSupervisor({ stateRoot: root, processIsAlive: () => false });
+  recovered.readActiveSessions = () => [];
+  assert.equal(recovered.recovery.interruptedRun.runId, newerRunId);
+  recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId: newerRunId, reason: "newer run inspected" });
+  assert.equal(recovered.recovery.interruptedRun.runId, olderRunId);
+  recovered.acknowledgeUnknown({ sessionId: SESSION_ID, runId: olderRunId, reason: "older run inspected" });
+  assert.equal(recovered.recovery.interruptedRun, null);
+  assert.equal(new GrokSupervisor({ stateRoot: root, processIsAlive: () => false }).recovery.interruptedRun, null);
 });
 
 test("journal write failure degrades to bounded memory and remains observable", () => {
