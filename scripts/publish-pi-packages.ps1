@@ -28,11 +28,15 @@ if ($runningInGitHubActions) {
     }
     Write-Host 'Using npm Trusted Publishing (OIDC); npm whoami is intentionally skipped because OIDC is exchanged only during npm publish.' -ForegroundColor DarkGray
 } else {
+    $expectedNpmUser = ([string]$env:NPM_EXPECTED_USER).Trim()
+    if ([string]::IsNullOrWhiteSpace($expectedNpmUser)) {
+        throw 'Set NPM_EXPECTED_USER before local publish.'
+    }
     $npmUserOutput = @(& $NpmCommand whoami 2>&1)
     $npmWhoamiExitCode = $LASTEXITCODE
     $npmUser = ([string]($npmUserOutput | Select-Object -Last 1)).Trim()
-    if ($npmWhoamiExitCode -ne 0 -or $npmUser -ne 'flyingmoonc') {
-        throw "Expected npm account flyingmoonc, received '$npmUser'."
+    if ($npmWhoamiExitCode -ne 0 -or $npmUser -ne $expectedNpmUser) {
+        throw "Expected npm account $expectedNpmUser, received '$npmUser'."
     }
 }
 
