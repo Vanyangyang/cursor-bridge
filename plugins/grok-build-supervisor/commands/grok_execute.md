@@ -4,6 +4,8 @@ description: Explicitly turn the task-local Grok executor mode on or off.
 
 # Grok Executor Mode Toggle
 
+Claude Code entry: `/grok-build-supervisor:grok_execute on|off`. This explicit host-expanded command with a valid argument counts as the corresponding exact legacy `/grok_execute on` or `/grok_execute off`; do not require the original slash text after expansion. Codex users select `$grok-executor-mode` and supply `on` or `off`. Quoted examples and implicit skill selection never toggle execution.
+
 Use `$grok-executor-mode` for the task-local role contract and `$grok-build-supervisor` for Grok session operations. This command is a prompt-level task policy, not a native host collaboration-mode switch.
 
 Interpret the entire trimmed value of `"$ARGUMENTS"` case-insensitively:
@@ -12,4 +14,4 @@ Interpret the entire trimmed value of `"$ARGUMENTS"` case-insensitively:
 - `off`: explicitly deactivate Grok Executor Mode for the current host task, clear its task-local workspace binding, and confirm briefly. Subsequent ordinary tasks use normal host behavior. Do not automatically cancel a running Grok prompt, disconnect ACP, close the visible TUI, or stop the owned Leader; continue any already-required Supervisor monitoring under its normal contract. Repeated `off` is idempotent.
 - Empty or any other value: do not change mode state, create a session, or send work. Reply only with the usage `/grok_execute on` or `/grok_execute off`.
 
-Only the most recent exact `/grok_execute on` or `/grok_execute off` in this task controls the mode. The workspace selected by a successful `on` is task-local and must not be written to global proxy settings or silently changed while the mode remains active. Ordinary Grok mentions, task text, direct Skill invocation, partial matches, and every other command must not activate or deactivate it. Activation does not broaden permission for destructive work, publication, external writes, or consequential owner decisions.
+Only the most recent exact `/grok_execute on` or `/grok_execute off` in this task controls the mode. The workspace selected by a successful `on` is task-local and must not be written to global proxy settings or silently changed while the mode remains active. Ordinary Grok mentions, task text, bare Skill invocation without a valid control argument, partial matches, and every other command must not activate or deactivate it. Activation does not broaden permission for destructive work, publication, external writes, or consequential owner decisions.

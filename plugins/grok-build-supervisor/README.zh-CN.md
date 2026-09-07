@@ -11,6 +11,8 @@ Grok Build Supervisor 可以单独安装到 Codex、Claude Code 或 Pi。它会�
 
 ## 安装
 
+宿主入口：Codex 初始化使用 `$grok-build-supervisor init`；之后直接选择 **开启 Grok 执行**（`$grok-executor-on`）或 **关闭 Grok 执行**（`$grok-executor-off`），无需补输参数。Claude Code 使用 `/grok-build-supervisor:grok_init` 初始化，再选择 `/grok-build-supervisor:grok-executor-on` 或 `/grok-build-supervisor:grok-executor-off`。下文的 `/grok_init`、`/grok_execute on|off` 是兼容聊天口令，不代表所有宿主都注册了这些斜杠命令。正规显式调用遵守相同授权边界；仅选择共享策略技能、引用示例或普通“继续”都不会激活执行。
+
 前置条件：
 
 - 支持插件的 Codex 或 Claude Code，或 Pi（已在 0.84.3 上验证）

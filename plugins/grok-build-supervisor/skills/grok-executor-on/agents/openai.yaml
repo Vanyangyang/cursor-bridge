@@ -1,0 +1,6 @@
+interface:
+  display_name: "开启 Grok 执行"
+  short_description: "Enable Grok execution and prepare its terminal"
+  default_prompt: "$grok-executor-on"
+policy:
+  allow_implicit_invocation: false

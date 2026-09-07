@@ -24,7 +24,7 @@ const shasums = JSON.parse(process.env.FAKE_NPM_SHASUMS || "{}");
 appendFileSync(process.env.FAKE_NPM_LOG, JSON.stringify(args) + "\\n");
 
 if (command === "run" && args[1] === "build:pi-packages") {
-  for (const [name, version] of [["pi-cursor-bridge", "0.1.14"], ["pi-grok-build-supervisor", "0.1.5"]]) {
+  for (const [name, version] of [["pi-cursor-bridge", "0.1.14"], ["pi-grok-build-supervisor", "0.1.6"]]) {
     const packageRoot = resolve(".pi-package-stage", name);
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, version, pi: { extensions: [] } }));
@@ -127,8 +127,13 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   assert.equal(cursor.version, "0.1.14");
   assert.equal(cursor.piPackage.embeddedProductVersion, "5.9.1");
   assert.equal(grok.name, "pi-grok-build-supervisor");
-  assert.equal(grok.version, "0.1.5");
-  assert.equal(grok.piPackage.embeddedProductVersion, "0.4.0");
+  assert.equal(grok.version, "0.1.6");
+  assert.equal(grok.piPackage.embeddedProductVersion, "0.4.1");
+  for (const action of ["on", "off"]) {
+    const skill = `./skills/grok-executor-${action}`;
+    assert.ok(grok.pi.skills.includes(skill));
+    assert.match(readFileSync(join(output, "pi-grok-build-supervisor", skill, "SKILL.md"), "utf8"), /no argument is required/);
+  }
   assert.deepEqual(cursor.pi.extensions, ["./extensions/index.ts"]);
   assert.deepEqual(grok.pi.prompts, ["./prompts/grok_init.md", "./prompts/grok_execute.md"]);
   const cursorBundle = readFileSync(join(output, "pi-cursor-bridge", "dist", "cursor-bridge.mjs"), "utf8");
@@ -154,7 +159,7 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   assert.match(grokExtension, new RegExp(`packageVersion: "${grok.version.replaceAll('.', '\\.') }"`));
   const grokBundle = readFileSync(join(output, "pi-grok-build-supervisor", "dist", "grok-build-supervisor.mjs"), "utf8");
   assert.match(grokBundle, /grok_session_inspect/);
-  assert.match(grokBundle, /version: "0\.4\.0"/);
+  assert.match(grokBundle, /version: "0\.4\.1"/);
   assert.match(readFileSync(join(output, "pi-grok-build-supervisor", "prompts", "grok_execute.md"), "utf8"), /\$ARGUMENTS/);
 });
 
@@ -262,7 +267,7 @@ test("Pi publisher preflights every selected package before the first publish", 
   const { result, calls } = runPublisherScenario(t, {
     lookups: {
       "pi-cursor-bridge@0.1.14": { kind: "missing" },
-      "pi-grok-build-supervisor@0.1.5": { kind: "existing", shasum: "different-grok-tarball" },
+      "pi-grok-build-supervisor@0.1.6": { kind: "existing", shasum: "different-grok-tarball" },
     },
   });
   assert.notEqual(result.status, 0);

@@ -11,6 +11,8 @@ Grok Build Supervisor is a separate plugin for Codex, Claude Code, and Pi. It op
 
 ## Install
 
+Host invocation: initialize with `$grok-build-supervisor init` in Codex, then select `$grok-executor-on` or `$grok-executor-off` directly; no argument is needed. In Claude Code, initialize with `/grok-build-supervisor:grok_init`, then select `/grok-build-supervisor:grok-executor-on` or `/grok-build-supervisor:grok-executor-off`. The short `/grok_init` and `/grok_execute on|off` examples below are legacy chat aliases, not universally registered slash commands. Explicit native invocations have the same authorization boundaries; bare shared-policy skill selection, quoted examples, and ordinary “continue” never activate execution.
+
 Requirements:
 
 - Codex or Claude Code with plugin support, or Pi (tested with 0.84.3)

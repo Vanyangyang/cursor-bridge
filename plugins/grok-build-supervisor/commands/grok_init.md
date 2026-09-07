@@ -4,6 +4,8 @@ description: Discover, verify, and persist the local HTTP proxy used by Grok Bui
 
 # Grok Build Supervisor Initialization
 
+Claude Code entry: `/grok-build-supervisor:grok_init [loopback-http-url]`. Codex entry: `$grok-build-supervisor init [loopback-http-url]`. The bare `/grok_init` spelling is a legacy chat alias, not a portable registered host command. An explicit host-expanded invocation retains the same initialization authority.
+
 This command initializes only the persistent local proxy configuration. It must not create or resume a Grok session, open a TUI, send a prompt, or change Grok Executor Mode.
 
 Interpret the entire trimmed value of `"$ARGUMENTS"` as follows:

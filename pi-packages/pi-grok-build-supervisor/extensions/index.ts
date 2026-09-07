@@ -8,7 +8,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export default createStdioMcpExtension({
   label: "Grok Build Supervisor",
   clientName: "pi-grok-build-supervisor",
-  packageVersion: "0.1.5",
+  packageVersion: "0.1.6",
   serverName: "grok-build-supervisor",
   serverScript: join(packageRoot, "dist", "grok-build-supervisor.mjs"),
   cwd: packageRoot,

@@ -65,10 +65,12 @@ copyRequired(
   join(repositoryRoot, "plugins", "grok-build-supervisor", "skills", "grok-build-supervisor"),
   join(grok, "skills", "grok-build-supervisor"),
 );
-copyRequired(
-  join(repositoryRoot, "plugins", "grok-build-supervisor", "skills", "grok-executor-mode"),
-  join(grok, "skills", "grok-executor-mode"),
-);
+for (const skill of ["grok-executor-mode", "grok-executor-on", "grok-executor-off"]) {
+  copyRequired(
+    join(repositoryRoot, "plugins", "grok-build-supervisor", "skills", skill),
+    join(grok, "skills", skill),
+  );
+}
 for (const file of ["grok_init.md", "grok_execute.md"]) {
   const source = join(repositoryRoot, "plugins", "grok-build-supervisor", "commands", file);
   const target = join(grok, "prompts", file);

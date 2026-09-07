@@ -7,6 +7,44 @@ function readProjectFile(relativePath) {
   return readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), 'utf8');
 }
 
+test('Grok native entries normalize explicit controls without implicit activation', () => {
+  const root = 'plugins/grok-build-supervisor/';
+  const policy = readProjectFile(root + 'skills/grok-executor-mode/SKILL.md');
+  const transport = readProjectFile(root + 'skills/grok-build-supervisor/SKILL.md');
+  const command = readProjectFile(root + 'commands/grok_execute.md');
+  assert.match(policy, /argument-hint: "\[on\|off\]"/);
+  for (const entry of ['$grok-executor-mode on|off', '/grok-build-supervisor:grok-executor-mode on|off', '/grok-build-supervisor:grok_execute on|off']) {
+    assert.ok(policy.includes(entry), entry);
+  }
+  assert.match(policy, /extra arguments, and implicit skill selection are not control invocations/);
+  assert.match(policy, /A bare skill invocation never toggles the mode/);
+  assert.match(transport, /#host-entry-normalization/);
+  assert.match(transport, /\$grok-build-supervisor init/);
+  assert.match(command, /do not require the original slash text after expansion/);
+  assert.doesNotMatch(command, /task text, direct Skill invocation,/);
+});
+
+test('Grok dedicated controls require no argument and stay explicit-only', () => {
+  const root = 'plugins/grok-build-supervisor/';
+  const policy = readProjectFile(root + 'skills/grok-executor-mode/SKILL.md');
+  const manifest = JSON.parse(readProjectFile(root + '.codex-plugin/plugin.json'));
+  for (const action of ['on', 'off']) {
+    const name = `grok-executor-${action}`;
+    const skill = readProjectFile(root + `skills/${name}/SKILL.md`);
+    const metadata = readProjectFile(root + `skills/${name}/agents/openai.yaml`);
+    assert.ok(skill.includes(`name: ${name}`));
+    assert.match(skill, /no argument is required/);
+    assert.match(skill, /Do not ask the user to type/);
+    assert.match(skill, /\.\.\/grok-executor-mode\/SKILL\.md/);
+    assert.match(metadata, /allow_implicit_invocation: false/);
+    assert.ok(metadata.includes(`default_prompt: "$${name}"`));
+    assert.ok(manifest.interface.defaultPrompt.includes(`$${name}`));
+    assert.ok(policy.includes(`$${name}`));
+  }
+  assert.match(policy, /including reactivation after off/);
+  assert.match(readProjectFile(root + 'skills/grok-executor-off/SKILL.md'), /Do not cancel work, disconnect ACP, close the terminal, or stop the Leader/);
+});
+
 test('cce-routing skill exposes shared implicit routing with explicit boundaries', () => {
   const skill = readProjectFile('skills/cce-routing/SKILL.md');
   const metadata = readProjectFile('skills/cce-routing/agents/openai.yaml');
@@ -148,7 +186,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.deepEqual(cursor?.source, { source: 'url', url: './' });
   assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
   assert.equal(grokManifest.name, 'grok-build-supervisor');
-  assert.match(grokManifest.version, /^0\.4\.0\+codex\./);
+  assert.match(grokManifest.version, /^0\.4\.1\+codex\./);
   assert.deepEqual(grokManifest.mcpServers, {
     'grok-build-supervisor': {
       command: 'node',
@@ -158,7 +196,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     },
   });
   assert.equal(grokManifest.repository, 'https://github.com/Vanyangyang/cursor-bridge');
-  assert.ok(grokManifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_init')));
+  assert.ok(grokManifest.interface.defaultPrompt.some((prompt) => prompt.includes('$grok-build-supervisor init')));
   assert.deepEqual(
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
@@ -179,9 +217,9 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.equal(claudeCursor?.version, '5.9.1');
   assert.match(claudeCursor?.description || '', /Cursor 3\.19\.7/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.4.0');
+  assert.equal(claudeGrok?.version, '0.4.1');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.4.0');
+  assert.equal(claudeGrokManifest.version, '0.4.1');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
@@ -274,8 +312,8 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   assert.doesNotMatch(english, /Turning the mode on does not open Grok/);
   assert.doesNotMatch(chinese, /开启模式本身不会立即打开 Grok/);
   assert.equal(manifest.interface.defaultPrompt.some((prompt) => /Create a new Grok TUI/i.test(prompt)), false);
-  assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute on')), true);
-  assert.equal(manifest.interface.defaultPrompt.some((prompt) => prompt.includes('/grok_execute off')), true);
+  assert.equal(manifest.interface.defaultPrompt.includes('$grok-executor-on'), true);
+  assert.equal(manifest.interface.defaultPrompt.includes('$grok-executor-off'), true);
   assert.match(executeCommand, /bind Grok Executor Mode to the current host task's absolute project directory/);
   assert.match(executeCommand, /call `grok_session_open`/);
   assert.match(executeCommand, /OPEN_GROK_SESSION/);

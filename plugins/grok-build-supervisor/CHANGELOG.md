@@ -4,6 +4,14 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-07
+
+- Add explicit `grok-executor-on` and `grok-executor-off` skill entries. Selecting either is the complete control instruction; no extra on/off argument is required.
+- Normalize native skill and namespaced command invocations while retaining legacy chat aliases. Ordinary continuation, quoted examples, and implicit selection cannot toggle execution.
+- Update Codex starter prompts and bilingual usage guidance. Turning execution off preserves active work and the visible terminal.
+- Pi package `pi-grok-build-supervisor` 0.1.6 includes both dedicated controls and embeds Supervisor 0.4.1.
+- Validation covers entry contracts and staged package contents; it does not claim fresh-host UI acceptance of the new entries.
+
 ## [0.4.0] - 2026-09-05
 
 ### Added
