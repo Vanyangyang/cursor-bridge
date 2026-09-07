@@ -1,6 +1,6 @@
 {
   "name": "pi-cursor-bridge",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Use Cursor Context Engine and bounded, explicitly continuous Cursor Agent execution from the Pi coding agent.",
   "type": "module",
   "license": "MIT",
