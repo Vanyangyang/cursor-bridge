@@ -61,7 +61,7 @@ if (command === "publish") {
 }
 
 if (command === "whoami") {
-  console.log("flyingmoonc");
+  console.log(process.env.NPM_EXPECTED_USER || "publisher");
   process.exit(0);
 }
 
@@ -172,9 +172,9 @@ test("Pi publisher uses GitHub Actions OIDC without weakening local account veri
   assert.match(script, /\^\(\?:X\+\-\?\)\+\$/);
   assert.match(script, /must use npm Trusted Publishing without a real NODE_AUTH_TOKEN or NPM_TOKEN/);
   assert.match(script, /npm whoami is intentionally skipped/);
-  assert.match(script, /else \{\s+\$npmUserOutput = @\(& \$NpmCommand whoami 2>&1\)/);
+  assert.match(script, /else \{\s+\$expectedNpmUser = \(\[string\]\$env:NPM_EXPECTED_USER\)\.Trim\(\)/);
   assert.match(script, /\$npmUserOutput = @\(& \$NpmCommand whoami 2>&1\)/);
-  assert.match(script, /\$npmUser -ne 'flyingmoonc'/);
+  assert.match(script, /NPM_EXPECTED_USER/);
   assert.doesNotMatch(script, /\(& npm whoami\)\.Trim\(\)/);
   assert.match(script, /\[ValidateSet\('pi-cursor-bridge', 'pi-grok-build-supervisor'\)\]/);
   assert.match(script, /\[string\[\]\]\$PackageName/);
