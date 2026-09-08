@@ -64,7 +64,7 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **5.10.1 验证：** 工作区修复已在 Cursor 3.19.13 上通过宿主原生只读 FIFO：精确本地身份、四阶段检查、Fable 5.1/high 和可归属结果均通过。该次运行使用此前的 5.9.1 本机补丁。新增来源字段有回归/协议检查，5.10.1 新宿主加载仍待验收；持久会话证据沿用 5.9.0，较广环境结果沿用 5.8.2。
+> **6.0.0 验证：** 253 项自动化检查通过。本机构建的 MCP 已完成真实 Cursor 的精简状态与显式完整结果读取。6.0.0 新宿主原生加载仍待验收；其他运行证据保留其既有范围。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
@@ -161,10 +161,10 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.19.13** | **5.10.1**（`main`，当前版本） | 此前工作区补丁已原生验证精确本地身份及 FIFO/Fable 5.1/high；来源字段有回归/协议检查。5.10.1 新宿主加载仍待验收；其他运行证据沿用 5.9.0/5.8.2。 |
-| 3.19.7 | 5.9.0（归档） | 三轮真实只读持久会话、精确 Agent 身份、适配器重连、未读回复补收及幂等收集。 |
+| **3.19.13** | **6.0.0**（`main`，当前版本） | 253 项自动化检查通过，本机构建的 MCP 已完成真实 Cursor 的精简状态与显式完整结果读取。6.0.0 新宿主原生加载仍待验收；其他运行证据保留其既有范围。 |
+| 3.19.13 | 5.10.1（归档） | 工作区注册、FIFO 恢复与请求来源声明。 |
 
-不再主动维护旧 Cursor Bridge 版本。5.8.1、5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
+不再主动维护旧 Cursor Bridge 版本。5.10.1、5.10.0、5.9.1、5.9.0、5.8.2、5.8.1、5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
 支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
@@ -180,11 +180,11 @@ Cursor 兼容目标（Windows 11）：
 |---|---|
 | **`cursor_init`** | 使用一个绝对路径初始化 CCE，或切换工作区。 |
 | **`cursor_context_engine`** | 使用一个自然语言 `query` 进行只读项目理解。 |
-| **`cursor_do`** | 把明确、有边界的子任务交给 Cursor Agent 执行。 |
+| **`cursor_do`** | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果。 |
 | **`cursor_model`** | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
-| **`cursor_status`** | 只读查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。 |
+| **`cursor_status`** | 查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。任务视图默认精简；使用 `cursor_status(task_id, detail="full")` 才会取得完整保留结果并记录收取。 |
 | `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
-| `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`。 |
+| `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`，并返回动作/状态摘要；正文需另用完整任务状态取得。 |
 
 > [!WARNING]
 > Cursor 是 Agent，不是文件系统沙箱。CCE 会强提示只读调查，但提示词与允许路径并不是操作系统级隔离；重要结论和工作区改动仍需核验。
@@ -318,13 +318,14 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 
 - FIFO 即先进先出：普通任务通过一个 UI lock 串行执行，并在干净对话中开始。
 - 独立 `parallel_agent` 使用不同的顶层 Cursor Agent。并行写任务必须提供互不重叠的 `allowed_paths`；只读任务使用 `read_only=true`。
-- 保存返回的 `task_id`，再用 `cursor_status(task_id)` 回收。
+- 异步 `cursor_do(background=true)` 只返回精简提交回执。保存其中的 `task_id`，正常轮询时使用默认精简的 `cursor_status(task_id)`；任务进入终态后，调用 `cursor_status(task_id, detail="full")` 取得完整结果并记录收取。任务仍保留时，重复显式完整读取仍会返回同一结果。`cursor_do(background=false)` 是同步执行，仍直接返回完整结果正文。
+- `cursor_task_control` 只返回动作和精简任务状态，不返回结果正文。恢复动作到达终态后，用 `cursor_status(task_id, detail="full")` 取得正文。
 - `session_mode=isolated` 仍是默认值。只有后续轮次必须保留同一 Cursor 上下文时才使用 `session_mode=create`，然后用返回的稳定 `session_id` 配合 `session_mode=continue` 继续。
 - 每个续发轮次都会获得新的 `task_id`，并且必须再次声明 `read_only=true` 或 `allowed_paths` 子集。持续会话只使用 `parallel_agent`、同一时间只允许一个轮次，而且绝不降级到 FIFO。
 - `cursor_status(session_id)` 查看持久关联。`cursor_session_control(action=close)` 只结束 Bridge 连续性，不会停止 Cursor；已关闭的映射可用 `action=forget, confirm=true` 删除。
 - adapter 中断后，`cursor_session_control(action=reconcile)` 会两次核对精确 Agent，绝不重发；只有无法恢复停止证据时，才能显式确认风险后使用 `abandon`。
-- reconcile 确认完成后，在续发前使用 `cursor_session_control(action=collect_result)` 补收该轮回复。它会还原原选中 Agent，不发送提示、不持久化正文。epoch 变化会使收集无效；成功后重复调用返回 `already_collected`。数值回复签名和读取记录覆盖重启恢复，包括完成后首次读取前中断；没有保存签名的旧版续发轮需要人工检查。
-- 最多保留 50 条任务记录。未读回复受到保护：达到限制后以 `TASK_RETENTION_FULL` 拒绝新提交，不会丢弃未读结果。用 `cursor_status(task_id)` 读取 `cursor_status().unreadResultTaskIds` 中的任务后，相应记录才允许被淘汰。
+- reconcile 确认完成后，在续发前使用 `cursor_session_control(action=collect_result)` 补收该轮完整回复。它始终返回完整回复，会还原原选中 Agent，不发送提示、不持久化正文。epoch 变化会使收集无效；成功后重复调用返回 `already_collected`。数值回复签名和读取记录覆盖重启恢复，包括完成后首次读取前中断；没有保存签名的旧版续发轮需要人工检查。
+- 最多保留 50 条任务记录。未读回复受到保护：达到限制后以 `TASK_RETENTION_FULL` 拒绝新提交，不会丢弃未读结果。对 `cursor_status().unreadResultTaskIds` 中每个 ID 调用 `cursor_status(task_id, detail="full")`；精简 status 不记录收取，只有显式完整读取才会让相应记录允许淘汰。
 - `timeout_ms` 是发送后由 FIFO 和自动恢复共用的监视预算。到期不会取消 Cursor；显式 `reap` 可以给予新的监视预算。
 - 若宿主未提供工作区身份，Bridge 恢复共享 `default` 绑定后会以 `WORKSPACE_CONFIRMATION_REQUIRED` 阻止提交，直到 `cursor_init` 为当前 adapter 确认目标项目。按身份隔离的绑定仍保持原有重启行为。
 - ready 会话的原子注册表位于用户配置目录，因此可跨 MCP 重启和插件缓存替换；不会持久化提示、回复、凭据、插件路径、脚本路径或 CDP target ID。

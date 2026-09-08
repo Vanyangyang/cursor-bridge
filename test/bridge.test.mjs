@@ -1181,7 +1181,8 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   const sessionControl = tools.find((tool) => tool.name === 'cursor_session_control');
   assert.deepEqual(sessionControl.inputSchema.properties.action.enum, ['reconcile', 'collect_result', 'close', 'forget', 'abandon']);
   const status = tools.find((tool) => tool.name === 'cursor_status');
-  assert.deepEqual(Object.keys(status.inputSchema.properties), ['task_id', 'session_id']);
+  assert.deepEqual(Object.keys(status.inputSchema.properties), ['task_id', 'session_id', 'detail']);
+  assert.deepEqual(status.inputSchema.properties.detail.enum, ['compact', 'full']);
   assert.equal(tools.some((tool) => tool.name === 'cursor_launch'), false);
 });
 
@@ -1438,7 +1439,7 @@ test('persistent cursor_do sessions keep one stable session ID across explicit t
   bridge._bindSessionAgent(first);
   bridge._finishJob(first, 'turn one complete');
   assert.equal(bridge.sessionStatus(created.sessionId).sessionState, 'ready');
-  assert.equal((await bridge.status(first.id)).result, 'turn one complete');
+  assert.equal((await bridge.status(first.id, { detail: 'full' })).result, 'turn one complete');
 
   const restarted = new OfflineBridge({ sessionFile, projectPath: process.cwd(), sessionInstanceId: 'adapter-after-update' });
   const continued = await restarted.doTask('继续同一个会话', {
@@ -1480,7 +1481,7 @@ test('continued sessions fail closed on scope expansion and close before forget'
   first.agentId = 'durable-agent-scope';
   bridge._bindSessionAgent(first);
   bridge._finishJob(first, 'done');
-  await bridge.status(first.id);
+  await bridge.status(first.id, { detail: 'full' });
 
   await assert.rejects(
     bridge.doTask('尝试扩大为写入', {
@@ -1940,7 +1941,9 @@ test('bound FIFO recovery collects once, including cancel after completion', asy
     bridge._stopParallelAgent = async () => { throw new Error('must not stop a completed Agent'); };
     const result = await bridge.taskControl(job.id, { action, confirm: true, expectedAgentId: job.agentId });
     assert.equal(result.state, 'completed');
-    assert.equal(result.task.result, 'final FIFO reply');
+    assert.equal(result.task.result, undefined);
+    assert.equal(job.resultCollectedAt ?? null, null);
+    assert.equal((await bridge.status(job.id, { detail: 'full' })).result, 'final FIFO reply');
     assert.equal(result.task.reservationHeld, false);
     await bridge.taskControl(job.id, { action: 'reap' });
     assert.equal(collects, 1);
@@ -2054,7 +2057,9 @@ test('stable completion keeps reservation when final response extraction is temp
   ];
   const retried = await bridge.taskControl(view.taskId, { action: 'reap' });
   assert.equal(retried.state, 'completed');
-  assert.equal(retried.task.result, 'retry recovered result');
+  assert.equal(retried.task.result, undefined);
+  assert.equal(job.resultCollectedAt ?? null, null);
+  assert.equal((await bridge.status(view.taskId, { detail: 'full' })).result, 'retry recovered result');
   assert.equal(retried.task.resultUnavailable, false);
   assert.equal(retried.task.reservationHeld, false);
 });
@@ -2498,14 +2503,16 @@ test('status is a pure snapshot and explicit reap performs recovery', async () =
 
   const status = await bridge.status(view.taskId);
   assert.equal(status.status, 'needs_attention');
-  assert.equal(status.result, null);
+  assert.equal(status.result, undefined);
   assert.equal(status.reservationHeld, true);
   assert.equal(bridge.entrySnapshots.length, 2);
   assert.equal(bridge.monitorStarts, 0);
 
   const recovered = await bridge.taskControl(view.taskId, { action: 'reap' });
   assert.equal(recovered.state, 'completed');
-  assert.equal(recovered.task.result, 'recovered result');
+  assert.equal(recovered.task.result, undefined);
+  assert.equal(job.resultCollectedAt ?? null, null);
+  assert.equal((await bridge.status(view.taskId, { detail: 'full' })).result, 'recovered result');
   assert.equal(recovered.task.reservationHeld, false);
 });
 

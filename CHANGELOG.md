@@ -6,6 +6,18 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-09-09
+
+### Breaking changes
+
+- `cursor_status` now returns compact task views by default. Compact status never returns a result body or records result receipt; retrieve a retained terminal result and record receipt explicitly with `cursor_status(task_id, detail="full")`.
+- `cursor_do(background=true)` now returns only a compact submission receipt. `cursor_do(background=false)` continues to return the full synchronous result, and `cursor_session_control(action=collect_result)` continues to return the full session reply.
+- `cursor_task_control` now returns an action and compact task-state summary without a result body. Follow a terminal recovery action with explicit full task status when the result is needed.
+
+### Validation
+
+- 253 automated checks passed. A locally built MCP completed a real Cursor compact-status and explicit full-result read; fresh-host native 6.0.0 pickup remains pending.
+
 ## [5.10.1] - 2026-09-09
 
 ### Fixed

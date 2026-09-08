@@ -9,7 +9,7 @@
       "name": "cursor-bridge",
       "source": ".",
       "description": "Use an adaptive Cursor Context Engine and bounded Cursor Agent execution with exact workspace identity and declared request provenance in the Cursor 3.19.13 Agents Window; see compatibility documentation for verified paths.",
-      "version": "5.10.1",
+      "version": "6.0.0",
       "author": {
         "name": "Vanyangyang"
       }

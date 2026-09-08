@@ -128,7 +128,7 @@ try {
   let completedUnread = false;
   while (Date.now() < deadline) {
     const snapshot = parseTool(await second.callTool({ name: 'cursor_status', arguments: {} }), 'metadata-only cursor_status');
-    const task = snapshot.recentTasks.find((entry) => entry.taskId === turnThree.taskId);
+    const task = [...snapshot.activeParallel, ...snapshot.recentTasks].find((entry) => entry.taskId === turnThree.taskId);
     if (!task) throw new Error('The exact unread test task is missing');
     assert.equal(Object.hasOwn(task, 'result'), false);
     if (task.status === 'completed') {

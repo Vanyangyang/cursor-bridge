@@ -45,11 +45,19 @@ restart/update -> ready (reattachable) | needs_attention (reconciliation require
 
 `cursor_session_control(action=reconcile)` is the only automatic recovery path: it reads the exact bound Agent twice and clears the sender lease only from a stable terminal state. `action=abandon` requires explicit risk acknowledgement and closes only the Bridge mapping; it never claims that Cursor stopped.
 
-After reconciliation confirms a completed turn, `action=collect_result` explicitly retrieves that turn's stable reply before the next turn. It restores the previous Agent selection on success or failure, never sends a prompt, and does not persist response text. A restoration failure is reported separately without replacing the original collection error. Collection fails while the Agent is running and discards the reply if another sender changes the session epoch or active state. After a successful collection, a repeated call returns `already_collected` without reading the UI again. The registry records `resultCollectedAt`; `resultUnavailable` describes the absence of a reply in the current adapter.
+After reconciliation confirms a completed turn, `action=collect_result` explicitly retrieves and returns that turn's complete stable reply before the next turn. It restores the previous Agent selection on success or failure, never sends a prompt, and does not persist response text. A restoration failure is reported separately without replacing the original collection error. Collection fails while the Agent is running and discards the reply if another sender changes the session epoch or active state. After a successful collection, a repeated call returns `already_collected` without reading the UI again. The registry records `resultCollectedAt`; `resultUnavailable` describes the absence of a reply in the current adapter.
 
 Before sending a continued turn, Bridge atomically persists only the prior reply's numeric message count, length, and hash under the sender epoch. Recovery uses these values to reject the prior reply while the new one hydrates. They are deleted after explicit result receipt or when claiming the next turn. Older interrupted continuation turns without these values cannot be collected safely; inspect that original Agent manually before continuing. First turns use their newly created exact Agent identity.
 
-A completed background turn must be explicitly read before continuation. Read its `cursor_status(task_id)` while the adapter is alive; after a restart, reconcile and collect first. The read records a metadata receipt before returning the reply. This is not a transport acknowledgment or an exactly-once delivery guarantee.
+## Task result views
+
+- `cursor_status(task_id)` is compact by default. It returns task identity, state, model, reservation, recovery, errors, and result availability, but never returns a result body or records result receipt.
+- `cursor_status(task_id, detail="full")` explicitly returns complete task detail and its retained result, and records receipt. Repeat explicit full reads remain allowed while the task record is retained.
+- `cursor_do(background=true)` returns only a compact submission receipt. `cursor_do(background=false)` is an explicit wait and returns the full result body.
+- `cursor_task_control` returns its action and compact task state without a result body or an implicit result receipt. After a terminal control action, use explicit full task status when the result is needed.
+- `cursor_session_control(action=collect_result)` always returns the full session reply; compact task views do not replace it.
+
+A completed background session turn must be explicitly retrieved before continuation. While the adapter is alive, poll its `cursor_status(task_id)` compact view and use `cursor_status(task_id, detail="full")` after a terminal state; after a restart, reconcile and collect first. An explicit full task read records a metadata receipt before returning the reply. This is not a transport acknowledgment or an exactly-once delivery guarantee.
 
 ## Sender and result rules
 
@@ -60,7 +68,7 @@ A completed background turn must be explicitly read before continuation. Read it
 - Result collection accepts only a stable completed assistant reply that advances the visible message count or changes that reply signature. This supports Cursor's virtualized message list without returning the prior turn.
 - The primary agent still owns real diff inspection, tests, and final acceptance.
 - Automatic recovery shares the original post-submission monitoring deadline. Expiry is an attention condition, not Stop confirmation; only an explicit `reap` may start a fresh monitoring budget.
-- The process retains at most 50 task records. Terminal replies that have not been returned through an explicit result read are not evicted; further submissions fail with `TASK_RETENTION_FULL` until capacity is available. `cursor_status().unreadResultTaskIds` identifies the replies to collect. These records remain process-local.
+- The process retains at most 50 task records. Terminal replies that have not been returned through an explicit full result read are not evicted; further submissions fail with `TASK_RETENTION_FULL` until capacity is available. `cursor_status().unreadResultTaskIds` identifies the replies to retrieve through `cursor_status(task_id, detail="full")`. Compact status never releases retention protection. These records remain process-local.
 
 ## Storage and update boundary
 

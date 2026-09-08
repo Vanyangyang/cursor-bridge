@@ -22605,7 +22605,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.10.1";
+var PLUGIN_VERSION = "6.0.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -24029,7 +24029,7 @@ var CursorBridge = class {
         throw cursorSessionError("SESSION_NOT_READY", `state=${session.state}; recovery=${session.recoveryState || "none"}`);
       }
       if (session.lastTask?.status === "completed" && !session.lastTask.resultCollectedAt && this.tasks.has(session.lastTask.taskId)) {
-        throw cursorSessionError("SESSION_RESULT_UNCOLLECTED", `read cursor_status(task_id=${session.lastTask.taskId}) before continuing`);
+        throw cursorSessionError("SESSION_RESULT_UNCOLLECTED", `read cursor_status(task_id=${session.lastTask.taskId}, detail="full") before continuing`);
       }
       if (session.lastTask?.status === "completed" && !session.lastTask.resultCollectedAt && !this.tasks.has(session.lastTask.taskId) && session.recoveryState !== "reconciled_result_uncollected") {
         throw cursorSessionError("SESSION_RECONCILE_REQUIRED", "the prior reply was not read before this adapter restarted; reconcile the exact Agent before continuing");
@@ -24688,7 +24688,7 @@ var CursorBridge = class {
       modelPreference = session.modelPreference || null;
       if (duplicate) {
         const existing = this.tasks.get(session.activeTaskId || session.lastTask && session.lastTask.taskId || "");
-        return existing ? { duplicate: true, ...this._taskView(existing, true) } : { duplicate: true, ...this._sessionView(session) };
+        return existing ? { duplicate: true, ...options.background === false ? this._collectedTaskView(existing) : this._compactTaskView(existing) } : { duplicate: true, ...this._sessionView(session) };
       }
     }
     const job = this._enqueue("do", fullPrompt, {
@@ -24712,9 +24712,9 @@ var CursorBridge = class {
       agentId: sessionMode === "continue" ? session && session.agentId : null,
       agentLabel: sessionMode === "continue" ? session && session.agentLabel : null
     });
-    if (options.background !== false) return this._taskView(job);
+    if (options.background !== false) return this._compactTaskView(job);
     await job.promise;
-    return this._taskView(job, true);
+    return this._collectedTaskView(job);
   }
   _assertNoParallelPathConflict(allowedPaths) {
     if (this._hasGlobalReservation()) {
@@ -26560,11 +26560,13 @@ var CursorBridge = class {
       job.cancelReason = reason || (job.execution === "parallel_agent" ? "User requested Cursor Agent cancellation" : "User requested FIFO task cancellation");
       job.cancelRequestSeq = Number(job.cancelRequestSeq || 0) + 1;
     }
-    return this._withJobLock(job, () => this._taskControlLocked(job, action, {
+    const result = await this._withJobLock(job, () => this._taskControlLocked(job, action, {
       ...options,
       reason,
       expectedAgentId
     }));
+    if (result && result.task) result.task = this._compactTaskView(job);
+    return result;
   }
   async _taskControlLocked(job, action, options) {
     if (action === "reap") {
@@ -26807,7 +26809,6 @@ var CursorBridge = class {
     throw new Error(`Cursor task timed out (${timeoutMs}ms) before generation was confirmed stopped with a complete assistant reply${taskHint}`);
   }
   _taskView(job, includeResult = false) {
-    if (includeResult) this._markTaskResultCollected(job);
     const view = {
       taskId: job.id,
       requestedTimeoutMs: job.requestedTimeoutMs ?? job.timeoutMs,
@@ -26874,6 +26875,157 @@ var CursorBridge = class {
     }
     return view;
   }
+  _collectedTaskView(job) {
+    this._markTaskResultCollected(job);
+    return this._taskView(job, true);
+  }
+  _compactTaskView(job, { summary = false } = {}) {
+    const full = this._taskView(job);
+    const selection = full.modelSelection && {
+      configured: full.modelSelection.configured,
+      applied: full.modelSelection.applied,
+      model: full.modelSelection.model,
+      effort: full.modelSelection.effort,
+      requestedModel: full.modelSelection.requestedModel ?? full.modelSelection.model ?? full.modelPreference?.model,
+      requestedEffort: full.modelSelection.requestedEffort ?? full.modelSelection.effort ?? full.modelPreference?.effort,
+      effectiveModel: full.modelSelection.effectiveModel,
+      effectiveEffort: full.modelSelection.effectiveEffort,
+      failureClass: full.modelSelection.failureClass,
+      retryable: full.modelSelection.retryable,
+      errorCode: full.modelSelection.errorCode,
+      lastError: full.modelSelection.lastError,
+      failedAt: full.modelSelection.failedAt,
+      verifiedAt: full.modelSelection.verifiedAt
+    };
+    const view = {
+      taskId: full.taskId,
+      kind: full.kind,
+      status: full.status,
+      phase: full.phase,
+      execution: full.execution,
+      effectiveExecution: full.effectiveExecution,
+      projectPath: full.projectPath,
+      sessionId: full.sessionId,
+      agentId: full.agentId,
+      sendState: full.sendState,
+      modelSelection: selection,
+      reservationHeld: full.reservationHeld,
+      reservationScope: full.reservationScope,
+      blocksFifo: full.blocksFifo,
+      blocksAll: full.blocksAll,
+      recoveryState: full.recoveryState,
+      attention: full.attention,
+      cancelRequested: full.cancelRequested,
+      cancelReason: full.cancelReason,
+      underlyingStopConfirmed: full.underlyingStopConfirmed,
+      lastRecoveryAt: full.lastRecoveryAt,
+      terminalEvidence: full.terminalEvidence,
+      resultAvailable: job.result != null,
+      resultLength: job.result == null ? 0 : String(job.result).length,
+      resultUnread: job.result != null && !full.resultCollectedAt,
+      resultUnavailable: full.resultUnavailable,
+      resultCollectedAt: full.resultCollectedAt,
+      error: full.error
+    };
+    if (selection && Object.values(selection).every((value) => value === void 0)) view.modelSelection = null;
+    if (full.sessionError) view.sessionError = full.sessionError;
+    if (full.firstWaitError) view.firstWaitError = full.firstWaitError;
+    if (full.providerError) view.providerError = full.providerError;
+    if (full.uiDiagnostic) view.uiDiagnostic = full.uiDiagnostic;
+    if (full.workspaceBinding && full.workspaceBinding.ok === false) view.workspaceBinding = full.workspaceBinding;
+    if ((full.error || full.status === "needs_attention") && full.workspaceBindingChecks) {
+      view.workspaceBindingChecks = full.workspaceBindingChecks;
+    }
+    if (full.status === "needs_attention" && full.lastWaitObservation) view.lastWaitObservation = full.lastWaitObservation;
+    if (summary) {
+      return {
+        taskId: view.taskId,
+        status: view.status,
+        phase: view.phase,
+        agentId: view.agentId,
+        sessionId: view.sessionId,
+        resultAvailable: view.resultAvailable,
+        resultLength: view.resultLength,
+        resultUnread: view.resultUnread,
+        resultCollectedAt: view.resultCollectedAt,
+        ...view.sendState ? { sendState: view.sendState } : {},
+        ...view.reservationHeld ? { reservationHeld: true, reservationScope: view.reservationScope } : {},
+        ...view.blocksFifo ? { blocksFifo: true } : {},
+        ...view.blocksAll ? { blocksAll: true } : {},
+        ...view.recoveryState ? { recoveryState: view.recoveryState } : {},
+        ...view.attention ? { attention: view.attention } : {},
+        ...view.cancelRequested ? { cancelRequested: true } : {},
+        ...view.cancelReason ? { cancelReason: view.cancelReason } : {},
+        ...view.underlyingStopConfirmed != null ? { underlyingStopConfirmed: view.underlyingStopConfirmed } : {},
+        ...view.lastRecoveryAt ? { lastRecoveryAt: view.lastRecoveryAt } : {},
+        ...view.terminalEvidence ? { terminalEvidence: view.terminalEvidence } : {},
+        ...view.resultUnavailable ? { resultUnavailable: true } : {},
+        ...view.error ? { error: view.error } : {},
+        ...view.providerError ? { providerError: view.providerError } : {},
+        ...view.uiDiagnostic ? { uiDiagnostic: view.uiDiagnostic } : {},
+        ...view.workspaceBinding ? { workspaceBinding: view.workspaceBinding } : {},
+        ...view.workspaceBindingChecks ? { workspaceBindingChecks: view.workspaceBindingChecks } : {}
+      };
+    }
+    return {
+      ...view,
+      requestedTimeoutMs: full.requestedTimeoutMs,
+      effectiveTimeoutMs: full.effectiveTimeoutMs,
+      readOnly: full.readOnly,
+      allowedPaths: full.allowedPaths,
+      modelPreference: full.modelPreference,
+      requestContext: full.requestContext,
+      sessionMode: full.sessionMode,
+      sessionTurn: full.sessionTurn,
+      sessionState: full.sessionState,
+      requestId: full.requestId,
+      provisionalAgentId: full.provisionalAgentId,
+      agentLabel: full.agentLabel,
+      createdAt: full.createdAt,
+      startedAt: full.startedAt,
+      sentAt: full.sentAt,
+      finishedAt: full.finishedAt
+    };
+  }
+  _compactStatusCommon() {
+    const workspace = this.workspaceView();
+    const runtime = this.runtimeModeView();
+    const models = this.modelPreferencesView();
+    return {
+      pluginVersion: PLUGIN_VERSION,
+      statusPath: "json-list",
+      workspaceKey: workspace.workspaceKey,
+      workspaceConfirmationRequired: workspace.workspaceConfirmationRequired,
+      workspaceBindingWarning: workspace.workspaceBindingWarning,
+      projectPath: workspace.projectPath,
+      initialized: workspace.initialized,
+      ...workspace.workspaceBinding && workspace.workspaceBinding.ok === false ? { workspaceBinding: workspace.workspaceBinding } : {},
+      ...this.delegationView(),
+      runtimeMode: runtime.runtimeMode,
+      minimalModeWarning: runtime.minimalModeWarning,
+      modelPreferences: models.modelPreferences,
+      modelPreferencesUpdatedAt: models.modelPreferencesUpdatedAt,
+      sessionStoragePersistent: !!this.sessionFile
+    };
+  }
+  _compactLifecycleView() {
+    const lifecycle = this._lastLifecycle;
+    if (!lifecycle) {
+      return { adapterPid: process.pid, status: null, lifecycleMode: null, persistent: null, degradedReason: null };
+    }
+    if (lifecycle.degradedReason || lifecycle.spawnErrorCode || lifecycle.error || lifecycle.supervisorError || lifecycle.needsAction || lifecycle.nextStep || lifecycle.retryable || lifecycle.status === "failed") {
+      return lifecycle;
+    }
+    return {
+      adapterPid: lifecycle.adapterPid,
+      supervisorPid: lifecycle.supervisorPid,
+      status: lifecycle.status,
+      lifecycleMode: lifecycle.lifecycleMode,
+      persistent: lifecycle.persistent,
+      degradedReason: lifecycle.degradedReason,
+      cursorPid: lifecycle.cursorPid
+    };
+  }
   _assertWorkspaceConfirmed() {
     if (this.workspaceConfirmationRequired) {
       throw new Error("WORKSPACE_CONFIRMATION_REQUIRED: the saved default binding has no host workspace identity. Run cursor_init with the intended project before submitting work.");
@@ -26882,7 +27034,7 @@ var CursorBridge = class {
   _ensureTaskCapacity() {
     this._trimTasks(49);
     if (this.tasks.size >= 50) {
-      throw new Error("TASK_RETENTION_FULL: 50 tasks are active or have unread replies. Read unreadResultTaskIds with cursor_status(task_id), or wait for active tasks before submitting more work.");
+      throw new Error('TASK_RETENTION_FULL: 50 tasks are active or have unread replies. Read each unreadResultTaskId with cursor_status(task_id, detail="full"), or wait for active tasks before submitting more work.');
     }
   }
   _trimTasks(limit = 50) {
@@ -26892,16 +27044,20 @@ var CursorBridge = class {
       if (this.tasks.size <= limit) break;
     }
   }
-  async status(taskId = "") {
+  async status(taskId = "", { detail = "compact" } = {}) {
+    const normalizedDetail = normalizeStatusDetail(detail);
     if (taskId) {
       const job = this.tasks.get(String(taskId));
-      if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this.sessionRegistryView() };
-      return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this.sessionRegistryView(), ...this._taskView(job, true) };
+      if (normalizedDetail === "full") {
+        if (!job) return { found: false, taskId: String(taskId), ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this.sessionRegistryView() };
+        return { found: true, ...this.workspaceView(), ...this.delegationView(), ...this.runtimeModeView(), ...this.modelPreferencesView(), ...this.sessionRegistryView(), ...this._collectedTaskView(job) };
+      }
+      return { found: !!job, ...this._compactStatusCommon(), ...job ? this._compactTaskView(job) : { taskId: String(taskId) } };
     }
     const parallelRunning = this.activeParallel.size;
     const uiBusy = this.busy;
     const globalBlocked = this._hasGlobalReservation();
-    const common = {
+    const common = normalizedDetail === "full" ? {
       pluginVersion: PLUGIN_VERSION,
       statusPath: "json-list",
       ...this.workspaceView(),
@@ -26939,6 +27095,21 @@ var CursorBridge = class {
         runtimeMode: this.runtimeMode,
         presentation: null
       }
+    } : {
+      ...this._compactStatusCommon(),
+      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
+      uiBusy,
+      parallelRunning,
+      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0,
+      queued: this.queue.length,
+      blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
+      globallyBlocked: globalBlocked,
+      blockedQueuedCount: this.activeParallel.size > 0 ? this.queue.filter((job) => globalBlocked || job.effectiveExecution !== "parallel_agent").length : 0,
+      activeParallel: [...this.activeParallel.values()].map((job) => this._compactTaskView(job, { summary: true })),
+      recentTasks: [...this.tasks.values()].filter((job) => !this.activeParallel.has(job.id)).slice(-10).map((job) => this._compactTaskView(job, { summary: true })),
+      unreadResultTaskIds: [...this.tasks.values()].filter((job) => isTerminalTask(job) && job.result != null && !job.resultCollectedAt).map((job) => job.id),
+      taskRetentionLimit: 50,
+      lifecycle: this._compactLifecycleView()
     };
     try {
       const ver = await httpJson("/json/version");
@@ -26958,6 +27129,13 @@ function buildSearchInputSchema() {
     },
     required: ["query"]
   };
+}
+function normalizeStatusDetail(detail) {
+  if (detail === void 0) return "compact";
+  if (typeof detail !== "string" || !["compact", "full"].includes(detail)) {
+    throw new Error("detail must be compact or full");
+  }
+  return detail;
 }
 var REQUEST_CONTEXT_SCHEMA = {
   type: "object",
@@ -26988,7 +27166,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
-      description: "Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Persistent continuity is explicit: session_mode=create starts one durable top-level Agent association, and session_mode=continue requires its exact session_id. Omission keeps the existing isolated behavior. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id). Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.",
+      description: 'Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Persistent continuity is explicit: session_mode=create starts one durable top-level Agent association, and session_mode=continue requires its exact session_id. Omission keeps the existing isolated behavior. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id, detail="full"); ordinary status calls are compact and do not acknowledge the reply. Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
       inputSchema: {
         type: "object",
         properties: {
@@ -27009,7 +27187,7 @@ function buildToolDefinitions(bridgeInstance) {
     } : null,
     {
       name: "cursor_task_control",
-      description: "Recover or terminate one exact in-memory Cursor task without resubmitting it; task records do not survive this MCP server process. Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and collects a stable terminal result when possible. Use cancel with confirm=true and the exact expected_agent_id to target Stop safely. FIFO or unbound orphans globally block delegation and require manual verification before abandon. Use abandon only with an explicit reason and acknowledge_may_still_write=true; it releases reservations without proving the Cursor Agent stopped.",
+      description: 'Recover or terminate one exact in-memory Cursor task without resubmitting it; task records do not survive this MCP server process. Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and stores a stable terminal result when possible. Responses stay compact and never acknowledge the result; collect it later with cursor_status(task_id, detail="full"). Use cancel with confirm=true and the exact expected_agent_id to target Stop safely. FIFO or unbound orphans globally block delegation and require manual verification before abandon. Use abandon only with an explicit reason and acknowledge_may_still_write=true; it releases reservations without proving the Cursor Agent stopped.',
       inputSchema: {
         type: "object",
         properties: {
@@ -27065,12 +27243,14 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_status",
-      description: "Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Pass task_id for its configured and effective model selection, or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.",
+      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Compact is the default and never includes or acknowledges a task result. Use detail="full" with task_id to receive the complete legacy task details and result; this marks the result collected while keeping repeat full reads available. Pass task_id for its configured and effective model selection or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.',
       inputSchema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           task_id: { type: "string", description: "A task ID returned by cursor_do." },
-          session_id: { type: "string", description: "A persistent session ID returned by cursor_do(session_mode=create)." }
+          session_id: { type: "string", description: "A persistent session ID returned by cursor_do(session_mode=create)." },
+          detail: { type: "string", enum: ["compact", "full"], default: "compact", description: "compact returns status and safety metadata without the result body or receipt side effect. full returns legacy complete details and explicitly collects a task result." }
         }
       }
     }
@@ -27187,15 +27367,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       if (args && args.task_id && args.session_id) {
         throw cursorSessionError("STATUS_SELECTOR_AMBIGUOUS", "pass task_id or session_id, not both");
       }
+      const detail = normalizeStatusDetail(args && args.detail);
       const statusMs = Math.max(1e3, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8e3));
       let result;
       try {
         result = await Promise.race([
-          args && args.session_id ? Promise.resolve(bridge.sessionStatus(args.session_id)) : bridge.status(args && args.task_id),
+          args && args.session_id ? Promise.resolve(bridge.sessionStatus(args.session_id)) : bridge.status(args && args.task_id, { detail }),
           new Promise((_, reject) => setTimeout(() => reject(new Error(`cursor_status_timeout_${statusMs}`)), statusMs))
         ]);
       } catch (error2) {
-        result = {
+        result = detail === "full" ? {
           connected: false,
           pluginVersion: PLUGIN_VERSION,
           statusPath: "json-list",
@@ -27203,7 +27384,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
           ...bridge.workspaceView(),
           ...bridge.delegationView(),
           ...bridge.runtimeModeView(),
+          ...bridge.modelPreferencesView(),
           ...bridge.sessionRegistryView()
+        } : {
+          connected: false,
+          ...bridge._compactStatusCommon(),
+          ...args && args.task_id ? { found: false, taskId: String(args.task_id) } : {},
+          ...args && args.session_id ? { found: false, sessionId: String(args.session_id) } : {},
+          error: error2 instanceof Error ? error2.message : String(error2)
         };
       }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };

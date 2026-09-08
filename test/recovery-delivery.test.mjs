@@ -116,7 +116,11 @@ test('unread terminal replies block further submissions instead of being silentl
   await assert.rejects(bridge.doTask('new session', { sessionMode: 'create', readOnly: true }), /TASK_RETENTION_FULL/);
   assert.equal(bridge.tasks.size, 50);
   assert.equal(bridge._readSession('anything'), null);
-  const collected = await bridge.status('old-0');
+  const compact = await bridge.status('old-0');
+  assert.equal(compact.result, undefined);
+  assert.equal(bridge.tasks.get('old-0').resultCollectedAt, undefined);
+  await assert.rejects(bridge.doTask('still full', { sessionMode: 'create', readOnly: true }), /TASK_RETENTION_FULL/);
+  const collected = await bridge.status('old-0', { detail: 'full' });
   assert.equal(collected.result, 'answer-0');
   const next = await bridge.doTask('new session', { sessionMode: 'create', readOnly: true });
   assert.ok(next.sessionId);
@@ -159,7 +163,9 @@ test('ordinary task views omit replies and exact reads record receipt', async ()
   bridge.tasks.set(job.id, job);
   assert.equal(bridge._taskView(job).result, undefined);
   assert.equal(job.resultCollectedAt, undefined);
-  assert.equal((await bridge.status(job.id)).result, 'private reply');
+  assert.equal((await bridge.status(job.id)).result, undefined);
+  assert.equal(job.resultCollectedAt, undefined);
+  assert.equal((await bridge.status(job.id, { detail: 'full' })).result, 'private reply');
   assert.ok(job.resultCollectedAt);
 });
 
@@ -188,7 +194,7 @@ test('read receipts survive restart and ordinary completed sessions cannot colle
   sender._bindSessionAgent(job);
   sender._finishJob(job, 'delivered reply');
   await assert.rejects(sender.doTask('next turn', { sessionMode: 'continue', sessionId: created.sessionId, readOnly: true, readOnlySpecified: true }), /SESSION_RESULT_UNCOLLECTED/);
-  await sender.status(job.id);
+  await sender.status(job.id, { detail: 'full' });
   const restarted = new OfflineBridge({ sessionFile, projectPath: process.cwd() });
   restarted._collectParallelAgent = async () => assert.fail('normal ready session must not read arbitrary latest replies');
   await assert.rejects(restarted.sessionControl(created.sessionId, { action: 'collect_result' }), /SESSION_RESULT_NOT_READY/);
@@ -204,7 +210,7 @@ test('continued-turn numeric baselines survive restart and reject the prior repl
   first.agentId = 'baseline-agent';
   sender._bindSessionAgent(first);
   sender._finishJob(first, 'first private reply');
-  await sender.status(first.id);
+  await sender.status(first.id, { detail: 'full' });
   const continued = await sender.doTask('second turn', { sessionMode: 'continue', sessionId: created.sessionId, readOnly: true, readOnlySpecified: true });
   const second = sender.tasks.get(continued.taskId);
   const baseline = { messageCount: 2, replyLength: 19, replyHash: 12345 };

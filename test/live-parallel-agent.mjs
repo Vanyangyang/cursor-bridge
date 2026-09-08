@@ -75,8 +75,8 @@ while (Date.now() < deadline) {
   }
   if (fatalRecovery) break;
   if (sa.status === 'completed' && sb.status === 'completed') {
-    finalA = sa;
-    finalB = sb;
+    finalA = await bridge.status(a.taskId, { detail: 'full' });
+    finalB = await bridge.status(b.taskId, { detail: 'full' });
     break;
   }
   await sleep(1200);
