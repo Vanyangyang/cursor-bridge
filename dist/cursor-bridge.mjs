@@ -22344,6 +22344,7 @@ var StdioServerTransport = class {
 
 // server.mjs
 import { basename as basename6, dirname as dirname6, join as join8, resolve as resolve7 } from "node:path";
+import { statSync as statSync3 } from "node:fs";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -22604,7 +22605,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "5.10.0";
+var PLUGIN_VERSION = "5.10.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -23342,6 +23343,60 @@ function exprInspectWorkspaceRepository(projectPath) {
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
     return JSON.stringify(inspectWorkspace(${JSON.stringify(String(projectPath || ""))}).diagnostic);
+  })()`;
+}
+function exprRegisterAgentsWorkspace(projectPath, workspaceFile = false) {
+  return `(async function(){
+    ${WORKSPACE_SECTION_BODY}
+    const path=${JSON.stringify(String(projectPath || ""))};
+    const before=inspectWorkspace(path).diagnostic;
+    if(before.state!=='workspace_registration_required')return JSON.stringify(before);
+    const fail=(state,error)=>JSON.stringify({...before,state,error});
+    const services=new Set();
+    for(const node of document.querySelectorAll('button[aria-label="Open Workspace"],.ui-sidebar-section-head')){
+      const key=Object.keys(node).find(k=>k.startsWith('__reactFiber$'));
+      for(let f=key&&node[key],i=0;f&&i<48;i++,f=f.return){
+        for(let d=f.dependencies&&f.dependencies.firstContext;d;d=d.next){
+          const service=d.memoizedValue&&d.memoizedValue.workspace&&d.memoizedValue.workspace.instantiationService;
+          if(service)services.add(service);
+        }
+      }
+    }
+    const candidates=new Map();
+    for(const service of services){
+      const entries=new Map();
+      for(let s=service,i=0;s&&i<8;i++,s=s._parent){
+        for(const [id,value] of s._services&&s._services._entries||[]){
+          if(!entries.has(String(id)))entries.set(String(id),value);
+        }
+      }
+      const projects=entries.get('glassWorkspacesService');
+      const workspaces=entries.get('workspacesService');
+      const URI=entries.get('environmentService')?.userHome?.constructor;
+      if(typeof projects?.replaceWorkspaceProject==='function'&&typeof URI?.file==='function'
+          &&typeof workspaces?.getSingleFolderWorkspaceIdentifier==='function'
+          &&typeof workspaces?.getWorkspaceIdentifier==='function'
+          &&typeof projects?.refresh==='function'){
+        candidates.set(projects,{projects,workspaces,URI});
+      }
+    }
+    if(candidates.size!==1)return fail('workspace_registration_unavailable','Expected one Cursor workspace registration service');
+    try{
+      const {projects,workspaces,URI}=[...candidates.values()][0];
+      const uri=URI.file(path);
+      const identifier=await workspaces[${JSON.stringify(workspaceFile ? "getWorkspaceIdentifier" : "getSingleFolderWorkspaceIdentifier")}](uri);
+      if(!identifier?.id||localWorkspacePath(identifier)!==normalizeWorkspacePath(path)){
+        return fail('workspace_registration_identity_mismatch','Cursor returned a different workspace identity');
+      }
+      const current=inspectWorkspace(path).diagnostic;
+      if(current.state!=='workspace_registration_required')return JSON.stringify(current);
+      // addProject can skip folders already represented by Agent history.
+      // With no 'replaces', this public service method upserts only this exact ID.
+      await projects.replaceWorkspaceProject({project:{type:'workspace',workspaceIdentifier:identifier}});
+      await projects.refresh();
+      return JSON.stringify({ok:false,state:'workspace_registration_requested',wanted:before.wanted,
+        workspaceId:identifier.id,registrationSource:'cursor_glass_workspaces_service'});
+    }catch(error){return fail('workspace_registration_failed',String(error.message||error));}
   })()`;
 }
 function exprInspectAgentWorkspace(projectPath, options = {}) {
@@ -24291,6 +24346,8 @@ var CursorBridge = class {
     return result;
   }
   async initializeWorkspace(projectPath) {
+    if (this._healing) await this._healing.catch(() => {
+    });
     if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
       throw new Error("cursor_init cannot change workspace while Cursor tasks are queued or running");
     }
@@ -24303,7 +24360,7 @@ var CursorBridge = class {
     this._lastLifecycle = null;
     this._lastWorkspaceBinding = null;
     try {
-      await this._ensureCursor();
+      await this._ensureCursor({ registerWorkspace: true });
     } catch (error2) {
       const lifecycle = this._lastLifecycle;
       const recoverableStatuses = /* @__PURE__ */ new Set([
@@ -24339,7 +24396,7 @@ var CursorBridge = class {
       lifecycle: this._lastLifecycle
     };
   }
-  async _findAgentsWorkspace(projectPath) {
+  async _findAgentsWorkspace(projectPath, { registerWorkspace = false } = {}) {
     if (!projectPath) return null;
     this._lastWorkspaceBinding = null;
     let page;
@@ -24352,7 +24409,24 @@ var CursorBridge = class {
     const c = makeClient(page.webSocketDebuggerUrl);
     try {
       await c.ready;
-      const repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || "{}");
+      let repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || "{}");
+      if (registerWorkspace && repository.state === "workspace_registration_required") {
+        const registration = await this._withUiLock(async () => {
+          if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+            return { ok: false, state: "workspace_registration_busy", error: "Cursor tasks became queued or running before registration" };
+          }
+          return JSON.parse(await evalJS(c, exprRegisterAgentsWorkspace(projectPath, statSync3(projectPath).isFile())) || "{}");
+        });
+        repository = registration;
+        if (registration.state === "workspace_registration_requested") {
+          for (let attempt = 0; attempt < 20; attempt++) {
+            repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || "{}");
+            if (repository.state !== "workspace_registration_required") break;
+            await sleep2(250);
+          }
+          repository = { ...repository, registration };
+        }
+      }
       this._lastWorkspaceBinding = { ...repository, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
       if (!repository.ok) return null;
       return {
@@ -24556,7 +24630,9 @@ var CursorBridge = class {
       throw cursorSessionError("SESSION_EXECUTION_INVALID", "persistent sessions require execution=parallel_agent and never fall back to FIFO");
     }
     const readOnly = options.readOnly === true;
-    const timeoutMs = Math.max(3e4, Math.min(9e5, Number(options.timeoutMs || 6e5)));
+    const requestedTimeoutMs = Number(options.timeoutMs ?? 6e5);
+    if (!Number.isFinite(requestedTimeoutMs)) throw new Error("timeout_ms must be finite");
+    const timeoutMs = Math.max(3e4, Math.min(9e5, requestedTimeoutMs));
     const allowedPaths = Array.isArray(options.allowedPaths) ? options.allowedPaths.map((x) => String(x).trim()).filter(Boolean) : [];
     if (readOnly && allowedPaths.length > 0) {
       throw new Error("read_only=true cannot be combined with allowed_paths because a read-only task cannot declare a write scope");
@@ -24619,6 +24695,7 @@ var CursorBridge = class {
       requestContext,
       taskId,
       timeoutMs,
+      requestedTimeoutMs,
       newChat: sessionMode !== "continue",
       execution,
       readOnly,
@@ -24682,6 +24759,7 @@ var CursorBridge = class {
       prompt,
       requestContext: options.requestContext || normalizeRequestContext(),
       timeoutMs: options.timeoutMs,
+      requestedTimeoutMs: options.requestedTimeoutMs ?? options.timeoutMs,
       newChat: options.newChat,
       preferLegacyUi: options.preferLegacyUi === true,
       execution: options.execution || "fifo",
@@ -24847,7 +24925,7 @@ var CursorBridge = class {
   // 自愈：每次查询前委托 ensureCursorRunning。并发去重。失败静默降级（_run 报清晰错）。
   // 统一走 ensureCursorRunning 复用其【单一身份校验来源】（cdpUp + cdpIsCursor）——避免热路径裸 /json/version 检查
   // 绕过身份校验、在别的 IDE 占 9223 时驱动错应用（2026-06-08 review #6）。
-  _ensureCursor() {
+  _ensureCursor({ registerWorkspace = false } = {}) {
     this._refreshPersistedRuntimeMode();
     if (this._healing) return this._healing;
     this._healing = (async () => {
@@ -24860,17 +24938,11 @@ var CursorBridge = class {
           ...this.projectPath ? { projectPath: this.projectPath } : {}
         });
         this._lastLifecycle = lifecycleFromEnsureResult(rr, this.runtimeMode);
-        if (!rr.ok && rr.status === "workspace-not-ready" && rr.projectPath) {
-          const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
+        if ((rr.ok || rr.status === "workspace-not-ready") && rr.projectPath) {
+          const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath, { registerWorkspace });
           if (agentsWorkspace) {
             this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
-          }
-        }
-        if (rr.ok && rr.workspaceAction === "reused-agents-window" && rr.projectPath) {
-          const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
-          if (agentsWorkspace) {
-            this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
-          } else {
+          } else if (rr.ok && (rr.workspaceAction === "reused-agents-window" || this._lastWorkspaceBinding)) {
             this._lastLifecycle = {
               ...this._lastLifecycle,
               status: "workspace-not-ready",
@@ -25011,10 +25083,11 @@ var CursorBridge = class {
             this.activeParallel.delete(job.id);
             this._failJob(job, error2);
           } else if (error2 && error2.sent) {
+            job.firstWaitError ||= error2.message;
             job.error = `Submission state is uncertain; monitoring continues by agentId: ${error2.message}`;
             if (job.agentId) {
               job.phase = "running";
-              job.reservationScope = job.readOnly ? "agent" : "paths";
+              job.reservationScope = job.effectiveExecution === "fifo" ? "global" : job.readOnly ? "agent" : "paths";
               this.activeParallel.set(job.id, job);
               this._startParallelMonitor(job);
             } else {
@@ -25083,6 +25156,7 @@ var CursorBridge = class {
           baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
         } catch {
         }
+        options.responseBaseline = baseline;
         const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
         await this._verifyAgentsWorkspace(c, options, "before_send");
         options.sendState = "dispatching";
@@ -25671,6 +25745,7 @@ var CursorBridge = class {
     if (!diagnostic.ok) throw createWorkspaceBindingError(diagnostic);
   }
   async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "", job = null) {
+    let lastSnapshot = {};
     const accepted = async () => {
       await this._throwIfNewProviderError(c, providerErrorBaseline);
       let snap = {};
@@ -25678,6 +25753,7 @@ var CursorBridge = class {
         snap = JSON.parse(await evalJS(c, EXPR_SNAP));
       } catch {
       }
+      lastSnapshot = snap;
       const inputTextLength = Number(snap.inputTextLength);
       return Number(snap.stop || 0) > 0 || Number(snap.messageCount || 0) > Number(baselineCount || 0) || Number.isFinite(inputTextLength) && inputTextLength === 0;
     };
@@ -25693,14 +25769,22 @@ var CursorBridge = class {
       throw error3;
     }
     const clicked = await evalJS(c, EXPR_CLICK_SEND);
-    if (clicked === "CLICKED") {
+    if (clicked === "CLICKED" || clicked === "NO_SEND") {
       for (let i = 0; i < 20; i++) {
         await sleep2(250);
-        if (await accepted()) return "button";
+        if (await accepted()) return clicked === "CLICKED" ? "button" : "enter";
       }
     }
-    const error2 = new Error(`Cursor did not accept the submission (submit_not_accepted: ${clicked || "unknown"}); the prompt remains in the input and no orphan task was created`);
-    error2.confirmedNotSent = true;
+    const error2 = new Error(`Cursor submission could not be confirmed (submission_uncertain: ${clicked || "unknown"}); Enter was dispatched, so inspect the bound Agent before retrying`);
+    error2.confirmedNotSent = false;
+    error2.sent = true;
+    error2.composerDiagnostic = {
+      inputTextLength: Number.isFinite(Number(lastSnapshot.inputTextLength)) ? Number(lastSnapshot.inputTextLength) : null,
+      sendReady: lastSnapshot.sendReady === true,
+      stop: Number(lastSnapshot.stop || 0),
+      messageCount: Number(lastSnapshot.messageCount || 0),
+      fallbackResult: clicked || "unknown"
+    };
     throw error2;
   }
   async _readProviderError(c) {
@@ -26072,7 +26156,12 @@ var CursorBridge = class {
     }
     if (!this._monitorOwns(job, generation)) return;
     const detail = lastCollectionError ? `; last collection error: ${lastCollectionError}` : "";
-    throw new Error(`Cursor parallel_agent task timed out (${job.timeoutMs}ms)${detail}`);
+    const recovered = await this._withJobLock(job, async () => {
+      if (!this._monitorOwns(job, generation)) return true;
+      const result = await this._reapParallelJobLocked(job, { reattach: false, preserveMonitor: true });
+      return isTerminalTask(job) || result.state === "terminal_uncollected";
+    });
+    if (!recovered) throw new Error(`Cursor ${job.effectiveExecution || job.execution || "Agent"} task timed out (${job.timeoutMs}ms)${detail}`);
   }
   async _requestExactAgentSelection(c, agentId) {
     if (!await this._ensureHistoryOpen(c)) return "REACT_ADAPTER_UNAVAILABLE";
@@ -26168,7 +26257,7 @@ var CursorBridge = class {
     job.resultUnavailable = true;
     job.terminalEvidence = evidence || "stable_completed_history_icon";
     job.recoveryState = "terminal_result_uncollected";
-    job.reservationScope = uncertainSubmissionReservationScope(job, error2);
+    job.reservationScope = job.effectiveExecution === "fifo" ? "global" : uncertainSubmissionReservationScope(job, error2);
     this._safeSettleSessionJob(job, "terminal_result_uncollected", { needsAttention: true });
   }
   _abandonJob(job, reason) {
@@ -26216,7 +26305,7 @@ var CursorBridge = class {
       job.recoveryState = "agent_missing";
       return { stable: false, error: "The bound agentId was not found in Agent History", entry: second || first || null };
     }
-    const stable = first.id === second.id && first.showSpinner === second.showSpinner && String(first.icon || "") === String(second.icon || "");
+    const stable = first.id === second.id && second.id === job.agentId && first.showSpinner === second.showSpinner && String(first.icon || "") === String(second.icon || "");
     return { stable, entry: second, error: stable ? null : "Agent History state is not yet stable" };
   }
   async _reapParallelJob(job, options = {}) {
@@ -26225,15 +26314,15 @@ var CursorBridge = class {
   }
   async _reapParallelJobLocked(job, options = {}) {
     if (!job || isTerminalTask(job)) return { changed: false, state: "terminal", task: this._taskView(job, true) };
-    if (job.execution !== "parallel_agent" || !this.activeParallel.has(job.id)) {
+    if (!this.activeParallel.has(job.id)) {
       return { changed: false, state: "not_parallel_reservation", task: this._taskView(job, true) };
     }
     if (!job.agentId) {
       job.lastRecoveryAt = (/* @__PURE__ */ new Date()).toISOString();
       job.recoveryState = "unbound_agent";
-      return { changed: false, state: "unbound_agent", task: this._taskView(job, true) };
+      return { changed: false, state: "unbound_agent", next: "The FIFO orphan has no agentId that can be safely rebound. Confirm that it stopped in the Cursor UI before explicitly abandoning it.", task: this._taskView(job, true) };
     }
-    this._invalidateParallelMonitor(job);
+    if (!options.preserveMonitor) this._invalidateParallelMonitor(job);
     const observed = await this._readStableParallelEntry(job);
     if (!observed.stable || !observed.entry) {
       return { changed: false, state: job.recoveryState || "unstable", error: observed.error, task: this._taskView(job, true) };
@@ -26481,7 +26570,7 @@ var CursorBridge = class {
     if (action === "reap") {
       const result = await this._reapParallelJobLocked(job, { reattach: true });
       if (result.state === "not_parallel_reservation" && job.phase === "orphaned") {
-        result.next = job.agentId ? "FIFO is bound to an agentId, but reap applies only to parallel_agent. Use cancel for a targeted stop, or abandon after confirmation." : "The FIFO orphan has no agentId that can be safely rebound. Confirm that it stopped in the Cursor UI before explicitly abandoning it.";
+        result.next = job.agentId ? "The bound task has no recoverable reservation. Inspect its current state before cancelling." : "The FIFO orphan has no agentId that can be safely rebound. Confirm that it stopped in the Cursor UI before explicitly abandoning it.";
       }
       return { found: true, action, ...result };
     }
@@ -26539,10 +26628,13 @@ var CursorBridge = class {
     }
     const canTargetStop = job.execution === "parallel_agent" || !!job.agentId;
     if (canTargetStop && (job.execution === "parallel_agent" || job.phase === "orphaned")) {
-      if (job.execution === "parallel_agent") {
+      if (this.activeParallel.has(job.id)) {
         this._invalidateParallelMonitor(job);
         const reaped = await this._reapParallelJobLocked(job, { reattach: false });
-        if (isTerminalTask(job)) return { found: true, action, ...reaped };
+        if (isTerminalTask(job) || reaped.state === "terminal_uncollected") {
+          job.cancelRequested = false;
+          return { found: true, action, ...reaped };
+        }
       }
       job.phase = "cancelling";
       job.recoveryState = "stopping";
@@ -26677,6 +26769,7 @@ var CursorBridge = class {
       } catch {
         s = { stop: 0, messageCount: 0, replyLength: 0, replyHash: 0 };
       }
+      if (job) job.lastWaitObservation = { at: (/* @__PURE__ */ new Date()).toISOString(), stop: s.stop, messageCount: s.messageCount, replyLength: s.replyLength, sawStop: sawStop || s.stop > 0 };
       if (s.stop > 0) sawStop = true;
       if (sawStop && s.stop === 0 && s.replyLength > 0) {
         await sleep2(800);
@@ -26717,6 +26810,10 @@ var CursorBridge = class {
     if (includeResult) this._markTaskResultCollected(job);
     const view = {
       taskId: job.id,
+      requestedTimeoutMs: job.requestedTimeoutMs ?? job.timeoutMs,
+      effectiveTimeoutMs: job.timeoutMs,
+      firstWaitError: job.firstWaitError || null,
+      lastWaitObservation: job.lastWaitObservation || null,
       kind: job.kind,
       status: job.status,
       phase: job.phase,
@@ -26772,7 +26869,7 @@ var CursorBridge = class {
       if (job.recoveryState === "terminal_result_uncollected") {
         view.attention = "Agent History proves that the underlying task ended, but its final reply has not been collected. Retry with reap, or explicitly abandon only if a missing reply is acceptable.";
       } else {
-        view.attention = job.agentId ? job.execution === "parallel_agent" ? "Use cursor_task_control(action=reap) to recheck the original agentId. Use cancel when a stop is needed, and abandon only after manual confirmation while accepting residual write risk." : "FIFO is bound to an agentId. Use cursor_task_control(action=cancel) with the exact expected_agent_id for a targeted stop." : "This orphan has no agentId that can be safely rebound and globally blocks new delegation. Confirm that it stopped in the Cursor UI, then explicitly release it with cursor_task_control(action=abandon).";
+        view.attention = job.agentId ? job.execution === "parallel_agent" ? "Use cursor_task_control(action=reap) to recheck the original agentId. Use cancel when a stop is needed, and abandon only after manual confirmation while accepting residual write risk." : "FIFO is bound to an agentId. Use reap to collect or resume monitoring; use cancel with the exact expected_agent_id to stop running work." : "This orphan has no agentId that can be safely rebound and globally blocks new delegation. Confirm that it stopped in the Cursor UI, then explicitly release it with cursor_task_control(action=abandon).";
       }
     }
     return view;
@@ -26875,7 +26972,7 @@ function buildToolDefinitions(bridgeInstance) {
   return [
     {
       name: "cursor_init",
-      description: "Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge saves it, finds Cursor, ensures the required connection, and opens or verifies the matching project. If Cursor was opened too early without CCE access, initialization safely keeps the binding and tells the user to save, close Cursor once, and repeat the same initialization sentence; it never force-closes Cursor. Cursor login and the user's old/new UI preference are preserved. When both UIs are open, Bridge selects the new Agents Window and creates work in the matching repository instead of Home.",
+      description: "Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge saves it, finds Cursor, ensures the required connection, and opens or verifies the matching project. In Agents Window, initialization registers a missing local workspace through Cursor's project service and verifies its exact path before reporting ready. If Cursor was opened too early without CCE access, initialization safely keeps the binding and tells the user to save, close Cursor once, and repeat the same initialization sentence; it never force-closes Cursor. Cursor login and the user's old/new UI preference are preserved. When both UIs are open, Bridge selects the new Agents Window and creates work in the matching repository instead of Home.",
       inputSchema: {
         type: "object",
         properties: {
@@ -26900,7 +26997,7 @@ function buildToolDefinitions(bridgeInstance) {
           background: { type: "boolean", default: true, description: "When true, return the task ID immediately. When false, wait for the task to finish or need attention." },
           execution: { type: "string", enum: ["fifo", "parallel_agent"], default: "fifo", description: "fifo is the first-in, first-out serial queue and runs one task at a time in a clean chat. parallel_agent creates a separate top-level Cursor Agent." },
           read_only: { type: "boolean", default: false, description: "Set true when Cursor must not change the workspace." },
-          timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "One monitoring budget after submission, shared by FIFO and automatic Agent recovery. Expiry needs attention; it does not cancel work. Explicit reap may start a new budget. The default is 10 minutes." },
+          timeout_ms: { type: "integer", minimum: 3e4, maximum: 9e5, default: 6e5, description: "One monitoring budget after submission, shared by FIFO and automatic Agent recovery. Default 10 minutes, maximum 15 minutes; task status reports requested and effective budgets. Expiry probes the bound Agent once for completion; it does not cancel or resend work. Explicit reap may start a new budget for a still-running bound Agent, including FIFO." },
           allowed_paths: { type: "array", items: { type: "string" }, description: "Workspace-relative paths Cursor may write. Parallel write tasks require non-overlapping paths. This declaration is not a filesystem sandbox." },
           completion_contract: { type: "string", description: "Optional acceptance checks or a required final-report format." },
           session_mode: { type: "string", enum: [...CURSOR_SESSION_MODES], default: "isolated", description: "isolated preserves the current clean-task behavior. create starts an update-safe persistent session. continue sends one new turn to the exact session_id." },
@@ -27177,6 +27274,7 @@ export {
   exprInspectAgentWorkspace,
   exprInspectWorkspaceRepository,
   exprOpenAgent,
+  exprRegisterAgentsWorkspace,
   isConfirmedCompletedReply,
   isCursorEffortOptionText,
   isDurablyRegisteredParallelEntry,

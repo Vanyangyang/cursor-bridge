@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CursorBridge, exprCreateAgentForWorkspace, exprInspectWorkspaceRepository, exprInspectAgentWorkspace } from '../server.mjs';
+import { CursorBridge, exprCreateAgentForWorkspace, exprInspectWorkspaceRepository, exprInspectAgentWorkspace, exprRegisterAgentsWorkspace } from '../server.mjs';
 
 const path = 'G:/VibeProj/spellcast';
 const environment = (localPath = path, id = 'workspace-spellcast') => ({ id, uri: { scheme: 'file', path: localPath } });
 const project = (localPath = path, extra = {}) => ({ type: 'workspace', workspaceIdentifier: environment(localPath), ...extra });
 const section = (projects, extra = {}) => ({ id: 'repo:github.com/vanyangyang/spellcast', displayName: 'vanyangyang/spellcast', projects, headers: [], ...extra });
 const evaluate = (expression, document) => JSON.parse(Function('document', `return ${expression}`)(document));
+const evaluateAsync = async (expression, document) => JSON.parse(await Function('document', `return ${expression}`)(document));
 
 function page(sections, composers = [], hasTranscript = true) {
   let clicks = 0;
@@ -42,6 +43,78 @@ test('registered file URI binds local, single remote and dual remote group label
     assert.equal(evaluate(exprCreateAgentForWorkspace(path), document).ok, true);
     assert.equal(document.clicks, 1);
   }
+});
+
+function registrationPage({ workspacePath = path, workspaceFile = false, identifierPath = workspacePath, fail = false } = {}) {
+  const metadata = section([]);
+  const document = page([metadata]);
+  const calls = [];
+  class URI {
+    constructor(path) { this.scheme = 'file'; this.path = path; }
+    static file(path) { calls.push(['file', path]); return new URI(path); }
+  }
+  const identifier = { id: 'registered-target', [workspaceFile ? 'configPath' : 'uri']: new URI(identifierPath) };
+  const workspaces = {
+    getSingleFolderWorkspaceIdentifier: async uri => { calls.push(['folder', uri.path]); return identifier; },
+    getWorkspaceIdentifier: async uri => { calls.push(['workspaceFile', uri.path]); return identifier; },
+  };
+  const projects = { replaceWorkspaceProject: async request => {
+    calls.push(['register', request]);
+    if (fail) throw Error('registration rejected');
+    metadata.projects.push(request.project);
+  }, refresh: async () => { calls.push(['refresh']); } };
+  const context = { workspace: { instantiationService: { _services: { _entries: new Map([
+    ['glassWorkspacesService', projects], ['workspacesService', workspaces],
+    ['environmentService', { userHome: new URI('/user') }],
+  ]) } } } };
+  const head = document.querySelectorAll('.ui-sidebar-section-head')[0];
+  head.__reactFiber$test.dependencies = { firstContext: { memoizedValue: context } };
+  const query = document.querySelectorAll;
+  document.querySelectorAll = selector => selector.includes('Open Workspace') ? [head] : query(selector);
+  return { document, calls, head, identifier };
+}
+
+test('explicit registration uses Cursor identity factory, preserves the exact path and is idempotent', async () => {
+  const target = 'C:/projects/中文 project/quote"dir';
+  const { document, calls, identifier } = registrationPage({ workspacePath: target });
+  const expression = exprRegisterAgentsWorkspace(target);
+  const registered = await evaluateAsync(expression, document);
+  assert.equal(registered.state, 'workspace_registration_requested');
+  assert.deepEqual(calls.map(([name]) => name), ['file', 'folder', 'register', 'refresh']);
+  assert.deepEqual(calls[2], ['register', { project: { type: 'workspace', workspaceIdentifier: identifier } }]);
+  assert.equal('replaces' in calls[2][1], false);
+  assert.equal((await evaluateAsync(expression, document)).state, 'workspace_ready');
+  assert.equal(calls.length, 4);
+  assert.equal(document.clicks, 0);
+});
+
+test('workspace files use their own identifier factory and URI, not one of their folders', async () => {
+  const target = 'C:/projects/my.code-workspace';
+  const { document, calls } = registrationPage({ workspacePath: target, workspaceFile: true });
+  assert.equal((await evaluateAsync(exprRegisterAgentsWorkspace(target, true), document)).state, 'workspace_registration_requested');
+  assert.deepEqual(calls[1], ['workspaceFile', target]);
+  assert.equal(calls[2][1].project.workspaceIdentifier.configPath.path, target);
+});
+
+test('different factory identity, missing service and ambiguous existing targets never add a project', async () => {
+  const wrong = registrationPage({ identifierPath: 'G:/other/spellcast' });
+  assert.equal((await evaluateAsync(exprRegisterAgentsWorkspace(path), wrong.document)).state, 'workspace_registration_identity_mismatch');
+  assert.equal(wrong.calls.some(([name]) => name === 'register'), false);
+  const absent = registrationPage();
+  delete absent.head.__reactFiber$test.dependencies;
+  assert.equal((await evaluateAsync(exprRegisterAgentsWorkspace(path), absent.document)).state, 'workspace_registration_unavailable');
+  assert.equal(absent.calls.length, 0);
+  const ambiguous = page([section([project(), project()])]);
+  assert.equal((await evaluateAsync(exprRegisterAgentsWorkspace(path), ambiguous)).state, 'workspace_ambiguous');
+  assert.equal(ambiguous.clicks, 0);
+});
+
+test('registration exceptions are diagnostic failures and cannot report ready', async () => {
+  const { document } = registrationPage({ fail: true });
+  const result = await evaluateAsync(exprRegisterAgentsWorkspace(path), document);
+  assert.equal(result.ok, false);
+  assert.equal(result.state, 'workspace_registration_failed');
+  assert.match(result.error, /registration rejected/);
 });
 
 test('historical dual repository group does not compete with the registered local workspace', () => {

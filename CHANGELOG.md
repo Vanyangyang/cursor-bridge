@@ -6,6 +6,21 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.10.1] - 2026-09-09
+
+### Fixed
+
+- Explicit `cursor_init` registers a missing local workspace through Cursor's workspace service, verifies the exact identity, and serializes registration against existing lifecycle recovery. Read-only status does not register projects.
+- Recover bound FIFO tasks through explicit `reap`, including monitor reattachment, terminal result collection, and idempotent repeated recovery. Unknown or uncollected states retain their reservation.
+- Probe terminal state once at timeout without extending the automatic monitoring budget. Expose requested/effective budgets and bounded wait observations.
+- Recheck submission after a temporarily missing Send control. Once Enter was dispatched, an unconfirmed submission retains uncertainty instead of falsely reporting that no work was sent.
+- Install the Codex marketplace root as a local plugin source so updates include the selected checkout.
+
+### Validation
+
+- Native Codex MCP validation on the preceding development build completed send, 30-second timeout, explicit reap, final reply collection, reservation release, and an unchanged repeated reap. The NO_SEND race branches have regression coverage; they were not forced in the final native run.
+- Pi package `pi-cursor-bridge` 0.1.17 embeds Cursor Bridge 5.10.1. Grok Build Supervisor is unchanged.
+
 ## [5.10.0] - 2026-09-08
 
 ### Added

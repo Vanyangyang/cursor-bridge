@@ -370,6 +370,29 @@ test('trusted prompt fill waits for Cursor to expose an exact send control', asy
   );
 });
 
+test('submission rechecks NO_SEND and preserves uncertainty after Enter', async () => {
+  const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+  bridge._throwIfNewProviderError = async () => {};
+  bridge._verifyAgentsWorkspace = async () => {};
+  for (const completes of [true, false]) {
+    let fallback = false;
+    let clicks = 0;
+    const client = { async send(method, params) {
+      if (params.expression === EXPR_CLICK_SEND) {
+        fallback = true;
+        clicks++;
+        return { result: { value: 'NO_SEND' } };
+      }
+      return { result: { value: JSON.stringify({ inputTextLength: completes && fallback ? 0 : 12, stop: 0, messageCount: 0, sendReady: false }) } };
+    } };
+    if (completes) assert.equal(await bridge._confirmSubmission(client), 'enter');
+    else await assert.rejects(bridge._confirmSubmission(client), error =>
+      error.confirmedNotSent === false && error.sent === true
+      && error.composerDiagnostic.fallbackResult === 'NO_SEND');
+    assert.equal(clicks, 1);
+  }
+});
+
 test('missing chat input returns structured diagnostics without navigation or clicks', async () => {
   const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null });
   const calls = [];
@@ -1001,7 +1024,8 @@ test('cursor_init keeps a valid binding and returns child-friendly recovery when
       super({ runtimeFile: null, workspaceFile, workspaceKey: 'test-host', runtimeMode: 'normal' });
     }
 
-    async _ensureCursor() {
+    async _ensureCursor(options) {
+      assert.equal(options.registerWorkspace, true);
       this._lastLifecycle = {
         status: 'running-no-debug',
         message: 'Cursor was already running.',
@@ -1020,6 +1044,30 @@ test('cursor_init keeps a valid binding and returns child-friendly recovery when
   assert.equal(result.projectPath, project);
   assert.equal(result.retryable, true);
   assert.match(result.nextStep, /exit Cursor normally once/);
+});
+
+test('cursor_init waits for an existing heal before changing target and requesting registration', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-init-heal-'));
+  const project = join(directory, 'project');
+  mkdirSync(project);
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: join(directory, 'binding.json'),
+    workspaceKey: 'init-heal-test', modelPreferencesFile: null, sessionFile: null });
+  let finish;
+  bridge._healing = new Promise(resolve => { finish = resolve; });
+  let calls = 0;
+  bridge._ensureCursor = async options => {
+    calls++;
+    assert.equal(options.registerWorkspace, true);
+    assert.equal(bridge.projectPath, project);
+  };
+  const pending = bridge.initializeWorkspace(project);
+  await Promise.resolve();
+  assert.equal(calls, 0);
+  assert.notEqual(bridge.projectPath, project);
+  finish();
+  assert.equal((await pending).ready, true);
+  assert.equal(calls, 1);
 });
 
 test('unified CCE prompt lets Cursor choose the minimum sufficient investigation depth', () => {
@@ -1879,6 +1927,65 @@ test('parallel submission waits for a durable History row before releasing the U
   assert.equal(uncertainSubmissionReservationScope({ readOnly: false }, {}), 'paths');
 });
 
+test('bound FIFO recovery collects once, including cancel after completion', async () => {
+  for (const action of ['reap', 'cancel']) {
+    const bridge = new TaskControlBridge();
+    const view = await bridge.doTask('FIFO recovery', { timeoutMs: 1200000 });
+    assert.equal(view.requestedTimeoutMs, 1200000);
+    assert.equal(view.effectiveTimeoutMs, 900000);
+    const job = makeOrphan(bridge, view);
+    bridge.entrySnapshots = [{ id: job.agentId, showSpinner: false, icon: 'check-circled' }];
+    let collects = 0;
+    bridge._collectParallelAgent = async () => { collects++; return 'final FIFO reply'; };
+    bridge._stopParallelAgent = async () => { throw new Error('must not stop a completed Agent'); };
+    const result = await bridge.taskControl(job.id, { action, confirm: true, expectedAgentId: job.agentId });
+    assert.equal(result.state, 'completed');
+    assert.equal(result.task.result, 'final FIFO reply');
+    assert.equal(result.task.reservationHeld, false);
+    await bridge.taskControl(job.id, { action: 'reap' });
+    assert.equal(collects, 1);
+  }
+});
+
+test('bound FIFO recovery preserves global reservation for running, unknown and uncollected states', async () => {
+  for (const state of ['running', 'unknown', 'uncollected']) {
+    const bridge = new TaskControlBridge();
+    const job = makeOrphan(bridge, await bridge.doTask('FIFO recovery'));
+    job.waitDeadlineAt = Date.now() - 1000;
+    bridge.entrySnapshots = [{ id: job.agentId, showSpinner: state === 'running', icon: state === 'uncollected' ? 'check-circled' : 'unknown' }];
+    if (state === 'uncollected') bridge.collectError = new Error('reply unavailable');
+    const result = await bridge.taskControl(job.id, { action: state === 'uncollected' ? 'cancel' : 'reap', confirm: true, expectedAgentId: job.agentId });
+    assert.equal(result.state, { running: 'running', unknown: 'idle_unconfirmed', uncollected: 'terminal_uncollected' }[state]);
+    assert.equal(result.task.blocksAll, true);
+    assert.equal(result.task.reservationHeld, true);
+    assert.equal(bridge.monitorStarts, state === 'running' ? 1 : 0);
+    if (state === 'running') assert.ok(job.waitDeadlineAt > Date.now());
+    if (state === 'uncollected') assert.equal(job.cancelRequested, false);
+  }
+});
+
+test('expired FIFO monitor probes terminal state without renewing its deadline', async () => {
+  for (const complete of [true, false]) {
+    const bridge = new TaskControlBridge();
+    const job = makeOrphan(bridge, await bridge.doTask('expired FIFO'));
+    job.firstWaitError = 'original FIFO timeout';
+    const deadline = job.waitDeadlineAt = Date.now() - 1000;
+    bridge.entrySnapshots = [{ id: job.agentId, showSpinner: !complete, icon: complete ? 'check-circled' : 'loading' }];
+    if (complete) await bridge._monitorParallelAgent(job, job.monitorGeneration);
+    else await assert.rejects(bridge._monitorParallelAgent(job, job.monitorGeneration).catch(error => {
+      bridge._failParallelJob(job, error);
+      throw error;
+    }), /Cursor fifo task timed out/);
+    assert.equal(job.waitDeadlineAt, deadline);
+    assert.equal(bridge.monitorStarts, 0);
+    assert.equal(job.firstWaitError, 'original FIFO timeout');
+    assert.equal(job.status, complete ? 'completed' : 'needs_attention');
+    if (!complete) {
+      assert.equal(bridge._taskView(job).blocksAll, true);
+    }
+  }
+});
+
 test('orphaned task can be reaped to completed after its original promise was rejected', async () => {
   const bridge = new TaskControlBridge();
   const view = await bridge.doTask('可恢复的只读任务', { execution: 'parallel_agent', readOnly: true });
@@ -2244,7 +2351,7 @@ test('running FIFO cancel that cannot confirm Stop remains blocked with an expli
   }), /global Cursor reservation/);
 
   const reaped = await bridge.taskControl(view.taskId, { action: 'reap' });
-  assert.equal(reaped.state, 'not_parallel_reservation');
+  assert.equal(reaped.state, 'unbound_agent');
   assert.match(reaped.next, /FIFO orphan/);
 });
 

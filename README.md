@@ -64,7 +64,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **5.10.0 validation:** On Cursor 3.19.13, the workspace fix passed a native host read-only FIFO request with exact local identity, four stage checks, Claude Fable 5.1/high, and an attributable result. That run used the preceding 5.9.1 local patch. The new provenance fields have regression/protocol coverage; fresh-host 5.10.0 pickup remains pending. Persistent-session evidence is retained from 5.9.0 and broader environment results from 5.8.2.
+> **5.10.1 validation:** On Cursor 3.19.13, the workspace fix passed a native host read-only FIFO request with exact local identity, four stage checks, Claude Fable 5.1/high, and an attributable result. That run used the preceding 5.9.1 local patch. The new provenance fields have regression/protocol coverage; fresh-host 5.10.1 pickup remains pending. Persistent-session evidence is retained from 5.9.0 and broader environment results from 5.8.2.
 
 CCE and `cursor_do` accept optional `request_context`, for example `{"sender":"model","source":"mixed"}`. `sender` declares who directly sends the request (`user/model/unknown`); `source` distinguishes user requirements from model additions (`user/model/mixed/unknown`). Separate both in mixed prompt text. Omitted values remain unknown, are not inferred from the selected model, and never grant extra permission. Task status reports the declaration for that turn.
 >
@@ -161,7 +161,7 @@ Cursor compatibility targets (Windows 11):
 
 | Cursor | Cursor Bridge | Status |
 |---|---|---|
-| **3.19.13** | **5.10.0** (`main`, current) | Exact local workspace and FIFO/Fable 5.1/high verified natively on the preceding workspace patch; provenance has regression/protocol coverage. Fresh-host 5.10.0 pickup remains pending; other runtime evidence is inherited from 5.9.0/5.8.2. |
+| **3.19.13** | **5.10.1** (`main`, current) | Exact local workspace and FIFO/Fable 5.1/high verified natively on the preceding workspace patch; provenance has regression/protocol coverage. Fresh-host 5.10.1 pickup remains pending; other runtime evidence is inherited from 5.9.0/5.8.2. |
 | 3.19.7 | 5.9.0 (archived) | Three live read-only persistent turns, exact Agent identity, adapter reconnection, unread-reply recovery and idempotent collection. |
 
 Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.8.1, 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
@@ -292,7 +292,7 @@ Shared lifecycle supervisor
 Cursor Agent + project index
 ```
 
-- `cursor_init` validates and persists one workspace for the current host context. Re-running it switches that context to another workspace.
+- `cursor_init` validates and persists one workspace for the current host context. In Agents Window, it registers a missing local workspace through Cursor's workspace service and verifies the exact path before reporting ready. Re-running it switches that context to another workspace; status checks never register projects.
 - Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
 - On a cold launch, Bridge starts the CDP-enabled Cursor process without a project or `--new-window` argument, waits for the target list to stabilize, then binds the repository inside Agents v2. A transient first target is never treated as canonical merely because it appeared first.

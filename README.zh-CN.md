@@ -64,7 +64,7 @@ Codex（推荐）/ Claude Code / Pi
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
 
 > [!NOTE]
-> **5.10.0 验证：** 工作区修复已在 Cursor 3.19.13 上通过宿主原生只读 FIFO：精确本地身份、四阶段检查、Fable 5.1/high 和可归属结果均通过。该次运行使用此前的 5.9.1 本机补丁。新增来源字段有回归/协议检查，5.10.0 新宿主加载仍待验收；持久会话证据沿用 5.9.0，较广环境结果沿用 5.8.2。
+> **5.10.1 验证：** 工作区修复已在 Cursor 3.19.13 上通过宿主原生只读 FIFO：精确本地身份、四阶段检查、Fable 5.1/high 和可归属结果均通过。该次运行使用此前的 5.9.1 本机补丁。新增来源字段有回归/协议检查，5.10.1 新宿主加载仍待验收；持久会话证据沿用 5.9.0，较广环境结果沿用 5.8.2。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
@@ -161,7 +161,7 @@ Cursor 兼容目标（Windows 11）：
 
 | Cursor | Cursor Bridge | 说明 |
 |---|---|---|
-| **3.19.13** | **5.10.0**（`main`，当前版本） | 此前工作区补丁已原生验证精确本地身份及 FIFO/Fable 5.1/high；来源字段有回归/协议检查。5.10.0 新宿主加载仍待验收；其他运行证据沿用 5.9.0/5.8.2。 |
+| **3.19.13** | **5.10.1**（`main`，当前版本） | 此前工作区补丁已原生验证精确本地身份及 FIFO/Fable 5.1/high；来源字段有回归/协议检查。5.10.1 新宿主加载仍待验收；其他运行证据沿用 5.9.0/5.8.2。 |
 | 3.19.7 | 5.9.0（归档） | 三轮真实只读持久会话、精确 Agent 身份、适配器重连、未读回复补收及幂等收集。 |
 
 不再主动维护旧 Cursor Bridge 版本。5.8.1、5.8.0、5.7.1、5.7.0、5.6.2、5.6.1、5.6.0、5.5.0、5.4.2、5.4.1 与 5.4.0 的历史组合及精确安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
@@ -292,7 +292,7 @@ Shared lifecycle supervisor
 Cursor Agent + project index
 ```
 
-- `cursor_init` 为当前宿主上下文校验并持久化一个工作区；再次执行即可切换项目。
+- `cursor_init` 为当前宿主上下文校验并持久化一个工作区；在 Agents Window 缺少该本地工作区时，通过 Cursor 的工作区服务添加，并在核验完整路径后报告就绪。再次执行即可切换项目；状态查询不会添加项目。
 - 项目索引由 Cursor 自己负责。Bridge 只确保连接，并选择经过校验、与项目匹配的 CDP target。
 - 多个 MCP adapter 共用一个用户级 lifecycle supervisor，并在读取状态或执行生命周期操作前重新同步持久运行模式。
 - 冷启动时，Bridge 只启动带 CDP 的 Cursor 进程，不传项目路径或 `--new-window`；待 target 列表稳定后，再在 Agents v2 内绑定仓库。不会仅因某个临时 target 最先出现，就把它当作标准目标。

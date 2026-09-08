@@ -3,19 +3,19 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.19.13",
-    "cursorBridgeVersion": "5.10.0",
+    "cursorBridgeVersion": "5.10.1",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
       "inheritedEvidenceRelease": "5.9.0",
-      "currentReleaseEvidence": "provenance-regression-and-protocol-tested; fresh-host-5.10.0-pickup-pending",
+      "currentReleaseEvidence": "provenance-regression-and-protocol-tested; fifo-timeout-reap-native-verified-on-preceding-development-build; no-send-race-regression-tested; fresh-host-5.10.1-pickup-pending",
       "workspaceIdentity": "5.9.1-local-patch-native-host-verified-exact-file-uri-four-stage-fifo",
       "requestProvenance": "regression-and-protocol-tested; caller-declared-not-authenticated",
       "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
       "agentsWindow": "live-tested-existing-supervised-single-window-cdp-9223",
       "modelPreferences": "5.9.1-local-patch-native-host-verified-claude-fable-5.1-high",
-      "readOnlyMcpSupervisor": "5.9.1-local-patch-native-status-init-fifo-verified; 5.10.0-native-pickup-pending",
+      "readOnlyMcpSupervisor": "5.9.1-local-patch-native-status-init-fifo-verified; 5.10.1-native-pickup-pending",
       "attachedFallback": "regression-tested-not-live-rechecked-on-3.19.7",
       "lifecycleDiagnostics": "live-tested",
       "fifoExecution": "5.9.1-local-patch-native-readonly-local-fifo-completed; minimal-inherited",
@@ -30,6 +30,12 @@
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.19.13",
+      "cursorBridgeVersion": "5.10.0",
+      "gitRef": "cursor-bridge--v5.10.0",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.19.7",
       "cursorBridgeVersion": "5.9.1",
