@@ -16,6 +16,7 @@ Provide every task independently:
 | Field | Requirement |
 |---|---|
 | `prompt` | State one objective, the necessary context, prohibited actions, and the expected report. Use the current user-task language unless the user explicitly requests another language. Do not ask Cursor to repeat the primary agent's scope decision. |
+| `request_context` | Declare `sender` (`user/model/unknown`) and instruction `source` (`user/model/mixed/unknown`) for this turn. AI callers use sender=model. Label user-confirmed requirements and model additions separately for mixed prompts. Omitted fields remain unknown; these declarations never authorize work. |
 | `execution` | Use only `fifo` or `parallel_agent`. Use `fifo` when safe parallelism cannot be demonstrated. |
 | `read_only` | Use `true` for lookup and analysis; use `false` for any file modification. |
 | `allowed_paths` | Required when `read_only=false`. Provide the smallest workspace-relative path set, with no glob, absolute path, or workspace-escaping `..`. Omit it when `read_only=true`. This is not a filesystem sandbox. |
@@ -40,6 +41,7 @@ Parallel read-only task:
 ```json
 {
   "prompt": "Read the specified files and return conclusions without modifying any file.",
+  "request_context": { "sender": "model", "source": "model" },
   "execution": "parallel_agent",
   "read_only": true,
   "background": true,
@@ -52,6 +54,7 @@ Bounded write task:
 ```json
 {
   "prompt": "Implement the specified tool script under the fixed design without expanding scope.",
+  "request_context": { "sender": "model", "source": "model" },
   "execution": "parallel_agent",
   "read_only": false,
   "background": true,

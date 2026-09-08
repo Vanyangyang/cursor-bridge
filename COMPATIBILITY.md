@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.19.7** | **5.9.1** | `main` | Current maintained version. Candidate bundle verified Fable 5.1/high and picker cleanup from closed and model-submenu-open live states without sending a prompt. New-host native CCE pickup remains pending. Other runtime evidence is inherited from 5.9.0/5.8.2. |
+| **3.19.13** | **5.10.0** | `main` | Current maintained version. Exact workspace/FIFO/Fable 5.1/high passed a native host task on the preceding 5.9.1 local patch. Provenance fields have regression/protocol coverage; fresh-host 5.10.0 pickup remains pending. Other runtime evidence is inherited from 5.9.0/5.8.2. |
+| 3.19.7 | 5.9.1 | `cursor-bridge--v5.9.1` | Archived. Model-list classification and exact effort/picker-cleanup adapter checks. |
 | 3.19.7 | 5.9.0 | `cursor-bridge--v5.9.0` | Archived. Three live read-only persistent turns on one exact Agent, adapter reconnection, unread-reply recovery and idempotent collection. |
 
 ## Historical versions

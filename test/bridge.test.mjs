@@ -1056,7 +1056,7 @@ test('CCE and cursor_do scaffolds preserve multilingual user text and request ma
     const bridge = new OfflineBridge();
     const view = await bridge.doTask(sample);
     const delegatedPrompt = bridge.tasks.get(view.taskId).prompt;
-    assert.equal(delegatedPrompt.startsWith(sample), true);
+    assert.equal(delegatedPrompt.includes('\n\nTask:\n' + sample), true);
     assert.match(delegatedPrompt, /Reply in the language of the user task/);
   }
 
@@ -1112,7 +1112,7 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.match(search.description, /minimum sufficient context/);
   assert.match(search.description, /NOT_FOUND/);
   assert.match(search.description, /not a filesystem sandbox/);
-  assert.deepEqual(Object.keys(search.inputSchema.properties), ['query']);
+  assert.deepEqual(Object.keys(search.inputSchema.properties), ['query', 'request_context']);
   assert.deepEqual(Object.keys(init.inputSchema.properties), ['path']);
   assert.deepEqual(init.inputSchema.required, ['path']);
   assert.match(init.description, /never force-closes Cursor/);
@@ -1201,7 +1201,7 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_launch'), false);
     const search = listed.tools.find((tool) => tool.name === 'cursor_context_engine');
     assert.match(search.description, /Cursor Context Engine \(CCE\)/);
-    assert.equal(Object.keys(search.inputSchema.properties).length, 1);
+    assert.equal(Object.keys(search.inputSchema.properties).length, 2);
     assert.equal(Object.hasOwn(search.inputSchema.properties, 'max_results'), false);
     const runtime = listed.tools.find((tool) => tool.name === 'cursor_runtime');
     assert.deepEqual(Object.keys(runtime.inputSchema.properties), ['mode']);

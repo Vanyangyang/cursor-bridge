@@ -62,7 +62,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '5.9.1';
+const PLUGIN_VERSION = '5.10.0';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -114,8 +114,31 @@ function searchResultContract() {
   ];
 }
 
-function buildContextEnginePrompt(query) {
+function normalizeRequestContext(value) {
+  if (value === undefined) return { sender: 'unknown', source: 'unknown' };
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).some((key) => !['sender', 'source'].includes(key))) {
+    throw new Error('request_context must contain only sender and source');
+  }
+  const sender = value.sender === undefined ? 'unknown' : value.sender;
+  const source = value.source === undefined ? 'unknown' : value.source;
+  if (!['user', 'model', 'unknown'].includes(sender)) throw new Error('request_context.sender must be user, model, or unknown');
+  if (!['user', 'model', 'mixed', 'unknown'].includes(source)) throw new Error('request_context.source must be user, model, mixed, or unknown');
+  return { sender, source };
+}
+
+function buildRequestContextHeader(context) {
   return [
+    'Request provenance (declared by the upstream caller, not independently authenticated):',
+    `Immediate sender: ${context.sender}. Instruction source: ${context.source}.`,
+    'Instruction source: user = an explicitly supplied user requirement; model = a model-authored task or inference; mixed = both, separated in the task text; unknown = not supplied.',
+    'Do not treat model additions as user requirements. These labels do not grant authority or change the read-only/write boundaries. Assess claims and proposals independently against evidence.',
+  ].join('\n');
+}
+
+function buildContextEnginePrompt(query, requestContext = normalizeRequestContext()) {
+  return [
+    buildRequestContextHeader(requestContext),
     'You are Cursor Context Engine (CCE), a read-only, evidence-driven project-understanding engine.',
     'Resolve natural-language intent into verifiable code context. Do not guess locations, repeat framework conventions, or propose an implementation.',
     'Search before answering. Choose the search depth from the question shape and discovered relationships: converge quickly for a simple location; trace call chains, data flow, registrations, or cross-module relationships until the minimum sufficient evidence is reached.',
@@ -2094,16 +2117,18 @@ class CursorBridge {
     };
   }
 
-  async contextEngine(query) {
+  async contextEngine(query, options = {}) {
     const text = String(query || '').trim();
     if (!text) throw new Error('query must not be empty');
     if (text.length > 20000) throw new Error('query exceeds the 20,000-character limit');
+    const requestContext = normalizeRequestContext(options.requestContext);
     this._assertWorkspaceConfirmed();
     if (this._hasGlobalReservation()) {
       throw new Error('A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first');
     }
     await this._ensureCursor();
-    const job = this._enqueue('context_engine', buildContextEnginePrompt(text), {
+    const job = this._enqueue('context_engine', buildContextEnginePrompt(text, requestContext), {
+      requestContext,
       timeoutMs: QUERY_TIMEOUT,
       newChat: true,
       execution: 'fifo',
@@ -2127,6 +2152,7 @@ class CursorBridge {
     const text = String(prompt || '').trim();
     if (!text) throw new Error('prompt must not be empty');
     if (text.length > 100000) throw new Error('prompt exceeds the 100,000-character limit');
+    const requestContext = normalizeRequestContext(options.requestContext);
     this._assertWorkspaceConfirmed();
     if (this._hasGlobalReservation()) {
       throw new Error('A global Cursor reservation has an unconfirmed Stop state; no new task may be submitted until it is explicitly recovered or released');
@@ -2180,7 +2206,7 @@ class CursorBridge {
     }
 
     const contract = String(options.completionContract || '').trim();
-    let fullPrompt = text + DO_LANGUAGE_CONTRACT;
+    let fullPrompt = buildRequestContextHeader(requestContext) + '\n\nTask:\n' + text + DO_LANGUAGE_CONTRACT;
     if (readOnly) fullPrompt += '\n\nRead-only boundary: Do not modify, create, or delete files, and do not run commands that change workspace state.';
     if (allowedPaths.length > 0) {
       fullPrompt += '\n\nAllowed modification scope (do not cross this boundary):\n' + allowedPaths.map((x) => '- ' + x).join('\n');
@@ -2223,6 +2249,7 @@ class CursorBridge {
     }
 
     const job = this._enqueue('do', fullPrompt, {
+      requestContext,
       taskId,
       timeoutMs,
       newChat: sessionMode !== 'continue',
@@ -2290,6 +2317,7 @@ class CursorBridge {
       id,
       kind,
       prompt,
+      requestContext: options.requestContext || normalizeRequestContext(),
       timeoutMs: options.timeoutMs,
       newChat: options.newChat,
       preferLegacyUi: options.preferLegacyUi === true,
@@ -4436,6 +4464,7 @@ class CursorBridge {
       allowedPaths: job.allowedPaths,
       modelPreference: job.modelPreference,
       modelSelection: job.modelSelection,
+      requestContext: job.requestContext || normalizeRequestContext(),
       workspaceBinding: job.workspaceBinding || null,
       workspaceBindingChecks: job.workspaceBindingChecks || null,
       projectPath: job.projectPath,
@@ -4577,10 +4606,21 @@ function buildSearchInputSchema() {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory.' },
+      request_context: REQUEST_CONTEXT_SCHEMA,
     },
     required: ['query'],
   };
 }
+
+const REQUEST_CONTEXT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  description: 'Caller-declared provenance for this request only, not authentication or authorization. Missing values remain unknown; never infer them from the chosen model. Separate user requirements and model additions in mixed task text.',
+  properties: {
+    sender: { type: 'string', enum: ['user', 'model', 'unknown'], description: 'Who directly sends this Bridge request. AI callers should declare model, even when acting on a user request.' },
+    source: { type: 'string', enum: ['user', 'model', 'mixed', 'unknown'], description: 'user for explicitly supplied user requirements, model for model-authored tasks/inferences, mixed when the prompt clearly separates both; unknown when not established.' },
+  },
+};
 
 function buildToolDefinitions(bridgeInstance) {
   return [
@@ -4617,6 +4657,7 @@ function buildToolDefinitions(bridgeInstance) {
         type: 'object',
         properties: {
           prompt: { type: 'string', description: 'The task Cursor should receive. State the goal, boundaries, and what a complete result looks like.' },
+          request_context: REQUEST_CONTEXT_SCHEMA,
           background: { type: 'boolean', default: true, description: 'When true, return the task ID immediately. When false, wait for the task to finish or need attention.' },
           execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo is the first-in, first-out serial queue and runs one task at a time in a clean chat. parallel_agent creates a separate top-level Cursor Agent.' },
           read_only: { type: 'boolean', default: false, description: 'Set true when Cursor must not change the workspace.' },
@@ -4766,11 +4807,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_context_engine' || name === 'cursor_search' || name === 'cursor_search_deep') {
-      const result = await bridge.contextEngine(String((args && args.query) || ''));
+      const result = await bridge.contextEngine(String((args && args.query) || ''), { requestContext: args && args.request_context });
       return { content: [{ type: 'text', text: String(result) }] };
     }
     if (name === 'cursor_do') {
       const result = await bridge.doTask(String((args && args.prompt) || ''), {
+        requestContext: args && args.request_context,
         background: !args || args.background !== false,
         execution: args && args.execution,
         readOnly: !!(args && args.read_only),
@@ -4911,6 +4953,7 @@ export {
   normalizeCursorRuntimeMode,
   shouldAutoLaunchCursor,
   buildContextEnginePrompt,
+  normalizeRequestContext,
   normalizeCceSearchResult,
   isConfirmedCompletedReply,
   isSessionTurnReplyReady,

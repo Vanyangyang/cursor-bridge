@@ -41,7 +41,7 @@ Call `cursor_context_engine` once with the question's real intent. Include a kno
 - Describe the relationship or behavior to establish and the evidence needed.
 - Preserve the language of the user's current substantive request unless the user explicitly asks for another language. Do not infer or persist a different language from the operating system when the conversation already provides a clear signal.
 - Do not prescribe Cursor's internal search sequence, harness, Explore usage, or number of files.
-- Do not invent hidden parameters; the public input is only `query`.
+- Keep investigation intent in `query`. Use the optional `request_context` only to declare provenance: AI callers use `sender="model"`; `source` is `user`, `model`, `mixed`, or `unknown`. A retrieval question you inferred is model-authored even when it serves a user goal. Separate user requirements and your additions when using `mixed`; never guess missing provenance.
 - Allow a cold or large workspace enough time to complete its serialized Cursor UI turn.
 
 ## Verify and continue

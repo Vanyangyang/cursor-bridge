@@ -6,6 +6,25 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [5.10.0] - 2026-09-08
+
+### Added
+
+- Optional `request_context` on CCE and `cursor_do` declares the immediate sender (`user`, `model`, or `unknown`) separately from instruction source (`user`, `model`, `mixed`, or `unknown`). Bridge includes those labels in the transmitted prompt and task status; omitted values remain unknown and do not inherit from previous turns.
+- Mixed requests distinguish user-confirmed requirements from model additions. Provenance is caller-declared, not authentication, extra authority, or a model-routing policy.
+
+### Fixed
+
+- Bind Agents Window workspaces by the exact registered local file URI instead of directory basenames or repository group titles. Historical groups and ambiguous identities no longer stand in for a creation target.
+- Identify empty Agent drafts through their actual writable input before transcript DOM exists; verify identity after creation and before filling/sending, with actionable failure diagnostics.
+- Apply workspace verification to supervised Agents Window reuse as well as attached lifecycles.
+
+### Validation
+
+- The workspace fix passed a native Codex MCP read-only FIFO task on Cursor 3.19.13: exact local workspace, four identity checks, Claude Fable 5.1/high applied, real send, and attributable completed result. This evidence used the 5.9.1 local patch subsequently committed as `894c64c`; it is not a fresh-host 5.10.0 pickup claim.
+- Provenance serialization and backward compatibility are checked independently in regression and MCP protocol tests. Other persistent-session/runtime evidence remains scoped to earlier documented runs.
+- Pi package `pi-cursor-bridge` 0.1.16 embeds Cursor Bridge 5.10.0. The Grok Build Supervisor release is unchanged.
+
 ## [5.9.1] - 2026-09-05
 
 ### Fixed

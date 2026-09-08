@@ -7,6 +7,8 @@ description: "Delegate bounded light-to-medium implementation, investigation, do
 
 Use Cursor as an execution partner. Keep direction, scope decisions, risk ownership, result review, and final verification with the primary agent.
 
+Declare `request_context` for each call: an AI caller uses `sender="model"`; set `source="user"` for explicitly supplied user requirements, `"model"` for your own task/inference, or `"mixed"` when both appear. In mixed prompts, label user-confirmed requirements separately from your additions. Use `"unknown"` where provenance is unavailable; a user asking you to use Cursor does not make your authored message user-authored. These labels are declarations, not authentication or extra permission, and do not carry over to later session turns.
+
 ## Respect execution controls
 
 - Do not call `cursor_do` when the user explicitly says not to use Cursor or not to delegate. A direct user opt-out always wins.
