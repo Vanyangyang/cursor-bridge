@@ -22806,6 +22806,13 @@ function selectPageForUiPreference(inspected, options = {}) {
 function isAgentsWorkspaceBindError(error2) {
   return !!(error2 && /Cursor Agents workspace binding failed/.test(String(error2.message || "")));
 }
+function createWorkspaceBindingError(diagnostic) {
+  const error2 = new Error(`Cursor Agents workspace binding failed: ${diagnostic.state || "unknown"}; wanted=${diagnostic.wanted || diagnostic.workspace || "unknown"}. ${diagnostic.nextStep || "Re-run cursor_init for the exact local workspace."}`);
+  error2.code = "CURSOR_WORKSPACE_BINDING_FAILED";
+  error2.workspaceBindingFailure = diagnostic;
+  error2.confirmedNotSent = true;
+  return error2;
+}
 async function findPage(options = {}) {
   const list = await httpJson("/json/list");
   const pages = list.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
@@ -22895,9 +22902,10 @@ var CURSOR_INPUT_SELECTOR = [
   ".aislash-editor-input"
 ].join(",");
 var INPUT_PICKER_BODY = `
-  const pickInput=()=>[...document.querySelectorAll(${JSON.stringify(CURSOR_INPUT_SELECTOR)})]
+  const inputCandidates=()=>[...document.querySelectorAll(${JSON.stringify(CURSOR_INPUT_SELECTOR)})]
     .filter(e=>e.offsetParent!==null&&!e.disabled&&e.getAttribute('aria-disabled')!=='true'&&e.getAttribute('contenteditable')!=='false')
-    .sort((a,b)=>(b.classList&&b.classList.contains('ui-prompt-input-editor__input')?1:0)-(a.classList&&a.classList.contains('ui-prompt-input-editor__input')?1:0))[0]||null;`;
+    .sort((a,b)=>(b.classList&&b.classList.contains('ui-prompt-input-editor__input')?1:0)-(a.classList&&a.classList.contains('ui-prompt-input-editor__input')?1:0));
+  const pickInput=()=>inputCandidates()[0]||null;`;
 var EXPR_VISIBLE = `(function(){${INPUT_PICKER_BODY}return !!pickInput();})()`;
 var CHAT_PANEL_NEXT_STEP = "Complete or close the current Customize/Settings dialog, open Cursor's main Agent/Chat panel or New Chat, then retry the same request.";
 function classifyChatPanelDiagnostic(snapshot = {}) {
@@ -23202,75 +23210,162 @@ function createModelSelectionError(message, failureClass, retryable, diagnostic 
   error2.modelSelectionFailure = { failureClass, retryable, ...diagnostic };
   return error2;
 }
-var WORKSPACE_SECTION_BODY = `
+var WORKSPACE_SECTION_BODY = String.raw`
+  const workspaceScalar=value=>value&&typeof value==='object'&&'value' in value?value.value:value;
+  const normalizeWorkspacePath=value=>{
+    let path=String(value||'').replace(/\\/g,'/').replace(/^\/([a-z]:\/)/i,'$1').replace(/\/+$/,'');
+    return /^[a-z]:\//i.test(path)||path.startsWith('//')?path.toLowerCase():path;
+  };
+  const localWorkspacePath=identifier=>{
+    const uri=identifier&&(identifier.uri||identifier.configPath);
+    if(!uri||uri.scheme!=='file'||uri.authority)return '';
+    return normalizeWorkspacePath(uri.fsPath||uri.path);
+  };
+  const inputAgentHeaders=input=>{
+    const headers=new Set();
+    for(let node=input,n=0;node&&n<12;n++,node=node.parentElement){
+      const key=Object.keys(node).find(key=>key.startsWith('__reactFiber$'));
+      for(let f=key&&node[key],i=0;f&&i<36;i++,f=f.return){
+        const selected=f.memoizedProps&&f.memoizedProps.selectedAgent;
+        const header=selected&&selected.reference&&selected.reference.header;
+        if(header)headers.add(header);
+      }
+    }
+    return [...headers];
+  };
   const headText=(el)=>String(el&&(el.innerText||el.textContent)||'').trim();
   const isNewAgentButton=(node)=>{
     if(!node)return false;
     const aria=String(node.getAttribute&&node.getAttribute('aria-label')||'').trim();
-    const text=String(node.innerText||'').trim().split('\\n')[0].trim();
+    const text=String(node.innerText||'').trim().split('\n')[0].trim();
     return /^New Agent$/i.test(aria)||/^New Agent$/i.test(text);
   };
   const findNewAgent=(root)=>[...(root&&root.querySelectorAll?root.querySelectorAll('button,[role=button]'):[])].find(isNewAgentButton)||null;
   const collectWorkspaceSections=()=>{
     const sections=[];
-    const seen=new Set();
-    const add=(head,node,button)=>{
-      const name=String(head||'').trim();
-      if(!name)return;
-      const key=name.toLowerCase();
-      if(seen.has(key))return;
-      seen.add(key);
-      sections.push({head:name,node,button:button||findNewAgent(node)});
-    };
+    const heads=new Set(document.querySelectorAll('.ui-sidebar-section-head'));
     for(const section of document.querySelectorAll('section.glass-sidebar-workspace-section-root')){
-      add(headText(section.querySelector('.ui-sidebar-section-head')),section,null);
+      const head=section.querySelector('.ui-sidebar-section-head');
+      if(head)heads.add(head);
     }
-    for(const headEl of document.querySelectorAll('.ui-sidebar-section-head')){
+    for(const headEl of heads){
       const name=headText(headEl);
       if(!name)continue;
+      let metadata=null;
+      const key=Object.keys(headEl).find(key=>key.startsWith('__reactFiber$'));
+      for(let f=key&&headEl[key],i=0;f&&i<36;i++,f=f.return){
+        const p=f.memoizedProps;
+        if(p&&p.section&&Array.isArray(p.section.projects)){metadata=p.section;break;}
+      }
       let scope=headEl;
       let chosen=null;
       for(let i=0;scope&&i<16;i++,scope=scope.parentElement){
-        const nested=[...scope.querySelectorAll('.ui-sidebar-section-head')].map(headText).filter(Boolean);
-        const unique=[...new Set(nested.map((h)=>h.toLowerCase()))];
+        const nested=[...scope.querySelectorAll('.ui-sidebar-section-head')];
         const button=findNewAgent(scope);
-        if(button&&unique.length===1&&unique[0]===name.toLowerCase()){
+        if(button&&nested.length===1&&nested[0]===headEl){
           chosen={node:scope,button};
           break;
         }
       }
-      add(name,chosen?chosen.node:headEl,chosen&&chosen.button);
+      const source=metadata&&(metadata.newAgentTargetSource||metadata);
+      sections.push({head:name,metadata,source,button:chosen&&chosen.button});
     }
     return sections;
   };
+  const inspectWorkspace=projectPath=>{
+    const wanted=normalizeWorkspacePath(projectPath);
+    const sections=collectWorkspaceSections();
+    const available=sections.map(s=>({
+      title:s.head,sectionId:s.metadata&&s.metadata.id||null,
+      projects:(s.source&&s.source.projects||[]).map(p=>({
+        type:p.type,workspaceId:p.workspaceIdentifier&&p.workspaceIdentifier.id||null,
+        path:localWorkspacePath(p.workspaceIdentifier)||null,remoteAuthority:p.remoteAuthority||null,
+        repoUrls:Array.isArray(p.repoUrls)?p.repoUrls:[]
+      }))
+    }));
+    const matches=[];
+    for(const section of sections){
+      for(const project of section.source&&section.source.projects||[]){
+        if(project.type==='workspace'&&localWorkspacePath(project.workspaceIdentifier)===wanted){
+          matches.push({section,project});
+        }
+      }
+    }
+    const fail=state=>({ok:false,state,wanted,available,
+      nextStep:'In Cursor Agents Window, add or open the exact local folder (or .code-workspace file) '+projectPath+'. Ensure it has one registered local workspace creation target, then run cursor_init with that same path. Repository titles and historical Agents cannot establish the target.'});
+    if(!matches.length)return {diagnostic:fail(sections.some(s=>s.metadata)?'workspace_registration_required':'workspace_identity_unavailable')};
+    if(matches.length!==1)return {diagnostic:fail('workspace_ambiguous')};
+    const {section,project}=matches[0];
+    if(project.remoteAuthority||!project.workspaceIdentifier.id)return {diagnostic:fail('workspace_environment_unverified')};
+    // Cursor's section-level New Agent action chooses among registered targets.
+    // Do not click it when a second workspace could win that choice.
+    if(section.source.projects.length!==1)return {diagnostic:fail('workspace_creation_target_ambiguous')};
+    if(!section.button)return {diagnostic:fail('workspace_new_agent_unavailable')};
+    return {section,diagnostic:{ok:true,state:'workspace_ready',workspace:wanted,
+      workspaceId:project.workspaceIdentifier.id,sectionId:section.metadata.id,
+      environment:'local',identitySource:'registered_workspace_file_uri',repoUrls:Array.isArray(project.repoUrls)?project.repoUrls:[]}};
+  };
 `;
 function exprCreateAgentForWorkspace(projectPath) {
-  const workspaceLabel = JSON.stringify(basename6(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
-    const wanted=${workspaceLabel};
-    const sections=collectWorkspaceSections();
-    const available=sections.map((section)=>section.head).filter(Boolean);
-    const matches=sections.filter((section)=>section.head.toLowerCase()===wanted);
-    if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
-    if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
-    const button=matches[0].button;
-    if(!button)return JSON.stringify({ok:false,state:'repository_new_agent_unavailable',wanted});
-    button.click();
-    return JSON.stringify({ok:true,state:'repository_agent_created',workspace:wanted});
+    ${INPUT_PICKER_BODY}
+    const result=inspectWorkspace(${JSON.stringify(String(projectPath || ""))});
+    if(!result.diagnostic.ok)return JSON.stringify(result.diagnostic);
+    const previousAgentIds=[...new Set(inputCandidates().flatMap(inputAgentHeaders)
+      .map(header=>String(workspaceScalar(header.id)||'')).filter(Boolean))];
+    result.section.button.click();
+    return JSON.stringify({...result.diagnostic,state:'workspace_agent_creation_requested',previousAgentIds});
   })()`;
 }
 function exprInspectWorkspaceRepository(projectPath) {
-  const workspaceLabel = JSON.stringify(basename6(String(projectPath || "")).trim().toLowerCase());
   return `(function(){
     ${WORKSPACE_SECTION_BODY}
-    const wanted=${workspaceLabel};
-    const sections=collectWorkspaceSections();
-    const available=sections.map((section)=>section.head).filter(Boolean);
-    const matches=sections.filter((section)=>section.head.toLowerCase()===wanted);
-    if(matches.length===0)return JSON.stringify({ok:false,state:'repository_not_found',wanted,available});
-    if(matches.length>1)return JSON.stringify({ok:false,state:'repository_ambiguous',wanted,count:matches.length});
-    return JSON.stringify({ok:true,state:'repository_ready',workspace:wanted});
+    return JSON.stringify(inspectWorkspace(${JSON.stringify(String(projectPath || ""))}).diagnostic);
+  })()`;
+}
+function exprInspectAgentWorkspace(projectPath, options = {}) {
+  return `(function(){
+    ${WORKSPACE_SECTION_BODY}
+    ${INPUT_PICKER_BODY}
+    const wanted=normalizeWorkspacePath(${JSON.stringify(String(projectPath || ""))});
+    const options=${JSON.stringify(options)};
+    const rawId=id=>String(id||'').replace(/^local:/,'');
+    const excluded=new Set((options.excludedAgentIds||[]).map(rawId));
+    const fail=(state,observed=null)=>({ok:false,state,wanted,observed,
+      nextStep:'Inspect task sendState before retrying. Select the exact local workspace '+${JSON.stringify(String(projectPath || ""))}+' in Cursor and retry cursor_init when no task may still be running. The Agent must expose an existing local environment for that same path; do not substitute a repository alias, cloud target, or another worktree.'});
+    const inputs=inputCandidates();
+    if(inputs.length!==1)return JSON.stringify(fail('agent_workspace_identity_unavailable',{inputCount:inputs.length}));
+    const headers=inputAgentHeaders(inputs[0]);
+    const ids=[...new Set(headers.map(header=>rawId(workspaceScalar(header.id))).filter(Boolean))];
+    if(ids.length!==1||excluded.has(ids[0])||options.agentId&&ids[0]!==rawId(options.agentId)){
+      return JSON.stringify(fail('agent_workspace_identity_unavailable',{
+        inputCount:inputs.length,headerCount:headers.length,candidateAgentIds:ids,
+        identitySource:'writable_input_react_ancestors',expectedAgentId:options.agentId||null,
+        excludedAgentIdsMatched:ids.filter(id=>excluded.has(id))
+      }));
+    }
+    const id=ids[0];
+    if(options.requireInputFocus&&document.activeElement!==inputs[0])return JSON.stringify(fail('agent_input_focus_mismatch'));
+    let observed;
+    for(const header of headers){
+      const target=workspaceScalar(header.targetEnvironment);
+      const environment=workspaceScalar(header.environment);
+      const location=workspaceScalar(header.location);
+      observed={agentId:'local:'+id,targetType:target&&target.type||null,
+        workspaceId:environment&&environment.id||null,path:localWorkspacePath(environment)||null,
+        targetPath:localWorkspacePath(target&&target.environment)||null,locationType:location&&location.type||null};
+      if(!wanted||!environment||!environment.id||!target||target.type!=='existing'
+        ||environment.remoteAuthority||target.remoteAuthority||target.environment&&target.environment.remoteAuthority
+        ||observed.path!==wanted||observed.targetPath!==wanted||target.environment.id!==environment.id
+        ||location&&(location.type!=='local'&&location.type!=='worktree'
+          ||localWorkspacePath(location.environment)!==wanted
+          ||location.type==='worktree'&&normalizeWorkspacePath(location.worktreePath)!==wanted)){
+        return JSON.stringify(fail('agent_workspace_mismatch',observed));
+      }
+    }
+    return JSON.stringify({ok:true,state:'agent_workspace_verified',workspace:wanted,
+      environment:'local',identitySource:'selected_agent_existing_file_uri',...observed});
   })()`;
 }
 var EXPR_HISTORY_OPEN = `(function(){return !![...document.querySelectorAll('.compact-agent-history-react-menu-label')].find(e=>e.offsetParent!==null);})()`;
@@ -23749,7 +23844,8 @@ var CursorBridge = class {
       initialized: !!this.projectPath,
       reinitializable: true,
       interactionPreference: "agents_v2_when_open_else_legacy",
-      cursorUiPreferencePreserved: true
+      cursorUiPreferencePreserved: true,
+      workspaceBinding: this._lastWorkspaceBinding || null
     };
   }
   sessionRegistryView() {
@@ -24185,6 +24281,7 @@ var CursorBridge = class {
     this.workspaceSource = "persistent_init";
     this.workspaceUpdatedAt = saved.updatedAt;
     this._lastLifecycle = null;
+    this._lastWorkspaceBinding = null;
     try {
       await this._ensureCursor();
     } catch (error2) {
@@ -24224,6 +24321,7 @@ var CursorBridge = class {
   }
   async _findAgentsWorkspace(projectPath) {
     if (!projectPath) return null;
+    this._lastWorkspaceBinding = null;
     let page;
     try {
       page = await findPage({ purpose: "fifo", preferAgentsV2: true });
@@ -24235,13 +24333,15 @@ var CursorBridge = class {
     try {
       await c.ready;
       const repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || "{}");
+      this._lastWorkspaceBinding = { ...repository, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
       if (!repository.ok) return null;
       return {
         targetId: page.id,
         targetUiFlavor: "agents_v2",
         workspace: repository.workspace
       };
-    } catch {
+    } catch (error2) {
+      this._lastWorkspaceBinding = { ok: false, state: "workspace_probe_failed", wanted: projectPath, error: String(error2.message || error2) };
       return null;
     } finally {
       c.close();
@@ -24635,6 +24735,7 @@ var CursorBridge = class {
     if (isTerminalTask(job)) return;
     const e = error2 instanceof Error ? error2 : new Error(String(error2));
     job.error = e.message;
+    if (e.workspaceBindingFailure) job.workspaceBinding = e.workspaceBindingFailure;
     if (e.providerError) job.providerError = e.providerError;
     if (e.uiDiagnostic) job.uiDiagnostic = e.uiDiagnostic;
     if (e.terminalEvidence) job.terminalEvidence = e.terminalEvidence;
@@ -24740,7 +24841,7 @@ var CursorBridge = class {
             this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
           }
         }
-        if (rr.ok && rr.lifecycleMode === "attached" && rr.workspaceAction === "reused-agents-window" && rr.projectPath) {
+        if (rr.ok && rr.workspaceAction === "reused-agents-window" && rr.projectPath) {
           const agentsWorkspace = await this._findAgentsWorkspace(rr.projectPath);
           if (agentsWorkspace) {
             this._lastLifecycle = promoteAgentsWorkspaceLifecycle(this._lastLifecycle, agentsWorkspace);
@@ -24748,9 +24849,9 @@ var CursorBridge = class {
             this._lastLifecycle = {
               ...this._lastLifecycle,
               status: "workspace-not-ready",
-              message: `Cursor is reachable, but Cursor Bridge could not verify workspace ${rr.projectPath} in the attached Agents Window.`,
+              message: `Cursor is reachable, but Cursor Bridge could not verify workspace ${rr.projectPath} in the Agents Window (${this._lastWorkspaceBinding?.state || "workspace_probe_unavailable"}).`,
               needsAction: "open_workspace_in_cursor",
-              nextStep: `Open workspace ${rr.projectPath} in Cursor, then retry the same operation.`,
+              nextStep: this._lastWorkspaceBinding?.nextStep || `Open workspace ${rr.projectPath} in Cursor, then retry the same operation.`,
               retryable: true
             };
           }
@@ -24927,10 +25028,11 @@ var CursorBridge = class {
           try {
             await this._newChat(c, {
               uiFlavor: options.targetUiFlavor,
-              projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath
+              projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath,
+              job: options
             });
           } catch (error2) {
-            if (attempt === 0 && options.targetUiFlavor === "agents_v2" && isAgentsWorkspaceBindError(error2)) {
+            if (attempt === 0 && options.targetUiFlavor === "agents_v2" && isAgentsWorkspaceBindError(error2) && !error2.workspaceBindingFailure) {
               const fallback = await findPage({ purpose: "fifo", preferLegacy: true });
               if (fallback && fallback.id !== page.id) {
                 options.fallbackReason = "agents_window_unbound_use_workbench";
@@ -24957,10 +25059,11 @@ var CursorBridge = class {
         } catch {
         }
         const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
+        await this._verifyAgentsWorkspace(c, options, "before_send");
         options.sendState = "dispatching";
         try {
           await chord(c, 0, "Enter", "Enter", 13);
-          await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
+          await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline, options);
           options.sendState = "sent";
           options.sentAt = options.sentAt || (/* @__PURE__ */ new Date()).toISOString();
           await this._bindFifoAgentAfterSend(c, options, historyBefore, providerErrorBaseline);
@@ -25350,11 +25453,19 @@ var CursorBridge = class {
   async _newChat(c, options = {}) {
     if (options.uiFlavor === "agents_v2" && options.projectPath) {
       const created = JSON.parse(await evalJS(c, exprCreateAgentForWorkspace(options.projectPath)) || "{}");
+      if (options.job) {
+        options.job.workspaceBindingChecks = { before_create: { ...created, checkedAt: (/* @__PURE__ */ new Date()).toISOString() } };
+      }
       if (!created.ok) {
-        const available = Array.isArray(created.available) ? `; available=${created.available.join(", ")}` : "";
-        throw new Error(`Cursor Agents workspace binding failed: ${created.state || "unknown"}; wanted=${created.wanted || basename6(options.projectPath)}${available}`);
+        throw createWorkspaceBindingError(created);
       }
       await sleep2(1100);
+      const actual = JSON.parse(await evalJS(c, exprInspectAgentWorkspace(options.projectPath, { excludedAgentIds: created.previousAgentIds })) || "{}");
+      if (options.job) options.job.workspaceBindingChecks.after_create = { ...actual, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
+      if (!actual.ok) throw createWorkspaceBindingError(actual);
+      if (actual.workspaceId !== created.workspaceId) {
+        throw createWorkspaceBindingError({ ...actual, ok: false, state: "created_workspace_id_mismatch" });
+      }
       return true;
     }
     return this._clickNewAgent(c, true);
@@ -25491,6 +25602,7 @@ var CursorBridge = class {
     }
   }
   async _fillPrompt(c, text, job, timeoutMs = 2500) {
+    await this._verifyAgentsWorkspace(c, job);
     const prepared = await evalJS(c, EXPR_PREPARE_INPUT);
     if (prepared !== "READY") return prepared;
     try {
@@ -25522,7 +25634,18 @@ var CursorBridge = class {
     };
     throw error2;
   }
-  async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "") {
+  async _verifyAgentsWorkspace(c, job, stage = "before_fill") {
+    if (!job || job.targetUiFlavor !== "agents_v2") return;
+    const projectPath = job.projectPath || this.projectPath;
+    const diagnostic = JSON.parse(await evalJS(c, exprInspectAgentWorkspace(projectPath, {
+      agentId: job.agentId || job.provisionalAgentId || job.workspaceBinding?.agentId,
+      requireInputFocus: stage === "before_send"
+    })) || "{}");
+    job.workspaceBinding = { ...diagnostic, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    job.workspaceBindingChecks = { ...job.workspaceBindingChecks, [stage]: job.workspaceBinding };
+    if (!diagnostic.ok) throw createWorkspaceBindingError(diagnostic);
+  }
+  async _confirmSubmission(c, baselineCount = 0, providerErrorBaseline = "", job = null) {
     const accepted = async () => {
       await this._throwIfNewProviderError(c, providerErrorBaseline);
       let snap = {};
@@ -25536,6 +25659,13 @@ var CursorBridge = class {
     for (let i = 0; i < 6; i++) {
       await sleep2(250);
       if (await accepted()) return "enter";
+    }
+    try {
+      await this._verifyAgentsWorkspace(c, job, "before_send_fallback");
+    } catch (error3) {
+      error3.confirmedNotSent = false;
+      error3.sent = true;
+      throw error3;
     }
     const clicked = await evalJS(c, EXPR_CLICK_SEND);
     if (clicked === "CLICKED") {
@@ -25587,9 +25717,9 @@ var CursorBridge = class {
       this._throwIfCancelledBeforeSend(job);
       let createdForWorkspace = false;
       try {
-        createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath }) : await this._clickNewAgent(c, false);
+        createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath, job }) : await this._clickNewAgent(c, false);
       } catch (error2) {
-        if (isAgentsWorkspaceBindError(error2)) {
+        if (isAgentsWorkspaceBindError(error2) && !error2.workspaceBindingFailure) {
           return { fallbackReason: "Agents Window could not bind the current repository; downgraded to FIFO/workbench before submission" };
         }
         throw error2;
@@ -25622,9 +25752,10 @@ var CursorBridge = class {
         baseline = JSON.parse(await evalJS(c, EXPR_SNAP));
       } catch {
       }
+      await this._verifyAgentsWorkspace(c, job, "before_send");
       job.sendState = "dispatching";
       await chord(c, 0, "Enter", "Enter", 13);
-      await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline);
+      await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline, job);
       sent = true;
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -25739,9 +25870,10 @@ var CursorBridge = class {
       }
       await sleep2(350);
       this._throwIfCancelledBeforeSend(job);
+      await this._verifyAgentsWorkspace(c, job, "before_send");
       job.sendState = "dispatching";
       await chord(c, 0, "Enter", "Enter", 13);
-      await this._confirmSubmission(c, job.responseBaseline.messageCount, providerErrorBaseline);
+      await this._confirmSubmission(c, job.responseBaseline.messageCount, providerErrorBaseline, job);
       sent = true;
       job.sendState = "sent";
       job.sentAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -26569,6 +26701,8 @@ var CursorBridge = class {
       allowedPaths: job.allowedPaths,
       modelPreference: job.modelPreference,
       modelSelection: job.modelSelection,
+      workspaceBinding: job.workspaceBinding || null,
+      workspaceBindingChecks: job.workspaceBindingChecks || null,
       projectPath: job.projectPath,
       sessionMode: job.sessionMode || "isolated",
       sessionId: job.sessionId || null,
@@ -27002,6 +27136,7 @@ export {
   exprClickBoundComposerStop,
   exprClickSelectedAgentStop,
   exprCreateAgentForWorkspace,
+  exprInspectAgentWorkspace,
   exprInspectWorkspaceRepository,
   exprOpenAgent,
   isConfirmedCompletedReply,

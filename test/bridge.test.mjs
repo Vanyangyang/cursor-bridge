@@ -228,11 +228,11 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_PAGE_CAPABILITIES, /agentAdapterKind/);
 });
 
-test('Cursor Agents workspace expression creates a new Agent inside the exact repository section', () => {
+test('legacy repository section titles alone cannot authorize local Agent creation', () => {
   let clicked = 0;
   const section = {
     querySelector(selector) {
-      if (selector === '.ui-sidebar-section-head') return { innerText: 'VESPERIX' };
+      if (selector === '.ui-sidebar-section-head') return { innerText: 'VESPERIX', querySelectorAll: () => [] };
       return null;
     },
     querySelectorAll() {
@@ -241,20 +241,19 @@ test('Cursor Agents workspace expression creates a new Agent inside the exact re
   };
   const document = { querySelectorAll: () => [section] };
   const result = JSON.parse(Function('document', `return ${exprCreateAgentForWorkspace('G:\\\\project\\\\VESPERIX')};`)(document));
-  assert.equal(result.ok, true);
-  assert.equal(result.workspace, 'vesperix');
-  assert.equal(clicked, 1);
+  assert.equal(result.ok, false);
+  assert.equal(result.state, 'workspace_identity_unavailable');
+  assert.equal(clicked, 0);
 
   const missing = JSON.parse(Function('document', `return ${exprCreateAgentForWorkspace('G:\\\\project\\\\other')};`)(document));
   assert.equal(missing.ok, false);
-  assert.equal(missing.state, 'repository_not_found');
-  assert.deepEqual(missing.available, ['VESPERIX']);
+  assert.equal(missing.state, 'workspace_identity_unavailable');
 
   const ready = JSON.parse(Function('document', `return ${exprInspectWorkspaceRepository('G:\\\\project\\\\VESPERIX')};`)(document));
-  assert.deepEqual(ready, { ok: true, state: 'repository_ready', workspace: 'vesperix' });
+  assert.equal(ready.ok, false);
 });
 
-test('Cursor 3.16.17 Agents Window binds a repo by sidebar head when the legacy section wrapper is gone', () => {
+test('sidebar head without workspace metadata fails closed when the legacy wrapper is gone', () => {
   let clicked = 0;
   const newAgent = {
     getAttribute: (name) => name === 'aria-label' ? 'New Agent' : null,
@@ -293,17 +292,17 @@ test('Cursor 3.16.17 Agents Window binds a repo by sidebar head when the legacy 
   };
 
   const created = JSON.parse(Function('document', `return ${exprCreateAgentForWorkspace('G:\\\\u2dProject\\\\u6project\\\\VESPERIX')};`)(document));
-  assert.equal(created.ok, true);
-  assert.equal(created.workspace, 'vesperix');
-  assert.equal(clicked, 1);
+  assert.equal(created.ok, false);
+  assert.equal(created.state, 'workspace_identity_unavailable');
+  assert.equal(clicked, 0);
 
   const ready = JSON.parse(Function('document', `return ${exprInspectWorkspaceRepository('G:\\\\u2dProject\\\\u6project\\\\VESPERIX')};`)(document));
-  assert.deepEqual(ready, { ok: true, state: 'repository_ready', workspace: 'vesperix' });
+  assert.equal(ready.ok, false);
 
   const missing = JSON.parse(Function('document', `return ${exprInspectWorkspaceRepository('G:\\\\project\\\\other')};`)(document));
   assert.equal(missing.ok, false);
-  assert.equal(missing.state, 'repository_not_found');
-  assert.deepEqual(missing.available, ['cursor-bridge', 'vesperix']);
+  assert.equal(missing.state, 'workspace_identity_unavailable');
+  assert.deepEqual(missing.available.map(row => row.title), ['cursor-bridge', 'vesperix']);
 });
 
 test('chat panel diagnostics distinguish actionable missing-input states', () => {
