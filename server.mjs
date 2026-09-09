@@ -24,7 +24,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { basename, dirname, join, resolve } from 'node:path';
 import { statSync } from 'node:fs';
-import { WebSocket } from 'ws';
+import { makeClient as createCdpClient } from './cdp-client.mjs';
 import http from 'http';
 import { pathToFileURL } from 'url';
 import {
@@ -63,7 +63,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.0';
+const PLUGIN_VERSION = '6.0.1';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -283,17 +283,11 @@ function shouldRecoverNormalAgentsPresentation({
 }
 
 async function inspectPageTarget(page) {
-  const c = makeClient(page.webSocketDebuggerUrl);
   const probeMs = Number(process.env.CURSOR_BRIDGE_PAGE_PROBE_TIMEOUT || 5000);
+  const c = makeClient(page.webSocketDebuggerUrl, { connectTimeoutMs: probeMs });
   try {
-    await Promise.race([
-      c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out connecting to the CDP target')), probeMs)),
-    ]);
-    const raw = await Promise.race([
-      evalJS(c, EXPR_PAGE_CAPABILITIES),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out probing the CDP target')), probeMs)),
-    ]);
+    await c.ready;
+    const raw = await evalJS(c, EXPR_PAGE_CAPABILITIES, { timeoutMs: probeMs });
     return { ...page, capabilities: JSON.parse(raw || '{}') };
   } catch (error) {
     return { ...page, capabilities: null, probeError: error.message };
@@ -346,33 +340,19 @@ async function findPage(options = {}) {
   const inspected = await Promise.all(pages.map(inspectPageTarget));
   return selectPageForUiPreference(inspected, options) || pages[0];
 }
-function makeClient(wsUrl) {
-  const ws = new WebSocket(wsUrl, { origin: ORIGIN });
-  let id = 0; const pending = new Map();
-  const failAll = (msg) => { for (const { rej } of pending.values()) { try { rej(new Error(msg)); } catch {} } pending.clear(); };
-  const ready = new Promise((res, rej) => { ws.on('open', res); ws.once('error', rej); });
-  ws.on('message', (data) => { let m; try { m = JSON.parse(data.toString()); } catch { return; } if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); if (m.error) rej(new Error(JSON.stringify(m.error))); else res(m.result); } });
-  // 关键健壮性：ws 打开后若关闭/出错，立即拒掉所有 pending。否则半开 socket（renderer 后台节流 / target detach / reload）
-  // 会让 evalJS 永挂，_waitComplete 的 QUERY_TIMEOUT（轮询守卫，只在迭代顶部求值）永不触发 → job 永挂 + busy 永真
-  // + 队列 wedge + ws 泄漏。_failInflight 加固（2026-06-08 review CB-1）。
-  ws.on('close', () => failAll('CDP WebSocket closed because the page or renderer disappeared'));
-  ws.on('error', (e) => failAll('CDP WebSocket error: ' + (e && e.message)));
-  const CMD_TIMEOUT = Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 30000);
-  const send = (method, params = {}) => {
-    const myId = ++id;
-    return new Promise((res, rej) => {
-    const t = setTimeout(() => { if (pending.delete(myId)) rej(new Error(`CDP command timed out: ${method} (${CMD_TIMEOUT}ms)`)); }, CMD_TIMEOUT);
-      pending.set(myId, { res: (v) => { clearTimeout(t); res(v); }, rej: (e) => { clearTimeout(t); rej(e); } });
-      try { ws.send(JSON.stringify({ id: myId, method, params })); }
-      catch (e) { clearTimeout(t); pending.delete(myId); rej(e); }
-    });
-  };
-  return { ready, send, close: () => { try { ws.close(); } catch {} } };
+function makeClient(wsUrl, options = {}) {
+  return createCdpClient(wsUrl, { origin: ORIGIN,
+    connectTimeoutMs: Number(process.env.CURSOR_BRIDGE_CONNECT_TIMEOUT || 5000),
+    commandTimeoutMs: Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 30000), ...options });
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function evalJS(c, expr) {
-  const r = await c.send('Runtime.evaluate', { expression: expr, returnByValue: true, includeCommandLineAPI: true, awaitPromise: true });
-    if (r.exceptionDetails) throw new Error('Page exception: ' + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+async function evalJS(c, expr, options) {
+  const r = await c.send('Runtime.evaluate', { expression: expr, returnByValue: true, includeCommandLineAPI: true, awaitPromise: true }, options);
+    if (r.exceptionDetails) {
+      const error = new Error('Page exception: ' + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+      error.code = 'CDP_EVALUATE_FAILED';
+      throw error;
+    }
   return r.result && r.result.value;
 }
 async function chord(c, modifiers, key, code, vk) {
@@ -670,6 +650,7 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
         kind,
         selected:row.getAttribute('data-selected')==='true'||row.getAttribute('aria-checked')==='true'||!!row.querySelector('.ui-model-picker__item-check,.ui-model-picker__param-check'),
         disabled:row.getAttribute('data-disabled')==='true'||row.getAttribute('aria-disabled')==='true',
+        pointerEvents:getComputedStyle(row).pointerEvents,
         hasSubmenu:row.getAttribute('aria-haspopup')==='menu',
         submenu:!!row.closest('[data-submenu]'),
         x:Math.round(rect.x+rect.width/2),
@@ -1618,7 +1599,7 @@ class CursorBridge {
       }
       if (session.lastTask?.status === 'completed' && !session.lastTask.resultCollectedAt
         && this.tasks.has(session.lastTask.taskId)) {
-        throw cursorSessionError('SESSION_RESULT_UNCOLLECTED', `read cursor_status(task_id=${session.lastTask.taskId}, detail="full") before continuing`);
+        throw cursorSessionError('SESSION_RESULT_UNCOLLECTED', `read cursor_status(task_id=${session.lastTask.taskId}, detail="result") before continuing`);
       }
       if (session.lastTask?.status === 'completed' && !session.lastTask.resultCollectedAt
         && !this.tasks.has(session.lastTask.taskId) && session.recoveryState !== 'reconciled_result_uncollected') {
@@ -2142,7 +2123,7 @@ class CursorBridge {
     };
   }
 
-  async applyRuntimePresentation(action) {
+  async applyRuntimePresentation(action, { scope = 'process' } = {}) {
     const normalizedAction = String(action || '').trim().toLowerCase();
     if (!['hide', 'show'].includes(normalizedAction)) {
       throw new Error('cursor_runtime action supports hide or show');
@@ -2150,6 +2131,7 @@ class CursorBridge {
     const result = setCursorWindowPresentation({
       action: normalizedAction,
       port: CDP_PORT,
+      scope,
     });
     this._lastPresentation = { ...result, at: new Date().toISOString() };
     return this._lastPresentation;
@@ -2165,7 +2147,7 @@ class CursorBridge {
     })) {
       return null;
     }
-    const presentation = await this.applyRuntimePresentation('show');
+    const presentation = await this.applyRuntimePresentation('show', { scope: 'agents' });
     if (lifecycle && typeof lifecycle === 'object') lifecycle.presentation = presentation;
     return presentation;
   }
@@ -2853,21 +2835,31 @@ class CursorBridge {
     throw error;
   }
 
-  async _readModelPickerTrigger(c) {
+  async _readModelPickerValue(c, expression, kind, { timeoutMs = 3000 } = {}) {
+    const startedAt = Date.now();
     try {
-      return JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_TRIGGER) || '{}');
-    } catch {
-      return { found: false, state: 'trigger_unreadable' };
+      const value = JSON.parse(await evalJS(c, expression, { timeoutMs }));
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        const error = new Error('Cursor picker returned an invalid snapshot');
+        error.code = 'CURSOR_PICKER_RESPONSE_INVALID';
+        throw error;
+      }
+      return value;
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      if (error instanceof SyntaxError) error.code = 'CURSOR_PICKER_PARSE_FAILED';
+      error.pickerRead = { kind, elapsedMs: Date.now() - startedAt, code: error.code || 'CDP_READ_FAILED', message: error.message };
+      throw error;
     }
   }
 
-  async _readModelPickerRows(c) {
-    try {
-      const snapshot = JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_ROWS) || '{}');
-      return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
-    } catch {
-      return { open: false, rows: [] };
-    }
+  async _readModelPickerTrigger(c, options) {
+    return this._readModelPickerValue(c, EXPR_MODEL_PICKER_TRIGGER, 'trigger', options);
+  }
+
+  async _readModelPickerRows(c, options) {
+    const snapshot = await this._readModelPickerValue(c, EXPR_MODEL_PICKER_ROWS, 'rows', options);
+    return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
   }
 
   async _clickModelPickerPoint(c, point) {
@@ -2957,7 +2949,7 @@ class CursorBridge {
     let last = this._inspectModelPickerRows({ open: false, rows: [] }, requested, kind);
     do {
       this._throwIfCancelledBeforeSend(job);
-      last = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
+      last = this._inspectModelPickerRows(await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) }), requested, kind);
       if (last.row) return { ...last, state: 'matched' };
       const signature = JSON.stringify(last.available);
       if (modelPickerAvailableIsDecisive(kind, last.available)) {
@@ -2979,19 +2971,42 @@ class CursorBridge {
 
   async _selectedEffortRow(c, modelRow, effort, job) {
     const requested = cursorEffortUiValue(effort);
-    const snapshot = await this._readModelPickerRows(c);
+    let snapshot = await this._readModelPickerRows(c);
     const immediate = this._inspectModelPickerRows(snapshot, requested, 'parameter');
     if (immediate.row) return { ...immediate, state: 'matched', attempts: ['visible'] };
 
     const attempts = [];
-    const effortControl = (snapshot.rows || [])
+    let effortControl = (snapshot.rows || [])
       .find((row) => row.kind === 'effort_control' && row.disabled !== true);
     if (effortControl) {
       this._throwIfCancelledBeforeSend(job);
+      // The model submenu makes sibling root controls pointer-events:none.
+      // Return to the root before using fresh Effort coordinates.
+      const modelSubmenuOpen = () => snapshot.rows.some(row => row.kind === 'model' && row.submenu === true);
+      if (modelSubmenuOpen()) {
+        attempts.push('close_model_submenu');
+        for (const type of ['keyDown', 'keyUp']) {
+          await c.send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+        }
+        const deadline = Date.now() + 700;
+        do {
+          this._throwIfCancelledBeforeSend(job);
+          snapshot = await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) });
+          if (!snapshot.open) break;
+          effortControl = snapshot.rows.find(row => row.kind === 'effort_control' && row.disabled !== true && row.pointerEvents !== 'none');
+          if (effortControl && !modelSubmenuOpen()) { attempts.push('fresh_effort_control'); break; }
+          if (Date.now() >= deadline) break;
+          await sleep(Math.min(50, deadline - Date.now()));
+        } while (Date.now() <= deadline);
+      }
+      if (!snapshot.open || !effortControl || effortControl.pointerEvents === 'none' || modelSubmenuOpen()) {
+        return { ...this._inspectModelPickerRows(snapshot, requested, 'parameter'), state: 'not_rendered', attempts };
+      }
       attempts.push('effort_control');
+      this._throwIfCancelledBeforeSend(job);
       await this._clickModelPickerPoint(c, effortControl);
       const result = await this._waitForModelPickerMatch(c, requested, 'parameter', job, { timeoutMs: 700 });
-      if (result.state !== 'not_rendered') return { ...result, attempts };
+      return { ...result, attempts };
     }
 
     this._throwIfCancelledBeforeSend(job);
@@ -3013,7 +3028,7 @@ class CursorBridge {
     const deadline = Date.now() + timeoutMs;
     do {
       this._throwIfCancelledBeforeSend(job);
-      const inspected = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
+      const inspected = this._inspectModelPickerRows(await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) }), requested, kind);
       if (inspected.row && inspected.row.selected) return inspected.row;
       if (Date.now() >= deadline) break;
       await sleep(Math.min(100, Math.max(0, deadline - Date.now())));
@@ -3031,8 +3046,11 @@ class CursorBridge {
     let modelRow = null;
     let effectiveEffort = null;
     let primaryError = null;
+    const selectionStartedAt = Date.now();
+    let stage = 'open_picker';
     try {
       const opened = await this._openModelPicker(c);
+      stage = 'locate_model';
       let located = await this._findModelPickerModel(c, opened, requestedModel);
       modelRow = located.modelRow;
       if (!modelRow) {
@@ -3078,11 +3096,14 @@ class CursorBridge {
           message,
           failureClass,
           failureClass === 'effort_menu_not_rendered',
-          { available: outcome.available || [], attempts: outcome.attempts || [] },
+          { available: outcome.available || [], attempts: outcome.attempts || [],
+            menu: outcome.snapshot ? { open: outcome.snapshot.open, rows: (outcome.snapshot.rows || []).slice(0, 20)
+              .map(({ text, kind, selected, disabled, pointerEvents, submenu }) => ({ text, kind, selected, disabled, pointerEvents, submenu })) } : null },
         );
       };
 
       if (requestedEffort && modelRow.hasSubmenu) {
+        stage = 'select_effort';
         const selectedEffort = await resolveEffort();
         if (!selectedEffort.row) throwEffortFailure(selectedEffort);
         if (!selectedEffort.row.selected || !modelRow.selected) {
@@ -3091,11 +3112,13 @@ class CursorBridge {
           await sleep(550);
         }
       } else if (!modelRow.selected) {
+        stage = 'select_model';
         this._throwIfCancelledBeforeSend(job);
         await this._clickModelPickerPoint(c, modelRow);
         await sleep(550);
       }
 
+      stage = 'verify_model';
       let trigger = await this._readModelPickerTrigger(c);
       if (!trigger.found || !normalizeModelPickerText(trigger.text).includes(normalizeModelPickerText(requestedModel))) {
         const reopened = await this._openModelPicker(c);
@@ -3112,6 +3135,7 @@ class CursorBridge {
       }
 
       if (requestedEffort) {
+        stage = 'verify_effort';
         const reopened = await this._openModelPicker(c);
         located = await this._findModelPickerModel(c, reopened, requestedModel);
         modelRow = located.modelRow;
@@ -3148,13 +3172,19 @@ class CursorBridge {
       if (!failure) {
         const pickerUnavailable = /model picker (?:is unavailable|did not open)/i.test(primaryError.message);
         failure = {
-          failureClass: pickerUnavailable ? 'picker_did_not_open' : 'probe_error',
+          failureClass: primaryError.pickerRead ? 'picker_read_failed' : pickerUnavailable ? 'picker_did_not_open' : 'probe_error',
           retryable: true,
         };
       }
       const diagnostic = {
         configured: true,
         applied: false,
+        stage,
+        elapsedMs: Date.now() - selectionStartedAt,
+        taskId: job?.id || null,
+        targetId: job?.targetId || null,
+        pickerRead: primaryError.pickerRead || null,
+        cdp: primaryError.cdp || null,
         requestedModel,
         requestedEffort,
         failureClass: failure.failureClass,
@@ -3162,6 +3192,7 @@ class CursorBridge {
         errorCode: primaryError.code || `CURSOR_MODEL_${String(failure.failureClass).toUpperCase()}`,
         available: failure.available || [],
         attempts: failure.attempts || [],
+        menu: failure.menu || null,
         runtimeMode: this.runtimeMode,
         lastError: primaryError.message,
         failedAt: new Date().toISOString(),
@@ -3199,7 +3230,17 @@ class CursorBridge {
       }
     }
 
-    const trigger = await this._readModelPickerTrigger(c);
+    let trigger;
+    try { trigger = await this._readModelPickerTrigger(c); }
+    catch (error) {
+      error.modelSelection = { configured: true, applied: false, requestedModel, requestedEffort,
+        taskId: job?.id || null, targetId: job?.targetId || null, stage: 'final_trigger',
+        failureClass: 'picker_read_failed', retryable: true, errorCode: error.code || 'CDP_READ_FAILED',
+        pickerRead: error.pickerRead || null, cdp: error.cdp || null,
+        elapsedMs: Date.now() - selectionStartedAt, lastError: error.message };
+      if (job) job.modelSelection = error.modelSelection;
+      throw error;
+    }
     const result = {
       configured: true,
       applied: true,
@@ -4645,6 +4686,14 @@ class CursorBridge {
       effectiveModel: full.modelSelection.effectiveModel,
       effectiveEffort: full.modelSelection.effectiveEffort,
       failureClass: full.modelSelection.failureClass,
+      stage: full.modelSelection.stage,
+      elapsedMs: full.modelSelection.elapsedMs,
+      pickerRead: full.modelSelection.pickerRead,
+      cdp: full.modelSelection.cdp,
+      available: full.modelSelection.available,
+      attempts: full.modelSelection.attempts,
+      menu: full.modelSelection.menu,
+      cleanupError: full.modelSelection.cleanupError,
       retryable: full.modelSelection.retryable,
       errorCode: full.modelSelection.errorCode,
       lastError: full.modelSelection.lastError,
@@ -4794,7 +4843,7 @@ class CursorBridge {
   _ensureTaskCapacity() {
     this._trimTasks(49);
     if (this.tasks.size >= 50) {
-      throw new Error('TASK_RETENTION_FULL: 50 tasks are active or have unread replies. Read each unreadResultTaskId with cursor_status(task_id, detail="full"), or wait for active tasks before submitting more work.');
+      throw new Error('TASK_RETENTION_FULL: 50 tasks are active or have unread replies. Read each unreadResultTaskId with cursor_status(task_id, detail="result"), or wait for active tasks before submitting more work.');
     }
   }
 
@@ -4808,6 +4857,17 @@ class CursorBridge {
 
   async status(taskId = '', { detail = 'compact' } = {}) {
     const normalizedDetail = normalizeStatusDetail(detail);
+    if (normalizedDetail === 'result') {
+      if (!taskId) throw new Error('RESULT_TASK_REQUIRED: detail="result" requires task_id');
+      const job = this.tasks.get(String(taskId));
+      if (!job) throw new Error(`RESULT_TASK_NOT_FOUND: ${taskId}`);
+      if (!isTerminalTask(job) || job.result == null) {
+        throw new Error(`RESULT_NOT_AVAILABLE: ${taskId}; inspect compact status before retrying`);
+      }
+      const text = String(job.result);
+      this._markTaskResultCollected(job);
+      return text;
+    }
     if (taskId) {
       const job = this.tasks.get(String(taskId));
       if (normalizedDetail === 'full') {
@@ -4903,8 +4963,8 @@ function buildSearchInputSchema() {
 
 function normalizeStatusDetail(detail) {
   if (detail === undefined) return 'compact';
-  if (typeof detail !== 'string' || !['compact', 'full'].includes(detail)) {
-    throw new Error('detail must be compact or full');
+  if (typeof detail !== 'string' || !['compact', 'full', 'result'].includes(detail)) {
+    throw new Error('detail must be compact, full or result');
   }
   return detail;
 }
@@ -4950,7 +5010,7 @@ function buildToolDefinitions(bridgeInstance) {
         'Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. ' +
         'Persistent continuity is explicit: session_mode=create starts one durable top-level Agent association, and session_mode=continue requires its exact session_id. Omission keeps the existing isolated behavior. ' +
         'Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. ' +
-        'Collect the result with cursor_status(task_id, detail="full"); ordinary status calls are compact and do not acknowledge the reply. Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
+        'Collect the result with cursor_status(task_id, detail="result"); ordinary status calls are compact and do not acknowledge the reply. Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -4973,7 +5033,7 @@ function buildToolDefinitions(bridgeInstance) {
       name: 'cursor_task_control',
       description:
         'Recover or terminate one exact in-memory Cursor task without resubmitting it; task records do not survive this MCP server process. ' +
-        'Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and stores a stable terminal result when possible. Responses stay compact and never acknowledge the result; collect it later with cursor_status(task_id, detail="full"). ' +
+        'Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and stores a stable terminal result when possible. Responses stay compact and never acknowledge the result; collect it later with cursor_status(task_id, detail="result"). ' +
         'Use cancel with confirm=true and the exact expected_agent_id to target Stop safely. ' +
         'FIFO or unbound orphans globally block delegation and require manual verification before abandon. ' +
         'Use abandon only with an explicit reason and acknowledge_may_still_write=true; it releases reservations without proving the Cursor Agent stopped.',
@@ -5040,14 +5100,14 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: 'cursor_status',
-      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Compact is the default and never includes or acknowledges a task result. Use detail="full" with task_id to receive the complete legacy task details and result; this marks the result collected while keeping repeat full reads available. Pass task_id for its configured and effective model selection or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.',
+      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Compact is the default and never includes or acknowledges a task result. Use detail="result" with task_id for only the complete reply as plain text, or detail="full" for JSON diagnostics and the reply; both record receipt and allow repeat reads while retained. Pass task_id for its configured and effective model selection or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
         properties: {
           task_id: { type: 'string', description: 'A task ID returned by cursor_do.' },
           session_id: { type: 'string', description: 'A persistent session ID returned by cursor_do(session_mode=create).' },
-          detail: { type: 'string', enum: ['compact', 'full'], default: 'compact', description: 'compact returns status and safety metadata without the result body or receipt side effect. full returns legacy complete details and explicitly collects a task result.' },
+          detail: { type: 'string', enum: ['compact', 'full', 'result'], default: 'compact', description: 'compact returns status without collecting the reply. result requires task_id and returns only its complete reply as plain text, recording receipt. full returns complete JSON details and the reply. Explicit result/full reads are repeatable while retained.' },
         },
       },
     },
@@ -5081,10 +5141,13 @@ async function ensureBridgeCursor(targetBridge, reason) {
 
 function toolErrorResult(error) {
   const message = error instanceof Error ? error.message : String(error);
-  if (error && error.uiDiagnostic) {
+  if (error && (error.uiDiagnostic || error.modelSelection || error.pickerRead || error.cdp)) {
     const payload = {
-      error: { code: error.code || error.uiDiagnostic.code || 'CURSOR_BRIDGE_ERROR', message },
-      uiDiagnostic: error.uiDiagnostic,
+      error: { code: error.code || error.uiDiagnostic?.code || 'CURSOR_BRIDGE_ERROR', message },
+      ...(error.uiDiagnostic ? { uiDiagnostic: error.uiDiagnostic } : {}),
+      ...(error.modelSelection ? { modelSelection: error.modelSelection } : {}),
+      ...(error.pickerRead ? { pickerRead: error.pickerRead } : {}),
+      ...(error.cdp ? { cdp: error.cdp } : {}),
     };
     return {
       content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
@@ -5175,6 +5238,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw cursorSessionError('STATUS_SELECTOR_AMBIGUOUS', 'pass task_id or session_id, not both');
       }
       const detail = normalizeStatusDetail(args && args.detail);
+      if (detail === 'result') {
+        if (!args.task_id || args.session_id) throw new Error('RESULT_TASK_REQUIRED: detail="result" requires task_id only');
+        return { content: [{ type: 'text', text: await bridge.status(args.task_id, { detail }) }] };
+      }
       const statusMs = Math.max(1000, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8000));
       let result;
       try {

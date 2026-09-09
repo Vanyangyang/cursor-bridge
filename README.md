@@ -64,7 +64,7 @@ It is installed and updated independently from Cursor Bridge.
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
 > [!NOTE]
-> **6.0.0 validation:** 253 automated checks passed. A locally built MCP completed a real Cursor compact-status and explicit full-result read. Fresh-host native 6.0.0 pickup remains pending; earlier runtime evidence retains its recorded scope.
+> See [Compatibility and update history](./COMPATIBILITY.md) and the [latest release](https://github.com/Vanyangyang/cursor-bridge/releases) for the current pairing and its evidence boundary.
 
 CCE and `cursor_do` accept optional `request_context`, for example `{"sender":"model","source":"mixed"}`. `sender` declares who directly sends the request (`user/model/unknown`); `source` distinguishes user requirements from model additions (`user/model/mixed/unknown`). Separate both in mixed prompt text. Omitted values remain unknown, are not inferred from the selected model, and never grant extra permission. Task status reports the declaration for that turn.
 >
@@ -157,14 +157,7 @@ With Grok Build Supervisor enabled, send your normal implementation task; the cu
 
 ## Compatibility
 
-Cursor compatibility targets (Windows 11):
-
-| Cursor | Cursor Bridge | Status |
-|---|---|---|
-| **3.19.13** | **6.0.0** (`main`, current) | 253 automated checks passed, and a locally built MCP completed a real Cursor compact-status and explicit full-result read. Fresh-host native 6.0.0 pickup remains pending; other runtime evidence retains its recorded scope. |
-| 3.19.13 | 5.10.1 (archived) | Workspace registration, FIFO recovery, and request provenance. |
-
-Previous Cursor Bridge versions are not actively maintained. See [Compatibility and update history](./COMPATIBILITY.md) for the archived 5.10.1, 5.10.0, 5.9.1, 5.9.0, 5.8.2, 5.8.1, 5.8.0, 5.7.1, 5.7.0, 5.6.2, 5.6.1, 5.6.0, 5.5.0, 5.4.2, 5.4.1, and 5.4.0 pairings with exact installation commands. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+See [Compatibility and update history](./COMPATIBILITY.md) and the [latest release](https://github.com/Vanyangyang/cursor-bridge/releases) for the current pairing, evidence boundary, and archived installation instructions. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
 Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
@@ -182,9 +175,9 @@ Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After i
 | **`cursor_context_engine`** | Read-only project understanding from one natural-language `query`. |
 | **`cursor_do`** | Submits a clear, bounded subtask to Cursor Agent for execution. Background submissions return a compact receipt; synchronous `background=false` returns the full result. |
 | **`cursor_model`** | Shows, sets, or resets persistent model and reasoning-effort defaults for CCE, `cursor_do`, or both. |
-| **`cursor_status`** | Reads connection, queue, runtime, persistent model defaults, and configured/effective task state. Task views are compact by default; use `cursor_status(task_id, detail="full")` to retrieve a complete retained result and record receipt. |
+| **`cursor_status`** | Reads connection, queue, runtime, persistent model defaults, and configured/effective task state. Task views are compact by default; `cursor_status(task_id, detail="result")` returns the plain complete reply and records receipt. `detail="full"` retains diagnostic task detail plus the reply. |
 | `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
-| `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery and returns an action/state summary; retrieve a result separately with full task status. |
+| `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery and returns an action/state summary; retrieve the reply separately with `cursor_status(task_id, detail="result")`. |
 
 > [!WARNING]
 > Cursor is an Agent, not a filesystem sandbox. CCE strongly prompts read-only investigation, but prompts and allowed paths are not OS-level isolation. Verify consequential anchors and workspace changes.
@@ -318,14 +311,14 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 
 - FIFO means first in, first out: ordinary tasks are serialized through one UI lock and start in a clean chat.
 - Independent `parallel_agent` tasks use separate top-level Cursor Agents. Writable parallel tasks require non-overlapping `allowed_paths`; read-only work uses `read_only=true`.
-- An asynchronous `cursor_do(background=true)` returns a compact submission receipt. Save its `task_id`, poll `cursor_status(task_id)` with the default compact view, and after a terminal state call `cursor_status(task_id, detail="full")` to retrieve the complete result and record receipt. Repeating an explicit full read returns the same result while the task is retained. `cursor_do(background=false)` is synchronous and still returns the complete result body.
-- `cursor_task_control` returns only its action and compact task state, never a result body. After a terminal recovery action, retrieve the body with `cursor_status(task_id, detail="full")`.
+- An asynchronous `cursor_do(background=true)` returns a compact submission receipt. Save its `task_id`, poll `cursor_status(task_id)` with the default compact view, and after a terminal state call `cursor_status(task_id, detail="result")` to retrieve the raw complete reply and record receipt. It has no JSON wrapper: check `isError` before treating its content as a reply. Use `detail="full"` only when the diagnostic task detail is also needed. Repeating either explicit read returns the same retained result. `cursor_do(background=false)` is synchronous and still returns the complete result body.
+- `cursor_task_control` returns only its action and compact task state, never a result body. After a terminal recovery action, retrieve the normal reply with `cursor_status(task_id, detail="result")`; use `detail="full"` for diagnostics.
 - `session_mode=isolated` remains the default. Use `session_mode=create` only when later turns must keep the same Cursor context; continue through the returned stable `session_id` with `session_mode=continue`.
 - Every continued turn receives a new `task_id` and must repeat `read_only=true` or an `allowed_paths` subset. Persistent sessions require `parallel_agent`, allow one active turn, and never downgrade to FIFO.
 - `cursor_status(session_id)` inspects the durable association. `cursor_session_control(action=close)` ends Bridge continuity without stopping Cursor; an already-closed mapping may be removed with `action=forget, confirm=true`.
 - After an interrupted adapter, `cursor_session_control(action=reconcile)` checks the exact Agent twice and never resends. `abandon` is an explicitly acknowledged last resort when stop evidence cannot be recovered.
 - After reconciliation confirms completion, use `cursor_session_control(action=collect_result)` before continuing to retrieve that turn's complete reply. It always returns the full reply, restores the previous Agent selection, never sends a prompt, and never persists the reply. A changed epoch invalidates collection; repeating a successful collection returns `already_collected`. Numeric reply signatures and read receipts cover restart recovery, including completion before the first read. Older continuation turns without a saved signature require manual inspection.
-- Up to 50 task records are retained. Unread replies are protected: `TASK_RETENTION_FULL` rejects new submissions instead of dropping them. For each ID in `cursor_status().unreadResultTaskIds`, call `cursor_status(task_id, detail="full")`; compact status calls do not record receipt, and only an explicit full read makes the record eligible for eviction.
+- Up to 50 task records are retained. Unread replies are protected: `TASK_RETENTION_FULL` rejects new submissions instead of dropping them. For each ID in `cursor_status().unreadResultTaskIds`, call `cursor_status(task_id, detail="result")`; compact status calls do not record receipt, while either explicit result or full read makes the record eligible for eviction.
 - `timeout_ms` is one post-submission monitoring budget shared by FIFO and automatic recovery. Expiry does not cancel Cursor; explicit `reap` may grant a fresh monitoring budget.
 - If the host supplies no workspace identity and Bridge restores the shared `default` binding, submission returns `WORKSPACE_CONFIRMATION_REQUIRED` until `cursor_init` confirms the intended project for this adapter. Identity-scoped bindings retain their normal restart behavior.
 - Ready session mappings survive MCP restart and plugin-cache replacement because their atomic registry lives in the user configuration directory. Prompts, replies, credentials, plugin paths, scripts, and CDP target IDs are not persisted.

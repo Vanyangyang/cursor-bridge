@@ -6,6 +6,23 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-09-09
+
+### Fixed
+
+- Modern effort selection exits the open model child submenu before using fresh root Effort coordinates. It waits for an interactive root control instead of clicking a pointer-disabled sibling; modern-control failures no longer fall back to reopening the covering model row submenu.
+- CDP clients enforce a connection deadline, reject pending calls on close/error, cap per-call deadlines, and retain transport stage/cause without reconnecting or resending commands automatically.
+- Picker reads preserve CDP, page-execution and parsing failures instead of misreporting an empty effort menu. Selection errors retain stage, elapsed time, task/target identity and cleanup diagnostics, including synchronous MCP failures.
+- Automatic normal-mode display recovery targets only one exact `Cursor Agents` window in the confirmed Cursor process. It leaves ordinary IDE windows and the process-wide minimal guard unchanged, and does nothing when the Agents match is missing or ambiguous.
+
+### Added
+
+- `cursor_status(task_id, detail="result")` returns the raw complete terminal reply without a JSON wrapper and records receipt. It requires a task ID; callers must check `isError` before treating content as a reply, and missing or not-ready tasks return MCP `isError` without recording receipt. `detail="full"` remains the diagnostic task-detail and reply view.
+
+### Validation
+
+- 274 full automated tests passed. A real fresh task passed after the fixes with an `actualEffort` hit. The historical `ETIMEDOUT` root cause remains `UNKNOWN`; this does not establish a cure. Native 6.0.1 pickup remains pending.
+
 ## [6.0.0] - 2026-09-09
 
 ### Breaking changes

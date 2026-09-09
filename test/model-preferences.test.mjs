@@ -221,7 +221,7 @@ test('effort picker waits for delayed rows and distinguishes stable unsupported 
   const notRendered = await chromeOnly._selectedEffortRow(null, modelRow, 'high', null);
   assert.equal(notRendered.state, 'not_rendered');
   assert.equal(notRendered.row, null);
-  assert.deepEqual(notRendered.attempts, ['effort_control', 'model_hover', 'model_click']);
+  assert.deepEqual(notRendered.attempts, ['effort_control']);
 });
 
 test('native Auto/Add Models parameter chrome is not a non-retryable unsupported effort menu', async () => {

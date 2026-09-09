@@ -146,7 +146,8 @@ test('normal Agents reuse requests a bounded non-activating compositor recovery'
 
   const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, runtimeMode: 'normal' });
   let showCalls = 0;
-  bridge.applyRuntimePresentation = async (action) => {
+  bridge.applyRuntimePresentation = async (action, options) => {
+    assert.equal(options.scope, 'agents');
     showCalls += 1;
     bridge._lastPresentation = {
       supported: true,
@@ -1182,7 +1183,7 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.deepEqual(sessionControl.inputSchema.properties.action.enum, ['reconcile', 'collect_result', 'close', 'forget', 'abandon']);
   const status = tools.find((tool) => tool.name === 'cursor_status');
   assert.deepEqual(Object.keys(status.inputSchema.properties), ['task_id', 'session_id', 'detail']);
-  assert.deepEqual(status.inputSchema.properties.detail.enum, ['compact', 'full']);
+  assert.deepEqual(status.inputSchema.properties.detail.enum, ['compact', 'full', 'result']);
   assert.equal(tools.some((tool) => tool.name === 'cursor_launch'), false);
 });
 

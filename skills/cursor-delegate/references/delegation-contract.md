@@ -69,15 +69,15 @@ Compact collection flow:
 
 1. After `cursor_do(background=true)`, save the compact receipt's `task_id`.
 2. Poll `cursor_status(task_id)` with its default compact view while the task is active.
-3. Once terminal, call `cursor_status(task_id, detail="full")` to retrieve the full retained result and record receipt. Repeat explicit full reads are allowed while the task record remains retained.
+3. Once terminal, call `cursor_status(task_id, detail="result")` to retrieve the raw retained reply and record receipt. It has no JSON wrapper, so check `isError` before treating content as a reply. Use `detail="full"` when task diagnostics are needed; repeat either explicit read is allowed while the task record remains retained.
 
 ## Identity and collection contract
 
 - `task_id` is the stable identity used by the primary agent to query and summarize a task. Save it immediately after dispatch.
 - `agent_id` binds a task to one specific Agents Window session when Bridge publishes it. `parallel_agent` always needs this identity. FIFO may also publish one; if it does not, do not assume a safe Stop target.
 - Determine task state only through `cursor_status(task_id)`, not the currently selected chat or latest visible response. Its default compact view never returns a result body or records receipt.
-- After a terminal state, use `cursor_status(task_id, detail="full")` to retrieve the complete retained result and record explicit receipt. A collected result should include at least task state, summary, changed files, validation performed, failures or blockers, and the raw Cursor response.
-- `cursor_task_control` returns an action and compact task-state summary without a result body or implicit receipt. Retrieve a terminal result afterward through explicit full task status.
+- After a terminal state, use `cursor_status(task_id, detail="result")` to retrieve the plain complete retained reply and record explicit receipt. Use `detail="full"` when task diagnostics are needed. A collected result should include at least task state, summary, changed files, validation performed, failures or blockers, and the raw Cursor response.
+- `cursor_task_control` returns an action and compact task-state summary without a result body or implicit receipt. Retrieve a terminal reply afterward with `detail="result"`, or use `detail="full"` for diagnostics.
 - `cursor_session_control(action=collect_result)` always returns the full session reply.
 - Do not require a unique completion marker or minimum response length. Bridge determines completion from Agent state, stopped generation, and response stability.
 
@@ -86,15 +86,15 @@ Compact collection flow:
 | State or phase | Primary-agent action |
 |---|---|
 | `queued/submitting/running/collecting` | Keep the original task and continue polling by `task_id`. More than two minutes is not a failure. |
-| `completed` | Call `cursor_status(task_id, detail="full")` to read the raw response, then inspect the real diff, allowed paths, and completion contract. |
+| `completed` | Call `cursor_status(task_id, detail="result")` to read the raw response, then inspect the real diff, allowed paths, and completion contract. Use `detail="full"` when diagnostics are needed. |
 | `failed` | Read the explicit error and determine whether the Cursor Agent actually failed before deciding to rework. |
 | `needs_attention/orphaned` with bound `agent_id` | Preserve path ownership and explicitly call `cursor_task_control(action=reap)` for the same in-memory task. Do not resubmit automatically. |
 | FIFO or unbound orphan | A global reservation blocks all new delegation. If an `agent_id` was published, use targeted `cancel`. Otherwise manually verify Cursor has stopped, then use explicitly acknowledged `abandon`; there is no safe `reap` target. |
-| `terminal_uncollected` | Agent History is stably terminal but the final response extraction failed. Keep the reservation and retry explicit `reap`; after recovery, use full task status to retrieve the result. Do not release on one DOM failure. |
+| `terminal_uncollected` | Agent History is stably terminal but the final response extraction failed. Keep the reservation and retry explicit `reap`; after recovery, use `detail="result"` to retrieve the reply or `detail="full"` for diagnostics. Do not release on one DOM failure. |
 | `cancelled` | The exact Agent Stop action or an unsent queued cancellation was confirmed; the reservation is released. |
 | `abandoned` | The reservation was explicitly released without proof that the underlying Agent stopped. Treat the warning as live risk and inspect workspace changes before any overlapping write. |
 
-For an R6-style false negative, continue compact polling of the original `task_id` when Agent History already contains a complete final response but automatic collection has not finished. Bridge should retry extraction against the original `agent_id`; once terminal, use explicit full task status. Do not work around collection by requiring a longer reply, injecting a completion marker, or submitting the same task again.
+For an R6-style false negative, continue compact polling of the original `task_id` when Agent History already contains a complete final response but automatic collection has not finished. Bridge should retry extraction against the original `agent_id`; once terminal, use `detail="result"` or `detail="full"` for diagnostics. Do not work around collection by requiring a longer reply, injecting a completion marker, or submitting the same task again.
 
 ## Primary-agent acceptance contract
 
@@ -114,5 +114,5 @@ Cursor's completion statement means only that delegated execution ended; it is n
 - Stop automatic integration when parallel tasks conflict and return the batch to primary-agent review.
 - If Agent History or the response DOM is temporarily unreadable, let Bridge wait and retry against the same `agent_id`. Enter `needs_attention` after persistent failure; do not incorrectly mark the task complete or create a duplicate Agent.
 - For a bound orphan, use `reap` before `cancel`. `cancel` requires the exact `expected_agent_id` and only releases after stable Stop evidence. `abandon` requires explicit confirmation, a reason, acknowledgement that the Agent may still write, and the exact `expected_agent_id` when one is bound.
-- Default compact `cursor_status` is a pure snapshot. `cursor_status(task_id, detail="full")` is the explicit result-receipt operation; reconciliation still happens only through explicit `cursor_task_control`.
+- Default compact `cursor_status` is a pure snapshot. `cursor_status(task_id, detail="result")` is the normal explicit result-receipt operation; `detail="full"` also records receipt and retains diagnostic detail. Reconciliation still happens only through explicit `cursor_task_control`.
 - Task records and reservations live only for the current Bridge MCP process. After restart, inspect Cursor Agent History and the workspace manually; persistent cross-process task leases are outside the current contract.

@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.19.13** | **6.0.0** | `main` | Current maintained version. 253 automated checks passed, and a locally built MCP completed a real Cursor compact-status and explicit full-result read. Fresh-host native 6.0.0 pickup remains pending; other runtime evidence retains its recorded scope. |
+| **3.19.13** | **6.0.1** | `main` | Current maintained version. 274 full automated tests passed. A real fresh task passed after the fixes with an `actualEffort` hit. The historical `ETIMEDOUT` root cause remains `UNKNOWN`; this does not establish a cure. Native 6.0.1 pickup remains pending. |
+| 3.19.13 | 6.0.0 | `cursor-bridge--v6.0.0` | Archived. Compact default status and explicit result collection. |
 | 3.19.13 | 5.10.1 | `cursor-bridge--v5.10.1` | Archived. Workspace registration, FIFO recovery, and request provenance. |
 | 3.19.13 | 5.10.0 | `cursor-bridge--v5.10.0` | Archived. Request provenance and exact workspace identity. |
 | 3.19.7 | 5.9.1 | `cursor-bridge--v5.9.1` | Archived. Model-list classification and exact effort/picker-cleanup adapter checks. |

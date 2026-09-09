@@ -1,6 +1,6 @@
 ---
 name: cursor-delegate
-description: "Delegate bounded light-to-medium implementation, investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns direction and risk boundaries. Also use when the user explicitly asks to create, keep, continue, inspect, or close the same Cursor execution session, including phrases such as '持续会话', '同一个 Cursor 会话', or 'continue the Cursor session'. Generic '继续' is not enough to reuse a session. Poll each turn compactly by task_id, then explicitly retrieve a terminal result by task_id and verify it in the primary agent. Do not use when the user opts out, cursor_do is unavailable or administrator-disabled, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
+description: "Delegate bounded light-to-medium implementation, investigation, documentation, configuration, testing, and tooling work to Cursor Bridge after the primary agent owns direction and risk boundaries. Also use when the user explicitly asks to create, keep, continue, inspect, or close the same Cursor execution session, including phrases such as '持续会话', '同一个 Cursor 会话', or 'continue the Cursor session'. Generic '继续' is not enough to reuse a session. Poll each turn compactly by task_id, then retrieve its normal terminal reply with detail=result and verify it in the primary agent. Do not use when the user opts out, cursor_do is unavailable or administrator-disabled, or for product direction, architecture decisions, exclusive GUI operations, formal verification verdicts, governance state decisions, or unbounded investigation."
 ---
 
 # Cursor Delegate
@@ -21,7 +21,7 @@ Declare `request_context` for each call: an AI caller uses `sender="model"`; set
 
 Use this responsibility chain:
 
-`primary agent defines purpose, invariants, and risk boundaries -> form a bounded task envelope -> Cursor investigates locally and executes within the envelope -> poll compactly and retrieve the terminal result by task_id -> primary agent inspects the real changes and verifies them`
+`primary agent defines purpose, invariants, and risk boundaries -> form a bounded task envelope -> Cursor investigates locally and executes within the envelope -> poll compactly and retrieve the normal terminal reply with detail=result -> primary agent inspects the real changes and verifies them`
 
 - Decide what should be achieved, why it matters, what must not change, where Cursor may work, and what evidence makes the result acceptable. Do not delegate product direction, architecture boundaries, or state verdicts.
 - Allow Cursor to locate relevant implementation, compare local approaches, and complete code, documentation, configuration, scripts, tests, and tooling inside those boundaries. Do not require the primary agent to pre-solve the task line by line.
@@ -85,7 +85,7 @@ The envelope may contain a small number of local implementation `open_questions`
 
 1. Always query `cursor_status(task_id)` for the exact task. Its default compact view is for normal polling; use `detail="full"` during progress only when detailed diagnostics are needed. Do not treat the currently visible Cursor chat as task identity.
 2. Treat `submitting`, `running`, and `collecting` as normal in-progress states. More than two minutes is not itself a failure; wait for an explicit terminal state.
-3. After a terminal state, call `cursor_status(task_id, detail="full")`. It returns the complete retained result and records explicit receipt; repeat full reads remain allowed while the task is retained.
+3. After a terminal state, call `cursor_status(task_id, detail="result")`. It returns the raw complete retained reply without a JSON wrapper and records explicit receipt; check `isError` before treating content as a reply. Repeat result reads remain allowed while the task is retained. Use `detail="full"` when the diagnostic task detail is needed.
 4. Compare Cursor's claimed work with the real diff, `allowed_paths`, and acceptance contract.
 5. When `cursor_status` reports a configured model default, confirm `modelSelection.applied=true` and preserve its configured/effective model and effort fields in any failure report.
 6. Run risk-proportionate verification in the primary agent. Cursor's response alone cannot support a formal pass, verified state, or governance transition.
@@ -98,7 +98,7 @@ Read [delegation-contract.md](references/delegation-contract.md) for state inter
 ## Handle abnormal states
 
 - For `needs_attention`, `orphaned`, ambiguous state, or an unbound session, assume the real Cursor Agent may still be running. Preserve path ownership and never resubmit automatically.
-- For a parallel orphan with a bound `agent_id`, first call `cursor_task_control(action=reap)`. This explicitly rechecks and, when possible, resumes monitoring or recovers that task's terminal state. It returns only an action/state summary; after a terminal state, retrieve any result with `cursor_status(task_id, detail="full")`.
+- For a parallel orphan with a bound `agent_id`, first call `cursor_task_control(action=reap)`. This explicitly rechecks and, when possible, resumes monitoring or recovers that task's terminal state. It returns only an action/state summary; after a terminal state, retrieve the normal reply with `cursor_status(task_id, detail="result")` or use `detail="full"` for diagnostics.
 - For an unbound FIFO or any orphan without an `agent_id`, do not call `reap` as if an identity existed. It globally blocks delegation; manually verify Cursor has stopped, then use the explicitly acknowledged `abandon` path.
 - To stop a bound task, use `cursor_task_control(action=cancel, confirm=true, expected_agent_id=<exact id>)`. This includes FIFO tasks that have published an Agent ID. If Stop cannot be confirmed, the reservation remains held.
 - Use `action=abandon` only after manual verification and an explicit user decision to accept the risk. It requires `confirm=true`, a non-empty reason, `acknowledge_may_still_write=true`, and the exact `expected_agent_id` when one is already bound; report that the underlying Agent may still run or write.

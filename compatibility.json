@@ -3,19 +3,19 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.19.13",
-    "cursorBridgeVersion": "6.0.0",
+    "cursorBridgeVersion": "6.0.1",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
-      "inheritedEvidenceRelease": "5.10.1",
-      "currentReleaseEvidence": "253-automated-pass; local-built-mcp-real-cursor-compact-full-pass; native-fresh-host-6.0.0-pickup-pending",
+      "inheritedEvidenceRelease": "6.0.0",
+      "currentReleaseEvidence": "274-full-automated-tests-pass; real-fresh-task-fixed-pass-actualEffort-hit; historical-ETIMEDOUT-root-UNKNOWN; native-6.0.1-pickup-pending",
       "workspaceIdentity": "5.9.1-local-patch-native-host-verified-exact-file-uri-four-stage-fifo",
       "requestProvenance": "regression-and-protocol-tested; caller-declared-not-authenticated",
       "cursorVersionEvidence": "installed-executable-product-and-file-version",
       "ideWorkbench": "not-exposed-in-live-run",
       "agentsWindow": "live-tested-existing-supervised-single-window-cdp-9223",
       "modelPreferences": "5.9.1-local-patch-native-host-verified-claude-fable-5.1-high",
-      "readOnlyMcpSupervisor": "local-built-mcp-real-cursor-compact-full-pass; native-fresh-host-6.0.0-pickup-pending",
+      "readOnlyMcpSupervisor": "real-fresh-task-fixed-pass-actualEffort-hit; historical-ETIMEDOUT-root-UNKNOWN; native-6.0.1-pickup-pending",
       "attachedFallback": "regression-tested-not-live-rechecked-on-3.19.7",
       "lifecycleDiagnostics": "live-tested",
       "fifoExecution": "5.9.1-local-patch-native-readonly-local-fifo-completed; minimal-inherited",
@@ -30,6 +30,12 @@
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.19.13",
+      "cursorBridgeVersion": "6.0.0",
+      "gitRef": "cursor-bridge--v6.0.0",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.19.13",
       "cursorBridgeVersion": "5.10.1",

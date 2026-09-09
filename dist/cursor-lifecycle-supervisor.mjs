@@ -81,7 +81,7 @@ function powershellWindowScript(options) {
     `  Remove-Item -LiteralPath '${showFlagPath}' -Force -ErrorAction SilentlyContinue`,
     "}"
   ].join("\n");
-  const apply = lifetime ? lifetimeLoop : loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { ${hideIfAllowed}; Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
+  const apply = lifetime ? lifetimeLoop : loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { ${hideIfAllowed}; Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}${options.scope === "agents" ? ", $true" : ""}); [Console]::Out.Write($changed)`;
   return `$ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 ${WINDOW_CONTROL_TYPE}
@@ -95,6 +95,8 @@ function setCursorWindowPresentation(options = {}) {
   const platform = options.platform || process.platform;
   const action = String(options.action || "").trim().toLowerCase();
   if (!["hide", "show"].includes(action)) throw new Error(`unsupported Cursor window action: ${options.action}`);
+  const scope = options.scope ?? "process";
+  if (!["process", "agents"].includes(scope)) throw new Error(`unsupported Cursor window scope: ${scope}`);
   if (platform !== "win32") {
     return { supported: false, applied: false, action, reason: `window control is not implemented for ${platform}` };
   }
@@ -105,12 +107,14 @@ function setCursorWindowPresentation(options = {}) {
   }
   const showFlagPath = resolve(options.showFlagPath || join2(dirname(resolveCursorRuntimeFile()), `show-${pid}.flag`));
   try {
-    if (action === "show") {
-      mkdirSync2(dirname(showFlagPath), { recursive: true });
-      writeFileSync(showFlagPath, `${pid}
+    if (scope === "process") {
+      if (action === "show") {
+        mkdirSync2(dirname(showFlagPath), { recursive: true });
+        writeFileSync(showFlagPath, `${pid}
 `, { encoding: "utf8", mode: 384 });
-    } else {
-      rmSync(showFlagPath, { force: true });
+      } else {
+        rmSync(showFlagPath, { force: true });
+      }
     }
   } catch (error) {
     return {
@@ -124,7 +128,7 @@ function setCursorWindowPresentation(options = {}) {
   }
   const run = options.execFileSyncImpl || execFileSync;
   try {
-    const script = powershellWindowScript({ pid, action });
+    const script = powershellWindowScript({ pid, action, scope });
     const output = run("powershell.exe", [
       "-NoLogo",
       "-NoProfile",
@@ -140,9 +144,18 @@ function setCursorWindowPresentation(options = {}) {
       timeout: Number(options.timeoutMs || 15e3)
     });
     const changedWindows = Number(String(output || "").trim() || 0);
-    return { supported: true, applied: true, action, port, pid, changedWindows, showFlagPath };
+    return {
+      supported: true,
+      applied: scope !== "agents" || changedWindows > 0,
+      action,
+      scope,
+      port,
+      pid,
+      changedWindows,
+      ...scope === "process" ? { showFlagPath } : {}
+    };
   } catch (error) {
-    if (action === "show") rmSync(showFlagPath, { force: true });
+    if (action === "show" && scope === "process") rmSync(showFlagPath, { force: true });
     return {
       supported: true,
       applied: false,
@@ -206,6 +219,7 @@ var init_cursor_runtime = __esm({
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Collections.Generic;
 
 public static class CursorBridgeWindowControl {
   [StructLayout(LayoutKind.Sequential)]
@@ -225,6 +239,7 @@ public static class CursorBridgeWindowControl {
   [DllImport("user32.dll", EntryPoint = "IsWindowArranged")] private static extern bool IsWindowArranged(IntPtr hWnd);
   [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr hWnd, StringBuilder text, int maxCount);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
   [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
@@ -248,7 +263,12 @@ public static class CursorBridgeWindowControl {
   }
 
   public static int Apply(int expectedProcessId, bool show) {
+    return Apply(expectedProcessId, show, false);
+  }
+
+  public static int Apply(int expectedProcessId, bool show, bool agentsOnly) {
     int changed = 0;
+    List<IntPtr> windows = new List<IntPtr>();
     EnumWindows((hWnd, lParam) => {
       uint processId;
       GetWindowThreadProcessId(hWnd, out processId);
@@ -256,6 +276,17 @@ public static class CursorBridgeWindowControl {
       StringBuilder className = new StringBuilder(256);
       GetClassNameW(hWnd, className, className.Capacity);
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
+      if (agentsOnly) {
+        StringBuilder title = new StringBuilder(GetWindowTextLengthW(hWnd) + 1);
+        GetWindowTextW(hWnd, title, title.Capacity);
+        if (!String.Equals(title.ToString(), "Cursor Agents", StringComparison.Ordinal)) return true;
+      }
+      windows.Add(hWnd);
+      return true;
+    }, IntPtr.Zero);
+    // Automatic recovery must never broaden an absent or ambiguous Agents match.
+    if (agentsOnly && windows.Count != 1) return 0;
+    foreach (IntPtr hWnd in windows) {
       bool visible = IsWindowVisible(hWnd);
       if (show) {
         // SWP_SHOWWINDOW + SWP_NOACTIVATE preserves minimized/maximized/arranged
@@ -283,8 +314,7 @@ public static class CursorBridgeWindowControl {
         if (restored || pulsed || redrawn) changed++;
       }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
-      return true;
-    }, IntPtr.Zero);
+    }
     return changed;
   }
 }

@@ -10975,7 +10975,7 @@ function powershellWindowScript(options) {
     `  Remove-Item -LiteralPath '${showFlagPath}' -Force -ErrorAction SilentlyContinue`,
     "}"
   ].join("\n");
-  const apply = lifetime ? lifetimeLoop : loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { ${hideIfAllowed}; Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}); [Console]::Out.Write($changed)`;
+  const apply = lifetime ? lifetimeLoop : loop ? `for ($i = 0; $i -lt ${iterations}; $i++) { ${hideIfAllowed}; Start-Sleep -Milliseconds ${intervalMs} }` : `$changed = [CursorBridgeWindowControl]::Apply(${targetPid}, ${show}${options.scope === "agents" ? ", $true" : ""}); [Console]::Out.Write($changed)`;
   return `$ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 ${WINDOW_CONTROL_TYPE}
@@ -10989,6 +10989,8 @@ function setCursorWindowPresentation(options = {}) {
   const platform = options.platform || process.platform;
   const action = String(options.action || "").trim().toLowerCase();
   if (!["hide", "show"].includes(action)) throw new Error(`unsupported Cursor window action: ${options.action}`);
+  const scope = options.scope ?? "process";
+  if (!["process", "agents"].includes(scope)) throw new Error(`unsupported Cursor window scope: ${scope}`);
   if (platform !== "win32") {
     return { supported: false, applied: false, action, reason: `window control is not implemented for ${platform}` };
   }
@@ -10999,12 +11001,14 @@ function setCursorWindowPresentation(options = {}) {
   }
   const showFlagPath = resolve(options.showFlagPath || join(dirname(resolveCursorRuntimeFile()), `show-${pid}.flag`));
   try {
-    if (action === "show") {
-      mkdirSync(dirname(showFlagPath), { recursive: true });
-      writeFileSync(showFlagPath, `${pid}
+    if (scope === "process") {
+      if (action === "show") {
+        mkdirSync(dirname(showFlagPath), { recursive: true });
+        writeFileSync(showFlagPath, `${pid}
 `, { encoding: "utf8", mode: 384 });
-    } else {
-      rmSync(showFlagPath, { force: true });
+      } else {
+        rmSync(showFlagPath, { force: true });
+      }
     }
   } catch (error2) {
     return {
@@ -11018,7 +11022,7 @@ function setCursorWindowPresentation(options = {}) {
   }
   const run = options.execFileSyncImpl || execFileSync;
   try {
-    const script = powershellWindowScript({ pid, action });
+    const script = powershellWindowScript({ pid, action, scope });
     const output = run("powershell.exe", [
       "-NoLogo",
       "-NoProfile",
@@ -11034,9 +11038,18 @@ function setCursorWindowPresentation(options = {}) {
       timeout: Number(options.timeoutMs || 15e3)
     });
     const changedWindows = Number(String(output || "").trim() || 0);
-    return { supported: true, applied: true, action, port, pid, changedWindows, showFlagPath };
+    return {
+      supported: true,
+      applied: scope !== "agents" || changedWindows > 0,
+      action,
+      scope,
+      port,
+      pid,
+      changedWindows,
+      ...scope === "process" ? { showFlagPath } : {}
+    };
   } catch (error2) {
-    if (action === "show") rmSync(showFlagPath, { force: true });
+    if (action === "show" && scope === "process") rmSync(showFlagPath, { force: true });
     return {
       supported: true,
       applied: false,
@@ -11100,6 +11113,7 @@ var init_cursor_runtime = __esm({
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Collections.Generic;
 
 public static class CursorBridgeWindowControl {
   [StructLayout(LayoutKind.Sequential)]
@@ -11119,6 +11133,7 @@ public static class CursorBridgeWindowControl {
   [DllImport("user32.dll", EntryPoint = "IsWindowArranged")] private static extern bool IsWindowArranged(IntPtr hWnd);
   [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr hWnd, StringBuilder text, int maxCount);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hWnd, StringBuilder className, int maxCount);
   [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hWnd, int command);
   [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
@@ -11142,7 +11157,12 @@ public static class CursorBridgeWindowControl {
   }
 
   public static int Apply(int expectedProcessId, bool show) {
+    return Apply(expectedProcessId, show, false);
+  }
+
+  public static int Apply(int expectedProcessId, bool show, bool agentsOnly) {
     int changed = 0;
+    List<IntPtr> windows = new List<IntPtr>();
     EnumWindows((hWnd, lParam) => {
       uint processId;
       GetWindowThreadProcessId(hWnd, out processId);
@@ -11150,6 +11170,17 @@ public static class CursorBridgeWindowControl {
       StringBuilder className = new StringBuilder(256);
       GetClassNameW(hWnd, className, className.Capacity);
       if (!String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
+      if (agentsOnly) {
+        StringBuilder title = new StringBuilder(GetWindowTextLengthW(hWnd) + 1);
+        GetWindowTextW(hWnd, title, title.Capacity);
+        if (!String.Equals(title.ToString(), "Cursor Agents", StringComparison.Ordinal)) return true;
+      }
+      windows.Add(hWnd);
+      return true;
+    }, IntPtr.Zero);
+    // Automatic recovery must never broaden an absent or ambiguous Agents match.
+    if (agentsOnly && windows.Count != 1) return 0;
+    foreach (IntPtr hWnd in windows) {
       bool visible = IsWindowVisible(hWnd);
       if (show) {
         // SWP_SHOWWINDOW + SWP_NOACTIVATE preserves minimized/maximized/arranged
@@ -11177,8 +11208,7 @@ public static class CursorBridgeWindowControl {
         if (restored || pulsed || redrawn) changed++;
       }
       if (!show && visible) { if (ShowWindowAsync(hWnd, 0)) changed++; }
-      return true;
-    }, IntPtr.Zero);
+    }
     return changed;
   }
 }
@@ -22356,6 +22386,272 @@ var import_subprotocol = __toESM(require_subprotocol(), 1);
 var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
+// cdp-client.mjs
+var ERROR_JSON_LIMIT = 2048;
+function positiveTimeout(name, value, fallback) {
+  const timeout = value === void 0 ? fallback : Number(value);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    const error2 = new TypeError(`${name} must be a positive finite number`);
+    error2.code = "CDP_INVALID_TIMEOUT";
+    error2.stage = "configuration";
+    error2.cdp = { stage: "configuration", elapsedMs: 0 };
+    throw error2;
+  }
+  return timeout;
+}
+function clientError(message, { code, stage, method, cause, elapsedMs = 0 } = {}) {
+  const error2 = new Error(message, cause ? { cause } : void 0);
+  error2.name = "CdpClientError";
+  error2.code = code || cause?.code || "CDP_CLIENT_ERROR";
+  error2.stage = stage || "unknown";
+  if (method) error2.method = method;
+  error2.cdp = {
+    stage: error2.stage,
+    ...method ? { method } : {},
+    elapsedMs: Math.max(0, Number(elapsedMs) || 0)
+  };
+  return error2;
+}
+function boundedJson(value) {
+  let text;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    text = String(value);
+  }
+  if (text === void 0) text = String(value);
+  return text.length <= ERROR_JSON_LIMIT ? text : `${text.slice(0, ERROR_JSON_LIMIT)}\u2026`;
+}
+function makeClient(wsUrl, options = {}) {
+  const createdAt = Date.now();
+  const connectTimeoutMs = positiveTimeout("connectTimeoutMs", options.connectTimeoutMs, 5e3);
+  const commandTimeoutMs = positiveTimeout("commandTimeoutMs", options.commandTimeoutMs, 3e4);
+  const WebSocketImpl = options.WebSocketImpl || import_websocket.default;
+  const websocketOptions = { handshakeTimeout: connectTimeoutMs };
+  if (options.origin !== void 0) websocketOptions.origin = options.origin;
+  let ws;
+  let state = "connecting";
+  let nextId = 0;
+  let connectTimer;
+  let readyResolve;
+  let readyReject;
+  const pending = /* @__PURE__ */ new Map();
+  const ready = new Promise((resolve8, reject) => {
+    readyResolve = resolve8;
+    readyReject = reject;
+  });
+  void ready.catch(() => {
+  });
+  const terminate = () => {
+    if (!ws) return;
+    try {
+      if (typeof ws.terminate === "function") ws.terminate();
+      else ws.close();
+    } catch {
+    }
+  };
+  const rejectPending = (error2) => {
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(typeof error2 === "function" ? error2(entry) : error2);
+    }
+    pending.clear();
+  };
+  const rejectReady = (error2) => {
+    if (state !== "connecting") return;
+    state = "failed";
+    clearTimeout(connectTimer);
+    readyReject(error2);
+  };
+  const failConnection = (cause) => {
+    const error2 = clientError(`CDP WebSocket connection failed: ${cause?.message || cause}`, {
+      stage: "connect",
+      cause,
+      elapsedMs: Date.now() - createdAt
+    });
+    rejectReady(error2);
+    terminate();
+    return error2;
+  };
+  const failSocket = (cause) => {
+    const error2 = clientError(`CDP WebSocket failed: ${cause?.message || cause}`, {
+      stage: "socket",
+      cause,
+      elapsedMs: Date.now() - createdAt
+    });
+    if (state === "connecting") return failConnection(cause);
+    if (state === "open") state = "failed";
+    rejectPending((entry) => clientError(`CDP WebSocket failed during ${entry.method}: ${cause?.message || cause}`, {
+      stage: "socket",
+      method: entry.method,
+      cause,
+      elapsedMs: Date.now() - entry.startedAt
+    }));
+    terminate();
+    return error2;
+  };
+  try {
+    ws = new WebSocketImpl(wsUrl, websocketOptions);
+  } catch (cause) {
+    failConnection(cause);
+  }
+  if (ws) {
+    connectTimer = setTimeout(() => {
+      const error2 = clientError(`CDP WebSocket connection timed out (${connectTimeoutMs}ms)`, {
+        code: "CDP_CONNECT_TIMEOUT",
+        stage: "connect",
+        elapsedMs: Date.now() - createdAt
+      });
+      rejectReady(error2);
+      terminate();
+    }, connectTimeoutMs);
+    ws.on("open", () => {
+      if (state !== "connecting") {
+        terminate();
+        return;
+      }
+      clearTimeout(connectTimer);
+      state = "open";
+      readyResolve();
+    });
+    ws.on("message", (data) => {
+      let message;
+      try {
+        message = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+      if (!message || !pending.has(message.id)) return;
+      const entry = pending.get(message.id);
+      pending.delete(message.id);
+      clearTimeout(entry.timer);
+      if (message.error) {
+        const detail = boundedJson(message.error);
+        entry.reject(clientError(`CDP command failed: ${entry.method}: ${detail}`, {
+          code: message.error.code ?? "CDP_PROTOCOL_ERROR",
+          stage: "protocol",
+          method: entry.method,
+          elapsedMs: Date.now() - entry.startedAt
+        }));
+      } else {
+        entry.resolve(message.result);
+      }
+    });
+    ws.on("error", (cause) => {
+      if (state === "closed" || state === "failed") return;
+      failSocket(cause);
+    });
+    ws.on("close", (code, reason) => {
+      if (state === "closed" || state === "failed") return;
+      const suffix = code ? ` (code=${code}${reason?.length ? ` reason=${String(reason).slice(0, 256)}` : ""})` : "";
+      const error2 = clientError(`CDP WebSocket closed${suffix}`, {
+        code: "CDP_SOCKET_CLOSED",
+        stage: state === "connecting" ? "connect" : "socket",
+        elapsedMs: Date.now() - createdAt
+      });
+      if (state === "connecting") rejectReady(error2);
+      else {
+        state = "closed";
+        rejectPending((entry) => clientError(`CDP WebSocket closed during ${entry.method}${suffix}`, {
+          code: "CDP_SOCKET_CLOSED",
+          stage: "socket",
+          method: entry.method,
+          elapsedMs: Date.now() - entry.startedAt
+        }));
+      }
+    });
+  }
+  const send = (method, params = {}, sendOptions = {}) => {
+    if (state !== "open" || !ws || ws.readyState !== (WebSocketImpl.OPEN ?? 1)) {
+      return Promise.reject(clientError(`CDP command cannot be sent before the WebSocket is open: ${method}`, {
+        code: "CDP_NOT_OPEN",
+        stage: "send",
+        method,
+        elapsedMs: 0
+      }));
+    }
+    let timeoutMs;
+    try {
+      timeoutMs = sendOptions.timeoutMs === void 0 ? commandTimeoutMs : Math.min(commandTimeoutMs, positiveTimeout("timeoutMs", sendOptions.timeoutMs));
+    } catch (error2) {
+      return Promise.reject(error2);
+    }
+    const id = ++nextId;
+    let payload;
+    try {
+      payload = JSON.stringify({ id, method, params });
+    } catch (cause) {
+      return Promise.reject(clientError(`CDP command could not be serialized: ${method}: ${cause.message}`, {
+        stage: "send",
+        method,
+        cause,
+        elapsedMs: 0
+      }));
+    }
+    return new Promise((resolve8, reject) => {
+      const startedAt = Date.now();
+      const timer = setTimeout(() => {
+        if (!pending.delete(id)) return;
+        reject(clientError(`CDP command timed out: ${method} (${timeoutMs}ms)`, {
+          code: "CDP_COMMAND_TIMEOUT",
+          stage: "command",
+          method,
+          elapsedMs: Date.now() - startedAt
+        }));
+      }, timeoutMs);
+      pending.set(id, { method, resolve: resolve8, reject, timer, startedAt });
+      try {
+        ws.send(payload, (cause) => {
+          if (!cause || !pending.has(id)) return;
+          const entry = pending.get(id);
+          pending.delete(id);
+          clearTimeout(entry.timer);
+          entry.reject(clientError(`CDP command send failed: ${method}: ${cause.message}`, {
+            stage: "send",
+            method,
+            cause,
+            elapsedMs: Date.now() - startedAt
+          }));
+        });
+      } catch (cause) {
+        pending.delete(id);
+        clearTimeout(timer);
+        reject(clientError(`CDP command send failed: ${method}: ${cause.message}`, {
+          stage: "send",
+          method,
+          cause,
+          elapsedMs: Date.now() - startedAt
+        }));
+      }
+    });
+  };
+  const close = () => {
+    if (state === "closed") return;
+    const wasConnecting = state === "connecting";
+    state = "closed";
+    clearTimeout(connectTimer);
+    const error2 = clientError("CDP client closed", {
+      code: "CDP_CLIENT_CLOSED",
+      stage: wasConnecting ? "connect" : "socket",
+      elapsedMs: Date.now() - createdAt
+    });
+    if (wasConnecting) readyReject(error2);
+    rejectPending((entry) => clientError(`CDP client closed during ${entry.method}`, {
+      code: "CDP_CLIENT_CLOSED",
+      stage: "socket",
+      method: entry.method,
+      elapsedMs: Date.now() - entry.startedAt
+    }));
+    if (!ws) return;
+    try {
+      if (wasConnecting && typeof ws.terminate === "function") ws.terminate();
+      else ws.close();
+    } catch {
+    }
+  };
+  return { ready, send, close };
+}
+
 // server.mjs
 init_cursor_runtime();
 import http2 from "http";
@@ -22605,7 +22901,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.0.0";
+var PLUGIN_VERSION = "6.0.1";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -22786,17 +23082,11 @@ function shouldRecoverNormalAgentsPresentation({
   return Number(now) - previousAt >= Math.max(0, Number(refreshMs) || 0);
 }
 async function inspectPageTarget(page) {
-  const c = makeClient(page.webSocketDebuggerUrl);
   const probeMs = Number(process.env.CURSOR_BRIDGE_PAGE_PROBE_TIMEOUT || 5e3);
+  const c = makeClient2(page.webSocketDebuggerUrl, { connectTimeoutMs: probeMs });
   try {
-    await Promise.race([
-      c.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out connecting to the CDP target")), probeMs))
-    ]);
-    const raw = await Promise.race([
-      evalJS(c, EXPR_PAGE_CAPABILITIES),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out probing the CDP target")), probeMs))
-    ]);
+    await c.ready;
+    const raw = await evalJS(c, EXPR_PAGE_CAPABILITIES, { timeoutMs: probeMs });
     return { ...page, capabilities: JSON.parse(raw || "{}") };
   } catch (error2) {
     return { ...page, capabilities: null, probeError: error2.message };
@@ -22844,73 +23134,22 @@ async function findPage(options = {}) {
   const inspected = await Promise.all(pages.map(inspectPageTarget));
   return selectPageForUiPreference(inspected, options) || pages[0];
 }
-function makeClient(wsUrl) {
-  const ws = new import_websocket.default(wsUrl, { origin: ORIGIN });
-  let id = 0;
-  const pending = /* @__PURE__ */ new Map();
-  const failAll = (msg) => {
-    for (const { rej } of pending.values()) {
-      try {
-        rej(new Error(msg));
-      } catch {
-      }
-    }
-    pending.clear();
-  };
-  const ready = new Promise((res, rej) => {
-    ws.on("open", res);
-    ws.once("error", rej);
+function makeClient2(wsUrl, options = {}) {
+  return makeClient(wsUrl, {
+    origin: ORIGIN,
+    connectTimeoutMs: Number(process.env.CURSOR_BRIDGE_CONNECT_TIMEOUT || 5e3),
+    commandTimeoutMs: Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 3e4),
+    ...options
   });
-  ws.on("message", (data) => {
-    let m;
-    try {
-      m = JSON.parse(data.toString());
-    } catch {
-      return;
-    }
-    if (m.id && pending.has(m.id)) {
-      const { res, rej } = pending.get(m.id);
-      pending.delete(m.id);
-      if (m.error) rej(new Error(JSON.stringify(m.error)));
-      else res(m.result);
-    }
-  });
-  ws.on("close", () => failAll("CDP WebSocket closed because the page or renderer disappeared"));
-  ws.on("error", (e) => failAll("CDP WebSocket error: " + (e && e.message)));
-  const CMD_TIMEOUT = Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 3e4);
-  const send = (method, params = {}) => {
-    const myId = ++id;
-    return new Promise((res, rej) => {
-      const t = setTimeout(() => {
-        if (pending.delete(myId)) rej(new Error(`CDP command timed out: ${method} (${CMD_TIMEOUT}ms)`));
-      }, CMD_TIMEOUT);
-      pending.set(myId, { res: (v) => {
-        clearTimeout(t);
-        res(v);
-      }, rej: (e) => {
-        clearTimeout(t);
-        rej(e);
-      } });
-      try {
-        ws.send(JSON.stringify({ id: myId, method, params }));
-      } catch (e) {
-        clearTimeout(t);
-        pending.delete(myId);
-        rej(e);
-      }
-    });
-  };
-  return { ready, send, close: () => {
-    try {
-      ws.close();
-    } catch {
-    }
-  } };
 }
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
-async function evalJS(c, expr) {
-  const r = await c.send("Runtime.evaluate", { expression: expr, returnByValue: true, includeCommandLineAPI: true, awaitPromise: true });
-  if (r.exceptionDetails) throw new Error("Page exception: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+async function evalJS(c, expr, options) {
+  const r = await c.send("Runtime.evaluate", { expression: expr, returnByValue: true, includeCommandLineAPI: true, awaitPromise: true }, options);
+  if (r.exceptionDetails) {
+    const error2 = new Error("Page exception: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+    error2.code = "CDP_EVALUATE_FAILED";
+    throw error2;
+  }
   return r.result && r.result.value;
 }
 async function chord(c, modifiers, key, code, vk) {
@@ -23188,6 +23427,7 @@ var EXPR_MODEL_PICKER_ROWS = `(function(){
         kind,
         selected:row.getAttribute('data-selected')==='true'||row.getAttribute('aria-checked')==='true'||!!row.querySelector('.ui-model-picker__item-check,.ui-model-picker__param-check'),
         disabled:row.getAttribute('data-disabled')==='true'||row.getAttribute('aria-disabled')==='true',
+        pointerEvents:getComputedStyle(row).pointerEvents,
         hasSubmenu:row.getAttribute('aria-haspopup')==='menu',
         submenu:!!row.closest('[data-submenu]'),
         x:Math.round(rect.x+rect.width/2),
@@ -24029,7 +24269,7 @@ var CursorBridge = class {
         throw cursorSessionError("SESSION_NOT_READY", `state=${session.state}; recovery=${session.recoveryState || "none"}`);
       }
       if (session.lastTask?.status === "completed" && !session.lastTask.resultCollectedAt && this.tasks.has(session.lastTask.taskId)) {
-        throw cursorSessionError("SESSION_RESULT_UNCOLLECTED", `read cursor_status(task_id=${session.lastTask.taskId}, detail="full") before continuing`);
+        throw cursorSessionError("SESSION_RESULT_UNCOLLECTED", `read cursor_status(task_id=${session.lastTask.taskId}, detail="result") before continuing`);
       }
       if (session.lastTask?.status === "completed" && !session.lastTask.resultCollectedAt && !this.tasks.has(session.lastTask.taskId) && session.recoveryState !== "reconciled_result_uncollected") {
         throw cursorSessionError("SESSION_RECONCILE_REQUIRED", "the prior reply was not read before this adapter restarted; reconcile the exact Agent before continuing");
@@ -24406,7 +24646,7 @@ var CursorBridge = class {
       return null;
     }
     if (!page || page.capabilities && page.capabilities.uiFlavor !== "agents_v2") return null;
-    const c = makeClient(page.webSocketDebuggerUrl);
+    const c = makeClient2(page.webSocketDebuggerUrl);
     try {
       await c.ready;
       let repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || "{}");
@@ -24518,14 +24758,15 @@ var CursorBridge = class {
       lastPresentation: this._lastPresentation
     };
   }
-  async applyRuntimePresentation(action) {
+  async applyRuntimePresentation(action, { scope = "process" } = {}) {
     const normalizedAction = String(action || "").trim().toLowerCase();
     if (!["hide", "show"].includes(normalizedAction)) {
       throw new Error("cursor_runtime action supports hide or show");
     }
     const result = setCursorWindowPresentation({
       action: normalizedAction,
-      port: CDP_PORT2
+      port: CDP_PORT2,
+      scope
     });
     this._lastPresentation = { ...result, at: (/* @__PURE__ */ new Date()).toISOString() };
     return this._lastPresentation;
@@ -24540,7 +24781,7 @@ var CursorBridge = class {
     })) {
       return null;
     }
-    const presentation = await this.applyRuntimePresentation("show");
+    const presentation = await this.applyRuntimePresentation("show", { scope: "agents" });
     if (lifecycle && typeof lifecycle === "object") lifecycle.presentation = presentation;
     return presentation;
   }
@@ -25115,7 +25356,7 @@ var CursorBridge = class {
     for (let attempt = 0; attempt < 2; attempt++) {
       options.targetId = page.id;
       options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
-      const c = makeClient(page.webSocketDebuggerUrl);
+      const c = makeClient2(page.webSocketDebuggerUrl);
       await c.ready;
       try {
         this._throwIfCancelledBeforeSend(options);
@@ -25195,20 +25436,29 @@ var CursorBridge = class {
     error2.preSend = true;
     throw error2;
   }
-  async _readModelPickerTrigger(c) {
+  async _readModelPickerValue(c, expression, kind, { timeoutMs = 3e3 } = {}) {
+    const startedAt = Date.now();
     try {
-      return JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_TRIGGER) || "{}");
-    } catch {
-      return { found: false, state: "trigger_unreadable" };
+      const value = JSON.parse(await evalJS(c, expression, { timeoutMs }));
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        const error2 = new Error("Cursor picker returned an invalid snapshot");
+        error2.code = "CURSOR_PICKER_RESPONSE_INVALID";
+        throw error2;
+      }
+      return value;
+    } catch (cause) {
+      const error2 = cause instanceof Error ? cause : new Error(String(cause));
+      if (error2 instanceof SyntaxError) error2.code = "CURSOR_PICKER_PARSE_FAILED";
+      error2.pickerRead = { kind, elapsedMs: Date.now() - startedAt, code: error2.code || "CDP_READ_FAILED", message: error2.message };
+      throw error2;
     }
   }
-  async _readModelPickerRows(c) {
-    try {
-      const snapshot = JSON.parse(await evalJS(c, EXPR_MODEL_PICKER_ROWS) || "{}");
-      return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
-    } catch {
-      return { open: false, rows: [] };
-    }
+  async _readModelPickerTrigger(c, options) {
+    return this._readModelPickerValue(c, EXPR_MODEL_PICKER_TRIGGER, "trigger", options);
+  }
+  async _readModelPickerRows(c, options) {
+    const snapshot = await this._readModelPickerValue(c, EXPR_MODEL_PICKER_ROWS, "rows", options);
+    return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
   }
   async _clickModelPickerPoint(c, point) {
     if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
@@ -25289,7 +25539,7 @@ var CursorBridge = class {
     let last = this._inspectModelPickerRows({ open: false, rows: [] }, requested, kind);
     do {
       this._throwIfCancelledBeforeSend(job);
-      last = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
+      last = this._inspectModelPickerRows(await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) }), requested, kind);
       if (last.row) return { ...last, state: "matched" };
       const signature = JSON.stringify(last.available);
       if (modelPickerAvailableIsDecisive(kind, last.available)) {
@@ -25310,17 +25560,41 @@ var CursorBridge = class {
   }
   async _selectedEffortRow(c, modelRow, effort, job) {
     const requested = cursorEffortUiValue(effort);
-    const snapshot = await this._readModelPickerRows(c);
+    let snapshot = await this._readModelPickerRows(c);
     const immediate = this._inspectModelPickerRows(snapshot, requested, "parameter");
     if (immediate.row) return { ...immediate, state: "matched", attempts: ["visible"] };
     const attempts = [];
-    const effortControl = (snapshot.rows || []).find((row) => row.kind === "effort_control" && row.disabled !== true);
+    let effortControl = (snapshot.rows || []).find((row) => row.kind === "effort_control" && row.disabled !== true);
     if (effortControl) {
       this._throwIfCancelledBeforeSend(job);
+      const modelSubmenuOpen = () => snapshot.rows.some((row) => row.kind === "model" && row.submenu === true);
+      if (modelSubmenuOpen()) {
+        attempts.push("close_model_submenu");
+        for (const type of ["keyDown", "keyUp"]) {
+          await c.send("Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+        }
+        const deadline = Date.now() + 700;
+        do {
+          this._throwIfCancelledBeforeSend(job);
+          snapshot = await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) });
+          if (!snapshot.open) break;
+          effortControl = snapshot.rows.find((row) => row.kind === "effort_control" && row.disabled !== true && row.pointerEvents !== "none");
+          if (effortControl && !modelSubmenuOpen()) {
+            attempts.push("fresh_effort_control");
+            break;
+          }
+          if (Date.now() >= deadline) break;
+          await sleep2(Math.min(50, deadline - Date.now()));
+        } while (Date.now() <= deadline);
+      }
+      if (!snapshot.open || !effortControl || effortControl.pointerEvents === "none" || modelSubmenuOpen()) {
+        return { ...this._inspectModelPickerRows(snapshot, requested, "parameter"), state: "not_rendered", attempts };
+      }
       attempts.push("effort_control");
+      this._throwIfCancelledBeforeSend(job);
       await this._clickModelPickerPoint(c, effortControl);
       const result2 = await this._waitForModelPickerMatch(c, requested, "parameter", job, { timeoutMs: 700 });
-      if (result2.state !== "not_rendered") return { ...result2, attempts };
+      return { ...result2, attempts };
     }
     this._throwIfCancelledBeforeSend(job);
     attempts.push("model_hover");
@@ -25339,7 +25613,7 @@ var CursorBridge = class {
     const deadline = Date.now() + timeoutMs;
     do {
       this._throwIfCancelledBeforeSend(job);
-      const inspected = this._inspectModelPickerRows(await this._readModelPickerRows(c), requested, kind);
+      const inspected = this._inspectModelPickerRows(await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) }), requested, kind);
       if (inspected.row && inspected.row.selected) return inspected.row;
       if (Date.now() >= deadline) break;
       await sleep2(Math.min(100, Math.max(0, deadline - Date.now())));
@@ -25356,8 +25630,11 @@ var CursorBridge = class {
     let modelRow = null;
     let effectiveEffort = null;
     let primaryError = null;
+    const selectionStartedAt = Date.now();
+    let stage = "open_picker";
     try {
       const opened = await this._openModelPicker(c);
+      stage = "locate_model";
       let located = await this._findModelPickerModel(c, opened, requestedModel);
       modelRow = located.modelRow;
       if (!modelRow) {
@@ -25396,10 +25673,15 @@ var CursorBridge = class {
           message,
           failureClass,
           failureClass === "effort_menu_not_rendered",
-          { available: outcome.available || [], attempts: outcome.attempts || [] }
+          {
+            available: outcome.available || [],
+            attempts: outcome.attempts || [],
+            menu: outcome.snapshot ? { open: outcome.snapshot.open, rows: (outcome.snapshot.rows || []).slice(0, 20).map(({ text, kind, selected, disabled, pointerEvents, submenu }) => ({ text, kind, selected, disabled, pointerEvents, submenu })) } : null
+          }
         );
       };
       if (requestedEffort && modelRow.hasSubmenu) {
+        stage = "select_effort";
         const selectedEffort = await resolveEffort();
         if (!selectedEffort.row) throwEffortFailure(selectedEffort);
         if (!selectedEffort.row.selected || !modelRow.selected) {
@@ -25408,10 +25690,12 @@ var CursorBridge = class {
           await sleep2(550);
         }
       } else if (!modelRow.selected) {
+        stage = "select_model";
         this._throwIfCancelledBeforeSend(job);
         await this._clickModelPickerPoint(c, modelRow);
         await sleep2(550);
       }
+      stage = "verify_model";
       let trigger2 = await this._readModelPickerTrigger(c);
       if (!trigger2.found || !normalizeModelPickerText(trigger2.text).includes(normalizeModelPickerText(requestedModel))) {
         const reopened = await this._openModelPicker(c);
@@ -25427,6 +25711,7 @@ var CursorBridge = class {
         modelRow = selected;
       }
       if (requestedEffort) {
+        stage = "verify_effort";
         const reopened = await this._openModelPicker(c);
         located = await this._findModelPickerModel(c, reopened, requestedModel);
         modelRow = located.modelRow;
@@ -25463,13 +25748,19 @@ var CursorBridge = class {
       if (!failure) {
         const pickerUnavailable = /model picker (?:is unavailable|did not open)/i.test(primaryError.message);
         failure = {
-          failureClass: pickerUnavailable ? "picker_did_not_open" : "probe_error",
+          failureClass: primaryError.pickerRead ? "picker_read_failed" : pickerUnavailable ? "picker_did_not_open" : "probe_error",
           retryable: true
         };
       }
       const diagnostic = {
         configured: true,
         applied: false,
+        stage,
+        elapsedMs: Date.now() - selectionStartedAt,
+        taskId: job?.id || null,
+        targetId: job?.targetId || null,
+        pickerRead: primaryError.pickerRead || null,
+        cdp: primaryError.cdp || null,
         requestedModel,
         requestedEffort,
         failureClass: failure.failureClass,
@@ -25477,6 +25768,7 @@ var CursorBridge = class {
         errorCode: primaryError.code || `CURSOR_MODEL_${String(failure.failureClass).toUpperCase()}`,
         available: failure.available || [],
         attempts: failure.attempts || [],
+        menu: failure.menu || null,
         runtimeMode: this.runtimeMode,
         lastError: primaryError.message,
         failedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -25513,7 +25805,29 @@ var CursorBridge = class {
         if (job && job.modelSelection) job.modelSelection.cleanupError = message;
       }
     }
-    const trigger = await this._readModelPickerTrigger(c);
+    let trigger;
+    try {
+      trigger = await this._readModelPickerTrigger(c);
+    } catch (error2) {
+      error2.modelSelection = {
+        configured: true,
+        applied: false,
+        requestedModel,
+        requestedEffort,
+        taskId: job?.id || null,
+        targetId: job?.targetId || null,
+        stage: "final_trigger",
+        failureClass: "picker_read_failed",
+        retryable: true,
+        errorCode: error2.code || "CDP_READ_FAILED",
+        pickerRead: error2.pickerRead || null,
+        cdp: error2.cdp || null,
+        elapsedMs: Date.now() - selectionStartedAt,
+        lastError: error2.message
+      };
+      if (job) job.modelSelection = error2.modelSelection;
+      throw error2;
+    }
     const result = {
       configured: true,
       applied: true,
@@ -25810,7 +26124,7 @@ var CursorBridge = class {
     });
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
-    const c = makeClient(page.webSocketDebuggerUrl);
+    const c = makeClient2(page.webSocketDebuggerUrl);
     await c.ready;
     let sent = false;
     try {
@@ -25945,7 +26259,7 @@ var CursorBridge = class {
     });
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
-    const c = makeClient(page.webSocketDebuggerUrl);
+    const c = makeClient2(page.webSocketDebuggerUrl);
     await c.ready;
     let sent = false;
     try {
@@ -26001,7 +26315,7 @@ var CursorBridge = class {
   async _readParallelEntry(job) {
     return this._withUiLock(async () => {
       const page = await findPage({ targetId: job.targetId, purpose: "parallel_agent" });
-      const c = makeClient(page.webSocketDebuggerUrl);
+      const c = makeClient2(page.webSocketDebuggerUrl);
       await c.ready;
       try {
         let entries = await this._readAgentEntries(c);
@@ -26206,7 +26520,7 @@ var CursorBridge = class {
   }
   async _collectParallelAgent(job) {
     const page = await findPage({ targetId: job.targetId, purpose: "parallel_agent" });
-    const c = makeClient(page.webSocketDebuggerUrl);
+    const c = makeClient2(page.webSocketDebuggerUrl);
     await c.ready;
     try {
       return await this._withRestoredAgentSelection(c, job, async () => {
@@ -26530,7 +26844,7 @@ var CursorBridge = class {
     if (!job.agentId) return { confirmed: false, state: "unbound_agent" };
     return this._withUiLock(async () => {
       const page = await findPage({ targetId: job.targetId, purpose: "parallel_agent" });
-      const c = makeClient(page.webSocketDebuggerUrl);
+      const c = makeClient2(page.webSocketDebuggerUrl);
       await c.ready;
       try {
         return await this._stopBoundAgentOnClient(c, job, { restorePrevious: true });
@@ -26724,7 +27038,7 @@ var CursorBridge = class {
     this.parallelRestoreTargetId = null;
     this._withUiLock(async () => {
       const page = await findPage({ targetId, purpose: "parallel_agent" });
-      const c = makeClient(page.webSocketDebuggerUrl);
+      const c = makeClient2(page.webSocketDebuggerUrl);
       await c.ready;
       try {
         if (await this._ensureHistoryOpen(c)) {
@@ -26891,6 +27205,14 @@ var CursorBridge = class {
       effectiveModel: full.modelSelection.effectiveModel,
       effectiveEffort: full.modelSelection.effectiveEffort,
       failureClass: full.modelSelection.failureClass,
+      stage: full.modelSelection.stage,
+      elapsedMs: full.modelSelection.elapsedMs,
+      pickerRead: full.modelSelection.pickerRead,
+      cdp: full.modelSelection.cdp,
+      available: full.modelSelection.available,
+      attempts: full.modelSelection.attempts,
+      menu: full.modelSelection.menu,
+      cleanupError: full.modelSelection.cleanupError,
       retryable: full.modelSelection.retryable,
       errorCode: full.modelSelection.errorCode,
       lastError: full.modelSelection.lastError,
@@ -27034,7 +27356,7 @@ var CursorBridge = class {
   _ensureTaskCapacity() {
     this._trimTasks(49);
     if (this.tasks.size >= 50) {
-      throw new Error('TASK_RETENTION_FULL: 50 tasks are active or have unread replies. Read each unreadResultTaskId with cursor_status(task_id, detail="full"), or wait for active tasks before submitting more work.');
+      throw new Error('TASK_RETENTION_FULL: 50 tasks are active or have unread replies. Read each unreadResultTaskId with cursor_status(task_id, detail="result"), or wait for active tasks before submitting more work.');
     }
   }
   _trimTasks(limit = 50) {
@@ -27046,6 +27368,17 @@ var CursorBridge = class {
   }
   async status(taskId = "", { detail = "compact" } = {}) {
     const normalizedDetail = normalizeStatusDetail(detail);
+    if (normalizedDetail === "result") {
+      if (!taskId) throw new Error('RESULT_TASK_REQUIRED: detail="result" requires task_id');
+      const job = this.tasks.get(String(taskId));
+      if (!job) throw new Error(`RESULT_TASK_NOT_FOUND: ${taskId}`);
+      if (!isTerminalTask(job) || job.result == null) {
+        throw new Error(`RESULT_NOT_AVAILABLE: ${taskId}; inspect compact status before retrying`);
+      }
+      const text = String(job.result);
+      this._markTaskResultCollected(job);
+      return text;
+    }
     if (taskId) {
       const job = this.tasks.get(String(taskId));
       if (normalizedDetail === "full") {
@@ -27132,8 +27465,8 @@ function buildSearchInputSchema() {
 }
 function normalizeStatusDetail(detail) {
   if (detail === void 0) return "compact";
-  if (typeof detail !== "string" || !["compact", "full"].includes(detail)) {
-    throw new Error("detail must be compact or full");
+  if (typeof detail !== "string" || !["compact", "full", "result"].includes(detail)) {
+    throw new Error("detail must be compact, full or result");
   }
   return detail;
 }
@@ -27166,7 +27499,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
       name: "cursor_do",
-      description: 'Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Persistent continuity is explicit: session_mode=create starts one durable top-level Agent association, and session_mode=continue requires its exact session_id. Omission keeps the existing isolated behavior. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id, detail="full"); ordinary status calls are compact and do not acknowledge the reply. Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
+      description: 'Give Cursor a clearly bounded task and get back a task ID. fifo means first in, first out: Bridge runs one queued task at a time, starting it in a clean chat. parallel_agent creates a separate top-level Cursor Agent. Persistent continuity is explicit: session_mode=create starts one durable top-level Agent association, and session_mode=continue requires its exact session_id. Omission keeps the existing isolated behavior. Parallel write tasks must declare non-overlapping allowed_paths; mark read-only work with read_only=true. Collect the result with cursor_status(task_id, detail="result"); ordinary status calls are compact and do not acknowledge the reply. Cursor can do the work, but the main agent still owns review and final verification. A direct user opt-out always wins.',
       inputSchema: {
         type: "object",
         properties: {
@@ -27187,7 +27520,7 @@ function buildToolDefinitions(bridgeInstance) {
     } : null,
     {
       name: "cursor_task_control",
-      description: 'Recover or terminate one exact in-memory Cursor task without resubmitting it; task records do not survive this MCP server process. Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and stores a stable terminal result when possible. Responses stay compact and never acknowledge the result; collect it later with cursor_status(task_id, detail="full"). Use cancel with confirm=true and the exact expected_agent_id to target Stop safely. FIFO or unbound orphans globally block delegation and require manual verification before abandon. Use abandon only with an explicit reason and acknowledge_may_still_write=true; it releases reservations without proving the Cursor Agent stopped.',
+      description: 'Recover or terminate one exact in-memory Cursor task without resubmitting it; task records do not survive this MCP server process. Use reap for needs_attention/orphaned work only when it has a bound agentId; it explicitly rechecks that Agent and stores a stable terminal result when possible. Responses stay compact and never acknowledge the result; collect it later with cursor_status(task_id, detail="result"). Use cancel with confirm=true and the exact expected_agent_id to target Stop safely. FIFO or unbound orphans globally block delegation and require manual verification before abandon. Use abandon only with an explicit reason and acknowledge_may_still_write=true; it releases reservations without proving the Cursor Agent stopped.',
       inputSchema: {
         type: "object",
         properties: {
@@ -27243,14 +27576,14 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_status",
-      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Compact is the default and never includes or acknowledges a task result. Use detail="full" with task_id to receive the complete legacy task details and result; this marks the result collected while keeping repeat full reads available. Pass task_id for its configured and effective model selection or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.',
+      description: 'Read-only snapshot of Cursor connectivity, queued/running work, reservations, execution availability, persistent model/effort defaults, sessions, and normal/minimal runtime presentation. Compact is the default and never includes or acknowledges a task result. Use detail="result" with task_id for only the complete reply as plain text, or detail="full" for JSON diagnostics and the reply; both record receipt and allow repeat reads while retained. Pass task_id for its configured and effective model selection or session_id for the durable association; never pass both. This tool never switches Agents, reconciles, or stops work.',
       inputSchema: {
         type: "object",
         additionalProperties: false,
         properties: {
           task_id: { type: "string", description: "A task ID returned by cursor_do." },
           session_id: { type: "string", description: "A persistent session ID returned by cursor_do(session_mode=create)." },
-          detail: { type: "string", enum: ["compact", "full"], default: "compact", description: "compact returns status and safety metadata without the result body or receipt side effect. full returns legacy complete details and explicitly collects a task result." }
+          detail: { type: "string", enum: ["compact", "full", "result"], default: "compact", description: "compact returns status without collecting the reply. result requires task_id and returns only its complete reply as plain text, recording receipt. full returns complete JSON details and the reply. Explicit result/full reads are repeatable while retained." }
         }
       }
     }
@@ -27279,10 +27612,13 @@ async function ensureBridgeCursor(targetBridge, reason) {
 }
 function toolErrorResult(error2) {
   const message = error2 instanceof Error ? error2.message : String(error2);
-  if (error2 && error2.uiDiagnostic) {
+  if (error2 && (error2.uiDiagnostic || error2.modelSelection || error2.pickerRead || error2.cdp)) {
     const payload = {
-      error: { code: error2.code || error2.uiDiagnostic.code || "CURSOR_BRIDGE_ERROR", message },
-      uiDiagnostic: error2.uiDiagnostic
+      error: { code: error2.code || error2.uiDiagnostic?.code || "CURSOR_BRIDGE_ERROR", message },
+      ...error2.uiDiagnostic ? { uiDiagnostic: error2.uiDiagnostic } : {},
+      ...error2.modelSelection ? { modelSelection: error2.modelSelection } : {},
+      ...error2.pickerRead ? { pickerRead: error2.pickerRead } : {},
+      ...error2.cdp ? { cdp: error2.cdp } : {}
     };
     return {
       content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
@@ -27368,6 +27704,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
         throw cursorSessionError("STATUS_SELECTOR_AMBIGUOUS", "pass task_id or session_id, not both");
       }
       const detail = normalizeStatusDetail(args && args.detail);
+      if (detail === "result") {
+        if (!args.task_id || args.session_id) throw new Error('RESULT_TASK_REQUIRED: detail="result" requires task_id only');
+        return { content: [{ type: "text", text: await bridge.status(args.task_id, { detail }) }] };
+      }
       const statusMs = Math.max(1e3, Number(process.env.CURSOR_BRIDGE_STATUS_TIMEOUT || 8e3));
       let result;
       try {

@@ -23,7 +23,7 @@ async function call(name, args = {}) {
   const text = response.content.find(c => c.type === 'text')?.text || '';
   assert.notEqual(response.isError, true, `${name}: ${text}`);
   measurements.push({ name, detail: args.detail || 'default', chars: text.length });
-  return JSON.parse(text);
+  return args.detail === 'result' ? text : JSON.parse(text);
 }
 try {
   await client.connect(transport);
@@ -45,6 +45,13 @@ try {
       chars: measurements.at(-1).chars }));
     if (state.status === 'completed') { terminal = true; break; }
     if (['failed', 'cancelled', 'abandoned', 'needs_attention'].includes(state.status)) {
+      try {
+        const diagnostic = await call('cursor_status', { task_id: taskId, detail: 'full' });
+        console.error(JSON.stringify({ event: 'failure-diagnostic', taskId, agentId: diagnostic.agentId,
+          targetId: diagnostic.targetId, sendState: diagnostic.sendState, modelSelection: diagnostic.modelSelection,
+          uiDiagnostic: diagnostic.uiDiagnostic, workspaceBindingChecks: diagnostic.workspaceBindingChecks,
+          error: diagnostic.error }));
+      } catch (error) { console.error(`Diagnostic collection failed: ${error.message}`); }
       throw new Error(`unexpected state ${state.status}: ${state.error || state.attention}`);
     }
     await new Promise(done => setTimeout(done, 30000));
@@ -54,7 +61,11 @@ try {
   assert.equal(Object.hasOwn(controlled.task, 'result'), false);
   const beforeRead = await call('cursor_status');
   assert.ok(beforeRead.unreadResultTaskIds.includes(taskId));
+  const body = await call('cursor_status', { task_id: taskId, detail: 'result' });
+  assert.match(body, /cursor-bridge-workspace/);
+  assert.equal(await call('cursor_status', { task_id: taskId, detail: 'result' }), body);
   const full = await call('cursor_status', { task_id: taskId, detail: 'full' });
+  assert.equal(full.result, body);
   assert.equal(full.status, 'completed');
   assert.ok(full.resultCollectedAt);
   assert.match(full.result, /cursor-bridge-workspace/);

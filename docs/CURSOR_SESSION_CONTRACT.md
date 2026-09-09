@@ -52,12 +52,13 @@ Before sending a continued turn, Bridge atomically persists only the prior reply
 ## Task result views
 
 - `cursor_status(task_id)` is compact by default. It returns task identity, state, model, reservation, recovery, errors, and result availability, but never returns a result body or records result receipt.
-- `cursor_status(task_id, detail="full")` explicitly returns complete task detail and its retained result, and records receipt. Repeat explicit full reads remain allowed while the task record is retained.
+- `cursor_status(task_id, detail="result")` requires a task ID and explicitly returns the raw complete retained reply, without a JSON wrapper, recording receipt. Callers must check `isError` before treating content as a reply. A missing or not-ready task returns an MCP `isError` response and records no receipt.
+- `cursor_status(task_id, detail="full")` continues to return complete diagnostic task detail and its retained reply, and records receipt. Repeat explicit result or full reads remain allowed while the task record is retained.
 - `cursor_do(background=true)` returns only a compact submission receipt. `cursor_do(background=false)` is an explicit wait and returns the full result body.
-- `cursor_task_control` returns its action and compact task state without a result body or an implicit result receipt. After a terminal control action, use explicit full task status when the result is needed.
+- `cursor_task_control` returns its action and compact task state without a result body or an implicit result receipt. After a terminal control action, use `detail="result"` for the normal reply or `detail="full"` for diagnostics.
 - `cursor_session_control(action=collect_result)` always returns the full session reply; compact task views do not replace it.
 
-A completed background session turn must be explicitly retrieved before continuation. While the adapter is alive, poll its `cursor_status(task_id)` compact view and use `cursor_status(task_id, detail="full")` after a terminal state; after a restart, reconcile and collect first. An explicit full task read records a metadata receipt before returning the reply. This is not a transport acknowledgment or an exactly-once delivery guarantee.
+A completed background session turn must be explicitly retrieved before continuation. While the adapter is alive, poll its `cursor_status(task_id)` compact view and use `cursor_status(task_id, detail="result")` after a terminal state; use `detail="full"` when diagnostics are needed. After a restart, reconcile and collect first. An explicit result or full task read records a metadata receipt before returning the reply. This is not a transport acknowledgment or an exactly-once delivery guarantee.
 
 ## Sender and result rules
 
@@ -68,7 +69,7 @@ A completed background session turn must be explicitly retrieved before continua
 - Result collection accepts only a stable completed assistant reply that advances the visible message count or changes that reply signature. This supports Cursor's virtualized message list without returning the prior turn.
 - The primary agent still owns real diff inspection, tests, and final acceptance.
 - Automatic recovery shares the original post-submission monitoring deadline. Expiry is an attention condition, not Stop confirmation; only an explicit `reap` may start a fresh monitoring budget.
-- The process retains at most 50 task records. Terminal replies that have not been returned through an explicit full result read are not evicted; further submissions fail with `TASK_RETENTION_FULL` until capacity is available. `cursor_status().unreadResultTaskIds` identifies the replies to retrieve through `cursor_status(task_id, detail="full")`. Compact status never releases retention protection. These records remain process-local.
+- The process retains at most 50 task records. Terminal replies that have not been returned through an explicit result or full read are not evicted; further submissions fail with `TASK_RETENTION_FULL` until capacity is available. `cursor_status().unreadResultTaskIds` identifies the replies to retrieve through `cursor_status(task_id, detail="result")`. Compact status never releases retention protection. These records remain process-local.
 
 ## Storage and update boundary
 

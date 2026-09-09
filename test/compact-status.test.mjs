@@ -62,6 +62,33 @@ test('task control of an already terminal task does not silently consume its rep
   assert.equal((await bridge.status(job.id, { detail: 'full' })).result, 'still unread');
 });
 
+test('result-only reads preserve exact text, acknowledge delivery and remain repeatable', async () => {
+  const bridge = new OfflineBridge();
+  const body = '  正文 😀\n{"result":"text, not a wrapper"}\n';
+  const job = await finishedTask(bridge, body);
+  assert.equal(await bridge.status(job.id, { detail: 'result' }), body);
+  assert.ok(job.resultCollectedAt);
+  const collectedAt = job.resultCollectedAt;
+  assert.equal(await bridge.status(job.id, { detail: 'result' }), body);
+  assert.equal((await bridge.status(job.id, { detail: 'full' })).result, body);
+  assert.equal(job.resultCollectedAt, collectedAt);
+});
+
+test('result-only rejects missing, running and unavailable tasks without recording receipt', async () => {
+  const bridge = new OfflineBridge();
+  await assert.rejects(bridge.status('', { detail: 'result' }), /RESULT_TASK_REQUIRED/);
+  await assert.rejects(bridge.status('missing', { detail: 'result' }), /RESULT_TASK_NOT_FOUND/);
+  const receipt = await bridge.doTask('pending', { readOnly: true });
+  const job = bridge.tasks.get(receipt.taskId);
+  job.result = 'partial text';
+  await assert.rejects(bridge.status(job.id, { detail: 'result' }), /RESULT_NOT_AVAILABLE/);
+  assert.equal(job.resultCollectedAt ?? null, null);
+  job.status = 'completed';
+  job.result = null;
+  await assert.rejects(bridge.status(job.id, { detail: 'result' }), /RESULT_NOT_AVAILABLE/);
+  assert.equal(job.resultCollectedAt ?? null, null);
+});
+
 test('asynchronous idempotent retry stays metadata-only while synchronous retry collects the body', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cursor-compact-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -156,7 +183,7 @@ test('bundled MCP exposes compact/full and preserves disconnected/error semantic
     await client.connect(transport);
     const definitions = await client.listTools();
     assert.deepEqual(definitions.tools.find(t => t.name === 'cursor_status').inputSchema.properties.detail.enum,
-      ['compact', 'full']);
+      ['compact', 'full', 'result']);
     const compact = JSON.parse((await call({})).content[0].text);
     const full = JSON.parse((await call({ detail: 'full' })).content[0].text);
     assert.equal(compact.connected, false);
@@ -165,6 +192,8 @@ test('bundled MCP exposes compact/full and preserves disconnected/error semantic
     assert.ok(full.runtimeFile);
     assert.ok(JSON.stringify(compact).length < JSON.stringify(full).length);
     for (const detail of ['typo', null, 3]) assert.equal((await call({ detail })).isError, true);
+    for (const args of [{ detail: 'result' }, { detail: 'result', session_id: 'session' },
+      { detail: 'result', task_id: 'missing' }]) assert.equal((await call(args)).isError, true);
     assert.equal((await call({ task_id: 'missing', session_id: 'also-missing' })).isError, true);
     const missing = JSON.parse((await call({ task_id: 'missing' })).content[0].text);
     assert.equal(missing.found, false);
