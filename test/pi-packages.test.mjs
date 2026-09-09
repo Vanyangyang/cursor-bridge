@@ -44,7 +44,7 @@ if (command === "pack") {
 if (command === "view") {
   const result = lookups[args[1]] || { kind: "error", code: "E500" };
   if (result.kind === "existing") {
-    console.log(JSON.stringify(result.shasum));
+    console.log(JSON.stringify(process.env.FAKE_NPM_VIEW_SHAPE === "array" ? [result.shasum] : result.shasum));
     process.exit(0);
   }
   if (result.kind === "missing") {
@@ -84,6 +84,7 @@ function runPublisherScenario(t, {
   nodeAuthToken,
   npmToken,
   packShape,
+  viewShape,
   shasums = { "pi-cursor-bridge": "cursor-local", "pi-grok-build-supervisor": "grok-local" },
 }) {
   const root = mkdtempSync(join(tmpdir(), "cursor-bridge-pi-publisher-"));
@@ -101,6 +102,7 @@ function runPublisherScenario(t, {
     FAKE_NPM_LOOKUPS: JSON.stringify(lookups),
     FAKE_NPM_SHASUMS: JSON.stringify(shasums),
     FAKE_NPM_PACK_SHAPE: packShape || "array",
+    FAKE_NPM_VIEW_SHAPE: viewShape || "string",
   };
   delete env.NODE_AUTH_TOKEN;
   delete env.NPM_TOKEN;
@@ -202,6 +204,19 @@ test("Pi publisher skips an identical package without calling publish", (t) => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(calls.some(([command]) => command === "whoami"), false);
   assert.equal(calls.some(([command]) => command === "publish"), false);
+});
+
+test("Pi publisher accepts npm 12 view arrays and preserves digest mismatch checks", (t) => {
+  for (const shasum of ["grok-local", "different-tarball"]) {
+    const { result, calls } = runPublisherScenario(t, {
+      packageNames: ["pi-grok-build-supervisor"],
+      packShape: "keyed",
+      viewShape: "array",
+      lookups: { "pi-grok-build-supervisor@0.1.8": { kind: "existing", shasum } },
+    });
+    assert.equal(result.status === 0, shasum === "grok-local", result.stderr || result.stdout);
+    assert.equal(calls.some(([command]) => command === "publish"), false);
+  }
 });
 
 test("Pi publisher publishes only a registry-confirmed missing package", (t) => {

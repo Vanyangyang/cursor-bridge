@@ -71,11 +71,12 @@ foreach ($package in $packages) {
 
     $publishedShasumOutput = @(& $NpmCommand view $packageSpec dist.shasum --json 2>&1)
     $publishedLookupExitCode = $LASTEXITCODE
-    $publishedShasum = ([string]($publishedShasumOutput -join '')).Trim().Trim('"')
     if ($publishedLookupExitCode -eq 0) {
-        if (-not $publishedShasum) {
-            throw "npm view returned success without a tarball shasum for $packageSpec."
+        $publishedValues = @(($publishedShasumOutput -join [Environment]::NewLine) | ConvertFrom-Json)
+        if ($publishedValues.Count -ne 1 -or $publishedValues[0] -isnot [string] -or [string]::IsNullOrWhiteSpace($publishedValues[0])) {
+            throw "npm view returned success without exactly one tarball shasum for $packageSpec."
         }
+        $publishedShasum = $publishedValues[0].Trim()
         if ($publishedShasum -ne $localShasum) {
             throw "$packageSpec already exists on npm, but its published tarball differs from the local package. Bump the package version instead of skipping it."
         }
