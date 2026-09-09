@@ -11,7 +11,9 @@ Grok Build Supervisor is a separate plugin for Codex, Claude Code, and Pi. It op
 
 ## Install
 
-Host invocation: initialize with `$grok-build-supervisor init` in Codex, then select `$grok-executor-on` or `$grok-executor-off` directly; no argument is needed. In Claude Code, initialize with `/grok-build-supervisor:grok_init`, then select `/grok-build-supervisor:grok-executor-on` or `/grok-build-supervisor:grok-executor-off`. The short `/grok_init` and `/grok_execute on|off` examples below are legacy chat aliases, not universally registered slash commands. Explicit native invocations have the same authorization boundaries; bare shared-policy skill selection, quoted examples, and ordinary “continue” never activate execution.
+Host invocation: initialize with `$grok-build-supervisor init` in Codex, then select **Enable Grok Execution** (`$grok-executor-on`) or **Disable Grok Execution** (`$grok-executor-off`) directly; no argument is needed. In Claude Code, initialize with `/grok-build-supervisor:grok_init`, then select `/grok-build-supervisor:grok-executor-on` or `/grok-build-supervisor:grok-executor-off`. The short `/grok_init` and `/grok_execute on|off` examples below are legacy chat aliases, not universally registered slash commands. Explicit native invocations have the same authorization boundaries; selecting the Supervisor skill alone, quoted examples, and ordinary “continue” never activate execution.
+
+Version 0.4.2 has three skill entries: **Grok Build Supervisor** for initialization and session supervision, **Enable Grok Execution**, and **Disable Grok Execution**. The old **Grok Executor Mode** entry was removed; its shared execution policy is now an internal reference. Disabling execution preserves active work and the terminal.
 
 Requirements:
 
@@ -40,7 +42,7 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update. Skills, prompt templates, and slash commands do not hot-load into an existing task. The Pi package is versioned independently and currently embeds Grok Build Supervisor 0.4.0.
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update to load the updated skills and prompts. Pi package 0.1.8 is versioned independently and embeds Grok Build Supervisor 0.4.2.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
@@ -109,7 +111,7 @@ Turn the mode off when you want Codex, Claude Code, or Pi to handle tasks normal
 /grok_execute off
 ```
 
-Only the exact `on` and `off` forms change the mode. Turning it off does not cancel work that is already running; the plugin finishes supervising that work safely.
+Only an explicit selection of the enable/disable skill or the exact compatibility `on` and `off` forms changes the mode. Turning it off does not cancel work that is already running; the plugin finishes supervising that work safely.
 
 ## How it stays connected
 

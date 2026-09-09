@@ -1,5 +1,5 @@
 interface:
-  display_name: "开启 Grok 执行"
+  display_name: "Enable Grok Execution"
   short_description: "Enable Grok execution and prepare its terminal"
   default_prompt: "$grok-executor-on"
 policy:

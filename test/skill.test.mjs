@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function readProjectFile(relativePath) {
@@ -9,15 +9,16 @@ function readProjectFile(relativePath) {
 
 test('Grok native entries normalize explicit controls without implicit activation', () => {
   const root = 'plugins/grok-build-supervisor/';
-  const policy = readProjectFile(root + 'skills/grok-executor-mode/SKILL.md');
+  const policy = readProjectFile(root + 'skills/grok-build-supervisor/references/executor-policy.md');
   const transport = readProjectFile(root + 'skills/grok-build-supervisor/SKILL.md');
   const command = readProjectFile(root + 'commands/grok_execute.md');
-  assert.match(policy, /argument-hint: "\[on\|off\]"/);
-  for (const entry of ['$grok-executor-mode on|off', '/grok-build-supervisor:grok-executor-mode on|off', '/grok-build-supervisor:grok_execute on|off']) {
+  assert.equal(existsSync(fileURLToPath(new URL('../' + root + 'skills/grok-executor-mode/SKILL.md', import.meta.url))), false);
+  assert.equal(existsSync(fileURLToPath(new URL('../' + root + 'skills/grok-executor-mode/agents/openai.yaml', import.meta.url))), false);
+  for (const entry of ['$grok-executor-on', '$grok-executor-off', '/grok-build-supervisor:grok_execute on|off']) {
     assert.ok(policy.includes(entry), entry);
   }
   assert.match(policy, /extra arguments, and implicit skill selection are not control invocations/);
-  assert.match(policy, /A bare skill invocation never toggles the mode/);
+  assert.match(policy, /Selecting the Supervisor skill alone never toggles the mode/);
   assert.match(transport, /#host-entry-normalization/);
   assert.match(transport, /\$grok-build-supervisor init/);
   assert.match(command, /do not require the original slash text after expansion/);
@@ -26,7 +27,7 @@ test('Grok native entries normalize explicit controls without implicit activatio
 
 test('Grok dedicated controls require no argument and stay explicit-only', () => {
   const root = 'plugins/grok-build-supervisor/';
-  const policy = readProjectFile(root + 'skills/grok-executor-mode/SKILL.md');
+  const policy = readProjectFile(root + 'skills/grok-build-supervisor/references/executor-policy.md');
   const manifest = JSON.parse(readProjectFile(root + '.codex-plugin/plugin.json'));
   for (const action of ['on', 'off']) {
     const name = `grok-executor-${action}`;
@@ -35,7 +36,8 @@ test('Grok dedicated controls require no argument and stay explicit-only', () =>
     assert.ok(skill.includes(`name: ${name}`));
     assert.match(skill, /no argument is required/);
     assert.match(skill, /Do not ask the user to type/);
-    assert.match(skill, /\.\.\/grok-executor-mode\/SKILL\.md/);
+    assert.match(skill, /\.\.\/grok-build-supervisor\/references\/executor-policy\.md/);
+    assert.ok(metadata.includes(`display_name: "${action === 'on' ? 'Enable' : 'Disable'} Grok Execution"`));
     assert.match(metadata, /allow_implicit_invocation: false/);
     assert.ok(metadata.includes(`default_prompt: "$${name}"`));
     assert.ok(manifest.interface.defaultPrompt.includes(`$${name}`));
@@ -186,7 +188,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.deepEqual(cursor?.source, { source: 'local', path: './' });
   assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
   assert.equal(grokManifest.name, 'grok-build-supervisor');
-  assert.match(grokManifest.version, /^0\.4\.1\+codex\./);
+  assert.match(grokManifest.version, /^0\.4\.2(?:\+codex\..+)?$/);
   assert.deepEqual(grokManifest.mcpServers, {
     'grok-build-supervisor': {
       command: 'node',
@@ -217,9 +219,9 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.equal(claudeCursor?.version, '6.0.1');
   assert.match(claudeCursor?.description || '', /Cursor 3\.19\.13/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.4.1');
+  assert.equal(claudeGrok?.version, '0.4.2');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.4.1');
+  assert.equal(claudeGrokManifest.version, '0.4.2');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
@@ -297,7 +299,7 @@ test('Grok activation binds the current workspace and immediately ensures the vi
   const english = readProjectFile('plugins/grok-build-supervisor/README.md');
   const chinese = readProjectFile('plugins/grok-build-supervisor/README.zh-CN.md');
   const executeCommand = readProjectFile('plugins/grok-build-supervisor/commands/grok_execute.md');
-  const executorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-executor-mode/SKILL.md');
+  const executorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/references/executor-policy.md');
   const supervisorSkill = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/SKILL.md');
   const supervisionFlow = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/references/supervision-data-flow.md');
   const supervisorMetadata = readProjectFile('plugins/grok-build-supervisor/skills/grok-build-supervisor/agents/openai.yaml');

@@ -11,7 +11,9 @@ Grok Build Supervisor 可以单独安装到 Codex、Claude Code 或 Pi。它会�
 
 ## 安装
 
-宿主入口：Codex 初始化使用 `$grok-build-supervisor init`；之后直接选择 **开启 Grok 执行**（`$grok-executor-on`）或 **关闭 Grok 执行**（`$grok-executor-off`），无需补输参数。Claude Code 使用 `/grok-build-supervisor:grok_init` 初始化，再选择 `/grok-build-supervisor:grok-executor-on` 或 `/grok-build-supervisor:grok-executor-off`。下文的 `/grok_init`、`/grok_execute on|off` 是兼容聊天口令，不代表所有宿主都注册了这些斜杠命令。正规显式调用遵守相同授权边界；仅选择共享策略技能、引用示例或普通“继续”都不会激活执行。
+宿主入口：Codex 初始化使用 `$grok-build-supervisor init`；之后直接选择 **Enable Grok Execution**（`$grok-executor-on`）或 **Disable Grok Execution**（`$grok-executor-off`），无需补输参数。Claude Code 使用 `/grok-build-supervisor:grok_init` 初始化，再选择 `/grok-build-supervisor:grok-executor-on` 或 `/grok-build-supervisor:grok-executor-off`。下文的 `/grok_init`、`/grok_execute on|off` 是兼容聊天口令，不代表所有宿主都注册了这些斜杠命令。正规显式调用遵守相同授权边界；仅选择 Supervisor 技能、引用示例或普通“继续”都不会激活执行。
+
+0.4.2 版本保留三个技能入口：**Grok Build Supervisor** 负责初始化和会话监督，**Enable Grok Execution** 开启执行，**Disable Grok Execution** 关闭执行。旧的 **Grok Executor Mode** 入口已移除，共用执行规则改为内部参考文档。关闭执行会保留进行中的工作和终端。
 
 前置条件：
 
@@ -40,7 +42,7 @@ Pi：
 pi install npm:pi-grok-build-supervisor
 ```
 
-安装或更新后需要新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi；Skill、提示模板和 slash command 不会热加载到已经打开的任务。Pi 包独立计版本，目前内置 Grok Build Supervisor 0.4.0。
+安装或更新后，新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi，以加载更新后的技能和提示模板。Pi 包独立计版本，0.1.8 内置 Grok Build Supervisor 0.4.2。
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 

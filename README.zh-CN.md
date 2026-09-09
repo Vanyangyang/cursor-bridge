@@ -136,7 +136,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 初始化结果会持久保存。需要切换项目时，再用另一个绝对路径重复同一句话即可。
 
-如果安装了 Grok Build Supervisor，先运行一次 `/grok_init`；然后在需要当前客户端协调 Grok Build 的项目中运行 `/grok_execute on`。
+如果安装了 Grok Build Supervisor，先初始化一次（Codex 使用 `$grok-build-supervisor init`），再在需要 Grok 工作的项目中选择 **Enable Grok Execution**。选择 **Disable Grok Execution** 可恢复宿主正常执行，且不会关闭终端；两个开关都不需要额外参数。其他宿主和兼容命令见 [Grok 使用指南](./plugins/grok-build-supervisor/README.zh-CN.md#安装)。
 
 ### 4. 开始处理真实任务
 

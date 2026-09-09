@@ -65,7 +65,7 @@ copyRequired(
   join(repositoryRoot, "plugins", "grok-build-supervisor", "skills", "grok-build-supervisor"),
   join(grok, "skills", "grok-build-supervisor"),
 );
-for (const skill of ["grok-executor-mode", "grok-executor-on", "grok-executor-off"]) {
+for (const skill of ["grok-executor-on", "grok-executor-off"]) {
   copyRequired(
     join(repositoryRoot, "plugins", "grok-build-supervisor", "skills", skill),
     join(grok, "skills", skill),

@@ -4,6 +4,13 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-09
+
+- Remove the old `grok-executor-mode` skill entry and move its shared rules to an internal Supervisor reference.
+- Use English menu names: **Enable Grok Execution** and **Disable Grok Execution**. Both controls still require no argument; disabling preserves active work and the terminal.
+- Update English, Chinese, and Pi documentation to describe the three remaining skill entries.
+- Pi package `pi-grok-build-supervisor` 0.1.8 embeds Supervisor 0.4.2 and excludes the retired skill.
+
 ## [0.4.1] - 2026-09-07
 
 - Add explicit `grok-executor-on` and `grok-executor-off` skill entries. Selecting either is the complete control instruction; no extra on/off argument is required.

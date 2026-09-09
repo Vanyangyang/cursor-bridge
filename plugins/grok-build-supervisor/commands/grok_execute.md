@@ -4,9 +4,9 @@ description: Explicitly turn the task-local Grok executor mode on or off.
 
 # Grok Executor Mode Toggle
 
-Claude Code entry: `/grok-build-supervisor:grok_execute on|off`. This explicit host-expanded command with a valid argument counts as the corresponding exact legacy `/grok_execute on` or `/grok_execute off`; do not require the original slash text after expansion. Codex users select `$grok-executor-mode` and supply `on` or `off`. Quoted examples and implicit skill selection never toggle execution.
+Claude Code entry: `/grok-build-supervisor:grok_execute on|off`. This explicit host-expanded command with a valid argument counts as the corresponding exact legacy `/grok_execute on` or `/grok_execute off`; do not require the original slash text after expansion. Codex users select `$grok-executor-on` or `$grok-executor-off` with no argument. Quoted examples and implicit skill selection never toggle execution.
 
-Use `$grok-executor-mode` for the task-local role contract and `$grok-build-supervisor` for Grok session operations. This command is a prompt-level task policy, not a native host collaboration-mode switch.
+Use the [Grok Executor Policy](../skills/grok-build-supervisor/references/executor-policy.md) for the task-local role contract and `$grok-build-supervisor` for Grok session operations. This command is a prompt-level task policy, not a native host collaboration-mode switch.
 
 Interpret the entire trimmed value of `"$ARGUMENTS"` case-insensitively:
 

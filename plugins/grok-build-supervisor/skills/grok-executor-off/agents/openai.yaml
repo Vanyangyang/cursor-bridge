@@ -1,5 +1,5 @@
 interface:
-  display_name: "关闭 Grok 执行"
+  display_name: "Disable Grok Execution"
   short_description: "Disable Grok execution while preserving active work"
   default_prompt: "$grok-executor-off"
 policy:

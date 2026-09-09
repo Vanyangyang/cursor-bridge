@@ -136,7 +136,7 @@ Initialize CCE workspace to C:\absolute\path\to\project
 
 Initialization is persistent. Repeat the sentence with another absolute path whenever you want to switch projects.
 
-If you installed Grok Build Supervisor, run `/grok_init` once. Then run `/grok_execute on` in the project where you want the current client to coordinate Grok Build.
+If you installed Grok Build Supervisor, initialize once (`$grok-build-supervisor init` in Codex), then select **Enable Grok Execution** in the project where Grok should work. **Disable Grok Execution** returns the host to normal execution without closing the terminal. Neither control needs an extra argument. See the [Grok guide](./plugins/grok-build-supervisor/README.md#install) for other hosts and compatibility commands.
 
 ### 4. Start with a real task
 
