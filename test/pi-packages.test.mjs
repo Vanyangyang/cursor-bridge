@@ -24,7 +24,7 @@ const shasums = JSON.parse(process.env.FAKE_NPM_SHASUMS || "{}");
 appendFileSync(process.env.FAKE_NPM_LOG, JSON.stringify(args) + "\\n");
 
 if (command === "run" && args[1] === "build:pi-packages") {
-  for (const [name, version] of [["pi-cursor-bridge", "0.2.1"], ["pi-grok-build-supervisor", "0.1.8"]]) {
+  for (const [name, version] of [["pi-cursor-bridge", "0.2.1"], ["pi-grok-build-supervisor", "0.1.9"]]) {
     const packageRoot = resolve(".pi-package-stage", name);
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, version, pi: { extensions: [] } }));
@@ -129,8 +129,8 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   assert.equal(cursor.version, "0.2.1");
   assert.equal(cursor.piPackage.embeddedProductVersion, "6.0.1");
   assert.equal(grok.name, "pi-grok-build-supervisor");
-  assert.equal(grok.version, "0.1.8");
-  assert.equal(grok.piPackage.embeddedProductVersion, "0.4.2");
+  assert.equal(grok.version, "0.1.9");
+  assert.equal(grok.piPackage.embeddedProductVersion, "0.4.3");
   assert.equal(grok.pi.skills.includes("./skills/grok-executor-mode"), false);
   assert.match(readFileSync(join(output, "pi-grok-build-supervisor", "skills", "grok-build-supervisor", "references", "executor-policy.md"), "utf8"), /# Grok Executor Policy/);
   for (const action of ["on", "off"]) {
@@ -163,7 +163,7 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   assert.match(grokExtension, new RegExp(`packageVersion: "${grok.version.replaceAll('.', '\\.') }"`));
   const grokBundle = readFileSync(join(output, "pi-grok-build-supervisor", "dist", "grok-build-supervisor.mjs"), "utf8");
   assert.match(grokBundle, /grok_session_inspect/);
-  assert.match(grokBundle, /version: "0\.4\.2"/);
+  assert.match(grokBundle, /version: "0\.4\.3"/);
   assert.match(readFileSync(join(output, "pi-grok-build-supervisor", "prompts", "grok_execute.md"), "utf8"), /\$ARGUMENTS/);
 });
 
@@ -212,7 +212,7 @@ test("Pi publisher accepts npm 12 view arrays and preserves digest mismatch chec
       packageNames: ["pi-grok-build-supervisor"],
       packShape: "keyed",
       viewShape: "array",
-      lookups: { "pi-grok-build-supervisor@0.1.8": { kind: "existing", shasum } },
+      lookups: { "pi-grok-build-supervisor@0.1.9": { kind: "existing", shasum } },
     });
     assert.equal(result.status === 0, shasum === "grok-local", result.stderr || result.stdout);
     assert.equal(calls.some(([command]) => command === "publish"), false);
@@ -284,7 +284,7 @@ test("Pi publisher preflights every selected package before the first publish", 
   const { result, calls } = runPublisherScenario(t, {
     lookups: {
       "pi-cursor-bridge@0.2.1": { kind: "missing" },
-      "pi-grok-build-supervisor@0.1.8": { kind: "existing", shasum: "different-grok-tarball" },
+      "pi-grok-build-supervisor@0.1.9": { kind: "existing", shasum: "different-grok-tarball" },
     },
   });
   assert.notEqual(result.status, 0);

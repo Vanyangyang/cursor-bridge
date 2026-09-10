@@ -13,7 +13,7 @@ Grok Build Supervisor is a separate plugin for Codex, Claude Code, and Pi. It op
 
 Host invocation: initialize with `$grok-build-supervisor init` in Codex, then select **Enable Grok Execution** (`$grok-executor-on`) or **Disable Grok Execution** (`$grok-executor-off`) directly; no argument is needed. In Claude Code, initialize with `/grok-build-supervisor:grok_init`, then select `/grok-build-supervisor:grok-executor-on` or `/grok-build-supervisor:grok-executor-off`. The short `/grok_init` and `/grok_execute on|off` examples below are legacy chat aliases, not universally registered slash commands. Explicit native invocations have the same authorization boundaries; selecting the Supervisor skill alone, quoted examples, and ordinary “continue” never activate execution.
 
-Version 0.4.2 has three skill entries: **Grok Build Supervisor** for initialization and session supervision, **Enable Grok Execution**, and **Disable Grok Execution**. The old **Grok Executor Mode** entry was removed; its shared execution policy is now an internal reference. Disabling execution preserves active work and the terminal.
+Version 0.4.3 has three skill entries: **Grok Build Supervisor** for initialization and session supervision, **Enable Grok Execution**, and **Disable Grok Execution**. The old **Grok Executor Mode** entry was removed; its shared execution policy is now an internal reference. Disabling execution preserves active work and the terminal.
 
 Requirements:
 
@@ -42,7 +42,7 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update to load the updated skills and prompts. Pi package 0.1.8 is versioned independently and embeds Grok Build Supervisor 0.4.2.
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update to load the updated skills and prompts. Pi package 0.1.9 is versioned independently and embeds Grok Build Supervisor 0.4.3.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 

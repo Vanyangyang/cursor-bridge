@@ -188,7 +188,7 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.deepEqual(cursor?.source, { source: 'local', path: './' });
   assert.deepEqual(grok?.source, { source: 'local', path: './plugins/grok-build-supervisor' });
   assert.equal(grokManifest.name, 'grok-build-supervisor');
-  assert.match(grokManifest.version, /^0\.4\.2(?:\+codex\..+)?$/);
+  assert.match(grokManifest.version, /^0\.4\.3(?:\+codex\..+)?$/);
   assert.deepEqual(grokManifest.mcpServers, {
     'grok-build-supervisor': {
       command: 'node',
@@ -219,9 +219,9 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.equal(claudeCursor?.version, '6.0.1');
   assert.match(claudeCursor?.description || '', /Cursor 3\.19\.13/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
-  assert.equal(claudeGrok?.version, '0.4.2');
+  assert.equal(claudeGrok?.version, '0.4.3');
   assert.equal(claudeGrokManifest.name, 'grok-build-supervisor');
-  assert.equal(claudeGrokManifest.version, '0.4.2');
+  assert.equal(claudeGrokManifest.version, '0.4.3');
 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');

@@ -4,6 +4,15 @@ Notable Grok Build Supervisor changes are documented here. The plugin has its ow
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-10
+
+- Allow distinct workspaces to run concurrently through one Supervisor daemon, with independent Leader/ACP connections, writer leases, journals, results, and visible terminals.
+- Persist exact workspace/session routing across restarts, reject conflicting selectors, and retain the original workspace's legacy state directory.
+- Check activity across all workspaces before shared proxy changes or daemon upgrades; prevent older clients from downgrading a newer runtime and stop only the verified owned Leader process.
+- Preserve final ACP text when it arrives alongside prompt completion.
+- Shorten each turn's supervision contract while retaining host identity, task boundaries, and clarification fallback. The Codex wrapper shrinks from 952 to 424 characters; this is not a tokenizer or billing measurement.
+- Pi package `pi-grok-build-supervisor` 0.1.9 embeds Supervisor 0.4.3. Validation covers 147 plugin tests, 6 Grok skill checks, 11 Pi packaging tests, and a bounded concurrent reply probe against two real Grok sessions.
+
 ## [0.4.2] - 2026-09-09
 
 - Remove the old `grok-executor-mode` skill entry and move its shared rules to an internal Supervisor reference.
