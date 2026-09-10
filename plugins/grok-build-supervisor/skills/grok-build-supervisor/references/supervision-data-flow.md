@@ -3,7 +3,7 @@
 ## Authority layers
 
 - ACP status, permission requests, errors, and terminal results are the live control plane.
-- The Supervisor appends bounded events to a segmented JSONL journal under its local state root. This journal is the restart and evidence source, not a model prompt.
+- Each workspace appends bounded events to its own segmented JSONL journal under its state directory. A cursor belongs to that workspace's journal. This journal is the restart and evidence source, not a model prompt.
 - `SUPERVISOR_DERIVED` summaries are deterministic reductions of a bounded event window.
 - `AGENT_SUMMARY_CLAIM` comes from Grok's saved `summary.json`. It is useful semantic compression, but it does not prove files, Git state, tests, or Unity behavior.
 
@@ -16,8 +16,9 @@ Host MCP client(s) -> authenticated user-local Named Pipe -> Supervisor daemon -
 - `server.mjs` is a thin per-host-task frontend. It does not own Leader, ACP, TUI, pending permission promises, or prompt state.
 - The detached Supervisor daemon owns those resources and survives MCP frontend exit and plugin reinstall.
 - The daemon capability token is generated once in the user-local state root, is never returned by status or tool results, and is checked with constant-time comparison on every pipe request.
-- Many clients may inspect. One writer lease and fencing token authorizes `open`, `prompt`, `respond`, and `control`; stale writers cannot resume writes after a newer client takes the lease.
-- A clean MCP disconnect releases its lease. An abrupt frontend loss leaves a bounded lease so another client can safely take over after expiry.
+- Many clients may inspect. Each workspace has one writer lease and fencing token for `open`, `prompt`, `respond`, and `control`; stale writers cannot resume writes after a newer client takes that workspace's lease. Distinct workspaces run independently.
+- A clean MCP disconnect releases only that client's leases. An abrupt frontend loss leaves bounded leases so another client can safely take over after expiry.
+- Every operational request resolves its explicit cwd, exact session/request identifiers, and client binding before touching a connection. Conflicting identifiers and ambiguous unbound calls fail closed. The durable workspace registry retains canonical directory and session associations across restarts. Proxy initialization and daemon upgrades check all workspace contexts, including operations still opening, before changing shared state.
 - Runtime upgrades are idle-only. A newer frontend continues using a busy older daemon, then rolls it forward after ACP, verified TUI, prompts, permissions, and elicitations are all inactive. A numeric PID alone is never live-TUI evidence because Windows can reuse it; busy state requires the recorded process fingerprint, Grok executable, active-session registry entry, and Leader ownership token to agree.
 - At daemon construction, the PowerShell launcher, TUI host, and its local Node dependencies are copied into a content-addressed directory under the persistent state root. Windows Terminal receives only those durable paths, so removing an old plugin cache during reinstall cannot invalidate a later TUI launch by the still-running daemon.
 

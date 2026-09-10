@@ -254,12 +254,8 @@ export function buildSupervisedPrompt(prompt, hostKind = "unknown") {
   const host = supervisingHost(hostKind);
   const preamble = [
     `[${host.label} supervision contract]`,
-    `This task was delegated by ${host.subject} to you as the Grok coding agent. ${host.subject} remains attached as the supervising ACP client.`,
-    "Use your own tools and available project evidence to investigate and resolve the task independently when they are sufficient.",
-    "Communicate concise progress, material findings, and the final result through normal ACP session updates.",
-    `When you need a specific fact or coordination decision that your tools cannot obtain, use ACP form elicitation to ask ${host.subject}. ${host.subject} may answer from verified context or route the question to the user when user authority is required.`,
-    "Do not ask for facts your tools can obtain and do not use a permission request for ordinary communication.",
-    "If ACP elicitation is unavailable, end the turn with exactly one JSON object inside <supervisor_question>...</supervisor_question> containing question, evidenceGap, and attempted fields.",
+    `Use in-scope tools; report concise ACP progress/results. Ask ${host.subject} via ACP form elicitation only for facts/decisions tools cannot supply; host routes user-authority questions. Never use permissions for chat.`,
+    "If elicitation is unavailable, end with one JSON object in <supervisor_question>...</supervisor_question>: question, evidenceGap, attempted.",
     `[/${host.label} supervision contract]`,
     "",
     "[Task]",
@@ -975,6 +971,7 @@ export class GrokSupervisor {
     this.inspectTerminalPresentation = options.inspectTerminalPresentation || inspectTerminalPresentation;
     this.inspectProcessIdentity = options.inspectProcessIdentity || inspectProcessIdentity;
     this.processIsAlive = options.processIsAlive || processIsAlive;
+    this.terminateProcess = options.terminateProcess || ((pid) => process.kill(pid));
     this.isProcessAncestor = options.isProcessAncestor || isProcessAncestor;
     this.terminateProcessTree = options.terminateProcessTree || terminateProcessTree;
     this.tuiLaunchTimeoutMs = options.tuiLaunchTimeoutMs ?? 15000;
@@ -3920,7 +3917,11 @@ export class GrokSupervisor {
     run.promise = this.acpContext.request(acp.methods.agent.session.prompt, {
       sessionId,
       prompt: [{ type: "text", text: supervisedPrompt }],
-    }).then((result) => {
+    }).then(async (result) => {
+      // ACP dispatches notifications through asynchronous handlers, but resolves
+      // responses immediately. Drain this turn's already-received updates before
+      // freezing the result (the final text and response can share one chunk).
+      await new Promise((resolveTurn) => setImmediate(resolveTurn));
       this.stopRunProgressHeartbeat(run);
       run.status = "completed";
       run.completedAt = new Date().toISOString();
@@ -4260,7 +4261,8 @@ export class GrokSupervisor {
       throw new Error("confirmation must equal STOP_OWNED_LEADER");
     }
     const ownership = this.readLeaderOwnership();
-    const currentProcessPid = this.leaderProcess?.pid ?? null;
+    const leaderChild = this.leaderProcess;
+    const currentProcessPid = leaderChild?.pid ?? null;
     if (!currentProcessPid && !ownership.valid) {
       throw new Error("No verified plugin ownership record exists for the Leader; refusing to stop it");
     }
@@ -4282,18 +4284,26 @@ export class GrokSupervisor {
     }
     await this.disconnect();
     const pid = ownership.valid ? ownership.record.leaderPid : currentProcessPid;
-    if (currentProcessPid) {
-      await this.runGrok(["leader", "--leader-socket", this.socketPath, "kill"]).catch(() => {});
-    } else {
-      await this.runGrok(["leader", "--leader-socket", this.socketPath, "kill"]);
-    }
-    if (currentProcessPid && processIsAlive(currentProcessPid)) {
-      this.leaderProcess.kill();
+    // `grok leader kill` is documented as stopping all discovered Leaders.
+    // Stop only this verified process so another workspace keeps running.
+    if (this.processIsAlive(pid)) {
+      if (leaderChild?.pid === pid && leaderChild.exitCode == null) {
+        leaderChild.kill();
+      } else {
+        const currentOwnership = this.readLeaderOwnership();
+        if (!currentOwnership.valid || currentOwnership.record.leaderPid !== pid
+          || currentOwnership.record.ownerToken !== ownerToken
+          || typeof currentOwnership.record.processFingerprint !== "string"
+          || this.inspectProcessIdentity(pid)?.fingerprint !== currentOwnership.record.processFingerprint) {
+          throw new Error("Leader ownership changed before stop; refusing to terminate an unverified process");
+        }
+        this.terminateProcess(pid);
+      }
     }
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
       const info = await this.leaderInfo();
-      if (!info.running && !processIsAlive(pid)) {
+      if (!info.running && !this.processIsAlive(pid)) {
         this.removeStaleOwnedLock();
         this.clearLeaderOwnership(pid);
         this.leaderProxyContext = null;

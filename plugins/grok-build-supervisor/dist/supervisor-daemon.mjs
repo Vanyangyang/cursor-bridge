@@ -7,22 +7,22 @@ var __export = (target, all) => {
 };
 
 // plugins/grok-build-supervisor/scripts/supervisor-daemon.mjs
-import { resolve as resolve9 } from "node:path";
+import { resolve as resolve10 } from "node:path";
 
 // plugins/grok-build-supervisor/scripts/supervisor-transport.mjs
-import { createHash as createHash6, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "node:crypto";
+import { createHash as createHash7, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "node:crypto";
 import {
   closeSync,
-  existsSync as existsSync8,
+  existsSync as existsSync9,
   mkdirSync as mkdirSync7,
   openSync,
-  readFileSync as readFileSync8,
+  readFileSync as readFileSync9,
   unlinkSync as unlinkSync3,
   writeFileSync as writeFileSync5
 } from "node:fs";
 import { createConnection as createConnection3, createServer as createServer2 } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname as dirname4, join as join8, resolve as resolve8 } from "node:path";
+import { dirname as dirname4, join as join9, resolve as resolve9 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // plugins/grok-build-supervisor/scripts/supervisor-core.mjs
@@ -16698,11 +16698,11 @@ var Connection = class {
     const id = this.nextRequestId++;
     let cancel = () => {
     };
-    const response = new Promise((resolve10, reject) => {
+    const response = new Promise((resolve11, reject) => {
       const pendingResponse = {
         resolve: (value) => {
           try {
-            resolve10(mapResponse ? mapResponse(value) : value);
+            resolve11(mapResponse ? mapResponse(value) : value);
           } catch (error51) {
             reject(error51);
           }
@@ -16759,8 +16759,8 @@ var Connection = class {
     this.stream = stream;
     this.staticHandlers = handlers;
     this.allowBatches = options2?.allowBatches ?? true;
-    this.closedPromise = new Promise((resolve10) => {
-      this.abortController.signal.addEventListener("abort", () => resolve10());
+    this.closedPromise = new Promise((resolve11) => {
+      this.abortController.signal.addEventListener("abort", () => resolve11());
     });
     void this.receive();
   }
@@ -17641,8 +17641,8 @@ var AsyncQueue = class {
     if (this.failed) {
       return Promise.reject(this.failure);
     }
-    return new Promise((resolve10, reject) => {
-      this.waiters.push({ resolve: resolve10, reject });
+    return new Promise((resolve11, reject) => {
+      this.waiters.push({ resolve: resolve11, reject });
     });
   }
 };
@@ -19948,12 +19948,8 @@ function buildSupervisedPrompt(prompt, hostKind = "unknown") {
   const host = supervisingHost(hostKind);
   const preamble = [
     `[${host.label} supervision contract]`,
-    `This task was delegated by ${host.subject} to you as the Grok coding agent. ${host.subject} remains attached as the supervising ACP client.`,
-    "Use your own tools and available project evidence to investigate and resolve the task independently when they are sufficient.",
-    "Communicate concise progress, material findings, and the final result through normal ACP session updates.",
-    `When you need a specific fact or coordination decision that your tools cannot obtain, use ACP form elicitation to ask ${host.subject}. ${host.subject} may answer from verified context or route the question to the user when user authority is required.`,
-    "Do not ask for facts your tools can obtain and do not use a permission request for ordinary communication.",
-    "If ACP elicitation is unavailable, end the turn with exactly one JSON object inside <supervisor_question>...</supervisor_question> containing question, evidenceGap, and attempted fields.",
+    `Use in-scope tools; report concise ACP progress/results. Ask ${host.subject} via ACP form elicitation only for facts/decisions tools cannot supply; host routes user-authority questions. Never use permissions for chat.`,
+    "If elicitation is unavailable, end with one JSON object in <supervisor_question>...</supervisor_question>: question, evidenceGap, attempted.",
     `[/${host.label} supervision contract]`,
     "",
     "[Task]"
@@ -20577,6 +20573,7 @@ var GrokSupervisor = class {
     this.inspectTerminalPresentation = options2.inspectTerminalPresentation || inspectTerminalPresentation;
     this.inspectProcessIdentity = options2.inspectProcessIdentity || inspectProcessIdentity;
     this.processIsAlive = options2.processIsAlive || processIsAlive2;
+    this.terminateProcess = options2.terminateProcess || ((pid) => process.kill(pid));
     this.isProcessAncestor = options2.isProcessAncestor || isProcessAncestor;
     this.terminateProcessTree = options2.terminateProcessTree || terminateProcessTree;
     this.tuiLaunchTimeoutMs = options2.tuiLaunchTimeoutMs ?? 15e3;
@@ -23234,7 +23231,8 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
     run.promise = this.acpContext.request(methods.agent.session.prompt, {
       sessionId,
       prompt: [{ type: "text", text: supervisedPrompt }]
-    }).then((result) => {
+    }).then(async (result) => {
+      await new Promise((resolveTurn) => setImmediate(resolveTurn));
       this.stopRunProgressHeartbeat(run);
       run.status = "completed";
       run.completedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -23554,7 +23552,8 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
       throw new Error("confirmation must equal STOP_OWNED_LEADER");
     }
     const ownership = this.readLeaderOwnership();
-    const currentProcessPid = this.leaderProcess?.pid ?? null;
+    const leaderChild = this.leaderProcess;
+    const currentProcessPid = leaderChild?.pid ?? null;
     if (!currentProcessPid && !ownership.valid) {
       throw new Error("No verified plugin ownership record exists for the Leader; refusing to stop it");
     }
@@ -23570,19 +23569,21 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
     }
     await this.disconnect();
     const pid = ownership.valid ? ownership.record.leaderPid : currentProcessPid;
-    if (currentProcessPid) {
-      await this.runGrok(["leader", "--leader-socket", this.socketPath, "kill"]).catch(() => {
-      });
-    } else {
-      await this.runGrok(["leader", "--leader-socket", this.socketPath, "kill"]);
-    }
-    if (currentProcessPid && processIsAlive2(currentProcessPid)) {
-      this.leaderProcess.kill();
+    if (this.processIsAlive(pid)) {
+      if (leaderChild?.pid === pid && leaderChild.exitCode == null) {
+        leaderChild.kill();
+      } else {
+        const currentOwnership = this.readLeaderOwnership();
+        if (!currentOwnership.valid || currentOwnership.record.leaderPid !== pid || currentOwnership.record.ownerToken !== ownerToken || typeof currentOwnership.record.processFingerprint !== "string" || this.inspectProcessIdentity(pid)?.fingerprint !== currentOwnership.record.processFingerprint) {
+          throw new Error("Leader ownership changed before stop; refusing to terminate an unverified process");
+        }
+        this.terminateProcess(pid);
+      }
     }
     const deadline = Date.now() + 5e3;
     while (Date.now() < deadline) {
       const info = await this.leaderInfo();
-      if (!info.running && !processIsAlive2(pid)) {
+      if (!info.running && !this.processIsAlive(pid)) {
         this.removeStaleOwnedLock();
         this.clearLeaderOwnership(pid);
         this.leaderProxyContext = null;
@@ -23597,10 +23598,258 @@ ${normalizedCwd}`).digest("hex").slice(0, 32);
   }
 };
 
+// plugins/grok-build-supervisor/scripts/workspace-registry.mjs
+import { createHash as createHash6 } from "node:crypto";
+import { existsSync as existsSync8, readFileSync as readFileSync8, realpathSync as realpathSync2 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join8, resolve as resolve8 } from "node:path";
+function fail(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+function canonicalWorkspace(value, { mustExist = true } = {}) {
+  if (typeof value !== "string" || !value.trim() || !isAbsolute4(value)) {
+    throw fail("GROK_WORKSPACE_REQUIRED", "cwd must be an absolute existing project directory");
+  }
+  let cwd = mustExist ? validateWorkingDirectory(value) : resolve8(value);
+  if (existsSync8(cwd)) cwd = realpathSync2.native(cwd);
+  const identity = process.platform === "win32" ? cwd.toLowerCase() : cwd;
+  return { cwd, identity, key: createHash6("sha256").update(identity).digest("hex") };
+}
+function entryFor(key, cwd, stateRoot, supervisor, sessionIds = []) {
+  return {
+    key,
+    cwd,
+    stateRoot,
+    supervisor,
+    sessionIds: new Set(sessionIds),
+    writerLease: null,
+    opening: false,
+    inFlightWrites: 0
+  };
+}
+var WorkspaceRegistry = class {
+  constructor({ stateRoot, legacySupervisor, createSupervisor }) {
+    this.stateRoot = resolve8(stateRoot);
+    this.path = join8(this.stateRoot, "workspaces.json");
+    this.createSupervisor = createSupervisor;
+    this.legacy = entryFor("legacy", null, this.stateRoot, legacySupervisor);
+    this.entries = /* @__PURE__ */ new Map([["legacy", this.legacy]]);
+    this.initialization = null;
+  }
+  async initialize() {
+    if (!this.initialization) this.initialization = this.load();
+    return this.initialization;
+  }
+  createEntry(key, cwd, sessionIds = []) {
+    const stateRoot = join8(this.stateRoot, "workspaces", key);
+    const supervisor = this.createSupervisor({
+      stateRoot,
+      workspaceCwd: cwd,
+      proxySettingsPath: join8(this.stateRoot, "proxy-settings.json"),
+      persistTuiRuntime: true
+    });
+    return entryFor(key, cwd, stateRoot, supervisor, sessionIds);
+  }
+  async load() {
+    if (existsSync8(this.path)) {
+      let saved;
+      try {
+        saved = JSON.parse(readFileSync8(this.path, "utf8"));
+      } catch {
+        throw fail("GROK_WORKSPACE_REGISTRY_INVALID", "The workspace registry is unreadable; refusing to guess session ownership");
+      }
+      if (saved?.schemaVersion !== 1 || !Array.isArray(saved.workspaces)) {
+        throw fail("GROK_WORKSPACE_REGISTRY_INVALID", "Unsupported workspace registry");
+      }
+      const identities = /* @__PURE__ */ new Set();
+      const sessions = /* @__PURE__ */ new Set();
+      const keys = /* @__PURE__ */ new Set();
+      for (const row of saved.workspaces) {
+        const workspace = canonicalWorkspace(row.cwd, { mustExist: false });
+        if (row.key !== "legacy" && row.key !== workspace.key || keys.has(row.key) || identities.has(workspace.identity) || !Array.isArray(row.sessionIds)) {
+          throw fail("GROK_WORKSPACE_REGISTRY_INVALID", "Conflicting workspace registry entries");
+        }
+        for (const id of row.sessionIds) {
+          validateSessionId(id);
+          if (sessions.has(id)) throw fail("GROK_WORKSPACE_REGISTRY_INVALID", "A session is registered to more than one workspace");
+          sessions.add(id);
+        }
+        keys.add(row.key);
+        identities.add(workspace.identity);
+        if (row.key === "legacy") {
+          this.legacy.cwd = workspace.cwd;
+          this.legacy.sessionIds = new Set(row.sessionIds);
+        } else {
+          this.entries.set(row.key, this.createEntry(row.key, workspace.cwd, row.sessionIds));
+        }
+      }
+    }
+    const core = this.legacy.supervisor;
+    const ownership = core.readLeaderOwnership?.();
+    const currentSessionId = core.attachedSessionId || core.activeRun?.sessionId || core.recovery?.interruptedRun?.sessionId;
+    const workspaceEvents = (core.events || []).filter((event) => typeof event.cwd === "string" && isAbsolute4(event.cwd) && ["session_created", "session_attached", "session_opened"].includes(event.kind));
+    const sessionEvent = currentSessionId && [...workspaceEvents].reverse().find((event) => event.sessionId === currentSessionId);
+    const completeHistory = !core.journal || core.journal.nextSequence === (core.events?.length || 0) + 1;
+    const historicalWorkspaces = completeHistory ? new Map(workspaceEvents.map((event) => {
+      const workspace = canonicalWorkspace(event.cwd, { mustExist: false });
+      return [workspace.identity, workspace.cwd];
+    })) : /* @__PURE__ */ new Map();
+    const historicalCwd = historicalWorkspaces.size === 1 ? [...historicalWorkspaces.values()][0] : null;
+    const cwd = core.attachedCwd || ownership?.record?.cwd || core.leaderCwd || sessionEvent?.cwd || historicalCwd || null;
+    if (cwd) {
+      const workspace = canonicalWorkspace(cwd, { mustExist: false });
+      if (this.legacy.cwd && canonicalWorkspace(this.legacy.cwd, { mustExist: false }).identity !== workspace.identity) {
+        throw fail("GROK_WORKSPACE_REGISTRY_INVALID", "Legacy Leader ownership disagrees with the workspace registry");
+      }
+      const other = this.findCwd(workspace.cwd);
+      if (other && other !== this.legacy) {
+        throw fail("GROK_WORKSPACE_REGISTRY_INVALID", "Legacy and isolated state claim the same workspace");
+      }
+      const previousCwd = this.legacy.cwd;
+      const previousSessions = new Set(this.legacy.sessionIds);
+      try {
+        this.legacy.cwd = workspace.cwd;
+        for (const id of [core.attachedSessionId, core.activeRun?.sessionId, core.recovery?.interruptedRun?.sessionId]) {
+          if (id) this.addSession(this.legacy, id);
+        }
+        this.persist();
+      } catch (cause) {
+        this.legacy.cwd = previousCwd;
+        this.legacy.sessionIds = previousSessions;
+        if (cause?.code === "GROK_WORKSPACE_SESSION_MISMATCH") throw cause;
+        throw Object.assign(fail("GROK_WORKSPACE_REGISTRY_WRITE_FAILED", "Could not save legacy workspace registration; existing sessions were not changed"), {
+          cause,
+          details: { cwd: workspace.cwd, verificationRequired: false }
+        });
+      }
+    }
+    return this;
+  }
+  persist() {
+    writeJsonAtomic(this.path, {
+      schemaVersion: 1,
+      workspaces: [...this.entries.values()].filter((entry) => entry.cwd).map((entry) => ({
+        key: entry.key,
+        cwd: entry.cwd,
+        sessionIds: [...entry.sessionIds]
+      }))
+    });
+  }
+  findCwd(cwd) {
+    const identity = canonicalWorkspace(cwd, { mustExist: false }).identity;
+    return [...this.entries.values()].find((entry) => entry.cwd && canonicalWorkspace(entry.cwd, { mustExist: false }).identity === identity) || null;
+  }
+  findSession(sessionId) {
+    if (!sessionId) return null;
+    validateSessionId(sessionId);
+    const matches = [...this.entries.values()].filter((entry) => entry.sessionIds.has(sessionId) || entry.supervisor.attachedSessionId === sessionId || entry.supervisor.activeRun?.sessionId === sessionId || entry.supervisor.recovery?.interruptedRun?.sessionId === sessionId);
+    if (matches.length > 1) throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "More than one workspace claims this session");
+    return matches[0] || null;
+  }
+  addSession(entry, sessionId) {
+    validateSessionId(sessionId);
+    const existing = this.findSession(sessionId);
+    if (existing && existing !== entry) {
+      throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "This session belongs to another workspace");
+    }
+    entry.sessionIds.add(sessionId);
+  }
+  rememberSession(entry, sessionId) {
+    if (!sessionId) return;
+    const alreadyRegistered = entry.sessionIds.has(sessionId);
+    this.addSession(entry, sessionId);
+    try {
+      this.persist();
+    } catch (cause) {
+      if (!alreadyRegistered) entry.sessionIds.delete(sessionId);
+      throw Object.assign(fail("GROK_WORKSPACE_REGISTRY_WRITE_FAILED", "Session opened but its workspace registration could not be saved; inspect this exact cwd and session before retrying"), {
+        cause,
+        details: { cwd: entry.cwd, sessionId, stateRoot: entry.stateRoot, verificationRequired: true }
+      });
+    }
+  }
+  legacyHasHistory() {
+    const core = this.legacy.supervisor;
+    return Boolean(core.attachedSessionId || core.activeRun || core.events?.length || core.recovery?.interruptedRun || core.recovery?.orphanedPermissions?.length || core.recovery?.orphanedElicitations?.length || core.recovery?.orphanedWorkspaceTrust?.length);
+  }
+  async select(selectors = {}, { boundKey = null, create = false, readOnly = false } = {}) {
+    await this.initialize();
+    const { cwd, sessionId, runId, permissionId, elicitationId } = selectors;
+    const candidates = [];
+    const sessionEntry = this.findSession(sessionId);
+    if (sessionId && !sessionEntry && !readOnly && !(cwd && create)) {
+      throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "The exact session is not registered to a workspace; inspect or resume it with its explicit cwd first");
+    }
+    if (sessionEntry) candidates.push(sessionEntry);
+    for (const [id, match] of [
+      [runId, (core) => core.activeRun?.runId === runId || core.recovery?.interruptedRun?.runId === runId],
+      [permissionId, (core) => core.pendingPermissions?.has(permissionId)],
+      [elicitationId, (core) => core.pendingElicitations?.has(elicitationId)]
+    ]) {
+      if (!id) continue;
+      const matches = [...this.entries.values()].filter((entry2) => match(entry2.supervisor));
+      if (matches.length > 1) throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "The request identifier is ambiguous across workspaces");
+      if (!matches.length && !readOnly) throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "The exact run, permission, or input request is not active in a known workspace");
+      if (matches[0]) candidates.push(matches[0]);
+    }
+    if (new Set(candidates).size > 1) {
+      throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "The request identifiers belong to different workspaces");
+    }
+    let entry = candidates[0] || null;
+    if (cwd !== void 0 && cwd !== null) {
+      const workspace = canonicalWorkspace(cwd);
+      let selected = this.findCwd(workspace.cwd);
+      if (entry && selected !== entry) {
+        throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "The requested session or operation belongs to another workspace");
+      }
+      if (!selected && create) {
+        if (!this.legacy.cwd && !this.legacyHasHistory()) {
+          selected = this.legacy;
+          selected.cwd = workspace.cwd;
+        } else {
+          selected = this.createEntry(workspace.key, workspace.cwd);
+          this.entries.set(workspace.key, selected);
+        }
+        try {
+          this.persist();
+        } catch (cause) {
+          if (selected === this.legacy) selected.cwd = null;
+          else this.entries.delete(selected.key);
+          throw Object.assign(fail("GROK_WORKSPACE_REGISTRY_WRITE_FAILED", "Workspace registration could not be saved; no session was opened"), {
+            cause,
+            details: { cwd: workspace.cwd, verificationRequired: false }
+          });
+        }
+      }
+      if (!selected) throw fail("GROK_WORKSPACE_REQUIRED", "Open or inspect the exact workspace before addressing its session");
+      entry = selected;
+    } else if (boundKey) {
+      const bound = this.entries.get(boundKey);
+      if (entry && bound && entry !== bound && !readOnly) {
+        throw fail("GROK_WORKSPACE_SESSION_MISMATCH", "This host client is bound to another workspace; open the intended workspace explicitly");
+      }
+      entry ||= bound || null;
+    }
+    if (!entry) {
+      const assigned = [...this.entries.values()].filter((item) => item.cwd);
+      if (assigned.length === 0 && readOnly) entry = this.legacy;
+      else if (assigned.length === 1 && readOnly && !sessionId && !runId && !permissionId && !elicitationId) entry = assigned[0];
+      else throw fail("GROK_WORKSPACE_REQUIRED", "Specify the current project's absolute cwd or exact registered sessionId");
+    }
+    return entry;
+  }
+  snapshot() {
+    return [...this.entries.values()].filter((entry) => entry.cwd).slice(0, 50).map((entry) => ({
+      key: entry.key,
+      cwd: entry.cwd,
+      sessionId: entry.supervisor.attachedSessionId || null
+    }));
+  }
+};
+
 // plugins/grok-build-supervisor/scripts/supervisor-transport.mjs
 var MODULE_DIRECTORY2 = dirname4(fileURLToPath2(import.meta.url));
-var PLUGIN_ROOT = resolve8(MODULE_DIRECTORY2, "..");
-var DEFAULT_DAEMON_BUNDLE = join8(PLUGIN_ROOT, "dist", "supervisor-daemon.mjs");
+var PLUGIN_ROOT = resolve9(MODULE_DIRECTORY2, "..");
+var DEFAULT_DAEMON_BUNDLE = join9(PLUGIN_ROOT, "dist", "supervisor-daemon.mjs");
 var MAX_MESSAGE_BYTES = 1024 * 1024;
 var DEFAULT_LEASE_MS = 6e4;
 var DAEMON_PROTOCOL_VERSION = 1;
@@ -23611,7 +23860,8 @@ var DAEMON_CAPABILITIES = Object.freeze({
   persistentTuiRuntime: true,
   proxyInitialization: true,
   resultArtifacts: true,
-  sessionOpenV2: true
+  sessionOpenV2: true,
+  multiWorkspaceSessions: true
 });
 function conciseError2(error51) {
   return error51 instanceof Error ? error51.message : String(error51);
@@ -23635,28 +23885,41 @@ function processIsAlive3(pid) {
     return false;
   }
 }
+function isOlderRuntime(targetVersion, currentVersion) {
+  const parse3 = (value) => /^(\d+)\.(\d+)\.(\d+)(?:\+codex\.(.+))?$/.exec(String(value || ""));
+  const target = parse3(targetVersion);
+  const current = parse3(currentVersion);
+  if (!target || !current) return false;
+  for (let part = 1; part <= 3; part += 1) {
+    if (Number(target[part]) !== Number(current[part])) {
+      return Number(target[part]) < Number(current[part]);
+    }
+  }
+  if (current[4] && !target[4]) return true;
+  return /^\d{14}$/.test(target[4] || "") && /^\d{14}$/.test(current[4] || "") && target[4] < current[4];
+}
 function readPluginVersion() {
   try {
-    const manifest = JSON.parse(readFileSync8(join8(PLUGIN_ROOT, ".codex-plugin", "plugin.json"), "utf8"));
+    const manifest = JSON.parse(readFileSync9(join9(PLUGIN_ROOT, ".codex-plugin", "plugin.json"), "utf8"));
     return typeof manifest.version === "string" ? manifest.version : "unknown";
   } catch {
     return "unknown";
   }
 }
 function daemonPaths(stateRoot = defaultStateRoot()) {
-  const root = resolve8(stateRoot);
+  const root = resolve9(stateRoot);
   const identity = process.platform === "win32" ? root.toLowerCase() : root;
-  const suffix = createHash6("sha256").update(identity).digest("hex").slice(0, 20);
+  const suffix = createHash7("sha256").update(identity).digest("hex").slice(0, 20);
   return {
     stateRoot: root,
-    pipePath: process.platform === "win32" ? `\\\\.\\pipe\\grok-build-supervisor-${suffix}` : join8(tmpdir(), `grok-build-supervisor-${suffix}.sock`),
-    authPath: join8(root, "daemon-auth.json"),
-    metadataPath: join8(root, "daemon.json"),
-    startupErrorPath: join8(root, "daemon-startup-error.json")
+    pipePath: process.platform === "win32" ? `\\\\.\\pipe\\grok-build-supervisor-${suffix}` : join9(tmpdir(), `grok-build-supervisor-${suffix}.sock`),
+    authPath: join9(root, "daemon-auth.json"),
+    metadataPath: join9(root, "daemon.json"),
+    startupErrorPath: join9(root, "daemon-startup-error.json")
   };
 }
 function parseAuthRecord(path) {
-  const value = JSON.parse(readFileSync8(path, "utf8"));
+  const value = JSON.parse(readFileSync9(path, "utf8"));
   if (value?.schemaVersion !== 1 || typeof value.token !== "string" || !/^[0-9a-f]{64}$/i.test(value.token)) {
     throw new Error(`Invalid Supervisor daemon auth record: ${path}`);
   }
@@ -23664,7 +23927,7 @@ function parseAuthRecord(path) {
 }
 function ensureDaemonAuth(paths = daemonPaths()) {
   mkdirSync7(paths.stateRoot, { recursive: true });
-  if (existsSync8(paths.authPath)) {
+  if (existsSync9(paths.authPath)) {
     return parseAuthRecord(paths.authPath).token;
   }
   const record2 = {
@@ -23732,17 +23995,30 @@ var SupervisorDaemon = class {
       stateRoot: this.paths.stateRoot,
       persistTuiRuntime: true
     });
+    this.registry = options2.workspaceRegistry || new WorkspaceRegistry({
+      stateRoot: this.paths.stateRoot,
+      legacySupervisor: this.supervisor,
+      createSupervisor: options2.supervisorFactory || ((supervisorOptions) => new GrokSupervisor(supervisorOptions))
+    });
     this.leaseMs = options2.leaseMs ?? DEFAULT_LEASE_MS;
     this.now = options2.now || (() => Date.now());
     this.daemonInstanceId = options2.daemonInstanceId || randomUUID3();
     this.server = null;
-    this.writerLease = null;
     this.clients = /* @__PURE__ */ new Map();
     this.stopping = false;
-    this.initializingProxy = false;
+    this.lifecycleOperation = null;
+    this.routingWritesInFlight = 0;
   }
-  leaseSnapshot(clientId = null) {
-    const lease = this.writerLease;
+  // Retain the old single-workspace field as a compatibility view of the
+  // permanently rooted legacy workspace. New code always passes an entry.
+  get writerLease() {
+    return this.registry.legacy.writerLease;
+  }
+  set writerLease(value) {
+    this.registry.legacy.writerLease = value;
+  }
+  leaseSnapshot(entry = this.registry.legacy, clientId = null) {
+    const lease = entry.writerLease;
     const active = Boolean(lease && lease.expiresAt > this.now());
     return {
       active,
@@ -23751,16 +24027,17 @@ var SupervisorDaemon = class {
       expiresAt: active ? new Date(lease.expiresAt).toISOString() : null
     };
   }
-  touchClient(clientId, leaseToken = null) {
+  touchClient(clientId) {
     const now = this.now();
-    this.clients.set(clientId, now);
-    if (this.writerLease?.clientId === clientId && this.writerLease.fencingToken === leaseToken) {
-      this.writerLease.expiresAt = now + this.leaseMs;
-    }
+    const existing = this.clients.get(clientId);
+    const client2 = existing && typeof existing === "object" ? existing : { lastSeen: now, boundKey: null };
+    client2.lastSeen = now;
+    this.clients.set(clientId, client2);
+    return client2;
   }
-  acquireWriter(clientId, sessionId = null, leaseToken = null) {
+  acquireWriter(entry, clientId, sessionId = null, leaseToken = null) {
     const now = this.now();
-    const lease = this.writerLease;
+    const lease = entry.writerLease;
     if (lease && lease.expiresAt > now) {
       if (lease.clientId !== clientId) {
         throw errorWithCode(
@@ -23772,12 +24049,18 @@ var SupervisorDaemon = class {
       if (lease.fencingToken !== leaseToken) {
         throw errorWithCode("The Grok writer fencing token is stale or missing", "GROK_WRITER_FENCED");
       }
+      if (sessionId && lease.sessionId && lease.sessionId !== sessionId) {
+        throw errorWithCode(
+          `Writer lease is bound to ${lease.sessionId}, not ${sessionId}`,
+          "GROK_WRITER_SESSION_MISMATCH"
+        );
+      }
       lease.sessionId = sessionId || lease.sessionId;
       lease.expiresAt = now + this.leaseMs;
       return lease;
     }
     if (!lease || lease.expiresAt <= now) {
-      this.writerLease = {
+      entry.writerLease = {
         clientId,
         sessionId,
         fencingToken: randomUUID3(),
@@ -23785,48 +24068,145 @@ var SupervisorDaemon = class {
         expiresAt: now + this.leaseMs
       };
     }
-    return this.writerLease;
+    return entry.writerLease;
   }
-  requireWriter(clientId, sessionId = null, leaseToken = null) {
-    const lease = this.acquireWriter(clientId, sessionId, leaseToken);
-    if (sessionId && lease.sessionId && lease.sessionId !== sessionId) {
-      throw errorWithCode(
-        `Writer lease is bound to ${lease.sessionId}, not ${sessionId}`,
-        "GROK_WRITER_SESSION_MISMATCH"
-      );
+  requireWriter(entry, clientId, sessionId = null, leaseToken = null) {
+    return this.acquireWriter(entry, clientId, sessionId, leaseToken);
+  }
+  releaseWriter(entry, clientId) {
+    if (entry.writerLease?.clientId === clientId) {
+      entry.writerLease = null;
+      return true;
     }
-    lease.sessionId = sessionId || lease.sessionId;
-    return lease;
+    return false;
   }
-  releaseWriter(clientId) {
-    if (this.writerLease?.clientId === clientId) {
-      this.writerLease = null;
+  refreshWriter(entry, clientId, leaseToken) {
+    const lease = entry.writerLease;
+    const now = this.now();
+    if (lease && lease.expiresAt > now && lease.clientId === clientId && lease.fencingToken === leaseToken) {
+      lease.expiresAt = now + this.leaseMs;
       return true;
     }
     return false;
   }
   async daemonBusyState() {
-    const status = await this.supervisor.status();
-    const liveTuis = (status.recordedTuis || []).filter((item) => item.processAlive === true && item.leaderOwnershipMatch === true && item.processIdentityMatch !== false);
-    const verifiedLiveTuiCount = Number.isInteger(status.recordedTuiCounts?.verifiedLive) ? status.recordedTuiCounts.verifiedLive : liveTuis.length;
-    const ownedLiveTuiCount = Array.isArray(status.ownedVisibleTuiPids) ? status.ownedVisibleTuiPids.length : 0;
+    await this.registry.initialize();
+    const workspaceStates = await Promise.all([...this.registry.entries.values()].map(async (entry) => {
+      const status = await entry.supervisor.status();
+      const liveTuis = (status.recordedTuis || []).filter((item) => item.processAlive === true && item.leaderOwnershipMatch === true && item.processIdentityMatch !== false);
+      const verifiedLiveTuiCount = Number.isInteger(status.recordedTuiCounts?.verifiedLive) ? status.recordedTuiCounts.verifiedLive : liveTuis.length;
+      const ownedLiveTuiCount = Array.isArray(status.ownedVisibleTuiPids) ? status.ownedVisibleTuiPids.length : 0;
+      const busy = Boolean(
+        entry.opening || entry.inFlightWrites > 0 || status.acpConnected || status.attachedSessionId || status.activeRun?.status === "running" || status.pendingPermissions?.length || status.pendingElicitations?.length || status.pendingWorkspaceTrust?.length || verifiedLiveTuiCount || ownedLiveTuiCount
+      );
+      return { entry, status, busy, liveTuiCount: verifiedLiveTuiCount, ownedLiveTuiCount };
+    }));
+    const legacy = workspaceStates.find((item) => item.entry === this.registry.legacy) || workspaceStates[0];
     return {
-      busy: Boolean(
-        status.acpConnected || status.attachedSessionId || status.activeRun?.status === "running" || status.pendingPermissions?.length || status.pendingElicitations?.length || status.pendingWorkspaceTrust?.length || verifiedLiveTuiCount || ownedLiveTuiCount
-      ),
-      status,
-      liveTuiCount: verifiedLiveTuiCount,
-      ownedLiveTuiCount
+      busy: this.routingWritesInFlight > 0 || workspaceStates.some((item) => item.busy),
+      status: legacy?.status || {},
+      liveTuiCount: workspaceStates.reduce((sum, item) => sum + item.liveTuiCount, 0),
+      ownedLiveTuiCount: workspaceStates.reduce((sum, item) => sum + item.ownedLiveTuiCount, 0),
+      leaderRunningCount: workspaceStates.filter((item) => item.status.leader?.running === true).length,
+      routingWritesInFlight: this.routingWritesInFlight,
+      workspaces: workspaceStates.map((item) => ({
+        key: item.entry.key,
+        cwd: item.entry.cwd,
+        busy: item.busy,
+        attachedSessionId: item.status.attachedSessionId || null,
+        activeRun: item.status.activeRun?.status || null,
+        leaderRunning: item.status.leader?.running === true,
+        liveTuiCount: item.liveTuiCount,
+        inFlightWrites: item.entry.inFlightWrites,
+        opening: Boolean(item.entry.opening)
+      }))
     };
   }
-  async route({ clientId, clientVersion, hostKind = "unknown", leaseToken = null, method, params = {} }) {
+  assertWritesAllowed() {
+    if (this.lifecycleOperation) {
+      throw errorWithCode(
+        `Supervisor daemon ${this.lifecycleOperation} is in progress`,
+        "GROK_SUPERVISOR_BUSY",
+        { operation: this.lifecycleOperation }
+      );
+    }
+  }
+  async runEntryWrite(entry, operation, { serializeOpen = false } = {}) {
+    this.assertWritesAllowed();
+    entry.inFlightWrites += 1;
+    const previous = entry.writeTail || Promise.resolve();
+    const current = Promise.resolve(previous).catch(() => {
+    }).then(() => {
+      this.assertWritesAllowed();
+      return operation();
+    });
+    entry.writeTail = current;
+    if (serializeOpen) entry.opening = current;
+    try {
+      return await current;
+    } finally {
+      if (entry.writeTail === current) entry.writeTail = null;
+      if (serializeOpen && entry.opening === current) entry.opening = false;
+      entry.inFlightWrites = Math.max(0, entry.inFlightWrites - 1);
+    }
+  }
+  async runWithWriter(entry, clientId, sessionId, leaseToken, operation) {
+    const now = this.now();
+    const previous = entry.writerLease && entry.writerLease.expiresAt > now ? { ...entry.writerLease } : null;
+    const lease = this.requireWriter(entry, clientId, sessionId, leaseToken);
+    const newlyGranted = previous === null;
+    try {
+      const result = await operation(lease);
+      if (entry.writerLease?.fencingToken === lease.fencingToken) {
+        lease.expiresAt = this.now() + this.leaseMs;
+      }
+      return result;
+    } catch (error51) {
+      if (newlyGranted && entry.writerLease?.fencingToken === lease.fencingToken) {
+        entry.writerLease = null;
+      }
+      throw error51;
+    }
+  }
+  async beginLifecycleOperation(operation) {
+    if (this.lifecycleOperation) {
+      throw errorWithCode(
+        `Another Supervisor daemon lifecycle operation (${this.lifecycleOperation}) is already running`,
+        operation === "initialize_proxy" ? "GROK_INIT_BUSY" : "GROK_SUPERVISOR_BUSY"
+      );
+    }
+    this.lifecycleOperation = operation;
+    try {
+      return await this.daemonBusyState();
+    } catch (error51) {
+      this.finishLifecycleOperation(operation);
+      throw error51;
+    }
+  }
+  finishLifecycleOperation(operation) {
+    if (this.lifecycleOperation === operation) this.lifecycleOperation = null;
+  }
+  async disconnectAllSupervisors() {
+    await Promise.all([...this.registry.entries.values()].map((entry) => entry.supervisor.disconnect().catch(() => {
+    })));
+  }
+  async routeRequest({
+    clientId,
+    clientVersion,
+    hostKind = "unknown",
+    leaseToken = null,
+    workspaceCwd = null,
+    method,
+    params = {}
+  }) {
     if (typeof clientId !== "string" || clientId.length > 128) {
       throw errorWithCode("A bounded clientId is required", "DAEMON_INVALID_CLIENT");
     }
-    this.touchClient(clientId, leaseToken);
+    await this.registry.initialize();
+    const client2 = this.touchClient(clientId);
     const requesterHostKind = normalizeHostKind(hostKind);
     if (method === "ping") {
-      return {
+      return { result: {
         ok: true,
         protocolVersion: DAEMON_PROTOCOL_VERSION,
         daemonInstanceId: this.daemonInstanceId,
@@ -23836,40 +24216,161 @@ var SupervisorDaemon = class {
         runtimeScript: this.runtimeScript,
         capabilities: this.capabilities,
         clientVersion: clientVersion || null,
-        writer: this.leaseSnapshot(clientId)
-      };
+        writer: this.leaseSnapshot(this.registry.legacy, clientId),
+        workspaces: this.registry.snapshot()
+      }, entry: null, includeLeaseToken: false };
     }
     if (method === "client_disconnect") {
-      const released = Boolean(this.writerLease && this.writerLease.clientId === clientId && this.writerLease.fencingToken === leaseToken && this.releaseWriter(clientId));
+      const matching = [...this.registry.entries.values()].find((entry2) => entry2.writerLease?.clientId === clientId && entry2.writerLease.fencingToken === leaseToken);
+      const released = Boolean(matching && this.releaseWriter(matching, clientId));
       this.clients.delete(clientId);
-      return { disconnected: true, releasedWriter: released };
+      return {
+        result: { disconnected: true, releasedWriter: released },
+        entry: matching || null,
+        workspace: matching ? { key: matching.key, cwd: matching.cwd } : null,
+        includeLeaseToken: false
+      };
     }
     if (method === "initialize_proxy") {
-      if (this.initializingProxy) {
-        throw errorWithCode("Another Grok proxy initialization is already running", "GROK_INIT_BUSY");
-      }
-      const state = await this.daemonBusyState();
-      if (state.busy || state.status.leader?.running === true) {
-        throw errorWithCode(
-          "Grok proxy cannot be reinitialized while the Supervisor owns an active Leader, TUI, ACP session, or prompt",
-          "GROK_INIT_BUSY",
-          {
-            attachedSessionId: state.status.attachedSessionId || null,
-            activeRun: state.status.activeRun?.status || null,
-            leaderRunning: state.status.leader?.running === true,
-            liveTuiCount: state.liveTuiCount
-          }
-        );
-      }
-      this.initializingProxy = true;
+      const state = await this.beginLifecycleOperation(method);
       try {
-        return await this.supervisor.initializeProxy(params);
+        if (state.busy || state.leaderRunningCount > 0) {
+          throw errorWithCode(
+            "Grok proxy cannot be reinitialized while any workspace owns an active Leader, TUI, ACP session, prompt, or in-flight write",
+            "GROK_INIT_BUSY",
+            {
+              liveTuiCount: state.liveTuiCount,
+              leaderRunningCount: state.leaderRunningCount,
+              workspaces: state.workspaces
+            }
+          );
+        }
+        return {
+          result: await this.supervisor.initializeProxy(params),
+          entry: null,
+          includeLeaseToken: false
+        };
       } finally {
-        this.initializingProxy = false;
+        this.finishLifecycleOperation(method);
       }
     }
+    if (method === "upgrade_if_idle") {
+      if (params.confirmation !== "RESTART_IDLE_SUPERVISOR_DAEMON") {
+        throw errorWithCode("Invalid daemon upgrade confirmation", "DAEMON_UPGRADE_REFUSED");
+      }
+      const versionCurrent = params.targetVersion === this.runtimeVersion;
+      if (isOlderRuntime(params.targetVersion, this.runtimeVersion)) {
+        return { result: {
+          restarting: false,
+          newerRuntimePreserved: true,
+          runtimeVersion: this.runtimeVersion,
+          runtimeFingerprint: this.runtimeFingerprint,
+          targetVersion: params.targetVersion
+        }, entry: null, includeLeaseToken: false };
+      }
+      const fingerprintCurrent = !params.targetFingerprint || !this.runtimeFingerprint || params.targetFingerprint === this.runtimeFingerprint;
+      if (versionCurrent && fingerprintCurrent) {
+        return { result: {
+          restarting: false,
+          alreadyCurrent: true,
+          runtimeVersion: this.runtimeVersion,
+          runtimeFingerprint: this.runtimeFingerprint
+        }, entry: null, includeLeaseToken: false };
+      }
+      const idle = await this.beginLifecycleOperation(method);
+      let restartAccepted = false;
+      try {
+        if (idle.busy) {
+          return { result: {
+            restarting: false,
+            busy: true,
+            runtimeVersion: this.runtimeVersion,
+            runtimeFingerprint: this.runtimeFingerprint,
+            targetVersion: params.targetVersion || null,
+            targetFingerprint: params.targetFingerprint || null,
+            workspaces: idle.workspaces
+          }, entry: null, includeLeaseToken: false };
+        }
+        await this.disconnectAllSupervisors();
+        restartAccepted = true;
+        setTimeout(() => this.stop(), 10);
+        return { result: {
+          restarting: true,
+          runtimeVersion: this.runtimeVersion,
+          runtimeFingerprint: this.runtimeFingerprint,
+          targetVersion: params.targetVersion || null,
+          targetFingerprint: params.targetFingerprint || null
+        }, entry: null, includeLeaseToken: false };
+      } finally {
+        if (!restartAccepted) this.finishLifecycleOperation(method);
+      }
+    }
+    if (method === "shutdown") {
+      if (params.confirmation !== "STOP_IDLE_SUPERVISOR_DAEMON") {
+        throw errorWithCode("Invalid daemon shutdown confirmation", "DAEMON_SHUTDOWN_REFUSED");
+      }
+      const idle = await this.beginLifecycleOperation(method);
+      let shutdownAccepted = false;
+      try {
+        if (idle.busy) {
+          throw errorWithCode(
+            "Supervisor daemon is not idle; refusing shutdown",
+            "DAEMON_NOT_IDLE",
+            { liveTuiCount: idle.liveTuiCount, workspaces: idle.workspaces }
+          );
+        }
+        await this.disconnectAllSupervisors();
+        shutdownAccepted = true;
+        setTimeout(() => this.stop(), 10);
+        return {
+          result: { shuttingDown: true, daemonInstanceId: this.daemonInstanceId },
+          entry: null,
+          includeLeaseToken: false
+        };
+      } finally {
+        if (!shutdownAccepted) this.finishLifecycleOperation(method);
+      }
+    }
+    const envelopeWorkspace = workspaceCwd !== null && workspaceCwd !== void 0 ? canonicalWorkspace(workspaceCwd) : null;
+    const parameterWorkspace = params.cwd !== null && params.cwd !== void 0 ? canonicalWorkspace(params.cwd) : null;
+    if (envelopeWorkspace && parameterWorkspace && envelopeWorkspace.identity !== parameterWorkspace.identity) {
+      throw errorWithCode(
+        "The workspace envelope and request cwd identify different projects",
+        "GROK_WORKSPACE_SESSION_MISMATCH",
+        { workspaceCwd: envelopeWorkspace.cwd, cwd: parameterWorkspace.cwd }
+      );
+    }
+    const routingCwd = (envelopeWorkspace || parameterWorkspace)?.cwd || null;
+    const readOnly = method === "inspect";
+    const mutation = ["open", "prompt", "respond", "control"].includes(method);
+    if (mutation) {
+      this.assertWritesAllowed();
+      this.routingWritesInFlight += 1;
+    }
+    let entry;
+    try {
+      entry = await this.registry.select({
+        cwd: routingCwd,
+        sessionId: params.sessionId || null,
+        runId: params.runId || null,
+        permissionId: params.permissionId || null,
+        elicitationId: params.elicitationId || null
+      }, {
+        boundKey: client2.boundKey,
+        create: Boolean(routingCwd) && ["open", "inspect"].includes(method),
+        readOnly
+      });
+    } finally {
+      if (mutation) this.routingWritesInFlight = Math.max(0, this.routingWritesInFlight - 1);
+    }
+    this.touchClient(clientId);
+    let result;
+    let includeLeaseToken = false;
     if (method === "inspect") {
-      const result = await this.supervisor.inspect(params);
+      this.refreshWriter(entry, clientId, leaseToken);
+      const coreParams = entry.cwd ? { ...params, cwd: entry.cwd } : params;
+      result = await entry.supervisor.inspect(coreParams);
+      this.refreshWriter(entry, clientId, leaseToken);
       if (result?.view === "status" && result.status) {
         result.status.daemon = {
           protocolVersion: DAEMON_PROTOCOL_VERSION,
@@ -23879,94 +24380,72 @@ var SupervisorDaemon = class {
           runtimeFingerprint: this.runtimeFingerprint,
           runtimeScript: this.runtimeScript,
           capabilities: this.capabilities,
-          writer: this.leaseSnapshot(clientId)
+          writer: this.leaseSnapshot(entry, clientId),
+          workspace: { key: entry.key, cwd: entry.cwd },
+          workspaces: this.registry.snapshot()
         };
       }
-      return result;
-    }
-    if (method === "open") {
-      const previousLease = this.writerLease ? { ...this.writerLease } : null;
-      this.acquireWriter(clientId, params.sessionId || null, leaseToken);
-      try {
-        const result = await this.supervisor.openSession(params);
-        this.writerLease.sessionId = result.sessionId;
-        this.touchClient(clientId, this.writerLease.fencingToken);
-        return result;
-      } catch (error51) {
-        this.writerLease = previousLease;
-        throw error51;
-      }
-    }
-    if (method === "prompt") {
-      this.requireWriter(clientId, params.sessionId, leaseToken);
-      return this.supervisor.startPrompt({ ...params, hostKind: requesterHostKind });
-    }
-    if (method === "respond") {
-      this.requireWriter(clientId, this.supervisor.attachedSessionId, leaseToken);
-      return this.supervisor.respond(params);
-    }
-    if (method === "control") {
-      this.requireWriter(clientId, params.sessionId || this.supervisor.attachedSessionId, leaseToken);
-      const result = await this.supervisor.control(params);
+    } else if (method === "open") {
+      result = await this.runEntryWrite(entry, () => this.runWithWriter(
+        entry,
+        clientId,
+        params.sessionId || null,
+        leaseToken,
+        async (lease) => {
+          const coreParams = entry.cwd ? { ...params, cwd: entry.cwd } : params;
+          const opened = await entry.supervisor.openSession(coreParams);
+          lease.sessionId = opened.sessionId;
+          this.registry.rememberSession(entry, opened.sessionId);
+          return opened;
+        }
+      ), { serializeOpen: true });
+      includeLeaseToken = true;
+    } else if (method === "prompt") {
+      result = await this.runEntryWrite(entry, () => this.runWithWriter(
+        entry,
+        clientId,
+        params.sessionId,
+        leaseToken,
+        () => entry.supervisor.startPrompt({ ...params, hostKind: requesterHostKind })
+      ));
+      this.registry.rememberSession(entry, result?.sessionId || params.sessionId);
+      includeLeaseToken = true;
+    } else if (method === "respond") {
+      const { cwd: _routingCwd, sessionId: _routingSessionId, ...coreParams } = params;
+      result = await this.runEntryWrite(entry, () => this.runWithWriter(
+        entry,
+        clientId,
+        params.sessionId || entry.supervisor.attachedSessionId,
+        leaseToken,
+        () => entry.supervisor.respond(coreParams)
+      ));
+      includeLeaseToken = true;
+    } else if (method === "control") {
+      result = await this.runEntryWrite(entry, () => this.runWithWriter(
+        entry,
+        clientId,
+        params.sessionId || entry.supervisor.attachedSessionId,
+        leaseToken,
+        () => entry.supervisor.control(params)
+      ));
       if (["disconnect", "stop_leader"].includes(params.action)) {
-        this.releaseWriter(clientId);
+        this.releaseWriter(entry, clientId);
+      } else {
+        includeLeaseToken = true;
       }
-      return result;
+    } else {
+      throw errorWithCode(`Unknown Supervisor daemon method: ${method}`, "DAEMON_METHOD_NOT_FOUND");
     }
-    if (method === "upgrade_if_idle") {
-      if (params.confirmation !== "RESTART_IDLE_SUPERVISOR_DAEMON") {
-        throw errorWithCode("Invalid daemon upgrade confirmation", "DAEMON_UPGRADE_REFUSED");
-      }
-      const versionCurrent = params.targetVersion === this.runtimeVersion;
-      const fingerprintCurrent = !params.targetFingerprint || !this.runtimeFingerprint || params.targetFingerprint === this.runtimeFingerprint;
-      if (versionCurrent && fingerprintCurrent) {
-        return {
-          restarting: false,
-          alreadyCurrent: true,
-          runtimeVersion: this.runtimeVersion,
-          runtimeFingerprint: this.runtimeFingerprint
-        };
-      }
-      const idle = await this.daemonBusyState();
-      if (idle.busy) {
-        return {
-          restarting: false,
-          busy: true,
-          runtimeVersion: this.runtimeVersion,
-          runtimeFingerprint: this.runtimeFingerprint,
-          targetVersion: params.targetVersion || null,
-          targetFingerprint: params.targetFingerprint || null
-        };
-      }
-      await this.supervisor.disconnect().catch(() => {
-      });
-      setTimeout(() => this.stop(), 10);
-      return {
-        restarting: true,
-        runtimeVersion: this.runtimeVersion,
-        runtimeFingerprint: this.runtimeFingerprint,
-        targetVersion: params.targetVersion || null,
-        targetFingerprint: params.targetFingerprint || null
-      };
-    }
-    if (method === "shutdown") {
-      if (params.confirmation !== "STOP_IDLE_SUPERVISOR_DAEMON") {
-        throw errorWithCode("Invalid daemon shutdown confirmation", "DAEMON_SHUTDOWN_REFUSED");
-      }
-      const idle = await this.daemonBusyState();
-      if (idle.busy) {
-        throw errorWithCode(
-          "Supervisor daemon is not idle; refusing shutdown",
-          "DAEMON_NOT_IDLE",
-          { activeRun: idle.status.activeRun?.status || null, liveTuiCount: idle.liveTuiCount }
-        );
-      }
-      await this.supervisor.disconnect().catch(() => {
-      });
-      setTimeout(() => this.stop(), 10);
-      return { shuttingDown: true, daemonInstanceId: this.daemonInstanceId };
-    }
-    throw errorWithCode(`Unknown Supervisor daemon method: ${method}`, "DAEMON_METHOD_NOT_FOUND");
+    if (method === "open" && routingCwd || !client2.boundKey) client2.boundKey = entry.key;
+    return {
+      result,
+      entry,
+      workspace: { key: entry.key, cwd: entry.cwd },
+      includeLeaseToken
+    };
+  }
+  async route(request) {
+    return (await this.routeRequest(request)).result;
   }
   async handleSocket(socket) {
     let buffer = "";
@@ -23999,17 +24478,15 @@ var SupervisorDaemon = class {
         if (!secretsMatch(this.authToken, request.authToken)) {
           throw errorWithCode("Supervisor daemon authentication failed", "DAEMON_AUTH_FAILED");
         }
-        const leaseBefore = this.writerLease ? { ...this.writerLease } : null;
-        const routeStartedAt = this.now();
-        const result = await this.route(request);
-        const lease = this.leaseSnapshot(request.clientId);
-        const leaseGrantedNow = lease.ownedByClient && (!leaseBefore || leaseBefore.expiresAt <= routeStartedAt || leaseBefore.clientId !== request.clientId || leaseBefore.fencingToken !== this.writerLease?.fencingToken);
-        const leaseTokenAccepted = lease.ownedByClient && request.leaseToken === this.writerLease?.fencingToken;
+        const routed = await this.routeRequest(request);
+        const lease = routed.entry?.writerLease || null;
+        const responseLeaseToken = routed.includeLeaseToken && lease?.clientId === request.clientId && lease.expiresAt > this.now() ? lease.fencingToken : null;
         socket.end(responseLine({
           id: request.id,
           ok: true,
-          result,
-          leaseToken: leaseGrantedNow || leaseTokenAccepted ? this.writerLease.fencingToken : null
+          result: routed.result,
+          workspace: routed.workspace || null,
+          leaseToken: responseLeaseToken
         }));
       } catch (error51) {
         socket.end(responseLine({ id: request?.id ?? null, ok: false, error: serializeError(error51) }));
@@ -24022,8 +24499,9 @@ var SupervisorDaemon = class {
     if (this.server) {
       return this.info();
     }
+    await this.registry.initialize();
     mkdirSync7(this.paths.stateRoot, { recursive: true });
-    if (process.platform !== "win32" && existsSync8(this.paths.pipePath)) {
+    if (process.platform !== "win32" && existsSync9(this.paths.pipePath)) {
       const metadata = readJsonFile(this.paths.metadataPath);
       if (!metadata || !processIsAlive3(metadata.pid)) {
         unlinkSync3(this.paths.pipePath);
@@ -24052,10 +24530,10 @@ var SupervisorDaemon = class {
       runtimeVersion: this.runtimeVersion,
       runtimeFingerprint: this.runtimeFingerprint,
       runtimeScript: this.runtimeScript,
-      pipePathHash: createHash6("sha256").update(this.paths.pipePath).digest("hex"),
+      pipePathHash: createHash7("sha256").update(this.paths.pipePath).digest("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
-    if (existsSync8(this.paths.startupErrorPath)) {
+    if (existsSync9(this.paths.startupErrorPath)) {
       try {
         unlinkSync3(this.paths.startupErrorPath);
       } catch {
@@ -24085,7 +24563,7 @@ var SupervisorDaemon = class {
     if (server) {
       await new Promise((resolveClose) => server.close(() => resolveClose()));
     }
-    if (process.platform !== "win32" && existsSync8(this.paths.pipePath)) {
+    if (process.platform !== "win32" && existsSync9(this.paths.pipePath)) {
       try {
         unlinkSync3(this.paths.pipePath);
       } catch {
@@ -24124,7 +24602,7 @@ function parseArgs(argv) {
     if (!value || value.startsWith("--")) {
       throw new Error(`${argument} requires a value`);
     }
-    if (argument === "--state-root") values.stateRoot = resolve9(value);
+    if (argument === "--state-root") values.stateRoot = resolve10(value);
     if (argument === "--runtime-version") values.runtimeVersion = value;
     if (argument === "--runtime-fingerprint") values.runtimeFingerprint = value;
     index += 1;

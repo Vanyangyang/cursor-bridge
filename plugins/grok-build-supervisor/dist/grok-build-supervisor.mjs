@@ -34810,7 +34810,8 @@ var DAEMON_CAPABILITIES = Object.freeze({
   persistentTuiRuntime: true,
   proxyInitialization: true,
   resultArtifacts: true,
-  sessionOpenV2: true
+  sessionOpenV2: true,
+  multiWorkspaceSessions: true
 });
 function conciseError(error51) {
   return error51 instanceof Error ? error51.message : String(error51);
@@ -34965,7 +34966,20 @@ function connectionError(error51, requestWritten = false) {
   error51.requestWritten = requestWritten;
   return error51;
 }
-function sendDaemonRequest({ paths, authToken, clientId, clientVersion, hostKind = "unknown", leaseToken = null, method, params, timeoutMs, onLeaseToken = null }) {
+function sendDaemonRequest({
+  paths,
+  authToken,
+  clientId,
+  clientVersion,
+  hostKind = "unknown",
+  leaseToken = null,
+  workspaceCwd = null,
+  method,
+  params,
+  timeoutMs,
+  onLeaseToken = null,
+  onWorkspace = null
+}) {
   return new Promise((resolveRequest, rejectRequest) => {
     const id = randomUUID2();
     const socket = createConnection(paths.pipePath);
@@ -34995,6 +35009,7 @@ function sendDaemonRequest({ paths, authToken, clientId, clientVersion, hostKind
         clientVersion,
         hostKind: normalizeHostKind(hostKind),
         leaseToken,
+        workspaceCwd,
         method,
         params
       };
@@ -35032,7 +35047,12 @@ function sendDaemonRequest({ paths, authToken, clientId, clientVersion, hostKind
         rejectRequest(error51);
         return;
       }
-      if (typeof response.leaseToken === "string" && typeof onLeaseToken === "function") {
+      if (response.workspace && typeof onWorkspace === "function") {
+        onWorkspace({
+          workspace: response.workspace,
+          leaseToken: typeof response.leaseToken === "string" ? response.leaseToken : null
+        });
+      } else if (typeof response.leaseToken === "string" && typeof onLeaseToken === "function") {
         onLeaseToken(response.leaseToken);
       }
       resolveRequest(response.result);
@@ -35064,6 +35084,14 @@ var SupervisorClient = class {
     this.runtimeFingerprint = options.runtimeFingerprint || this.daemonRuntime?.fingerprint || null;
     this.spawnProcess = options.spawnProcess || spawn2;
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
+    this.workspaceCwd = typeof options.workspaceCwd === "string" && options.workspaceCwd.trim() ? resolve4(options.workspaceCwd) : null;
+    this.workspaceBinding = null;
+    this.workspaceKeysByCwd = /* @__PURE__ */ new Map();
+    this.workspacesByKey = /* @__PURE__ */ new Map();
+    this.workspaceLeaseTokens = /* @__PURE__ */ new Map();
+    this.workspaceTokenSequences = /* @__PURE__ */ new Map();
+    this.requestSequence = 0;
+    this.bindingSequence = 0;
     this.leaseToken = null;
     this.daemonInfo = null;
     this.nextUpgradeCheckAt = 0;
@@ -35079,21 +35107,79 @@ var SupervisorClient = class {
     if (method === "initialize_proxy") return 45e3;
     return 3e4;
   }
-  async requestOnce(method, params = {}, timeoutMs = this.requestTimeout(method, params)) {
-    return sendDaemonRequest({
+  cwdIdentity(cwd) {
+    if (!cwd) return null;
+    const absolute = resolve4(cwd);
+    return process.platform === "win32" ? absolute.toLowerCase() : absolute;
+  }
+  resultRootForWorkspace(params = {}) {
+    const requestedCwd = typeof params.cwd === "string" && params.cwd.trim() ? resolve4(params.cwd) : this.workspaceCwd || this.workspaceBinding?.cwd || null;
+    const key = requestedCwd ? this.workspaceKeysByCwd.get(this.cwdIdentity(requestedCwd)) : this.workspaceBinding?.key || null;
+    return key && key !== "legacy" ? join4(this.paths.stateRoot, "workspaces", key, "results") : this.resultArtifactRoot;
+  }
+  captureRequestContext(method, params = {}, workspaceOverride = void 0) {
+    const sequence = ++this.requestSequence;
+    const explicitCwd = typeof params.cwd === "string" && params.cwd.trim() ? resolve4(params.cwd) : null;
+    const globalMethod = (/* @__PURE__ */ new Set(["ping", "initialize_proxy", "upgrade_if_idle", "shutdown"])).has(method);
+    const workspaceCwd = globalMethod ? null : workspaceOverride !== void 0 ? workspaceOverride : explicitCwd || this.workspaceCwd || this.workspaceBinding?.cwd || null;
+    const knownKey = workspaceCwd ? this.workspaceKeysByCwd.get(this.cwdIdentity(workspaceCwd)) || (this.workspaceBinding?.cwd && this.cwdIdentity(this.workspaceBinding.cwd) === this.cwdIdentity(workspaceCwd) ? this.workspaceBinding.key : null) : this.workspaceBinding?.key || null;
+    const leaseToken = method === "ping" ? null : knownKey && this.workspaceLeaseTokens.get(knownKey) || (knownKey === this.workspaceBinding?.key ? this.leaseToken : null);
+    return { sequence, explicitCwd, workspaceCwd, knownKey, leaseToken };
+  }
+  acceptWorkspaceResponse(context, { workspace, leaseToken }) {
+    if (!workspace || typeof workspace.key !== "string") return;
+    const canonicalCwd = typeof workspace.cwd === "string" && workspace.cwd ? resolve4(workspace.cwd) : null;
+    const normalized = { key: workspace.key, cwd: canonicalCwd };
+    this.workspacesByKey.set(workspace.key, normalized);
+    if (canonicalCwd) this.workspaceKeysByCwd.set(this.cwdIdentity(canonicalCwd), workspace.key);
+    if (context.workspaceCwd) {
+      this.workspaceKeysByCwd.set(this.cwdIdentity(context.workspaceCwd), workspace.key);
+    }
+    if (typeof leaseToken === "string") {
+      const previousSequence = this.workspaceTokenSequences.get(workspace.key) || 0;
+      if (context.sequence >= previousSequence) {
+        this.workspaceLeaseTokens.set(workspace.key, leaseToken);
+        this.workspaceTokenSequences.set(workspace.key, context.sequence);
+      }
+    }
+    const explicitOpen = context.method === "open" && Boolean(context.explicitCwd);
+    if ((!this.workspaceBinding || explicitOpen) && context.sequence >= this.bindingSequence) {
+      this.workspaceBinding = normalized;
+      this.workspaceCwd = canonicalCwd;
+      this.bindingSequence = context.sequence;
+    }
+    if (this.workspaceBinding?.key === workspace.key) {
+      this.leaseToken = this.workspaceLeaseTokens.get(workspace.key) || null;
+    }
+  }
+  async requestOnce(method, params = {}, timeoutMs = this.requestTimeout(method, params), frozenContext = null) {
+    const context = frozenContext || this.captureRequestContext(method, params);
+    context.method = method;
+    const result = await sendDaemonRequest({
       paths: this.paths,
       authToken: this.authToken(),
       clientId: this.clientId,
       clientVersion: this.clientVersion,
       hostKind: this.hostKind,
-      leaseToken: this.leaseToken,
+      leaseToken: context.leaseToken,
+      workspaceCwd: context.workspaceCwd,
       method,
       params,
       timeoutMs,
       onLeaseToken: (token) => {
-        this.leaseToken = token;
-      }
+        if (!context.knownKey) this.leaseToken = token;
+      },
+      onWorkspace: (response) => this.acceptWorkspaceResponse(context, response)
     });
+    if (method === "control" && ["disconnect", "stop_leader"].includes(params.action)) {
+      const key = context.knownKey || this.workspaceBinding?.key;
+      if (key) {
+        this.workspaceLeaseTokens.delete(key);
+        this.workspaceTokenSequences.set(key, context.sequence);
+      }
+      if (this.workspaceBinding?.key === key) this.leaseToken = null;
+    }
+    return result;
   }
   launchDaemon() {
     const args = [
@@ -35161,6 +35247,8 @@ var SupervisorClient = class {
       return info;
     }
     this.leaseToken = null;
+    this.workspaceLeaseTokens.clear();
+    this.workspaceTokenSequences.clear();
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
     const deadline = Date.now() + this.startTimeoutMs;
     let lastError = null;
@@ -35190,14 +35278,15 @@ var SupervisorClient = class {
   }
   async call(method, params = {}) {
     await this.ensureDaemon();
+    const context = this.captureRequestContext(method, params);
     try {
-      return await this.requestOnce(method, params);
+      return await this.requestOnce(method, params, this.requestTimeout(method, params), context);
     } catch (error51) {
       if (error51.requestWritten) {
         throw error51;
       }
       await this.ensureDaemon();
-      return this.requestOnce(method, params);
+      return this.requestOnce(method, params, this.requestTimeout(method, params), context);
     }
   }
   async requireDaemonCapability(capability, code, message) {
@@ -35213,9 +35302,16 @@ var SupervisorClient = class {
     return info;
   }
   async inspect(params = {}) {
+    if (params.cwd || this.workspaceCwd) {
+      await this.requireDaemonCapability(
+        "multiWorkspaceSessions",
+        "GROK_INSPECT_REQUIRES_IDLE_UPGRADE",
+        "The active Supervisor daemon cannot safely route inspection to an explicit workspace; exit the visible Grok TUI normally, then retry"
+      );
+    }
     const result = await this.call("inspect", params);
     return coalesceInteractionResult(result, params, {
-      resultArtifactRoot: this.resultArtifactRoot,
+      resultArtifactRoot: this.resultRootForWorkspace(params),
       inlineResultMaxBytes: this.inlineResultMaxBytes,
       persistResultArtifact: this.persistResultArtifact
     });
@@ -35227,27 +35323,57 @@ var SupervisorClient = class {
       "The active Supervisor daemon predates /grok_init; exit the visible Grok TUI normally, then run /grok_init again"
     ).then(() => this.call("initialize_proxy", params));
   }
-  openSession(params) {
-    return this.requireDaemonCapability(
+  async openSession(params) {
+    await this.requireDaemonCapability(
       "sessionOpenV2",
       "GROK_OPEN_REQUIRES_IDLE_UPGRADE",
       "The active Supervisor daemon cannot safely open a new TUI after a plugin cache refresh; exit the existing visible TUI normally, then retry"
-    ).then(() => this.call("open", params));
+    );
+    if (params.cwd || this.workspaceCwd) {
+      await this.requireDaemonCapability(
+        "multiWorkspaceSessions",
+        "GROK_MULTIWORKSPACE_REQUIRES_IDLE_UPGRADE",
+        "The active Supervisor daemon cannot safely route an explicit workspace; exit the visible Grok TUI normally, then retry after the daemon upgrade"
+      );
+    }
+    return this.call("open", params);
   }
-  startPrompt(params) {
+  async startPrompt(params) {
+    if (params.cwd || this.workspaceCwd) {
+      await this.requireDaemonCapability(
+        "multiWorkspaceSessions",
+        "GROK_MULTIWORKSPACE_REQUIRES_IDLE_UPGRADE",
+        "The active Supervisor daemon cannot safely route this prompt to an explicit workspace; exit the visible Grok TUI normally, then retry"
+      );
+    }
     if (this.hostKind === "codex") {
       return this.call("prompt", params);
     }
-    return this.requireDaemonCapability(
+    await this.requireDaemonCapability(
       "hostIdentityEnvelope",
       "GROK_HOST_IDENTITY_UPGRADE_REQUIRED",
       "The active Supervisor daemon cannot preserve the current host identity; exit the visible Grok TUI normally, then retry after the daemon upgrade"
-    ).then(() => this.call("prompt", params));
+    );
+    return this.call("prompt", params);
   }
-  respond(params) {
+  async respond(params) {
+    if (params.cwd || this.workspaceCwd) {
+      await this.requireDaemonCapability(
+        "multiWorkspaceSessions",
+        "GROK_MULTIWORKSPACE_REQUIRES_IDLE_UPGRADE",
+        "The active Supervisor daemon cannot safely route this response to an explicit workspace; exit the visible Grok TUI normally, then retry"
+      );
+    }
     return this.call("respond", params);
   }
-  control(params) {
+  async control(params) {
+    if (params.cwd || this.workspaceCwd) {
+      await this.requireDaemonCapability(
+        "multiWorkspaceSessions",
+        "GROK_MULTIWORKSPACE_REQUIRES_IDLE_UPGRADE",
+        "The active Supervisor daemon cannot safely route this control request to an explicit workspace; exit the visible Grok TUI normally, then retry"
+      );
+    }
     return this.call("control", params);
   }
   ping() {
@@ -35257,10 +35383,38 @@ var SupervisorClient = class {
     return this.call("shutdown", { confirmation: "STOP_IDLE_SUPERVISOR_DAEMON" });
   }
   async detach() {
+    const scopes = [...this.workspaceLeaseTokens.entries()].map(([key, token]) => ({
+      key,
+      token,
+      cwd: this.workspacesByKey.get(key)?.cwd || (this.workspaceBinding?.key === key ? this.workspaceBinding.cwd : null)
+    }));
+    if (scopes.length === 0) {
+      scopes.push({
+        key: this.workspaceBinding?.key || null,
+        token: this.leaseToken,
+        cwd: this.workspaceBinding?.cwd || this.workspaceCwd || null
+      });
+    }
+    let releasedWriters = 0;
+    let lastResult = null;
     try {
-      return await this.requestOnce("client_disconnect", {}, 2e3);
+      for (const scope of scopes) {
+        const context = this.captureRequestContext("client_disconnect", {}, scope.cwd);
+        context.method = "client_disconnect";
+        context.knownKey = scope.key;
+        context.leaseToken = scope.token;
+        lastResult = await this.requestOnce("client_disconnect", {}, 2e3, context);
+        if (lastResult.releasedWriter) releasedWriters += 1;
+      }
+      return {
+        ...lastResult || { disconnected: true, releasedWriter: false },
+        releasedWriter: releasedWriters > 0,
+        releasedWriters
+      };
     } finally {
       this.leaseToken = null;
+      this.workspaceLeaseTokens.clear();
+      this.workspaceTokenSequences.clear();
     }
   }
 };
@@ -35308,14 +35462,14 @@ register("grok_session_inspect", {
     waitMs: external_exports.number().int().min(0).max(25e3).optional().default(0).describe("Bounded wait for a terminal state, permission, or clarification; interaction view only"),
     sequences: external_exports.array(external_exports.number().int().positive()).max(20).optional().describe("Exact durable event sequence IDs used only by the evidence view"),
     sessionId: external_exports.string().max(64).optional().describe("Exact session UUID whose bounded Grok-authored summary may be returned as an unverified agent claim"),
-    cwd: external_exports.string().max(2048).optional().describe("Absolute existing project directory used for saved-session discovery"),
+    cwd: external_exports.string().max(2048).optional().describe("Absolute existing project directory; selects this workspace's connection and saved sessions"),
     sessionQuery: external_exports.string().max(200).optional().describe("Optional title or summary phrase used to filter saved sessions"),
     sessionLimit: external_exports.number().int().min(1).max(20).optional()
   },
   annotations: { readOnlyHint: true, destructiveHint: false }
 }, (args) => supervisor.inspect(args));
 register("grok_session_open", {
-  description: "Transactionally create or resume one daemon-owned Grok session. The default and normal presentation is a visible Windows Terminal PowerShell TUI. If Grok requires workspace trust, returns needs_workspace_trust while preserving and reusing the same visible terminal until the user confirms there; repeated open never launches a duplicate. Headless ACP-only presentation is allowed only after an explicit user request and the separate OPEN_GROK_SESSION_HEADLESS confirmation. Attempts rollback of owned processes on failure and reports whether cleanup completed.",
+  description: "Transactionally create or resume one daemon-owned Grok session in the exact workspace. Different workspaces have independent connections and writer leases. The default and normal presentation is a visible Windows Terminal PowerShell TUI. If Grok requires workspace trust, returns needs_workspace_trust while preserving and reusing the same visible terminal until the user confirms there; repeated open never launches a duplicate. Headless ACP-only presentation is allowed only after an explicit user request and the separate OPEN_GROK_SESSION_HEADLESS confirmation. Attempts rollback of owned processes on failure and reports whether cleanup completed.",
   inputSchema: {
     mode: external_exports.enum(["new", "resume"]),
     sessionId: external_exports.string().max(64).optional().describe("Exact Grok session UUID; required for resume and omitted for new"),
@@ -35329,6 +35483,7 @@ register("grok_session_prompt", {
   description: "Start one asynchronous prompt turn in the exact attached Grok session. The prompt may cause Grok actions; call only after user authorization and pass SEND_TO_GROK.",
   inputSchema: {
     sessionId: external_exports.string().describe("Exact attached Grok session UUID"),
+    cwd: external_exports.string().max(2048).optional().describe("Exact bound workspace; when provided it must match the session"),
     prompt: external_exports.string().min(1).max(1e5).describe("Full supervision instruction to send"),
     confirmation: external_exports.literal("SEND_TO_GROK")
   },
@@ -35339,6 +35494,8 @@ register("grok_session_respond", {
   inputSchema: {
     permissionId: external_exports.string().uuid().optional(),
     elicitationId: external_exports.string().uuid().optional(),
+    sessionId: external_exports.string().uuid().optional().describe("Exact session that owns this permission or input request"),
+    cwd: external_exports.string().max(2048).optional().describe("Exact workspace that owns this permission or input request"),
     action: external_exports.enum(["select", "cancel", "accept", "decline"]),
     optionId: external_exports.string().optional(),
     content: external_exports.record(external_exports.string(), external_exports.union([
@@ -35355,6 +35512,7 @@ register("grok_session_control", {
   description: "Cancel the active prompt, disconnect ACP, stop the Supervisor-owned Leader, or durably acknowledge an exact unknown-after-restart record after all related process boundaries are inactive. Acknowledgment preserves the outcome as unknown and does not cancel, resume, prompt, kill, or claim completion.",
   inputSchema: {
     action: external_exports.enum(["cancel_prompt", "disconnect", "stop_leader", "acknowledge_unknown"]),
+    cwd: external_exports.string().max(2048).optional().describe("Exact workspace to control; other workspaces remain connected"),
     sessionId: external_exports.string().optional(),
     runId: external_exports.string().optional(),
     reason: external_exports.string().trim().min(1).max(1e3).optional(),

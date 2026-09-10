@@ -196,16 +196,28 @@ test("supervision prompt and fallback question keep clarification narrowly scope
   const claudePrompt = buildSupervisedPrompt("Inspect the failing build.", "claude_code");
   const piPrompt = buildSupervisedPrompt("Inspect the failing build.", "pi");
   const neutralPrompt = buildSupervisedPrompt("Inspect the failing build.");
-  assert.match(codexPrompt, /delegated by Codex/);
+  assert.match(codexPrompt, /^\[Codex supervision contract\]\n/);
+  assert.match(codexPrompt, /Ask Codex via ACP form elicitation/);
+  assert.match(codexPrompt, /\n\[\/Codex supervision contract\]\n/);
   assert.match(claudePrompt, /\[Claude Code supervision contract\]/);
-  assert.match(claudePrompt, /delegated by Claude Code/);
-  assert.doesNotMatch(claudePrompt, /delegated by Codex/);
+  assert.match(claudePrompt, /Ask Claude Code via ACP form elicitation/);
+  assert.doesNotMatch(claudePrompt, /Ask Codex via/);
   assert.match(piPrompt, /\[Pi supervision contract\]/);
-  assert.match(piPrompt, /delegated by Pi/);
-  assert.doesNotMatch(piPrompt, /delegated by Codex/);
-  assert.match(neutralPrompt, /delegated by the supervising host agent/);
-  assert.match(codexPrompt, /specific fact or coordination decision/);
-  assert.match(codexPrompt, /Inspect the failing build/);
+  assert.match(piPrompt, /Ask Pi via ACP form elicitation/);
+  assert.doesNotMatch(piPrompt, /Ask Codex via/);
+  assert.match(neutralPrompt, /\[Host agent supervision contract\]/);
+  assert.match(neutralPrompt, /Ask the supervising host agent via ACP form elicitation/);
+  assert.match(codexPrompt, /facts\/decisions tools cannot supply; host routes user-authority questions/);
+  assert.match(codexPrompt, /Never use permissions for chat/);
+  assert.match(codexPrompt, /<supervisor_question>\.\.\.<\/supervisor_question>: question, evidenceGap, attempted/);
+  assert.doesNotMatch(codexPrompt, /remains attached/);
+  assert.doesNotMatch(codexPrompt, /delegated by/);
+  assert.match(codexPrompt, /\n\[Task\]\nInspect the failing build\.\n\[\/Task\]$/);
+  for (const hostKind of ["codex", "claude_code", "pi", undefined]) {
+    const wrapper = buildSupervisedPrompt("", hostKind);
+    assert.ok(wrapper.length <= 460, `${hostKind ?? "neutral"} empty-task wrapper is ${wrapper.length} chars`);
+    assert.match(wrapper, /\[Task\]\n\n\[\/Task\]$/);
+  }
   assert.equal(agentMessageText({
     sessionUpdate: "agent_message_chunk",
     content: { type: "text", text: "result" },

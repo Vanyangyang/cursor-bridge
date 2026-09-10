@@ -52,7 +52,7 @@ register("grok_session_inspect", {
     waitMs: z.number().int().min(0).max(25000).optional().default(0).describe("Bounded wait for a terminal state, permission, or clarification; interaction view only"),
     sequences: z.array(z.number().int().positive()).max(20).optional().describe("Exact durable event sequence IDs used only by the evidence view"),
     sessionId: z.string().max(64).optional().describe("Exact session UUID whose bounded Grok-authored summary may be returned as an unverified agent claim"),
-    cwd: z.string().max(2048).optional().describe("Absolute existing project directory used for saved-session discovery"),
+    cwd: z.string().max(2048).optional().describe("Absolute existing project directory; selects this workspace's connection and saved sessions"),
     sessionQuery: z.string().max(200).optional().describe("Optional title or summary phrase used to filter saved sessions"),
     sessionLimit: z.number().int().min(1).max(20).optional(),
   },
@@ -60,7 +60,7 @@ register("grok_session_inspect", {
 }, (args) => supervisor.inspect(args));
 
 register("grok_session_open", {
-  description: "Transactionally create or resume one daemon-owned Grok session. The default and normal presentation is a visible Windows Terminal PowerShell TUI. If Grok requires workspace trust, returns needs_workspace_trust while preserving and reusing the same visible terminal until the user confirms there; repeated open never launches a duplicate. Headless ACP-only presentation is allowed only after an explicit user request and the separate OPEN_GROK_SESSION_HEADLESS confirmation. Attempts rollback of owned processes on failure and reports whether cleanup completed.",
+  description: "Transactionally create or resume one daemon-owned Grok session in the exact workspace. Different workspaces have independent connections and writer leases. The default and normal presentation is a visible Windows Terminal PowerShell TUI. If Grok requires workspace trust, returns needs_workspace_trust while preserving and reusing the same visible terminal until the user confirms there; repeated open never launches a duplicate. Headless ACP-only presentation is allowed only after an explicit user request and the separate OPEN_GROK_SESSION_HEADLESS confirmation. Attempts rollback of owned processes on failure and reports whether cleanup completed.",
   inputSchema: {
     mode: z.enum(["new", "resume"]),
     sessionId: z.string().max(64).optional().describe("Exact Grok session UUID; required for resume and omitted for new"),
@@ -75,6 +75,7 @@ register("grok_session_prompt", {
   description: "Start one asynchronous prompt turn in the exact attached Grok session. The prompt may cause Grok actions; call only after user authorization and pass SEND_TO_GROK.",
   inputSchema: {
     sessionId: z.string().describe("Exact attached Grok session UUID"),
+    cwd: z.string().max(2048).optional().describe("Exact bound workspace; when provided it must match the session"),
     prompt: z.string().min(1).max(100000).describe("Full supervision instruction to send"),
     confirmation: z.literal("SEND_TO_GROK"),
   },
@@ -86,6 +87,8 @@ register("grok_session_respond", {
   inputSchema: {
     permissionId: z.string().uuid().optional(),
     elicitationId: z.string().uuid().optional(),
+    sessionId: z.string().uuid().optional().describe("Exact session that owns this permission or input request"),
+    cwd: z.string().max(2048).optional().describe("Exact workspace that owns this permission or input request"),
     action: z.enum(["select", "cancel", "accept", "decline"]),
     optionId: z.string().optional(),
     content: z.record(z.string(), z.union([
@@ -103,6 +106,7 @@ register("grok_session_control", {
   description: "Cancel the active prompt, disconnect ACP, stop the Supervisor-owned Leader, or durably acknowledge an exact unknown-after-restart record after all related process boundaries are inactive. Acknowledgment preserves the outcome as unknown and does not cancel, resume, prompt, kill, or claim completion.",
   inputSchema: {
     action: z.enum(["cancel_prompt", "disconnect", "stop_leader", "acknowledge_unknown"]),
+    cwd: z.string().max(2048).optional().describe("Exact workspace to control; other workspaces remain connected"),
     sessionId: z.string().optional(),
     runId: z.string().optional(),
     reason: z.string().trim().min(1).max(1000).optional(),

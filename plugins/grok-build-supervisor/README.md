@@ -126,12 +126,14 @@ Grok Build + the Windows Terminal window
 The Supervisor handles the connection details. Users do not manage the underlying Leader, ACP connection, process IDs, or event cursor.
 
 - Closing one Codex, Claude Code, or Pi task, or updating the plugin, does not immediately disconnect the background Supervisor.
-- More than one host can view the same Grok session, but only one can send commands at a time. This prevents two agents from writing over each other.
+- Different projects use independent Grok connections, terminals, and execution records. A task in project B does not take over project A's connection; permissions, cancellation, and results stay with the selected project.
+- More than one host can view the same Grok session, but each workspace has only one writer at a time. This prevents two agents from writing over each other while allowing different workspaces to run concurrently. Workspace paths are resolved before assigning ownership, so aliases of the same directory share one writer lock.
 - Status checks return compact stages such as locating, modifying, and verifying, with bounded file and tool counts. Silent Supervisor heartbeats do not pretend that Grok made progress, and raw tool logs or the answer accumulated so far are not repeated.
 - Short final answers are returned once. A longer report is saved as a local file, and the plugin returns its location, size, checksum, truncation status, and a short summary. [context-mode (recommended)](https://github.com/mksglu/context-mode) can process that file when installed, but the Supervisor does not require it.
 - Grok is told whether the sender is Codex, Claude Code, Pi, or another host, instead of always being told that Codex sent the task.
 - The scripts needed by an already-running session are copied to persistent storage, so refreshing the plugin cache cannot remove them mid-session.
 - A newer plugin waits until an older busy Supervisor is idle before replacing it. Existing work stays connected during the transition.
+- Upgrading from a Supervisor without workspace routing requires that older daemon to become idle first. The new plugin reports this boundary instead of switching another project's connection. Previously recorded sessions remain in their original state directory; the proxy only needs to be initialized once for all projects.
 - Before reusing or stopping a process, the plugin checks the session, project, process identity, Grok's active-session record, and its own ownership record. A matching process number alone is not enough.
 - A cancellation request is not treated as proof that an interrupted run ended. If a restart leaves a run unknown after all related ACP, Leader, TUI, and registry processes are gone, `acknowledge_unknown` requires the exact session ID, run ID, a bounded reason, and the existing control confirmation. It records a durable acknowledgment and leaves the outcome `unknown`; it does not cancel, resume, send work, stop a process, or claim completion.
 

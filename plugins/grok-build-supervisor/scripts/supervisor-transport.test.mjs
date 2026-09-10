@@ -101,6 +101,12 @@ class FakeSupervisor {
   }
 }
 
+function isolatedDaemonRoot(t) {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-busy-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+
 function noSpawn() {
   throw new Error("test client unexpectedly tried to spawn a daemon");
 }
@@ -274,12 +280,13 @@ test("unknown acknowledgment acquires the existing writer lease without an attac
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = daemonPaths(root);
   const fake = new FakeSupervisor();
+  const runId = "01900000-0000-7000-8000-000000000020";
+  fake.recovery = { interruptedRun: { sessionId: SESSION_ID, runId } };
   const daemon = new SupervisorDaemon({ paths, supervisor: fake, runtimeVersion: "test" });
   await daemon.start();
   t.after(() => daemon.stop());
   const first = new SupervisorClient({ paths, clientId: randomUUID(), clientVersion: "test", spawnProcess: noSpawn });
   const second = new SupervisorClient({ paths, clientId: randomUUID(), clientVersion: "test", spawnProcess: noSpawn });
-  const runId = "01900000-0000-7000-8000-000000000020";
 
   const acknowledged = await first.control({
     action: "acknowledge_unknown",
@@ -337,6 +344,30 @@ test("new frontends fail safely against a legacy daemon that lacks host and TUI 
     prompt: "do not mislabel this sender",
     confirmation: "SEND_TO_GROK",
   }), (error) => error.code === "GROK_HOST_IDENTITY_UPGRADE_REQUIRED");
+});
+
+test("an explicit workspace open is not sent to a legacy sessionOpenV2 daemon without workspace routing", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "grok-supervisor-legacy-workspace-routing-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = daemonPaths(root);
+  const fake = new FakeSupervisor();
+  const daemon = new SupervisorDaemon({
+    paths,
+    supervisor: fake,
+    runtimeVersion: "legacy",
+    capabilities: { sessionOpenV2: true },
+  });
+  await daemon.start();
+  t.after(() => daemon.stop());
+  const client = new SupervisorClient({ paths, clientVersion: "legacy", spawnProcess: noSpawn });
+
+  await assert.rejects(() => client.openSession({
+    mode: "new",
+    cwd: process.cwd(),
+    presentation: "none",
+    confirmation: "OPEN_GROK_SESSION_HEADLESS",
+  }), (error) => error.code === "GROK_MULTIWORKSPACE_REQUIRES_IDLE_UPGRADE");
+  assert.equal(fake.calls.some(([kind]) => kind === "open"), false);
 });
 
 test("two MCP clients share one Supervisor while a fencing lease keeps one writer", async (t) => {
@@ -458,7 +489,7 @@ test("two MCP clients share one Supervisor while a fencing lease keeps one write
   assert.equal(fake.calls.filter(([kind]) => kind === "open").length, 1);
 });
 
-test("daemon busy state ignores a reused PID without registry and Leader ownership matches", async () => {
+test("daemon busy state ignores a reused PID without registry and Leader ownership matches", async (t) => {
   const fake = new FakeSupervisor();
   fake.status = async () => ({
     acpConnected: false,
@@ -474,13 +505,13 @@ test("daemon busy state ignores a reused PID without registry and Leader ownersh
       leaderOwnershipMatch: false,
     }],
   });
-  const daemon = new SupervisorDaemon({ supervisor: fake, runtimeVersion: "test" });
+  const daemon = new SupervisorDaemon({ stateRoot: isolatedDaemonRoot(t), supervisor: fake, runtimeVersion: "test" });
   const state = await daemon.daemonBusyState();
   assert.equal(state.busy, false);
   assert.equal(state.liveTuiCount, 0);
 });
 
-test("daemon busy state blocks shutdown for a fully verified live TUI", async () => {
+test("daemon busy state blocks shutdown for a fully verified live TUI", async (t) => {
   const fake = new FakeSupervisor();
   fake.status = async () => ({
     acpConnected: false,
@@ -496,13 +527,13 @@ test("daemon busy state blocks shutdown for a fully verified live TUI", async ()
       leaderOwnershipMatch: true,
     }],
   });
-  const daemon = new SupervisorDaemon({ supervisor: fake, runtimeVersion: "test" });
+  const daemon = new SupervisorDaemon({ stateRoot: isolatedDaemonRoot(t), supervisor: fake, runtimeVersion: "test" });
   const state = await daemon.daemonBusyState();
   assert.equal(state.busy, true);
   assert.equal(state.liveTuiCount, 1);
 });
 
-test("daemon busy state uses the full verified-live count when public TUI details are capped", async () => {
+test("daemon busy state uses the full verified-live count when public TUI details are capped", async (t) => {
   const fake = new FakeSupervisor();
   fake.status = async () => ({
     acpConnected: false,
@@ -515,13 +546,13 @@ test("daemon busy state uses the full verified-live count when public TUI detail
     recordedTuiCounts: { total: 21, verifiedLive: 1, repairableOrphaned: 0, displayed: 20 },
     recordedTuis: [],
   });
-  const daemon = new SupervisorDaemon({ supervisor: fake, runtimeVersion: "test" });
+  const daemon = new SupervisorDaemon({ stateRoot: isolatedDaemonRoot(t), supervisor: fake, runtimeVersion: "test" });
   const state = await daemon.daemonBusyState();
   assert.equal(state.busy, true);
   assert.equal(state.liveTuiCount, 1);
 });
 
-test("daemon busy state preserves a verified trust-pending TUI before registry activation", async () => {
+test("daemon busy state preserves a verified trust-pending TUI before registry activation", async (t) => {
   const fake = new FakeSupervisor();
   fake.status = async () => ({
     acpConnected: false,
@@ -539,7 +570,7 @@ test("daemon busy state preserves a verified trust-pending TUI before registry a
       leaderOwnershipMatch: true,
     }],
   });
-  const daemon = new SupervisorDaemon({ supervisor: fake, runtimeVersion: "test" });
+  const daemon = new SupervisorDaemon({ stateRoot: isolatedDaemonRoot(t), supervisor: fake, runtimeVersion: "test" });
   const state = await daemon.daemonBusyState();
   assert.equal(state.busy, true);
   assert.equal(state.liveTuiCount, 1);
