@@ -96,6 +96,57 @@ function loadPickerFixture(name) {
   return JSON.parse(readFileSync(join(directory, 'fixtures', name), 'utf8'));
 }
 
+test('Cursor 3.20.17 Auto menu exposes its Model control and closes through the production reader', async () => {
+  // Minimal DOM fixture from the live selected-auto-menu; unrelated and hidden
+  // menu popups must not make a closed picker appear open.
+  let open = false;
+  const attributes = { 'data-testid': 'selected-auto-menu', 'data-component': 'menu-popup' };
+  const row = {
+    offsetParent: {}, innerText: 'Model\nAuto',
+    getAttribute: key => key === 'aria-haspopup' ? 'menu' : null,
+    querySelector: () => null, closest: () => null,
+    getBoundingClientRect: () => ({ x: 20, y: 40, width: 100, height: 24 }),
+  };
+  const menu = {
+    get offsetParent() { return open ? {} : null; },
+    getClientRects: () => open ? [{}] : [],
+    getAttribute: key => attributes[key] ?? null,
+    querySelectorAll: () => [row],
+  };
+  const document = {
+    querySelectorAll: selectors => selectors.split(',').some(selector => {
+      if (!selector.startsWith('[')) return false;
+      const clauses = [...selector.matchAll(/\[([\w-]+)(?:(\*?=)"([^"]*)")?\]/g)];
+      return clauses.length > 0 && clauses.every(([, key, operator, value]) =>
+        operator === '=' ? attributes[key] === value
+          : operator === '*=' ? String(attributes[key] || '').includes(value)
+            : key in attributes);
+    }) ? [menu] : [],
+  };
+  const b = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+  b._readModelPickerTrigger = async () => ({ found: true, text: 'Auto', x: 10, y: 20 });
+  b._clickModelPickerPoint = async () => { open = true; };
+  const client = { send: async (method, params) => {
+    if (method === 'Runtime.evaluate') return { result: { value:
+      Function('document', 'getComputedStyle', `return ${params.expression}`)(document, () => ({ pointerEvents: 'auto' })),
+    } };
+    assert.equal(method, 'Input.dispatchKeyEvent');
+    assert.equal(params.key, 'Escape');
+    if (params.type === 'keyUp') open = false;
+    return {};
+  } };
+  const snapshot = await b._openModelPicker(client);
+  assert.equal(snapshot.open, true);
+  assert.equal(snapshot.rows.length, 1);
+  assert.equal(snapshot.rows[0].kind, 'model_control');
+  assert.equal(snapshot.rows[0].text, 'Model Auto');
+  await b._closeModelPicker(client);
+  assert.equal((await b._readModelPickerRows(client)).open, false);
+  open = true;
+  attributes['data-testid'] = 'unrelated-menu';
+  assert.equal((await b._readModelPickerRows(client)).open, false);
+});
+
 test('model-list Auto and Add Models are not effort parameters', () => {
   const modelList = loadPickerFixture('cursor-model-picker-model-list.json');
   const effort = loadPickerFixture('cursor-model-picker-effort-submenu.json');

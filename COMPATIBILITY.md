@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.19.13** | **6.0.1** | `main` | Current maintained version. 274 full automated tests passed. A real fresh task passed after the fixes with an `actualEffort` hit. The historical `ETIMEDOUT` root cause remains `UNKNOWN`; this does not establish a cure. Native 6.0.1 pickup remains pending. |
+| **3.20.17** | **6.0.2** | `main` | Current maintained version. Recognizes the new Auto menu and verifies switching to a pinned model/effort. The built 6.0.2 standalone MCP passed exact workspace binding, CCE, read-only FIFO execution, Fable 5.1/high selection and repeatable result collection against real Cursor. Native 6.0.1 init→CCE→do passed; native 6.0.2 pickup remains pending. See [verification scope](./docs/cursor-3.20.17-verification.md) for inherited paths and unresolved observations. |
+| 3.19.19 | 6.0.1 | `cursor-bridge--v6.0.1` | Archived. Standalone MCP compatibility was verified locally after this tag; that compatibility-only update was not separately released. |
 | 3.19.13 | 6.0.0 | `cursor-bridge--v6.0.0` | Archived. Compact default status and explicit result collection. |
 | 3.19.13 | 5.10.1 | `cursor-bridge--v5.10.1` | Archived. Workspace registration, FIFO recovery, and request provenance. |
 | 3.19.13 | 5.10.0 | `cursor-bridge--v5.10.0` | Archived. Request provenance and exact workspace identity. |

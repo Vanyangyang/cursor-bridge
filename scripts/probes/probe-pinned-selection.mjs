@@ -39,6 +39,10 @@ try {
     const root = await bridge._openModelPicker(client);
     await bridge._openModelPickerControl(client, root, 'model_control');
   }
+  if (process.argv.includes('--effort-submenu-open')) {
+    const root = await bridge._openModelPicker(client);
+    await bridge._openModelPickerControl(client, root, 'effort_control');
+  }
   try { report.selection = await bridge._applyModelPreference(client, { model: 'Claude Fable 5.1', effort: 'high' }, job); }
   catch (error) { report.error = error.message; report.diagnostic = error.modelSelection; }
   report.after = (await bridge._readModelPickerTrigger(client)).text;

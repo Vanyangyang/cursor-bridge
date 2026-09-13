@@ -63,7 +63,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.1';
+const PLUGIN_VERSION = '6.0.2';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -623,7 +623,7 @@ function classifyModelPickerRowKind(text, hasItemName, menuTestId, submenuTestId
 const EXPR_MODEL_PICKER_ROWS = `(function(){
   ${MODEL_PICKER_VISIBLE_BODY}
   ${classifyModelPickerRowKind.toString()}
-  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
+  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid="selected-auto-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
   const rows=[];
   const seen=new Set();
   for(const menu of menus){

@@ -22901,7 +22901,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.0.1";
+var PLUGIN_VERSION = "6.0.2";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -23400,7 +23400,7 @@ function classifyModelPickerRowKind(text, hasItemName, menuTestId, submenuTestId
 var EXPR_MODEL_PICKER_ROWS = `(function(){
   ${MODEL_PICKER_VISIBLE_BODY}
   ${classifyModelPickerRowKind.toString()}
-  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
+  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid="selected-auto-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
   const rows=[];
   const seen=new Set();
   for(const menu of menus){

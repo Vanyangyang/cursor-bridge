@@ -6,6 +6,18 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.2] - 2026-09-13
+
+### Fixed
+
+- Recognize Cursor 3.20.17's `selected-auto-menu` so a composer currently using Auto can open its Model control, switch to the configured model/effort, verify selection, and close the picker before submitting. Persistent model preferences are unchanged.
+
+### Compatibility
+
+- The maintained baseline is Cursor **3.20.17**. The built 6.0.2 standalone MCP passed exact workspace binding, CCE, read-only FIFO execution, Fable 5.1/high verification, compact unread status and repeatable explicit result collection. Native 6.0.1 init→CCE→do also passed; native 6.0.2 pickup remains pending. See `docs/cursor-3.20.17-verification.md` for the evidence boundary and unresolved startup observation.
+- Pi package `pi-cursor-bridge` **0.2.2** embeds Cursor Bridge **6.0.2**.
+- Rechecked Cursor Bridge 6.0.1 on installed Cursor **3.19.19** (ProductVersion and FileVersion). No adapter source change was required. A standalone MCP bound this repository, completed CCE with verified `path:line` evidence, completed a read-only FIFO `cursor_do` with Claude Fable 5.1/high applied, and collected the result body. Closed-picker and already-open model-submenu effort selection still worked without sending. Native 6.0.1 status connection was observed; native complete init→CCE→do acceptance remains pending. The historical `ETIMEDOUT` root cause remains `UNKNOWN`.
+
 ## [6.0.1] - 2026-09-09
 
 ### Fixed
