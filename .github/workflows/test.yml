@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install
+      - run: npm test
+
+  macos-basic:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install
+      - name: Run macOS unit tests that do not require Cursor or Windows APIs
+        shell: bash
+        run: |
+          tests=(test/runtime.test.mjs test/cdp-client.test.mjs test/workspace-identity.test.mjs)
+          if [[ -f test/cdp-identity.test.mjs ]]; then
+            tests+=(test/cdp-identity.test.mjs)
+          fi
+          node --test "${tests[@]}"

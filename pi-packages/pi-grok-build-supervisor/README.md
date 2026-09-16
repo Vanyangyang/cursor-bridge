@@ -1,5 +1,7 @@
 # Grok Build Supervisor for Pi
 
+> **Windows only:** Grok Build Supervisor currently supports Windows only. macOS and Linux are not supported or covered by end-to-end acceptance.
+
 Let Pi plan, monitor, correct, and verify work while a persistent Grok Build session performs implementation, builds, and tests.
 
 ```powershell

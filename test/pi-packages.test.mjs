@@ -144,8 +144,13 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   assert.match(cursorBundle, /cursor_context_engine/);
   assert.match(cursorBundle, /cursor_model/);
   const cursorReadme = readFileSync(join(output, "pi-cursor-bridge", "README.md"), "utf8");
+  assert.match(cursor.description, /Windows only/i);
+  assert.match(cursorReadme, /Windows only/i);
   assert.match(cursorReadme, /Star on GitHub/);
   assert.match(cursorReadme, /https:\/\/github\.com\/Vanyangyang\/cursor-bridge/);
+  const grokReadme = readFileSync(join(output, "pi-grok-build-supervisor", "README.md"), "utf8");
+  assert.match(grok.description, /Windows only/i);
+  assert.match(grokReadme, /Windows only/i);
   const cursorExtension = readFileSync(join(output, "pi-cursor-bridge", "extensions", "index.ts"), "utf8");
   assert.match(cursorExtension, /cwd: hostCwd/);
   assert.match(cursorExtension, /CODEX_THREAD_ID: undefined/);
