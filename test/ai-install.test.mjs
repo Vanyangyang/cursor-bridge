@@ -65,7 +65,7 @@ test('bilingual AI install playbooks share the same completion standard', () => 
   const manifest = JSON.parse(readProjectFile('docs/ai-install.manifest.json'));
 
   assert.match(english, /^# Cursor Bridge AI Install/m);
-  assert.match(chinese, /^# Cursor Bridge AI 安装剧本/m);
+  assert.match(chinese, /^# Cursor Bridge AI 安装说明/m);
   assert.match(english, /## Completion standard/);
   assert.match(chinese, /## 完成标准/);
 
@@ -99,7 +99,7 @@ test('bilingual AI install playbooks share the same completion standard', () => 
   assert.match(english, /Do not rewrite, summarize, or flatten/);
   assert.match(chinese, /不要改写、摘要或打平/);
   assert.match(english, /Stop this playbook/);
-  assert.match(chinese, /停止本剧本/);
+  assert.match(chinese, /停止本说明/);
   assert.match(english, /`result` is `PASS` while `init` is not `ready`/);
   assert.match(chinese, /`result` 写成 `PASS`，但 `init` 不是 `ready`/);
 });

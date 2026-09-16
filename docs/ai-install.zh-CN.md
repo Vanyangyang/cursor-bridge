@@ -1,6 +1,6 @@
-# Cursor Bridge AI 安装剧本
+# Cursor Bridge AI 安装说明
 
-你正在把 Cursor Bridge 安装到**当前正在运行你的这个客户端**。先完整阅读本文和 [`ai-install.manifest.json`](./ai-install.manifest.json)，再按顺序执行。最后按[完成标准](#完成标准)逐项汇报。不要发明 marketplace 插件或额外安装器。只使用清单里的专用通用 npm 包。
+你正在把 Cursor Bridge 安装到**当前正在运行你的这个客户端**。先完整阅读本文和 [`ai-install.manifest.json`](./ai-install.manifest.json)，再按顺序执行。最后按[完成标准](#完成标准)逐项汇报。不要发明 marketplace 插件或额外安装器。只使用清单里指定的通用 npm 包。
 
 [English](./ai-install.md) · [README](../README.zh-CN.md)
 
@@ -9,7 +9,7 @@
 - Cursor Bridge **只支持 Windows**。当前机器不是 Windows 时，停止并判定安装失败。
 - `PATH` 上需要 Node.js 18+。
 - 必须已经安装并登录 Cursor。
-- 本剧本只给 **不是** Codex、Claude Code、Grok Build、Pi 的宿主使用。
+- 本说明只给 **不是** Codex、Claude Code、Grok Build、Pi 的宿主使用。
 - 只有用户明确要求时，才安装 Grok Build Supervisor。
 
 ## 1. 识别宿主
@@ -18,7 +18,7 @@
 
 | 宿主 | 动作 |
 |---|---|
-| Codex、Claude Code、Grok Build 或 Pi | **停止本剧本。** 使用仓库根 README 里的一等安装命令。不要另克隆一份旁路仓库，也不要改写插件文件。 |
+| Codex、Claude Code、Grok Build 或 Pi | **停止本说明。** 使用仓库根 README 里的一等安装命令。不要另克隆一份旁路仓库，也不要改写插件文件。 |
 | 无法确定 | 只问一次当前是哪个客户端。没有答复时，按通用 MCP 宿主继续。 |
 | 其他能跑 MCP 的客户端 | 继续。 |
 
