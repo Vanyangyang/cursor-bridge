@@ -28,7 +28,7 @@ jobs:
       - name: Run macOS unit tests that do not require Cursor or Windows APIs
         shell: bash
         run: |
-          tests=(test/cdp-client.test.mjs test/workspace-identity.test.mjs)
+          tests=(test/cdp-client.test.mjs test/workspace-identity.test.mjs test/generic-mcp-install.test.mjs)
           if [[ -f test/cdp-identity.test.mjs ]]; then
             tests+=(test/cdp-identity.test.mjs)
           fi

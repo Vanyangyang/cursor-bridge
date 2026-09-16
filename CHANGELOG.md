@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Documented a generic stdio MCP install for hosts without a marketplace plugin, and added `scripts/print-generic-mcp.mjs` to print an absolute `mcpServers` or VS Code `servers` snippet from the committed bundles.
+
 ## [6.0.3] - 2026-09-16
 
 ### Fixed

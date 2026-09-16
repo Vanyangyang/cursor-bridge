@@ -42,7 +42,17 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Start a new Codex task, restart Claude Code / run `/reload-plugins`, or restart Pi after installation or update to load the updated skills and prompts. Pi package 0.1.9 is versioned independently and embeds Grok Build Supervisor 0.4.3.
+#### Other MCP hosts
+
+```powershell
+git clone https://github.com/Vanyangyang/cursor-bridge.git
+cd cursor-bridge
+node .\scripts\print-generic-mcp.mjs --plugin grok
+```
+
+Paste the printed JSON into a client that can launch a local stdio MCP server. This path registers the Supervisor tools only; Codex, Claude Code, and Pi skills or slash commands are not installed. It is not a first-class host and is not live-tested.
+
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, restart Pi, or reload the MCP servers of a generic host after installation or update to load the updated skills and prompts. Pi package 0.1.9 is versioned independently and embeds Grok Build Supervisor 0.4.3.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 

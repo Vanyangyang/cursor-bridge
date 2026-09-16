@@ -20,7 +20,7 @@
 > [!WARNING]
 > **Windows only:** Cursor Bridge and Grok Build Supervisor currently support Windows only. macOS and Linux are not supported or covered by end-to-end acceptance.
 
-**Two independently installable MCP plugins for Codex, Claude Code, Grok Build, and Pi. Install only the bridge you need.**
+**Two independently installable MCP plugins for Codex, Claude Code, Grok Build, and Pi. Install only the bridge you need. Other MCP-capable clients can load the same stdio servers from a local checkout.**
 
 | Plugin | Use it for | Documentation |
 |---|---|---|
@@ -122,9 +122,40 @@ pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
 ```
 
+<a id="other-mcp-hosts"></a>
+
+#### Other MCP hosts
+
+Any client that can launch a local stdio MCP server can load the committed, dependency-free bundles. This is the generic install path for hosts without a Codex, Claude Code, Grok, or Pi plugin marketplace. It is not a first-class host and is not live-tested.
+
+```bash
+git clone https://github.com/Vanyangyang/cursor-bridge.git
+cd cursor-bridge
+node scripts/print-generic-mcp.mjs
+# Optional Supervisor:
+node scripts/print-generic-mcp.mjs --plugin grok
+# VS Code / Copilot uses a different top-level key:
+node scripts/print-generic-mcp.mjs --format vscode
+```
+
+Paste the printed JSON into that client's MCP settings. The common shape is:
+
+```json
+{
+  "mcpServers": {
+    "cursor-bridge": {
+      "command": "node",
+      "args": ["C:\\absolute\\path\\to\\cursor-bridge\\dist\\cursor-bridge.mjs"]
+    }
+  }
+}
+```
+
+`npm install` is not required unless you rebuild from source. Plugin skills, slash commands, marketplace updates, and host-specific hooks are not installed on this path. After adding the server, initialize the workspace in natural language as in step 3. Cursor Bridge remains Windows-only.
+
 ### 2. Restart or reload your client
 
-Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, or restart Pi. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
+Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or reload the MCP servers of a generic host. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
 
 ### 3. Initialize the plugin you installed
 
@@ -159,7 +190,7 @@ With Grok Build Supervisor enabled, send your normal implementation task; the cu
 
 See [Compatibility and update history](./COMPATIBILITY.md) and the [latest release](https://github.com/Vanyangyang/cursor-bridge/releases) for the current pairing, evidence boundary, and archived installation instructions. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
-Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
+Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. Other stdio MCP clients can use the [generic checkout](#other-mcp-hosts); they do not receive plugin skills or marketplace updates, and they are not part of the live-tested host set. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
 ## Use CCE and `cursor_do`
 
@@ -215,7 +246,14 @@ Pi:
 pi update npm:pi-cursor-bridge
 ```
 
-After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, or restart Pi. An already open task does not hot-load new MCP, Skill, or command code.
+Other MCP hosts:
+
+```bash
+cd C:\absolute\path\to\cursor-bridge
+git pull
+```
+
+After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or reload the MCP servers of a generic host. An already open task does not hot-load new MCP, Skill, or command code. Use `npm run build` only when you are running a local source checkout instead of the committed bundles.
 
 If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` once, then retry the Codex commands above.
 
@@ -336,6 +374,8 @@ Internal identity, state, recovery, scope, and update invariants are defined in 
 
 <details>
 <summary><strong>Run from source and advanced overrides</strong></summary>
+
+For a generic MCP host, prefer the committed bundles in [Other MCP hosts](#other-mcp-hosts). The commands below are for local development.
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git

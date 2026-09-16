@@ -20,7 +20,7 @@
 > [!WARNING]
 > **目前仅支持 Windows：** Cursor Bridge 和 Grok Build Supervisor 当前都只支持 Windows；macOS 和 Linux 尚不支持，也未通过端到端验收。
 
-**两个独立安装、互不影响的 Coding Agent MCP 插件，可用于 Codex、Claude Code、Grok Build 和 Pi；只安装自己需要的 Bridge 即可。**
+**两个独立安装、互不影响的 Coding Agent MCP 插件，可用于 Codex、Claude Code、Grok Build 和 Pi；只安装自己需要的 Bridge 即可。其他支持 MCP 的客户端也可以从本地仓库加载同一套 stdio 服务。**
 
 | 插件 | 用途 | 文档 |
 |---|---|---|
@@ -122,9 +122,40 @@ pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
 ```
 
+<a id="other-mcp-hosts"></a>
+
+#### 其他 MCP 宿主
+
+只要客户端能启动本地 stdio MCP 服务，就可以加载仓库里已经提交、无需再装依赖的 bundle。这是给没有 Codex、Claude Code、Grok 或 Pi 插件市场的宿主准备的通用安装路径。它不是一等宿主，也没有做过实机验收。
+
+```bash
+git clone https://github.com/Vanyangyang/cursor-bridge.git
+cd cursor-bridge
+node scripts/print-generic-mcp.mjs
+# 可选：安装 Supervisor
+node scripts/print-generic-mcp.mjs --plugin grok
+# VS Code / Copilot 使用不同的顶层字段：
+node scripts/print-generic-mcp.mjs --format vscode
+```
+
+把打印出的 JSON 粘贴进该客户端的 MCP 设置。常见形状是：
+
+```json
+{
+  "mcpServers": {
+    "cursor-bridge": {
+      "command": "node",
+      "args": ["C:\\absolute\\path\\to\\cursor-bridge\\dist\\cursor-bridge.mjs"]
+    }
+  }
+}
+```
+
+除非要从源码重新构建，否则不需要 `npm install`。这条路径不会安装插件 Skill、斜杠命令、marketplace 更新，以及宿主专用 hooks。添加服务后，按第 3 步用自然语言初始化工作区。Cursor Bridge 目前仍只支持 Windows。
+
 ### 2. 重启或重载当前客户端
 
-Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
+Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；通用 MCP 宿主则重载其 MCP 服务。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
 
 ### 3. 初始化已经安装的插件
 
@@ -159,7 +190,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 当前配对、证据边界和归档安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)和[最新发布](https://github.com/Vanyangyang/cursor-bridge/releases)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
-支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
+支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。其他 stdio MCP 客户端可以使用[通用检出安装](#other-mcp-hosts)；它们不会获得插件 Skill 或 marketplace 更新，也不属于已实机验收的宿主集合。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
 ## 用好 CCE 与 `cursor_do`
 
@@ -215,7 +246,14 @@ Pi：
 pi update npm:pi-cursor-bridge
 ```
 
-更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；或者重启 Pi。已经打开的任务不会热加载新 MCP、Skill 或命令。
+其他 MCP 宿主：
+
+```bash
+cd C:\absolute\path\to\cursor-bridge
+git pull
+```
+
+更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重载通用宿主的 MCP 服务。已经打开的任务不会热加载新 MCP、Skill 或命令。只有在运行本地源码而不是已提交 bundle 时，才需要 `npm run build`。
 
 如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main`，再重试上面的 Codex 命令。
 
@@ -336,6 +374,8 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 
 <details>
 <summary><strong>从源码运行与高级覆盖</strong></summary>
+
+如果只是给通用 MCP 宿主安装，优先使用[其他 MCP 宿主](#other-mcp-hosts)中的已提交 bundle。下面的命令用于本地开发。
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git

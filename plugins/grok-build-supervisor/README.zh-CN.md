@@ -42,7 +42,17 @@ Pi：
 pi install npm:pi-grok-build-supervisor
 ```
 
-安装或更新后，新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，或重启 Pi，以加载更新后的技能和提示模板。Pi 包独立计版本，0.1.9 内置 Grok Build Supervisor 0.4.3。
+#### 其他 MCP 宿主
+
+```powershell
+git clone https://github.com/Vanyangyang/cursor-bridge.git
+cd cursor-bridge
+node .\scripts\print-generic-mcp.mjs --plugin grok
+```
+
+把打印出的 JSON 粘贴进能启动本地 stdio MCP 服务的客户端。这条路径只注册 Supervisor 工具，不会安装 Codex、Claude Code 或 Pi 的 Skill 和斜杠命令。它不是一等宿主，也没有做过实机验收。
+
+安装或更新后，新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，重启 Pi，或重载通用宿主的 MCP 服务，以加载更新后的技能和提示模板。Pi 包独立计版本，0.1.9 内置 Grok Build Supervisor 0.4.3。
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 

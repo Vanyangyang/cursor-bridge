@@ -152,6 +152,11 @@ grok plugin enable cursor-bridge
 # Pi Packages remain independent
 pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
+
+# Generic stdio MCP hosts without a marketplace plugin
+git clone https://github.com/Vanyangyang/cursor-bridge.git
+node scripts/print-generic-mcp.mjs
+node scripts/print-generic-mcp.mjs --plugin grok
 ```
 
-Start a new Codex task, reload/restart Claude Code, reload Grok plugins, or restart Pi after installation. Skills, prompt templates, commands, and MCP registrations do not hot-load into an existing task.
+Start a new Codex task, reload/restart Claude Code, reload Grok plugins, restart Pi, or reload a generic host's MCP servers after installation. Skills, prompt templates, commands, and MCP registrations do not hot-load into an existing task.

@@ -17,7 +17,8 @@
     "test": "node --test test/*.test.mjs",
     "test:live-minimal": "node test/live-minimal-smoke.mjs",
     "test:live-session": "node test/live-session-continuity.mjs",
-    "star-history": "node scripts/update-star-history.mjs"
+    "star-history": "node scripts/update-star-history.mjs",
+    "print:mcp": "node scripts/print-generic-mcp.mjs"
   },
   "keywords": [
     "mcp",
