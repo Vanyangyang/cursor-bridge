@@ -2,7 +2,7 @@
 
 Use Cursor's project index and Agent search from Pi, with compact `path:line` evidence and optional bounded Cursor task execution.
 
-⭐ If Cursor Bridge helps you, please consider giving it a [Star on GitHub](https://github.com/Vanyangyang/cursor-bridge)—it helps others discover the project.
+⭐ If Cursor Bridge helps you, please consider giving it a Star on GitHub—it helps others discover the project.
 
 ```powershell
 pi install npm:pi-cursor-bridge
