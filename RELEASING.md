@@ -154,4 +154,6 @@ pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
 ```
 
-Start a new Codex task, reload/restart Claude Code, reload Grok plugins, or restart Pi after installation. Skills, prompt templates, commands, and MCP registrations do not hot-load into an existing task.
+Generic MCP hosts use `docs/ai-install.md` / `docs/ai-install.zh-CN.md`. Keep the playbook, `docs/ai-install.manifest.json`, and the committed skill/bundle paths in agreement.
+
+Start a new Codex task, reload/restart Claude Code, reload Grok plugins, restart Pi, or reload a generic host's MCP servers after installation. Skills, prompt templates, commands, and MCP registrations do not hot-load into an existing task.

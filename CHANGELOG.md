@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added an AI-read install playbook so a generic MCP host can copy one sentence to its current client, let that client install the committed MCP bundle and skills, and report against a fixed completion standard.
+
 ## [6.0.3] - 2026-09-16
 
 ### Fixed

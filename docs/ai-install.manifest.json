@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "windowsOnly": true,
+  "firstClassHosts": ["codex", "claude-code", "grok-build", "pi"],
+  "durableCheckout": {
+    "windows": "%LOCALAPPDATA%\\cursor-bridge\\checkout"
+  },
+  "products": {
+    "cursor-bridge": {
+      "required": true,
+      "mcp": {
+        "name": "cursor-bridge",
+        "command": "node",
+        "bundle": "dist/cursor-bridge.mjs"
+      },
+      "requiredTools": [
+        "cursor_init",
+        "cursor_context_engine",
+        "cursor_status",
+        "cursor_model"
+      ],
+      "optionalTools": [
+        "cursor_do",
+        "cursor_runtime",
+        "cursor_task_control",
+        "cursor_session_control"
+      ],
+      "skills": [
+        {
+          "name": "cce-routing",
+          "path": "skills/cce-routing"
+        },
+        {
+          "name": "cursor-delegate",
+          "path": "skills/cursor-delegate"
+        }
+      ],
+      "claudeCodeOnly": {
+        "hooks": [
+          "hooks/hooks.json",
+          "hooks/cce-routing.mjs"
+        ]
+      }
+    },
+    "grok-build-supervisor": {
+      "required": false,
+      "mcp": {
+        "name": "grok-build-supervisor",
+        "command": "node",
+        "bundle": "plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs"
+      },
+      "skills": [
+        {
+          "name": "grok-build-supervisor",
+          "path": "plugins/grok-build-supervisor/skills/grok-build-supervisor"
+        },
+        {
+          "name": "grok-executor-on",
+          "path": "plugins/grok-build-supervisor/skills/grok-executor-on"
+        },
+        {
+          "name": "grok-executor-off",
+          "path": "plugins/grok-build-supervisor/skills/grok-executor-off"
+        }
+      ],
+      "commands": [
+        {
+          "name": "grok_init",
+          "path": "plugins/grok-build-supervisor/commands/grok_init.md"
+        },
+        {
+          "name": "grok_execute",
+          "path": "plugins/grok-build-supervisor/commands/grok_execute.md"
+        }
+      ]
+    }
+  }
+}
