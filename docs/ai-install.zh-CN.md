@@ -33,18 +33,12 @@
 
 这条路径不要安装 `pi-cursor-bridge` 或 `pi-grok-build-supervisor`。不要安装 npm 上已被占用的无关包名 `cursor-bridge-mcp`。不要发布 `cursor-bridge-workspace`，也不要恢复 `cursor-mcp-bridge`。
 
-安装后需要有这些文件：
-
-- `node_modules/vanyangyang-cursor-bridge/dist/cursor-bridge.mjs`
-- `node_modules/vanyangyang-cursor-bridge/skills/cce-routing/SKILL.md`
-- `node_modules/vanyangyang-cursor-bridge/skills/cursor-delegate/SKILL.md`
-
 规则：
 
 1. 仅当用户正在开发 Cursor Bridge 本身时，才复用当前工作区（`source: repo-workspace`）。
 2. 否则把 [`ai-install.manifest.json`](./ai-install.manifest.json) 里钉死的包安装到 `%LOCALAPPDATA%\cursor-bridge\npm`。
 3. 不要把本仓库加进用户项目当 submodule。
-4. 使用清单里的精确版本。不要安装 `@latest`，也不要猜包名。
+4. 使用清单里的精确版本。不要安装 `@latest`，也不要猜包名。不要对私有根包使用 `npx`，也不要用 `npx` 启动这些专用包。
 
 ```powershell
 $prefix = "$env:LOCALAPPDATA\cursor-bridge\npm"
@@ -57,81 +51,44 @@ npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.0
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-build-supervisor@0.1.0
 ```
 
-记录 `source: npm:vanyangyang-cursor-bridge@0.1.0` 以及 bundle 的绝对路径：
+记录 `source: npm:vanyangyang-cursor-bridge@0.1.0`。
 
-`%LOCALAPPDATA%\cursor-bridge\npm\node_modules\vanyangyang-cursor-bridge\dist\cursor-bridge.mjs`
+如果 `npm install` 返回 `E404` 或其他仓库错误，说明包可能还没发布。再 clone `%LOCALAPPDATA%\cursor-bridge\checkout` 作为后备，把 npm 错误记进 `blockers`，并设置 `source: git-checkout`。
 
-如果 `npm install` 返回 `E404` 或其他仓库错误，说明包可能还没发布。再 clone `%LOCALAPPDATA%\cursor-bridge\checkout` 作为后备，把 npm 错误记进 `blockers`，并设置 `source: git-checkout`。不要对私有根包使用 `npx`。
+## 3. 产物位置
 
-## 3. 注册 MCP 服务
+npm 安装完成后，当前宿主自己决定 MCP 和 Skill 怎么登记。不要发明新的配置格式，也不要改写 Skill 文件。不要复制 `hooks/`。Claude Code 的 hooks 属于 marketplace 插件。不要把 probes、测试或 session contract 文档装进宿主。
 
-把一个 stdio 服务合并进当前宿主的 MCP 设置。不要删除无关服务。`command` 使用 `"node"`，bundle 必须是 npm prefix 或 git 后备里的绝对路径。
+Cursor Bridge 会出现在：
 
-npm 安装后的常见形状：
-
-```json
-{
-  "mcpServers": {
-    "cursor-bridge": {
-      "command": "node",
-      "args": ["C:\\Users\\<user>\\AppData\\Local\\cursor-bridge\\npm\\node_modules\\vanyangyang-cursor-bridge\\dist\\cursor-bridge.mjs"]
-    }
-  }
-}
-```
-
-如果该宿主使用 VS Code / Copilot 的 `servers` 而不是 `mcpServers`，写成：
-
-```json
-{
-  "servers": {
-    "cursor-bridge": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["C:\\Users\\<user>\\AppData\\Local\\cursor-bridge\\npm\\node_modules\\vanyangyang-cursor-bridge\\dist\\cursor-bridge.mjs"]
-    }
-  }
-}
-```
-
-从当前宿主自己的文档或已有配置里找出真实配置文件。不要发明新的配置格式。使用相对 bundle 路径视为安装失败。
-
-如果用户要求安装 Grok Build Supervisor，再增加一个名为 `grok-build-supervisor` 的服务，指向同一 npm prefix 下的 `node_modules/vanyangyang-grok-build-supervisor/dist/grok-build-supervisor.mjs`，或 git 后备里的 `plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs`。
-
-## 4. 安装 Skill
-
-把每个 Cursor Bridge Skill 目录**原样复制**。不要改写、摘要或打平 `SKILL.md`、`agents/`、`references/`。
-
-必需的 Skill 目录，来自 npm 包或 git 检出：
-
+- MCP：`%LOCALAPPDATA%\cursor-bridge\npm\node_modules\vanyangyang-cursor-bridge\dist\cursor-bridge.mjs`
+- Skill 根：`%LOCALAPPDATA%\cursor-bridge\npm\node_modules\vanyangyang-cursor-bridge\skills`
 - `skills/cce-routing`
 - `skills/cursor-delegate`
 
-只选一个 Skill 根目录：
+`source: git-checkout` 时，同样的相对路径在检出根下：`dist/cursor-bridge.mjs` 与 `skills/`。`source: repo-workspace` 时，用当前仓库里的这两处。
 
-1. 当前宿主文档写明的 Skill 目录。
-2. 宿主或项目里已经在用的 Skill 根：`.agents/skills`、`.cursor/skills`、`.claude/skills`、`.codex/skills`、`.gemini/skills`、`.opencode/skills`、`.windsurf/skills`、`.roo/skills`，或用户主目录下对应的用户级目录。
-3. 如果宿主会加载 `.agents/skills` 或 `~/.agents/skills`，则创建 `%USERPROFILE%\.agents\skills`。
-4. 如果没有任何 Skill 约定，记录 `skills_unsupported`，只安装 MCP。
+MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径视为安装失败。不要删除宿主里已有的无关服务。
 
-优先使用**用户级** Skill 根，避免把用户项目的 git 状态弄脏。只有宿主不加载用户级 Skill 时，才使用项目级目录。
+如果用户要求安装 Grok Build Supervisor，它会出现在同一 npm prefix 下：
 
-复制后必须存在：
+- MCP：`node_modules/vanyangyang-grok-build-supervisor/dist/grok-build-supervisor.mjs`
+- Skill 根：`node_modules/vanyangyang-grok-build-supervisor/skills`
+- 命令：`node_modules/vanyangyang-grok-build-supervisor/prompts`
 
-- `<skillsRoot>/cce-routing/SKILL.md`
-- `<skillsRoot>/cursor-delegate/SKILL.md`
-- `<skillsRoot>/cursor-delegate/references/delegation-contract.md`
+`source: git-checkout` 时对应 `plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs`、`plugins/grok-build-supervisor/skills/` 和 `plugins/grok-build-supervisor/commands/`。
 
-这条路径不要复制 `hooks/`。Claude Code 的 hooks 属于 marketplace 插件。不要把 probes、测试或 session contract 文档装进宿主。
+如果当前宿主没有任何 Skill 约定，记录 `skills_unsupported`，只登记 MCP。登记 Skill 时不要改写、摘要或打平 `SKILL.md`、`agents/`、`references/`。
 
-如果要安装 Grok Build Supervisor，用同样方式复制它的三个 Skill 目录。只有当前宿主已经会加载 command / prompt 目录时，才复制命令文件：npm 包装器用 `prompts/`，git 检出用 `plugins/grok-build-supervisor/commands/`。
+## 4. 重启当前客户端
 
-## 5. 重载、初始化并核验
+登记完成后，重启当前这个 agent / 客户端，让 MCP 和 Skill 生效。已经打开的任务不会热加载新注册。
 
-1. 重载或重启当前客户端的 MCP 与 Skill。已经打开的任务不会热加载新注册。
-2. 确认 [`ai-install.manifest.json`](./ai-install.manifest.json) 里 `requiredTools` 列出的工具可见。
-3. 对用户当前项目调用 `cursor_init`，参数必须是一个 Windows 绝对路径。
-4. 调用 `cursor_status`，记下已绑定的工作区。
+## 5. 初始化并核验
+
+1. 确认 [`ai-install.manifest.json`](./ai-install.manifest.json) 里 `requiredTools` 列出的工具可见。
+2. 对用户当前项目调用 `cursor_init`，参数必须是一个 Windows 绝对路径。
+3. 调用 `cursor_status`，记下已绑定的工作区。
 
 如果 `cursor_init` 返回 `close_cursor_and_retry`，请用户先保存工作、正常退出一次 Cursor，再重试。这是未完成安装，不是成功。
 
@@ -165,8 +122,8 @@ npm 安装后的常见形状：
 - `source` 是 `npm:vanyangyang-cursor-bridge@<清单版本>`，或已记录 npm 失败并使用 `git-checkout` / `repo-workspace`。
 - 该来源里存在 Cursor Bridge bundle。
 - MCP 配置使用 `node` 加上 `dist/cursor-bridge.mjs` 的绝对路径。
-- 重载后可以见到 `cursor_init`、`cursor_context_engine`、`cursor_status`、`cursor_model`。
-- Skill 已原样复制，或已经用原因汇报 `skills_unsupported`。
+- 重启当前客户端后可以见到 `cursor_init`、`cursor_context_engine`、`cursor_status`、`cursor_model`。
+- Skill 已按当前宿主自己的方式从上述目录登记，且未被改写；或已经用原因汇报 `skills_unsupported`。
 - `cursor_init` 对目标工作区返回 `ready`；若结果是 `close_cursor_and_retry`，`result` 必须是 `FAIL`。
 - 没有执行 npm publish、没有修改 ACL、没有批量结束 Node 或 PowerShell，也没有使用 Pi 包或发明额外产品名。
 
@@ -174,9 +131,9 @@ npm 安装后的常见形状：
 
 - 机器不是 Windows，却继续安装。
 - 一等宿主走了本通用路径，且用户没有明确要求绕过 marketplace。
-- MCP 使用了相对 bundle 路径，或对私有根包执行了 `npx`。
+- MCP 使用了相对 bundle 路径，或对私有根包执行了 `npx`，或用 `npx` 启动专用包。
 - 这条路径安装了 `pi-cursor-bridge`、`pi-grok-build-supervisor`，或无关的 `cursor-bridge-mcp`。
-- Skill 文件被改写，而不是复制。
+- Skill 文件被改写，而不是按宿主自己的方式登记上述目录。
 - 在非 Claude 宿主上安装了 Claude Code hooks。
 - 报告声称这个通用宿主已经过实机验收。
 - `result` 写成 `PASS`，但 `init` 不是 `ready`。

@@ -132,11 +132,11 @@ Give this sentence to the client you are already using:
 Read https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md completely. Install Cursor Bridge into this client. Follow every step. Report against the completion standard at the end. Use only the dedicated generic npm package named in the playbook. Do not invent a marketplace plugin, do not use a Pi package, and do not publish anything.
 ```
 
-That playbook tells the current AI to detect the host, keep Codex / Claude Code / Grok / Pi on their marketplace commands, and otherwise install `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm` (or clone a durable checkout if npm returns `E404`), register the committed MCP bundle, copy `cce-routing` and `cursor-delegate` intact, then initialize the workspace. It is not a first-class host and is not live-tested. Cursor Bridge remains Windows-only. Do not borrow `pi-cursor-bridge`, and do not install the unrelated npm name `cursor-bridge-mcp`.
+That playbook tells the current AI to detect the host, keep Codex / Claude Code / Grok / Pi on their marketplace commands, and otherwise install `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm` (or clone a durable checkout if npm returns `E404`). It then tells the AI where the MCP bundle and skills landed, so this host can register them itself, restart the current agent, and initialize the workspace. It is not a first-class host and is not live-tested. Cursor Bridge remains Windows-only. Do not borrow `pi-cursor-bridge`, and do not install the unrelated npm name `cursor-bridge-mcp`.
 
 ### 2. Restart or reload your client
 
-Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or reload the MCP servers of a generic host. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
+Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current generic-host agent. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
 
 ### 3. Initialize the plugin you installed
 
@@ -227,9 +227,9 @@ Pi:
 pi update npm:pi-cursor-bridge
 ```
 
-Other MCP hosts: ask the current client to re-read the [AI install playbook](./docs/ai-install.md) and update the durable npm prefix (or git-checkout fallback), then reload its MCP servers and skills.
+Other MCP hosts: ask the current client to re-read the [AI install playbook](./docs/ai-install.md) and update the durable npm prefix (or git-checkout fallback), then restart this agent.
 
-After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or reload the MCP servers of a generic host. An already open task does not hot-load new MCP, Skill, or command code.
+After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current generic-host agent. An already open task does not hot-load new MCP, Skill, or command code.
 
 If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` once, then retry the Codex commands above.
 

@@ -132,11 +132,11 @@ pi install npm:pi-grok-build-supervisor
 请完整阅读 https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.zh-CN.md ，按其中步骤把 Cursor Bridge 安装到当前客户端，并按文末完成标准逐项汇报。只使用剧本里的专用通用 npm 包。不要发明 marketplace 插件，不要借用 Pi 包，也不要发布任何包。
 ```
 
-这份剧本会让当前 AI 先识别宿主：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`（npm 返回 `E404` 时再 clone 一份可长期保留的检出），注册已提交的 MCP bundle，原样复制 `cce-routing` 和 `cursor-delegate`，再初始化工作区。它不是一等宿主，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。不要借用 `pi-cursor-bridge`，也不要安装 npm 上已被占用的无关包名 `cursor-bridge-mcp`。
+这份剧本会让当前 AI 先识别宿主：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`（npm 返回 `E404` 时再 clone 一份可长期保留的检出）。剧本只交代 MCP bundle 和 Skill 装完后的位置，由当前宿主自行登记，然后重启当前 agent，再初始化工作区。它不是一等宿主，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。不要借用 `pi-cursor-bridge`，也不要安装 npm 上已被占用的无关包名 `cursor-bridge-mcp`。
 
 ### 2. 重启或重载当前客户端
 
-Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；通用 MCP 宿主则重载其 MCP 服务。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
+Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；通用 MCP 宿主则重启当前 agent。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
 
 ### 3. 初始化已经安装的插件
 
@@ -227,9 +227,9 @@ Pi：
 pi update npm:pi-cursor-bridge
 ```
 
-其他 MCP 宿主：让当前客户端重新阅读 [AI 安装剧本](./docs/ai-install.zh-CN.md)，更新那份可长期保留的 npm prefix（或 git 检出后备），再重载 MCP 和 Skill。
+其他 MCP 宿主：让当前客户端重新阅读 [AI 安装剧本](./docs/ai-install.zh-CN.md)，更新那份可长期保留的 npm prefix（或 git 检出后备），然后重启当前 agent。
 
-更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重载通用宿主的 MCP 服务。已经打开的任务不会热加载新 MCP、Skill 或命令。
+更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重启当前通用宿主 agent。已经打开的任务不会热加载新 MCP、Skill 或命令。
 
 如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main`，再重试上面的 Codex 命令。
 

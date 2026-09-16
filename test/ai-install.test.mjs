@@ -83,6 +83,8 @@ test('bilingual AI install playbooks share the same completion standard', () => 
     assert.match(content, /close_cursor_and_retry/);
     assert.match(content, /do not restore `cursor-mcp-bridge`|不要恢复 `cursor-mcp-bridge`/i);
     assert.match(content, /E404/);
+    assert.match(content, /this host decides how to register|当前宿主自己决定/);
+    assert.match(content, /Restart this agent|重启当前客户端/);
     assert.doesNotMatch(content, /print-generic-mcp/);
     assert.match(content, /pi-cursor-bridge/);
     assert.match(content, /cursor-bridge-mcp/);
@@ -118,6 +120,9 @@ test('public READMEs send other hosts to the AI install playbook', () => {
   assert.match(chinese, /不要借用 Pi 包/);
   assert.match(english, /durable npm prefix/);
   assert.match(chinese, /npm prefix/);
+  assert.match(english, /register them itself/);
+  assert.match(chinese, /自行登记/);
+  assert.doesNotMatch(english + chinese, /copy `cce-routing`|原样复制 `cce-routing`/);
   assert.match(englishGrok, /docs\/ai-install\.md/);
   assert.match(chineseGrok, /docs\/ai-install\.zh-CN\.md/);
   assert.match(englishGrok, /vanyangyang-grok-build-supervisor/);
