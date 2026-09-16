@@ -143,7 +143,7 @@ test('bilingual quick starts separate installation, reload, initialization, and 
     assert.match(content, /#### Pi/);
   }
   assert.match(english, /#### Other MCP hosts/);
-  assert.match(chinese, /#### 其他 MCP 宿主/);
+  assert.match(chinese, /#### 其他支持 MCP 的客户端/);
   assert.match(english, /<a id="other-mcp-hosts"><\/a>/);
   assert.match(chinese, /<a id="other-mcp-hosts"><\/a>/);
   assert.match(english, /docs\/ai-install\.md/);
@@ -151,7 +151,7 @@ test('bilingual quick starts separate installation, reload, initialization, and 
   assert.match(english, /Report against the completion standard/);
   assert.match(chinese, /按文末完成标准逐项汇报/);
   const englishOther = english.match(/#### Other MCP hosts[\s\S]*?(?=### 2\.)/)?.[0] || '';
-  const chineseOther = chinese.match(/#### 其他 MCP 宿主[\s\S]*?(?=### 2\.)/)?.[0] || '';
+  const chineseOther = chinese.match(/#### 其他支持 MCP 的客户端[\s\S]*?(?=### 2\.)/)?.[0] || '';
   assert.match(englishOther, /vanyangyang-cursor-bridge/);
   assert.match(chineseOther, /vanyangyang-cursor-bridge/);
   assert.match(englishOther, /do not use a Pi package/);

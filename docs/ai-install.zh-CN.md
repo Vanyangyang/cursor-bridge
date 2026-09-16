@@ -9,20 +9,20 @@
 - Cursor Bridge **只支持 Windows**。当前机器不是 Windows 时，停止并判定安装失败。
 - `PATH` 上需要 Node.js 18+。
 - 必须已经安装并登录 Cursor。
-- 本说明只给 **不是** Codex、Claude Code、Grok Build、Pi 的宿主使用。
+- 本说明只给 **不是** Codex、Claude Code、Grok Build、Pi 的客户端使用。
 - 只有用户明确要求时，才安装 Grok Build Supervisor。
 
-## 1. 识别宿主
+## 1. 识别当前客户端
 
 根据用户说明、可用 CLI 和已知配置目录判断当前客户端。
 
-| 宿主 | 动作 |
+| 客户端 | 动作 |
 |---|---|
 | Codex、Claude Code、Grok Build 或 Pi | **停止本说明。** 使用仓库根 README 里的一等安装命令。不要另克隆一份旁路仓库，也不要改写插件文件。 |
-| 无法确定 | 只问一次当前是哪个客户端。没有答复时，按通用 MCP 宿主继续。 |
+| 无法确定 | 只问一次当前是哪个客户端。没有答复时，按其他支持 MCP 的客户端继续。 |
 | 其他能跑 MCP 的客户端 | 继续。 |
 
-通用安装不是一等宿主，也没有做过实机验收。
+通用安装不是官方优先支持的安装方式，也没有做过实机验收。
 
 ## 2. 安装专用 npm 包
 
@@ -57,7 +57,7 @@ npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-buil
 
 ## 3. 产物位置
 
-npm 安装完成后，当前宿主自己决定 MCP 和 Skill 怎么登记。不要发明新的配置格式，也不要改写 Skill 文件。不要复制 `hooks/`。Claude Code 的 hooks 属于 marketplace 插件。不要把 probes、测试或 session contract 文档装进宿主。
+npm 安装完成后，当前客户端自己决定 MCP 和 Skill 怎么登记。不要发明新的配置格式，也不要改写 Skill 文件。不要复制 `hooks/`。Claude Code 的 hooks 属于 marketplace 插件。不要把 probes、测试或 session contract 文档装进客户端。
 
 Cursor Bridge 会出现在：
 
@@ -68,7 +68,7 @@ Cursor Bridge 会出现在：
 
 `source: git-checkout` 时，同样的相对路径在检出根下：`dist/cursor-bridge.mjs` 与 `skills/`。`source: repo-workspace` 时，用当前仓库里的这两处。
 
-MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径视为安装失败。不要删除宿主里已有的无关服务。
+MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径视为安装失败。不要删除客户端里已有的无关服务。
 
 如果用户要求安装 Grok Build Supervisor，它会出现在同一 npm prefix 下：
 
@@ -78,7 +78,7 @@ MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径
 
 `source: git-checkout` 时对应 `plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs`、`plugins/grok-build-supervisor/skills/` 和 `plugins/grok-build-supervisor/commands/`。
 
-如果当前宿主没有任何 Skill 约定，记录 `skills_unsupported`，只登记 MCP。登记 Skill 时不要改写、摘要或打平 `SKILL.md`、`agents/`、`references/`。
+如果当前客户端没有任何 Skill 约定，记录 `skills_unsupported`，只登记 MCP。登记 Skill 时不要改写、摘要或打平 `SKILL.md`、`agents/`、`references/`。
 
 ## 4. 重启当前客户端
 
@@ -118,24 +118,24 @@ MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径
 ### 通用路径判定 PASS 的必要条件
 
 - 当前机器是 Windows。
-- 宿主不是一等 marketplace 宿主，或用户明确要求绕过它。
+- 当前客户端不是官方优先支持的 marketplace 客户端，或用户明确要求绕过它。
 - `source` 是 `npm:vanyangyang-cursor-bridge@<清单版本>`，或已记录 npm 失败并使用 `git-checkout` / `repo-workspace`。
 - 该来源里存在 Cursor Bridge bundle。
 - MCP 配置使用 `node` 加上 `dist/cursor-bridge.mjs` 的绝对路径。
 - 重启当前客户端后可以见到 `cursor_init`、`cursor_context_engine`、`cursor_status`、`cursor_model`。
-- Skill 已按当前宿主自己的方式从上述目录登记，且未被改写；或已经用原因汇报 `skills_unsupported`。
+- Skill 已按当前客户端自己的方式从上述目录登记，且未被改写；或已经用原因汇报 `skills_unsupported`。
 - `cursor_init` 对目标工作区返回 `ready`；若结果是 `close_cursor_and_retry`，`result` 必须是 `FAIL`。
 - 没有执行 npm publish、没有修改 ACL、没有批量结束 Node 或 PowerShell，也没有使用 Pi 包或发明额外产品名。
 
 ### 出现以下情况立即 FAIL
 
 - 机器不是 Windows，却继续安装。
-- 一等宿主走了本通用路径，且用户没有明确要求绕过 marketplace。
+- 官方优先支持的客户端走了本通用路径，且用户没有明确要求绕过 marketplace。
 - MCP 使用了相对 bundle 路径，或对私有根包执行了 `npx`，或用 `npx` 启动专用包。
 - 这条路径安装了 `pi-cursor-bridge`、`pi-grok-build-supervisor`，或无关的 `cursor-bridge-mcp`。
-- Skill 文件被改写，而不是按宿主自己的方式登记上述目录。
-- 在非 Claude 宿主上安装了 Claude Code hooks。
-- 报告声称这个通用宿主已经过实机验收。
+- Skill 文件被改写，而不是按客户端自己的方式登记上述目录。
+- 在非 Claude 客户端上安装了 Claude Code hooks。
+- 报告声称这个通用客户端已经过实机验收。
 - `result` 写成 `PASS`，但 `init` 不是 `ready`。
 
 一等 marketplace 安装应汇报 `path: first-class marketplace`，通用字段使用 `skipped-first-class`，然后按根 README 核验：新建任务或重载插件，并且工作区初始化成功。

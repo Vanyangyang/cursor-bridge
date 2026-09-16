@@ -124,7 +124,7 @@ pi install npm:pi-grok-build-supervisor
 
 <a id="other-mcp-hosts"></a>
 
-#### 其他 MCP 宿主
+#### 其他支持 MCP 的客户端
 
 把这句话交给你正在使用的客户端：
 
@@ -132,15 +132,15 @@ pi install npm:pi-grok-build-supervisor
 请完整阅读 https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.zh-CN.md ，按其中步骤把 Cursor Bridge 安装到当前客户端，并按文末完成标准逐项汇报。只使用这份说明里指定的通用 npm 包。不要发明 marketplace 插件，不要借用 Pi 包，也不要发布任何包。
 ```
 
-这份说明会让当前 AI 先识别宿主：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`（npm 返回 `E404` 时再 clone 一份可长期保留的检出）。说明只交代 MCP bundle 和 Skill 装完后的位置，由当前宿主自行登记，然后重启当前 agent，再初始化工作区。它不是一等宿主，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。不要借用 `pi-cursor-bridge`，也不要安装 npm 上已被占用的无关包名 `cursor-bridge-mcp`。
+这份说明会让当前 AI 先识别正在用的客户端：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`（这份可长期保留的 npm prefix；npm 返回 `E404` 时再 clone 一份 git 备份）。说明只交代 MCP bundle 和 Skill 装完后的位置，由当前客户端自行登记，然后重启当前客户端，再初始化工作区。这不是官方优先支持的安装方式，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。不要借用 `pi-cursor-bridge`，也不要安装 npm 上已被占用的无关包名 `cursor-bridge-mcp`。
 
 ### 2. 重启或重载当前客户端
 
-Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；通用 MCP 宿主则重启当前 agent。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
+Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；其他支持 MCP 的客户端则重启当前对话。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
 
 ### 3. 初始化已经安装的插件
 
-如果安装了 Cursor Bridge，Pi 会自动绑定启动时所在的目录；其他宿主可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
+如果安装了 Cursor Bridge，Pi 会自动绑定启动时所在的目录；其他客户端可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
 
 ```text
 初始化 CCE 工作区为 C:\absolute\path\to\project
@@ -171,7 +171,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 当前配对、证据边界和归档安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)和[最新发布](https://github.com/Vanyangyang/cursor-bridge/releases)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
-支持的宿主：**Codex**、**Claude Code**、**Grok Build**、**Pi**。其他 MCP 客户端可以使用 [AI 安装说明](./docs/ai-install.zh-CN.md)；它们不会获得 marketplace 更新，也不属于已实机验收的宿主集合。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
+支持的客户端：**Codex**、**Claude Code**、**Grok Build**、**Pi**。其他支持 MCP 的客户端可以使用 [AI 安装说明](./docs/ai-install.zh-CN.md)；它们不会获得 marketplace 更新，也不属于已实机验收的客户端集合。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
 ## 用好 CCE 与 `cursor_do`
 
@@ -227,9 +227,9 @@ Pi：
 pi update npm:pi-cursor-bridge
 ```
 
-其他 MCP 宿主：让当前客户端重新阅读 [AI 安装说明](./docs/ai-install.zh-CN.md)，更新那份可长期保留的 npm prefix（或 git 检出后备），然后重启当前 agent。
+其他支持 MCP 的客户端：让当前 AI 重新阅读 [AI 安装说明](./docs/ai-install.zh-CN.md)，更新已安装的 npm 包，然后重启当前客户端。
 
-更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重启当前通用宿主 agent。已经打开的任务不会热加载新 MCP、Skill 或命令。
+更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重启当前客户端。已经打开的任务不会热加载新 MCP、Skill 或命令。
 
 如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main`，再重试上面的 Codex 命令。
 
@@ -351,7 +351,7 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 <details>
 <summary><strong>从源码运行与高级覆盖</strong></summary>
 
-如果只是给通用 MCP 宿主安装，优先使用 [AI 安装说明](./docs/ai-install.zh-CN.md)。下面的命令用于本地开发。
+如果只是给其他支持 MCP 的客户端安装，优先使用 [AI 安装说明](./docs/ai-install.zh-CN.md)。下面的命令用于本地开发。
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git
