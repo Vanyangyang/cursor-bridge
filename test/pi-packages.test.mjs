@@ -24,7 +24,7 @@ const shasums = JSON.parse(process.env.FAKE_NPM_SHASUMS || "{}");
 appendFileSync(process.env.FAKE_NPM_LOG, JSON.stringify(args) + "\\n");
 
 if (command === "run" && args[1] === "build:pi-packages") {
-  for (const [name, version] of [["pi-cursor-bridge", "0.2.3"], ["pi-grok-build-supervisor", "0.1.9"]]) {
+  for (const [name, version] of [["pi-cursor-bridge", process.env.FAKE_NPM_CURSOR_VERSION || "0.2.3"], ["pi-grok-build-supervisor", "0.1.9"]]) {
     const packageRoot = resolve(".pi-package-stage", name);
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, version, pi: { extensions: [] } }));
@@ -85,6 +85,7 @@ function runPublisherScenario(t, {
   npmToken,
   packShape,
   viewShape,
+  cursorVersion,
   shasums = { "pi-cursor-bridge": "cursor-local", "pi-grok-build-supervisor": "grok-local" },
 }) {
   const root = mkdtempSync(join(tmpdir(), "cursor-bridge-pi-publisher-"));
@@ -103,6 +104,7 @@ function runPublisherScenario(t, {
     FAKE_NPM_SHASUMS: JSON.stringify(shasums),
     FAKE_NPM_PACK_SHAPE: packShape || "array",
     FAKE_NPM_VIEW_SHAPE: viewShape || "string",
+    FAKE_NPM_CURSOR_VERSION: cursorVersion || "0.2.3",
   };
   delete env.NODE_AUTH_TOKEN;
   delete env.NPM_TOKEN;
@@ -126,7 +128,7 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   const cursor = JSON.parse(readFileSync(join(output, "pi-cursor-bridge", "package.json"), "utf8"));
   const grok = JSON.parse(readFileSync(join(output, "pi-grok-build-supervisor", "package.json"), "utf8"));
   assert.equal(cursor.name, "pi-cursor-bridge");
-  assert.equal(cursor.version, "0.2.3");
+  assert.equal(cursor.version, "0.2.4-macos.0");
   assert.equal(cursor.piPackage.embeddedProductVersion, "6.0.3");
   assert.equal(grok.name, "pi-grok-build-supervisor");
   assert.equal(grok.version, "0.1.9");
@@ -143,6 +145,10 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   const cursorBundle = readFileSync(join(output, "pi-cursor-bridge", "dist", "cursor-bridge.mjs"), "utf8");
   assert.match(cursorBundle, /cursor_context_engine/);
   assert.match(cursorBundle, /cursor_model/);
+  assert.ok(
+    cursorBundle.includes("cursor\\.app[\\/\\\\]contents[\\/\\\\]resources[\\/\\\\]app[\\/\\\\]"),
+    "trial Pi package must embed the macOS Cursor.app CDP identity rule",
+  );
   const cursorReadme = readFileSync(join(output, "pi-cursor-bridge", "README.md"), "utf8");
   assert.match(cursorReadme, /Star on GitHub/);
   assert.match(cursorReadme, /https:\/\/github\.com\/Vanyangyang\/cursor-bridge/);
@@ -189,7 +195,10 @@ test("Pi publisher uses GitHub Actions OIDC without weakening local account veri
   assert.match(script, /\\bE404\\b/);
   assert.match(script, /Unable to determine whether \$packageSpec already exists on npm/);
   assert.match(script, /foreach \(\$candidate in \$publishPlan\)/);
-  assert.match(script, /\$NpmCommand publish \$candidate\.Package/);
+  assert.match(script, /\$publishArgs = @\(\$candidate\.Package\)/);
+  assert.match(script, /\$candidate\.Version -match '-'/);
+  assert.match(script, /--tag', 'trial'/);
+  assert.match(script, /\$NpmCommand publish @publishArgs/);
   assert.match(script, /published tarball differs from the local package/);
   assert.doesNotMatch(script, /Skipping \$packageSpec because it is already published/);
 });
@@ -217,6 +226,20 @@ test("Pi publisher accepts npm 12 view arrays and preserves digest mismatch chec
     assert.equal(result.status === 0, shasum === "grok-local", result.stderr || result.stdout);
     assert.equal(calls.some(([command]) => command === "publish"), false);
   }
+});
+
+test("Pi publisher publishes prereleases to the trial dist-tag", (t) => {
+  const { result, calls } = runPublisherScenario(t, {
+    packageNames: ["pi-cursor-bridge"],
+    cursorVersion: "0.2.4-macos.0",
+    lookups: {
+      "pi-cursor-bridge@0.2.4-macos.0": { kind: "missing" },
+    },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(calls.filter(([command]) => command === "publish"), [
+    ["publish", join(".pi-package-stage", "pi-cursor-bridge"), "--tag", "trial"],
+  ]);
 });
 
 test("Pi publisher publishes only a registry-confirmed missing package", (t) => {

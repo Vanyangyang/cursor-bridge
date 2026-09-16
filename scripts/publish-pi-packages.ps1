@@ -92,12 +92,18 @@ foreach ($package in $packages) {
     $publishPlan += [pscustomobject]@{
         Package = $package
         PackageSpec = $packageSpec
+        Version = [string]$manifest.version
     }
 }
 
 foreach ($candidate in $publishPlan) {
     Write-Host "`nPublishing $($candidate.Package) ..." -ForegroundColor Cyan
-    & $NpmCommand publish $candidate.Package
+    $publishArgs = @($candidate.Package)
+    if ($candidate.Version -match '-') {
+        $publishArgs += '--tag', 'trial'
+        Write-Host "Using npm dist-tag 'trial' for prerelease $($candidate.PackageSpec); latest is unchanged." -ForegroundColor DarkGray
+    }
+    & $NpmCommand publish @publishArgs
     if ($LASTEXITCODE -ne 0) {
         throw "npm publish failed for $($candidate.Package)."
     }

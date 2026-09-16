@@ -9,6 +9,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Recognize standard macOS `Cursor.app/Contents/Resources/app/` CDP target URLs so `cursor_init` / `cursor_do` are not misreported as `port-not-cursor` when Cursor owns the port. Existing Windows/Linux path matching and the Windsurf exclusion are unchanged. This is an identity-rule trial only; it does not add macOS end-to-end support.
+- Trial Pi wrapper `pi-cursor-bridge@0.2.4-macos.0` embeds this matcher on the npm `trial` dist-tag. Stable `pi-cursor-bridge@0.2.3` / Cursor Bridge 6.0.3 remains `latest`.
 
 ## [6.0.3] - 2026-09-16
 
