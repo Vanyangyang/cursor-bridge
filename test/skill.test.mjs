@@ -150,6 +150,14 @@ test('bilingual quick starts separate installation, reload, initialization, and 
   assert.match(chinese, /docs\/ai-install\.zh-CN\.md/);
   assert.match(english, /Report against the completion standard/);
   assert.match(chinese, /按文末完成标准逐项汇报/);
+  const englishOther = english.match(/#### Other MCP hosts[\s\S]*?(?=### 2\.)/)?.[0] || '';
+  const chineseOther = chinese.match(/#### 其他 MCP 宿主[\s\S]*?(?=### 2\.)/)?.[0] || '';
+  assert.match(englishOther, /vanyangyang-cursor-bridge/);
+  assert.match(chineseOther, /vanyangyang-cursor-bridge/);
+  assert.match(englishOther, /do not use a Pi package/);
+  assert.match(chineseOther, /不要借用 Pi 包/);
+  assert.doesNotMatch(englishOther, /pi install npm:pi-cursor-bridge/);
+  assert.doesNotMatch(chineseOther, /pi install npm:pi-cursor-bridge/);
   assert.match(english, /Cursor Bridge and Grok Build Supervisor are independent: install either one, or both/);
   assert.match(chinese, /Cursor Bridge 与 Grok Build Supervisor 互相独立：可以只装一个，也可以两个都装/);
 });

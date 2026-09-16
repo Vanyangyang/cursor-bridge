@@ -1,0 +1,42 @@
+{
+  "name": "vanyangyang-cursor-bridge",
+  "version": "0.1.0",
+  "description": "Windows only. Generic stdio MCP package for Cursor Bridge: CCE search and bounded Cursor Agent execution.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Vanyangyang",
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vanyangyang/cursor-bridge.git",
+    "directory": "mcp-packages/vanyangyang-cursor-bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/Vanyangyang/cursor-bridge/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cursor",
+    "stdio",
+    "semantic-search",
+    "coding-agent"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "./dist/cursor-bridge.mjs",
+  "bin": {
+    "cursor-bridge-mcp": "./dist/cursor-bridge.mjs"
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "README.md",
+    "LICENSE"
+  ],
+  "mcpPackage": {
+    "embeddedProduct": "Cursor Bridge",
+    "embeddedProductVersion": "6.0.3"
+  }
+}

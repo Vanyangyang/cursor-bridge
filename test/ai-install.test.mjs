@@ -16,11 +16,29 @@ test('AI install manifest matches committed bundles, skills, and commands', () =
   assert.equal(manifest.windowsOnly, true);
   assert.deepEqual(manifest.firstClassHosts, ['codex', 'claude-code', 'grok-build', 'pi']);
   assert.equal(manifest.durableCheckout.windows, '%LOCALAPPDATA%\\cursor-bridge\\checkout');
+  assert.equal(manifest.durableNpmPrefix.windows, '%LOCALAPPDATA%\\cursor-bridge\\npm');
 
   const cursor = manifest.products['cursor-bridge'];
   const grok = manifest.products['grok-build-supervisor'];
   assert.equal(cursor.required, true);
   assert.equal(grok.required, false);
+  assert.deepEqual(cursor.npm, {
+    package: 'vanyangyang-cursor-bridge',
+    version: '0.1.0',
+    bundle: 'dist/cursor-bridge.mjs',
+    skillsRoot: 'skills',
+    bin: 'cursor-bridge-mcp',
+  });
+  assert.deepEqual(grok.npm, {
+    package: 'vanyangyang-grok-build-supervisor',
+    version: '0.1.0',
+    bundle: 'dist/grok-build-supervisor.mjs',
+    skillsRoot: 'skills',
+    commandsRoot: 'prompts',
+    bin: 'grok-build-supervisor-mcp',
+  });
+  assert.equal(existsSync(join(repositoryRoot, 'mcp-packages', cursor.npm.package, 'package.json')), true);
+  assert.equal(existsSync(join(repositoryRoot, 'mcp-packages', grok.npm.package, 'package.json')), true);
   assert.deepEqual(cursor.requiredTools, [
     'cursor_init',
     'cursor_context_engine',
@@ -54,13 +72,20 @@ test('bilingual AI install playbooks share the same completion standard', () => 
   for (const content of [english, chinese]) {
     assert.match(content, /ai-install\.manifest\.json/);
     assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\checkout/);
+    assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\npm/);
+    assert.match(content, /vanyangyang-cursor-bridge@0\.1\.0/);
+    assert.match(content, /vanyangyang-grok-build-supervisor@0\.1\.0/);
+    assert.match(content, /source: npm:vanyangyang-cursor-bridge@0\.1\.0 \| git-checkout \| repo-workspace/);
     assert.match(content, /Windows only|只支持 Windows/);
     assert.match(content, /first-class marketplace \| generic-ai-install/);
     assert.match(content, /result: PASS \| FAIL/);
     assert.match(content, /skills_unsupported/);
     assert.match(content, /close_cursor_and_retry/);
     assert.match(content, /do not restore `cursor-mcp-bridge`|不要恢复 `cursor-mcp-bridge`/i);
+    assert.match(content, /E404/);
     assert.doesNotMatch(content, /print-generic-mcp/);
+    assert.match(content, /pi-cursor-bridge/);
+    assert.match(content, /cursor-bridge-mcp/);
     for (const tool of manifest.products['cursor-bridge'].requiredTools) {
       assert.match(content, new RegExp(tool));
     }
@@ -87,7 +112,15 @@ test('public READMEs send other hosts to the AI install playbook', () => {
   assert.match(chinese, /docs\/ai-install\.zh-CN\.md/);
   assert.match(english, /not a first-class host/);
   assert.match(chinese, /不是一等宿主/);
+  assert.match(english, /vanyangyang-cursor-bridge/);
+  assert.match(chinese, /vanyangyang-cursor-bridge/);
+  assert.match(english, /do not use a Pi package/);
+  assert.match(chinese, /不要借用 Pi 包/);
+  assert.match(english, /durable npm prefix/);
+  assert.match(chinese, /npm prefix/);
   assert.match(englishGrok, /docs\/ai-install\.md/);
   assert.match(chineseGrok, /docs\/ai-install\.zh-CN\.md/);
+  assert.match(englishGrok, /vanyangyang-grok-build-supervisor/);
+  assert.match(chineseGrok, /vanyangyang-grok-build-supervisor/);
   assert.doesNotMatch(english + chinese, /print-generic-mcp/);
 });

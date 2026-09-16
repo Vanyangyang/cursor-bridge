@@ -5,6 +5,7 @@ package-lock.json
 __pycache__/
 .artifacts/
 .pi-package-stage/
+.mcp-package-stage/
 .cursor-bridge-lifecycle/
 /plugins/agy-supervisor/
 

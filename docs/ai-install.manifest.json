@@ -5,6 +5,9 @@
   "durableCheckout": {
     "windows": "%LOCALAPPDATA%\\cursor-bridge\\checkout"
   },
+  "durableNpmPrefix": {
+    "windows": "%LOCALAPPDATA%\\cursor-bridge\\npm"
+  },
   "products": {
     "cursor-bridge": {
       "required": true,
@@ -35,6 +38,13 @@
           "path": "skills/cursor-delegate"
         }
       ],
+      "npm": {
+        "package": "vanyangyang-cursor-bridge",
+        "version": "0.1.0",
+        "bundle": "dist/cursor-bridge.mjs",
+        "skillsRoot": "skills",
+        "bin": "cursor-bridge-mcp"
+      },
       "claudeCodeOnly": {
         "hooks": [
           "hooks/hooks.json",
@@ -72,7 +82,15 @@
           "name": "grok_execute",
           "path": "plugins/grok-build-supervisor/commands/grok_execute.md"
         }
-      ]
+      ],
+      "npm": {
+        "package": "vanyangyang-grok-build-supervisor",
+        "version": "0.1.0",
+        "bundle": "dist/grok-build-supervisor.mjs",
+        "skillsRoot": "skills",
+        "commandsRoot": "prompts",
+        "bin": "grok-build-supervisor-mcp"
+      }
     }
   }
 }

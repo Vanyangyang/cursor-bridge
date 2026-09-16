@@ -1,0 +1,17 @@
+# Cursor Bridge MCP
+
+> **Windows only:** Cursor Bridge currently supports Windows only. macOS and Linux are not supported or covered by end-to-end acceptance.
+
+Generic stdio MCP package for hosts that are not Codex, Claude Code, Grok Build, or Pi. This is not a Pi package and is not a first-class host.
+
+The unscoped name `cursor-bridge-mcp` is already taken on npm by an unrelated package. Install this package instead. Until npm Trusted Publishing is configured for this name, `npm install` may return `E404`; the AI playbook then falls back to a durable git checkout.
+
+```powershell
+npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-cursor-bridge@0.1.0
+```
+
+Then point the host's MCP settings at the installed `dist/cursor-bridge.mjs` and copy the bundled `cce-routing` and `cursor-delegate` skills. Wrapper 0.1.0 embeds Cursor Bridge 6.0.3.
+
+Do not publish the private repository root, and do not restore `cursor-mcp-bridge`.
+
+Full install playbook: [English](https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md) · [简体中文](https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.zh-CN.md)

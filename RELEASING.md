@@ -1,6 +1,6 @@
 # Releasing This Repository
 
-This repository ships two independently installable plugins and two independently versioned Pi Packages.
+This repository ships two independently installable plugins, two independently versioned Pi Packages, and two dedicated generic MCP wrappers.
 
 | Product | Current release target | Distribution |
 |---|---:|---|
@@ -8,8 +8,10 @@ This repository ships two independently installable plugins and two independentl
 | Grok Build Supervisor | 0.4.1 | Codex, Claude Code |
 | Cursor Bridge for Pi | 0.2.1 | `pi-cursor-bridge` on npm |
 | Grok Build Supervisor for Pi | 0.1.7 | `pi-grok-build-supervisor` on npm |
+| Cursor Bridge generic MCP | 0.1.0 | `vanyangyang-cursor-bridge` on npm |
+| Grok Build Supervisor generic MCP | 0.1.0 | `vanyangyang-grok-build-supervisor` on npm |
 
-The private `cursor-bridge-workspace` root exists only for development, build, and test tooling; do not publish it or the retired `cursor-mcp-bridge` package. The Pi versions are wrapper-package versions; their manifests must also name the exact embedded Cursor Bridge or Grok Build Supervisor version.
+The private `cursor-bridge-workspace` root exists only for development, build, and test tooling; do not publish it or the retired `cursor-mcp-bridge` package. The Pi and generic MCP versions are wrapper-package versions; their manifests must also name the exact embedded Cursor Bridge or Grok Build Supervisor version. The unscoped name `cursor-bridge-mcp` is already taken by an unrelated package; do not use it.
 
 ## Build commands
 
@@ -26,6 +28,9 @@ npm run build:grok-supervisor
 
 # Create disposable staging trees for both Pi Packages
 npm run build:pi-packages
+
+# Create disposable staging trees for the dedicated generic MCP packages
+npm run build:mcp-packages
 ```
 
 `npm run build` must produce all four committed dependency-free runtime files:
@@ -37,7 +42,7 @@ npm run build:pi-packages
 
 Installed plugins execute these bundles directly; their hosts do not install runtime dependencies inside the plugin cache. Never release a source change with stale bundles.
 
-`.pi-package-stage/` is disposable build output and must not be committed. Each staged tarball must contain the final tagged bundles, Skills, prompt templates, manifests, and package README.
+`.pi-package-stage/` and `.mcp-package-stage/` are disposable build output and must not be committed. Each staged tarball must contain the final tagged bundles, Skills, prompt templates, manifests, and package README. Generic MCP packages must not include a `pi` field or a `pi-` name.
 
 ## Version synchronization
 
@@ -71,6 +76,16 @@ Keep the wrapper and embedded versions synchronized:
 - `pi-grok-build-supervisor`: package and adapter 0.1.7, embedded Grok Build Supervisor 0.4.1
 - package READMEs and Pi staging tests
 
+### Dedicated generic MCP packages
+
+Keep the wrapper and embedded versions synchronized:
+
+- `vanyangyang-cursor-bridge`: package 0.1.0, embedded Cursor Bridge 6.0.3
+- `vanyangyang-grok-build-supervisor`: package 0.1.0, embedded Grok Build Supervisor 0.4.3
+- `docs/ai-install.manifest.json` npm pins, playbooks, package READMEs, and MCP staging tests
+
+These wrappers are not Pi packages. Do not extend `scripts/publish-pi-packages.ps1` or `.github/workflows/publish-pi.yml` to the new names. First publish of each unscoped name requires its own npm Trusted Publishing setup. Until that exists, `npm install` may return `E404`; the AI install playbook treats that as expected and falls back to a durable git checkout.
+
 ## Validation
 
 Run the smallest relevant suite after each block, then the complete repository and Supervisor suites before publication:
@@ -80,6 +95,7 @@ npm test
 npm --prefix plugins/grok-build-supervisor test
 npm --prefix plugins/grok-build-supervisor run smoke:mcp
 npm run build:pi-packages
+npm run build:mcp-packages
 ```
 
 Also validate both plugin structures with the current Claude/Codex validators, inspect staged npm package contents, and verify source, committed bundles, and staged tarballs agree. Live compatibility claims require the documented Windows 11 + current Cursor/Grok/Pi user paths; unit tests alone are not sufficient.
@@ -154,6 +170,6 @@ pi install npm:pi-cursor-bridge
 pi install npm:pi-grok-build-supervisor
 ```
 
-Generic MCP hosts use `docs/ai-install.md` / `docs/ai-install.zh-CN.md`. Keep the playbook, `docs/ai-install.manifest.json`, and the committed skill/bundle paths in agreement.
+Generic MCP hosts use `docs/ai-install.md` / `docs/ai-install.zh-CN.md` and the dedicated wrappers `vanyangyang-cursor-bridge` / `vanyangyang-grok-build-supervisor`. Keep the playbook, `docs/ai-install.manifest.json`, the wrapper manifests, and the committed skill/bundle paths in agreement. Do not send generic hosts to `pi-*` or to the unrelated npm name `cursor-bridge-mcp`.
 
 Start a new Codex task, reload/restart Claude Code, reload Grok plugins, restart Pi, or reload a generic host's MCP servers after installation. Skills, prompt templates, commands, and MCP registrations do not hot-load into an existing task.

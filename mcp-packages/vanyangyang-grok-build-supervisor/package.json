@@ -1,0 +1,44 @@
+{
+  "name": "vanyangyang-grok-build-supervisor",
+  "version": "0.1.0",
+  "description": "Windows only. Generic stdio MCP package for Grok Build Supervisor.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Vanyangyang",
+  "homepage": "https://github.com/Vanyangyang/cursor-bridge/tree/main/plugins/grok-build-supervisor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vanyangyang/cursor-bridge.git",
+    "directory": "mcp-packages/vanyangyang-grok-build-supervisor"
+  },
+  "bugs": {
+    "url": "https://github.com/Vanyangyang/cursor-bridge/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "grok-build",
+    "stdio",
+    "agent-orchestration",
+    "coding-agent"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "./dist/grok-build-supervisor.mjs",
+  "bin": {
+    "grok-build-supervisor-mcp": "./dist/grok-build-supervisor.mjs"
+  },
+  "files": [
+    "dist/",
+    "scripts/",
+    "skills/",
+    "prompts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "mcpPackage": {
+    "embeddedProduct": "Grok Build Supervisor",
+    "embeddedProductVersion": "0.4.3"
+  }
+}

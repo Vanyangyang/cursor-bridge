@@ -129,10 +129,10 @@ pi install npm:pi-grok-build-supervisor
 Give this sentence to the client you are already using:
 
 ```text
-Read https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md completely. Install Cursor Bridge into this client. Follow every step. Report against the completion standard at the end. Do not invent a marketplace plugin or publish an npm package.
+Read https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md completely. Install Cursor Bridge into this client. Follow every step. Report against the completion standard at the end. Use only the dedicated generic npm package named in the playbook. Do not invent a marketplace plugin, do not use a Pi package, and do not publish anything.
 ```
 
-That playbook tells the current AI to detect the host, keep Codex / Claude Code / Grok / Pi on their marketplace commands, and otherwise register the committed MCP bundle, copy `cce-routing` and `cursor-delegate` intact, then initialize the workspace. It is not a first-class host and is not live-tested. Cursor Bridge remains Windows-only.
+That playbook tells the current AI to detect the host, keep Codex / Claude Code / Grok / Pi on their marketplace commands, and otherwise install `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm` (or clone a durable checkout if npm returns `E404`), register the committed MCP bundle, copy `cce-routing` and `cursor-delegate` intact, then initialize the workspace. It is not a first-class host and is not live-tested. Cursor Bridge remains Windows-only. Do not borrow `pi-cursor-bridge`, and do not install the unrelated npm name `cursor-bridge-mcp`.
 
 ### 2. Restart or reload your client
 
@@ -227,7 +227,7 @@ Pi:
 pi update npm:pi-cursor-bridge
 ```
 
-Other MCP hosts: ask the current client to re-read the [AI install playbook](./docs/ai-install.md) and update the durable checkout, then reload its MCP servers and skills.
+Other MCP hosts: ask the current client to re-read the [AI install playbook](./docs/ai-install.md) and update the durable npm prefix (or git-checkout fallback), then reload its MCP servers and skills.
 
 After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or reload the MCP servers of a generic host. An already open task does not hot-load new MCP, Skill, or command code.
 

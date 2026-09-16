@@ -42,7 +42,7 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Other MCP hosts: give the current client the [AI install playbook](../../docs/ai-install.md) and ask it to include Grok Build Supervisor. That path is not first-class and is not live-tested.
+Other MCP hosts: give the current client the [AI install playbook](../../docs/ai-install.md) and ask it to include Grok Build Supervisor. Use the dedicated package `vanyangyang-grok-build-supervisor`; do not borrow `pi-grok-build-supervisor`. That path is not first-class and is not live-tested.
 
 Start a new Codex task, restart Claude Code / run `/reload-plugins`, restart Pi, or reload the MCP servers of a generic host after installation or update to load the updated skills and prompts. Pi package 0.1.9 is versioned independently and embeds Grok Build Supervisor 0.4.3.
 
