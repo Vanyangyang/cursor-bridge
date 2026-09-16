@@ -23,6 +23,7 @@ import {
   statSync,
 } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { startCursorWindowTracker } from './cursor-window-tracker.mjs';
 import {
   defaultLifecycleDir,
   ensureLifecycleDir,
@@ -209,6 +210,7 @@ export async function startSupervisor(options = {}) {
   const clients = new Set();
   let idleTimer = null;
   let shuttingDown = false;
+  let windowTracker = null;
 
   const scheduleIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
@@ -223,6 +225,7 @@ export async function startSupervisor(options = {}) {
     if (!(idleMs > 0)) return;
     idleTimer = setTimeout(() => {
       if (clients.size > 0 || shuttingDown) return;
+      if (windowTracker?.active) { scheduleIdle(); return; }
       log(`idle ${idleMs}ms with 0 clients; exiting without stopping Cursor`);
       writeSupervisorDiag(logPath, 'idle', { reason: `idle-${idleMs}ms`, clients: 0, ensureCount });
       shutdown(0);
@@ -243,6 +246,12 @@ export async function startSupervisor(options = {}) {
         runtimeMode: requestRuntimeMode,
         projectPath: requestProjectPath,
       });
+      if (!ensureModule && result.ok && result.cursorPid && result.port && !windowTracker?.active) {
+        try {
+          windowTracker = await startCursorWindowTracker({ port: result.port, log,
+            onDisconnect: () => { if (!shuttingDown) scheduleIdle(); } });
+        } catch (error) { log(`window-observer-unavailable: ${error.message}`); }
+      }
       lastEnsure = {
         ...result,
         ensureCount,
@@ -320,6 +329,7 @@ export async function startSupervisor(options = {}) {
   const shutdown = (code = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
+    windowTracker?.close();
     writeSupervisorDiag(logPath, 'cleanup', { reason: 'shutdown', code, clients: clients.size, ensureCount });
     try { server.close(); } catch {}
     tryRemove(pidPath);

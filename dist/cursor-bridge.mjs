@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve8.call(this, root, ref);
+      let _sch = resolve9.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve8(root, ref) {
+    function resolve9(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3842,7 +3842,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve8(baseURI, relativeURI, options) {
+    function resolve9(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -4204,7 +4204,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve8,
+      resolve: resolve9,
       resolveComponent,
       equal,
       serialize,
@@ -9432,7 +9432,7 @@ var require_websocket = __commonJS({
     var http3 = __require("http");
     var net2 = __require("net");
     var tls = __require("tls");
-    var { randomBytes, createHash: createHash3 } = __require("crypto");
+    var { randomBytes, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -10100,7 +10100,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash3("sha1").update(key + GUID).digest("base64");
+        const digest = createHash4("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -10469,7 +10469,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http3 = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash3 } = __require("crypto");
+    var { createHash: createHash4 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -10776,7 +10776,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash3("sha1").update(key + GUID).digest("base64");
+        const digest = createHash4("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -11385,12 +11385,69 @@ var init_workspace_binding = __esm({
   }
 });
 
+// cursor-startup-window.mjs
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync5, renameSync as renameSync5, writeFileSync as writeFileSync5, rmSync as rmSync5 } from "node:fs";
+import { createHash as createHash2 } from "node:crypto";
+import { homedir as homedir6 } from "node:os";
+import { dirname as dirname5, join as join6, resolve as resolve5 } from "node:path";
+function cursorWindowStatePath(options = {}) {
+  const env = options.env || process.env;
+  const home = options.home || homedir6();
+  const platform = options.platform || process.platform;
+  let dataDir;
+  if (env.VSCODE_PORTABLE) dataDir = join6(env.VSCODE_PORTABLE, "user-data");
+  else if (env.VSCODE_APPDATA) dataDir = join6(env.VSCODE_APPDATA, "Cursor");
+  else if (platform === "win32") dataDir = join6(env.APPDATA || join6(home, "AppData", "Roaming"), "Cursor");
+  else if (platform === "darwin") dataDir = join6(home, "Library", "Application Support", "Cursor");
+  else dataDir = join6(env.XDG_CONFIG_HOME || join6(home, ".config"), "Cursor");
+  return join6(dataDir, "User", "globalStorage", "storage.json");
+}
+function bridgeWindowStatePath(options = {}) {
+  const env = options.env || process.env;
+  if (env.CURSOR_BRIDGE_WINDOW_STATE_FILE) return resolve5(env.CURSOR_BRIDGE_WINDOW_STATE_FILE);
+  const root = (options.platform || process.platform) === "win32" && env.APPDATA ? env.APPDATA : env.XDG_CONFIG_HOME || join6(options.home || homedir6(), ".config");
+  return join6(root, "cursor-bridge", "last-window.json");
+}
+function nativeWindowState(options) {
+  try {
+    return JSON.parse((options.readFileSyncImpl || readFileSync5)(options.file || cursorWindowStatePath(options), "utf8"))?.windowsState?.lastActiveWindow || null;
+  } catch {
+    return null;
+  }
+}
+function stateSignature(last) {
+  return createHash2("sha256").update(JSON.stringify(last)).digest("hex");
+}
+function readCursorStartupWindow(options = {}) {
+  const file = options.file || cursorWindowStatePath(options);
+  const last = nativeWindowState(options);
+  try {
+    const observed = JSON.parse((options.readFileSyncImpl || readFileSync5)(options.bridgeFile || bridgeWindowStatePath(options), "utf8"));
+    if (observed.version === 1 && observed.cursorStatePath === resolve5(file) && observed.nativeSignature === stateSignature(last) && ["agents_v2", "legacy"].includes(observed.uiFlavor)) {
+      return { uiFlavor: observed.uiFlavor, source: "bridge-last-closed-window" };
+    }
+  } catch {
+  }
+  if (last?.uiState && typeof last.uiState === "object" && !Array.isArray(last.uiState)) {
+    return { uiFlavor: last.uiState.glassMode === true ? "agents_v2" : "legacy", source: "cursor-last-active-window" };
+  }
+  return { uiFlavor: "agents_v2", source: "default-agents-window" };
+}
+function cursorStartupWindowArgs(startupWindow, projectPath) {
+  if (startupWindow.uiFlavor !== "legacy") return ["--glass"];
+  return ["--classic", ...projectPath ? [projectPath] : ["--new-window"]];
+}
+var init_cursor_startup_window = __esm({
+  "cursor-startup-window.mjs"() {
+  }
+});
+
 // cursor-ensure-core.mjs
 import { spawn as spawn2, execFileSync as execFileSync2 } from "child_process";
 import { existsSync as existsSync2 } from "fs";
 import { createRequire as createNodeRequire } from "node:module";
-import { homedir as homedir6 } from "node:os";
-import { basename as basename4, extname as extname2, join as join6, resolve as resolve5, win32 as winPath, posix as posixPath } from "node:path";
+import { homedir as homedir7 } from "node:os";
+import { basename as basename4, extname as extname2, join as join7, resolve as resolve6, win32 as winPath, posix as posixPath } from "node:path";
 import http from "http";
 function resolveCursorLaunchCdpPort(port = process.env.CURSOR_BRIDGE_CDP_PORT) {
   const parsed = Number(port == null || String(port).trim() === "" ? 9223 : port);
@@ -11417,13 +11474,13 @@ function resolveCodexThreadProjectPath(options = {}) {
   try {
     const lookupThreadCwd = options.lookupThreadCwd || ((id) => {
       const { DatabaseSync } = (options.requireImpl || loadModule)("node:sqlite");
-      const databasePath = options.databasePath || join6(homedir6(), ".codex", "state_5.sqlite");
+      const databasePath = options.databasePath || join7(homedir7(), ".codex", "state_5.sqlite");
       database = new DatabaseSync(databasePath, { readOnly: true });
       return database.prepare("SELECT cwd FROM threads WHERE id = ?").get(id)?.cwd || null;
     });
     const candidate = normalizeCodexThreadCwd(lookupThreadCwd(threadId));
     const existsImpl = options.existsImpl || existsSync2;
-    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve5(candidate) : null;
+    const resolved = candidate && !looksLikePluginRuntimePath(candidate) && existsImpl(candidate) ? resolve6(candidate) : null;
     if (options.useCache !== false) CODEX_THREAD_PROJECTS.set(threadId, resolved);
     return resolved;
   } catch {
@@ -11438,14 +11495,14 @@ function resolveCodexThreadProjectPath(options = {}) {
 }
 function resolveProjectPath(value = process.env.CURSOR_PROJECT_PATH, options = {}) {
   const explicit = String(value || "").trim();
-  if (explicit) return resolve5(explicit);
+  if (explicit) return resolve6(explicit);
   const persisted = String(options.persistedProjectPath || "").trim();
-  if (persisted) return resolve5(normalizeCodexThreadCwd(persisted));
+  if (persisted) return resolve6(normalizeCodexThreadCwd(persisted));
   const threadProjectPath = options.threadProjectPath === void 0 ? resolveCodexThreadProjectPath(options) : options.threadProjectPath;
-  if (threadProjectPath) return resolve5(normalizeCodexThreadCwd(threadProjectPath));
+  if (threadProjectPath) return resolve6(normalizeCodexThreadCwd(threadProjectPath));
   const cwd = options.cwd ?? process.cwd();
   if (!cwd || looksLikePluginRuntimePath(cwd)) return null;
-  return resolve5(cwd);
+  return resolve6(cwd);
 }
 function cursorFromRegistry(options = {}) {
   const execFileSyncImpl = options.execFileSyncImpl || execFileSync2;
@@ -11510,7 +11567,7 @@ function findCursorExeDetails(options = {}) {
       existsImpl
     });
     if (fromReg) return { path: fromReg, source: "windows_registry", platform };
-    const localAppData = env.LOCALAPPDATA || join6(homedir6(), "AppData", "Local");
+    const localAppData = env.LOCALAPPDATA || join7(homedir7(), "AppData", "Local");
     const programFiles = env.ProgramFiles || env.PROGRAMFILES || "C:\\Program Files";
     const programFilesX86 = env["ProgramFiles(x86)"] || env.PROGRAMFILES_X86 || "";
     const candidates = [
@@ -11527,7 +11584,7 @@ function findCursorExeDetails(options = {}) {
     return null;
   }
   if (platform === "darwin") {
-    const userHome = env.HOME || homedir6();
+    const userHome = env.HOME || homedir7();
     const candidates = [
       "/Applications/Cursor.app/Contents/MacOS/Cursor",
       userHome && posixPath.join(userHome, "Applications", "Cursor.app", "Contents", "MacOS", "Cursor")
@@ -11546,42 +11603,42 @@ function findCursorExe(options = {}) {
   return findCursorExeDetails(options)?.path || null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve8(res.statusCode === 200);
+      resolve9(res.statusCode === 200);
     });
-    req.on("error", () => resolve8(false));
+    req.on("error", () => resolve9(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve8(false);
+      resolve9(false);
     });
   });
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve8(false);
-          resolve8(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve9(false);
+          resolve9(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
         } catch {
-          resolve8(false);
+          resolve9(false);
         }
       });
     });
-    req.on("error", () => resolve8(false));
+    req.on("error", () => resolve9(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve8(false);
+      resolve9(false);
     });
   });
 }
@@ -11673,7 +11730,7 @@ async function ensureCursorRunningLocal(options = {}) {
   const cdpIsCursorImpl = options.cdpIsCursorImpl || cdpIsCursor;
   const cursorRunningImpl = options.cursorRunningImpl || cursorRunning;
   const findCursorExeDetailsImpl = options.findCursorExeDetailsImpl || findCursorExeDetails;
-  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve5(String(options.projectPath)) : null : resolveProjectPath();
+  const projectPath = Object.hasOwn(options, "projectPath") ? options.projectPath ? resolve6(String(options.projectPath)) : null : resolveProjectPath();
   const listCdpPageTargetsImpl = options.listCdpPageTargetsImpl || listCdpPageTargets;
   const spawnImpl = options.spawnImpl || spawn2;
   const sleepImpl = options.sleepImpl || ((ms) => new Promise((resolveWait) => setTimeout(resolveWait, ms)));
@@ -11881,14 +11938,17 @@ async function ensureCursorRunningLocal(options = {}) {
     };
   }
   const launchPort = resolveCursorLaunchCdpPort(CDP_PORT);
-  const args = [`--remote-debugging-port=${launchPort}`, `--remote-allow-origins=http://localhost:${launchPort}`];
-  if (effectiveRuntimeMode === "minimal") {
-    args.push(
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-      "--disable-backgrounding-occluded-windows"
-    );
-  }
+  const startupWindow = (options.readCursorStartupWindowImpl || readCursorStartupWindow)();
+  const args = [
+    `--remote-debugging-port=${launchPort}`,
+    `--remote-allow-origins=http://localhost:${launchPort}`,
+    ...cursorStartupWindowArgs(startupWindow, projectPath)
+  ];
+  args.push(
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows"
+  );
   const launched = await spawnDetachedSafely(spawnImpl, exe, args, {
     detached: true,
     stdio: "ignore",
@@ -11899,6 +11959,7 @@ async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: "spawn-blocked",
       exe,
+      startupWindow,
       port: CDP_PORT,
       cursorPid: null,
       runtimeMode: effectiveRuntimeMode,
@@ -11918,6 +11979,7 @@ async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: "timeout",
       exe,
+      startupWindow,
       port: CDP_PORT,
       cursorPid: child.pid || null,
       runtimeMode: effectiveRuntimeMode,
@@ -11939,6 +12001,7 @@ async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: "workspace-not-ready",
       exe,
+      startupWindow,
       port: CDP_PORT,
       cursorPid,
       runtimeMode: effectiveRuntimeMode,
@@ -11961,6 +12024,7 @@ async function ensureCursorRunningLocal(options = {}) {
     ok: true,
     status: "launched",
     exe,
+    startupWindow,
     port: CDP_PORT,
     cursorPid,
     runtimeMode: effectiveRuntimeMode,
@@ -11976,7 +12040,7 @@ async function ensureCursorRunningLocal(options = {}) {
   };
 }
 function normalizeProjectKey(projectPath) {
-  return projectPath ? resolve5(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
+  return projectPath ? resolve6(String(projectPath)).replace(/\\/g, "/").toLowerCase() : "";
 }
 function targetTitleMatchesProject(title, projectPath) {
   const name = basename4(String(projectPath || "")).trim().toLowerCase();
@@ -12054,6 +12118,7 @@ async function waitForProjectCdpTarget(maxMs, projectPath, listImpl = listCdpPag
 var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
+    init_cursor_startup_window();
     init_cursor_runtime();
     CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
     CDP_ORIGIN = `http://localhost:${CDP_PORT}`;
@@ -12282,20 +12347,20 @@ var init_win_job_breakaway = __esm({
 
 // cursor-lifecycle-client.mjs
 import net from "node:net";
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import {
   existsSync as existsSync4,
-  mkdirSync as mkdirSync6,
-  readFileSync as readFileSync5,
+  mkdirSync as mkdirSync7,
+  readFileSync as readFileSync6,
   realpathSync,
   readdirSync,
-  renameSync as renameSync5,
-  rmSync as rmSync5,
+  renameSync as renameSync6,
+  rmSync as rmSync6,
   unlinkSync,
-  writeFileSync as writeFileSync5
+  writeFileSync as writeFileSync6
 } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { basename as basename5, dirname as dirname5, join as join7, resolve as resolve6, win32 as win32Path } from "node:path";
+import { basename as basename5, dirname as dirname6, join as join8, resolve as resolve7, win32 as win32Path } from "node:path";
 function resolveSupervisorSpawnCwd({
   requestedCwd = null,
   runtimeRoot = null,
@@ -12310,9 +12375,9 @@ function resolveSupervisorSpawnCwd({
   return runtimeRoot;
 }
 function resolvePluginLocalLifecycleDir(sourceScript) {
-  const scriptDir = dirname5(resolve6(sourceScript));
-  const pluginRoot = basename5(scriptDir).toLowerCase() === "dist" ? dirname5(scriptDir) : scriptDir;
-  return join7(pluginRoot, ".cursor-bridge-lifecycle");
+  const scriptDir = dirname6(resolve7(sourceScript));
+  const pluginRoot = basename5(scriptDir).toLowerCase() === "dist" ? dirname6(scriptDir) : scriptDir;
+  return join8(pluginRoot, ".cursor-bridge-lifecycle");
 }
 function inspectWindowsAppContainerPath(target, options = {}) {
   const platform = options.platform || process.platform;
@@ -12355,59 +12420,59 @@ function sleep(ms) {
 }
 function resolveSupervisorScript() {
   if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
-    return resolve6(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+    return resolve7(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
-  const here = dirname5(fileURLToPath(import.meta.url));
+  const here = dirname6(fileURLToPath(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
-    const entryDir = dirname5(resolve6(process.argv[1]));
-    candidates.push(join7(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
-    candidates.push(join7(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    const entryDir = dirname6(resolve7(process.argv[1]));
+    candidates.push(join8(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
+    candidates.push(join8(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join7(here, "dist", "cursor-lifecycle-supervisor.mjs"),
-    join7(here, "cursor-lifecycle-supervisor.mjs")
+    join8(here, "dist", "cursor-lifecycle-supervisor.mjs"),
+    join8(here, "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
     if (existsSync4(c)) return c;
   }
-  return join7(here, "cursor-lifecycle-supervisor.mjs");
+  return join8(here, "cursor-lifecycle-supervisor.mjs");
 }
 function writeRuntimeFile(target, content) {
-  if (existsSync4(target) && readFileSync5(target).equals(content)) return;
+  if (existsSync4(target) && readFileSync6(target).equals(content)) return;
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync5(temporary, content);
+  writeFileSync6(temporary, content);
   try {
-    renameSync5(temporary, target);
+    renameSync6(temporary, target);
   } catch (error2) {
     if (!existsSync4(target)) {
-      rmSync5(temporary, { force: true });
+      rmSync6(temporary, { force: true });
       throw error2;
     }
-    if (readFileSync5(target).equals(content)) {
-      rmSync5(temporary, { force: true });
+    if (readFileSync6(target).equals(content)) {
+      rmSync6(temporary, { force: true });
       return;
     }
-    rmSync5(target, { force: true });
-    renameSync5(temporary, target);
+    rmSync6(target, { force: true });
+    renameSync6(temporary, target);
   }
 }
 function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
   const described = describeLifecycleSupervisorRuntime({ sourceScript, dir });
   const { sourceScript: source, content, fingerprint } = described;
-  const runtimeRoot = join7(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  mkdirSync6(runtimeRoot, { recursive: true });
-  const script = join7(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join8(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  mkdirSync7(runtimeRoot, { recursive: true });
+  const script = join8(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
 }
 function describeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
-  const source = resolve6(sourceScript || resolveSupervisorScript());
+  const source = resolve7(sourceScript || resolveSupervisorScript());
   if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
-  const content = readFileSync5(source);
-  const fingerprint = createHash2("sha256").update(content).digest("hex");
-  const runtimeRoot = join7(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  const script = join7(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const content = readFileSync6(source);
+  const fingerprint = createHash3("sha256").update(content).digest("hex");
+  const runtimeRoot = join8(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  const script = join8(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   return { sourceScript: source, script, runtimeRoot, fingerprint, content };
 }
 function isProcessAlive(pid) {
@@ -12421,7 +12486,7 @@ function isProcessAlive(pid) {
 }
 function readPidFile(pidPath) {
   try {
-    const n = Number(String(readFileSync5(pidPath, "utf8")).trim());
+    const n = Number(String(readFileSync6(pidPath, "utf8")).trim());
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
@@ -12536,7 +12601,7 @@ function tryUnlink(path) {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join7(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join8(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -12547,7 +12612,7 @@ function writeBootEnv(dir, extra = {}) {
   for (const [k, v] of Object.entries(payload)) {
     if (v != null && v !== "") cleaned[k] = String(v);
   }
-  writeFileSync5(bootPath, `${JSON.stringify(cleaned, null, 2)}
+  writeFileSync6(bootPath, `${JSON.stringify(cleaned, null, 2)}
 `, { encoding: "utf8" });
   return bootPath;
 }
@@ -12582,9 +12647,9 @@ async function ensureSupervisorConnected(options = {}) {
     let targetRuntime = null;
     try {
       targetRuntime = options.persistSupervisorRuntime === false ? {
-        sourceScript: resolve6(sourceScript),
-        script: resolve6(sourceScript),
-        runtimeRoot: dirname5(resolve6(sourceScript)),
+        sourceScript: resolve7(sourceScript),
+        script: resolve7(sourceScript),
+        runtimeRoot: dirname6(resolve7(sourceScript)),
         fingerprint: null
       } : describeLifecycleSupervisorRuntime({ sourceScript, dir });
     } catch {
@@ -12668,9 +12733,9 @@ async function ensureSupervisorConnected(options = {}) {
   try {
     ensureLifecycleDir(dir);
     runtime = options.persistSupervisorRuntime === false ? {
-      sourceScript: resolve6(sourceScript),
-      script: resolve6(sourceScript),
-      runtimeRoot: dirname5(resolve6(sourceScript)),
+      sourceScript: resolve7(sourceScript),
+      script: resolve7(sourceScript),
+      runtimeRoot: dirname6(resolve7(sourceScript)),
       fingerprint: null
     } : (options.materializeRuntimeImpl || materializeLifecycleSupervisorRuntime)({ sourceScript, dir });
   } catch (error2) {
@@ -12834,6 +12899,7 @@ async function ensureCursorViaSupervisor(options = {}) {
       presentation: response.presentation || null,
       windowGuard: response.windowGuard || null,
       startupWindowGuard: response.startupWindowGuard || null,
+      startupWindow: response.startupWindow || null,
       adapterPid,
       supervisorPid: response.supervisorPid || conn.supervisorPid,
       reusedSupervisor: conn.reusedSupervisor,
@@ -21124,7 +21190,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve8) => setTimeout(resolve8, pollInterval));
+        await new Promise((resolve9) => setTimeout(resolve9, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -21141,7 +21207,7 @@ var Protocol = class {
    */
   request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -21219,7 +21285,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve8(parseResult.data);
+            resolve9(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -21480,12 +21546,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve8, interval);
+      const timeoutId = setTimeout(resolve9, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -22361,19 +22427,19 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve8();
+        resolve9();
       } else {
-        this._stdout.once("drain", resolve8);
+        this._stdout.once("drain", resolve9);
       }
     });
   }
 };
 
 // server.mjs
-import { basename as basename6, dirname as dirname6, join as join8, resolve as resolve7 } from "node:path";
+import { basename as basename6, dirname as dirname7, join as join9, resolve as resolve8 } from "node:path";
 import { statSync as statSync3 } from "node:fs";
 
 // node_modules/ws/wrapper.mjs
@@ -22436,8 +22502,8 @@ function makeClient(wsUrl, options = {}) {
   let readyResolve;
   let readyReject;
   const pending = /* @__PURE__ */ new Map();
-  const ready = new Promise((resolve8, reject) => {
-    readyResolve = resolve8;
+  const ready = new Promise((resolve9, reject) => {
+    readyResolve = resolve9;
     readyReject = reject;
   });
   void ready.catch(() => {
@@ -22588,7 +22654,7 @@ function makeClient(wsUrl, options = {}) {
         elapsedMs: 0
       }));
     }
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       const startedAt = Date.now();
       const timer = setTimeout(() => {
         if (!pending.delete(id)) return;
@@ -22599,7 +22665,7 @@ function makeClient(wsUrl, options = {}) {
           elapsedMs: Date.now() - startedAt
         }));
       }, timeoutMs);
-      pending.set(id, { method, resolve: resolve8, reject, timer, startedAt });
+      pending.set(id, { method, resolve: resolve9, reject, timer, startedAt });
       try {
         ws.send(payload, (cause) => {
           if (!cause || !pending.has(id)) return;
@@ -22901,7 +22967,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.0.2";
+var PLUGIN_VERSION = "6.0.3";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -22925,8 +22991,8 @@ function sessionPathContains(parent, child) {
   return candidate === base || candidate.startsWith(`${base}/`);
 }
 function sameSessionProject(left, right) {
-  const a = resolve7(String(left || ""));
-  const b = resolve7(String(right || ""));
+  const a = resolve8(String(left || ""));
+  const b = resolve8(String(right || ""));
   return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 function searchResultContract() {
@@ -23007,13 +23073,13 @@ var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the wor
 var DO_LANGUAGE_CONTRACT = "\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.";
 var CDP_HOST2 = "127.0.0.1";
 function httpJson(path) {
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve8(JSON.parse(d));
+          resolve9(JSON.parse(d));
         } catch {
           reject(new Error("CDP returned a non-JSON response"));
         }
@@ -23232,6 +23298,15 @@ function createChatPanelUnavailableError(snapshot) {
   return error2;
 }
 var EXPR_PREPARE_INPUT = `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}return 'READY';})()`;
+var SEND_PICKER_BODY = `
+  const composerSelector='.composer-bar,.ui-prompt-input,.agent-prompt-input-root';
+  const composer=input&&(input.closest(composerSelector)||input.parentElement);
+  const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"],.send-with-mode .anysphere-icon-button')]
+    .filter(button=>button.offsetParent!==null&&!button.disabled
+      &&button.getAttribute('aria-disabled')!=='true'&&button.getAttribute('data-disabled')!=='true'
+      &&!button.classList.contains('disabled')&&getComputedStyle(button).pointerEvents!=='none'
+      &&button.closest(composerSelector)===composer
+      &&(!button.matches('.send-with-mode .anysphere-icon-button')||!!button.querySelector('.codicon-arrow-up-two'))):[];`;
 var EXPR_SNAP = `(function(){
   const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
     .filter(e=>e.offsetParent!==null&&!e.closest('.ui-model-picker__trigger,[class*=model-picker]'));
@@ -23242,19 +23317,15 @@ var EXPR_SNAP = `(function(){
   ${INPUT_PICKER_BODY}
   const input=pickInput();
   const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
-  const composer=input&&(input.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')||input.parentElement);
-  const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
-    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')===composer):[];
+  ${SEND_PICKER_BODY}
   return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length,sendReady:sendButtons.length===1});
 })()`;
 var EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
   const input=pickInput();if(!input)return 'NO_INPUT';
-  const composer=input.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')||input.parentElement;
+  ${SEND_PICKER_BODY}
   if(!composer)return 'NO_COMPOSER';
-  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
-    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')===composer);
-  if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
-  buttons[0].click();return 'CLICKED';
+  if(sendButtons.length!==1)return sendButtons.length?'AMBIGUOUS_SEND':'NO_SEND';
+  sendButtons[0].click();return 'CLICKED';
 })()`;
 var EXPR_EXTRACT = `(function(){
   const md=[...document.querySelectorAll('.markdown-root,.aichat-container [class*=markdown]')]
@@ -24076,6 +24147,7 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     presentation: result.presentation || null,
     windowGuard: result.windowGuard || null,
     startupWindowGuard: result.startupWindowGuard || null,
+    startupWindow: result.startupWindow || null,
     message: result.message || null,
     needsAction: result.needsAction || null,
     nextStep: result.nextStep || null,
@@ -24101,16 +24173,16 @@ function lifecycleFailureSummary(lifecycle, fallback) {
   return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(" ");
 }
 function releaseAdapterWorkingDirectory({ targetDir = null, chdir = process.chdir } = {}) {
-  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname6(process.execPath);
+  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname7(process.execPath);
   chdir(target);
   return target;
 }
 var CursorBridge = class {
   constructor(options = {}) {
-    this.adapterStartCwd = resolve7(options.adapterStartCwd || process.cwd());
+    this.adapterStartCwd = resolve8(options.adapterStartCwd || process.cwd());
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     this._syncDelegationState();
-    this.runtimeFile = options.runtimeFile === null ? null : resolve7(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeFile = options.runtimeFile === null ? null : resolve8(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
       "normal"
@@ -24121,16 +24193,16 @@ var CursorBridge = class {
     this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
     this.runtimeModeSource = options.runtimeMode !== void 0 ? "constructor" : persistedRuntimeMode ? "persistent" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
     this.runtimeModeScope = persistedRuntimeMode ? "persistent" : options.runtimeMode !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
-    this.workspaceFile = options.workspaceFile === null ? null : resolve7(options.workspaceFile || resolveWorkspaceBindingFile());
+    this.workspaceFile = options.workspaceFile === null ? null : resolve8(options.workspaceFile || resolveWorkspaceBindingFile());
     this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
     const persistedWorkspace = options.projectPath === void 0 ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey) : null;
-    this.projectPath = options.projectPath !== void 0 ? resolve7(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
+    this.projectPath = options.projectPath !== void 0 ? resolve8(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
     this.workspaceSource = options.projectPath !== void 0 ? "constructor" : persistedWorkspace ? "persistent_init" : "auto_detect";
     this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
     this.workspaceConfirmationRequired = this.workspaceKey === "default" && !!persistedWorkspace;
-    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve7(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
+    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve8(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
     this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
-    this.sessionFile = options.sessionFile === null ? null : resolve7(options.sessionFile || resolveCursorSessionRegistryFile());
+    this.sessionFile = options.sessionFile === null ? null : resolve8(options.sessionFile || resolveCursorSessionRegistryFile());
     this.sessionInstanceId = String(
       options.sessionInstanceId || `cursor-adapter-${createCursorSessionId().slice("cursor-session-".length)}`
     );
@@ -24988,8 +25060,8 @@ var CursorBridge = class {
     const id = options.taskId || this._nextTaskId();
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve8, reject) => {
-      resolvePromise = resolve8;
+    const promise = new Promise((resolve9, reject) => {
+      resolvePromise = resolve9;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -27784,6 +27856,7 @@ export {
   EXPR_PAGE_CAPABILITIES,
   EXPR_PREPARE_INPUT,
   EXPR_PROVIDER_ERROR,
+  EXPR_SNAP,
   EXPR_VISIBLE,
   EXPR_VISIBLE_COMPOSER,
   PLUGIN_VERSION,

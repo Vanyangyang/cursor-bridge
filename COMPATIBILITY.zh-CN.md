@@ -11,7 +11,8 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.20.17** | **6.0.2** | `main` | 当前维护版本。识别新版 Auto 菜单，并验证切回固定模型和 effort。6.0.2 构建的独立 MCP 已在真实 Cursor 上通过精确工作区绑定、CCE、只读 FIFO、Fable 5.1/high 校验和可重复结果收取。原生 6.0.1 init→CCE→do 已通过；原生 6.0.2 加载仍待验收。继承路径及未解决观察项见[验收范围](./docs/cursor-3.20.17-verification.md)。 |
+| **3.20.21** | **6.0.3** | `main` | 默认只恢复最后关闭的一种窗口，兼容 Cursor 自身窗口状态保存失败。IDE 与 Agents Window 均通过真实工作区绑定、CCE、FIFO、独立 Agent 执行及 minimal/normal 验收。原生 6.0.3 加载仍待验收，详见[验收范围](./docs/cursor-3.20.21-verification.md)。 |
+| 3.20.17 | 6.0.2 | `cursor-bridge--v6.0.2` | 已归档。Auto 菜单适配及独立 MCP 验收。 |
 | 3.19.19 | 6.0.1 | `cursor-bridge--v6.0.1` | 已归档。该标签之后曾完成本地独立 MCP 兼容性验收，当时未为兼容记录单独发版。 |
 | 3.19.13 | 6.0.0 | `cursor-bridge--v6.0.0` | 已归档。默认精简状态与显式结果收取。 |
 | 3.19.13 | 5.10.1 | `cursor-bridge--v5.10.1` | 已归档。工作区注册、FIFO 恢复与请求来源声明。 |

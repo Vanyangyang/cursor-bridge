@@ -63,7 +63,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.2';
+const PLUGIN_VERSION = '6.0.3';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -439,6 +439,15 @@ function createChatPanelUnavailableError(snapshot) {
   return error;
 }
 const EXPR_PREPARE_INPUT = `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}return 'READY';})()`;
+const SEND_PICKER_BODY = `
+  const composerSelector='.composer-bar,.ui-prompt-input,.agent-prompt-input-root';
+  const composer=input&&(input.closest(composerSelector)||input.parentElement);
+  const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"],.send-with-mode .anysphere-icon-button')]
+    .filter(button=>button.offsetParent!==null&&!button.disabled
+      &&button.getAttribute('aria-disabled')!=='true'&&button.getAttribute('data-disabled')!=='true'
+      &&!button.classList.contains('disabled')&&getComputedStyle(button).pointerEvents!=='none'
+      &&button.closest(composerSelector)===composer
+      &&(!button.matches('.send-with-mode .anysphere-icon-button')||!!button.querySelector('.codicon-arrow-up-two'))):[];`;
 // 生成中/完成信号：stop 钮数量 + 当前会话中最后一个真实消息 markdown。
 // 排除模型选择器里的 markdown，避免短回复被 "Cursor Grok ..." 等模型标签盖过。
 const EXPR_SNAP = `(function(){
@@ -451,19 +460,15 @@ const EXPR_SNAP = `(function(){
   ${INPUT_PICKER_BODY}
   const input=pickInput();
   const inputText=String(input&&(input.innerText||input.textContent)||'').trim();
-  const composer=input&&(input.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')||input.parentElement);
-  const sendButtons=composer?[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
-    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')===composer):[];
+  ${SEND_PICKER_BODY}
   return JSON.stringify({messageCount:texts.length,replyLength:last.length,replyHash:hash,stop,inputTextLength:inputText.length,sendReady:sendButtons.length===1});
 })()`;
 const EXPR_CLICK_SEND = `(function(){${INPUT_PICKER_BODY}
   const input=pickInput();if(!input)return 'NO_INPUT';
-  const composer=input.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')||input.parentElement;
+  ${SEND_PICKER_BODY}
   if(!composer)return 'NO_COMPOSER';
-  const buttons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="send"],button.ui-prompt-input-submit-button[aria-label="Send message"],button[aria-label="Send"]')]
-    .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar,.ui-prompt-input,.agent-prompt-input-root')===composer);
-  if(buttons.length!==1)return buttons.length?'AMBIGUOUS_SEND':'NO_SEND';
-  buttons[0].click();return 'CLICKED';
+  if(sendButtons.length!==1)return sendButtons.length?'AMBIGUOUS_SEND':'NO_SEND';
+  sendButtons[0].click();return 'CLICKED';
 })()`;
 // 抓答案：最后一个可见且不属于模型选择器的 markdown；短回复同样有效。
 const EXPR_EXTRACT = `(function(){
@@ -1355,6 +1360,7 @@ function lifecycleFromEnsureResult(result, fallbackRuntimeMode) {
     presentation: result.presentation || null,
     windowGuard: result.windowGuard || null,
     startupWindowGuard: result.startupWindowGuard || null,
+    startupWindow: result.startupWindow || null,
     message: result.message || null,
     needsAction: result.needsAction || null,
     nextStep: result.nextStep || null,
@@ -5367,6 +5373,7 @@ export {
   EXPR_HISTORY_ENTRIES,
   EXPR_PROVIDER_ERROR,
   EXPR_CLICK_SEND,
+  EXPR_SNAP,
   EXPR_PREPARE_INPUT,
   exprOpenAgent,
   exprClickSelectedAgentStop,

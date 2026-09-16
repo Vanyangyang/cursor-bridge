@@ -10,6 +10,7 @@ import { createRequire as createNodeRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { basename, extname, join, resolve, win32 as winPath, posix as posixPath } from 'node:path';
 import http from 'http';
+import { readCursorStartupWindow, cursorStartupWindowArgs } from './cursor-startup-window.mjs';
 import {
   findCursorPidByPort,
   normalizeCursorRuntimeMode,
@@ -552,14 +553,19 @@ export async function ensureCursorRunningLocal(options = {}) {
   }
 
   const launchPort = resolveCursorLaunchCdpPort(CDP_PORT);
-  const args = [`--remote-debugging-port=${launchPort}`, `--remote-allow-origins=http://localhost:${launchPort}`];
-  if (effectiveRuntimeMode === 'minimal') {
-    args.push(
-      '--disable-background-timer-throttling',
-      '--disable-renderer-backgrounding',
-      '--disable-backgrounding-occluded-windows',
-    );
-  }
+  const startupWindow = (options.readCursorStartupWindowImpl || readCursorStartupWindow)();
+  const args = [
+    `--remote-debugging-port=${launchPort}`,
+    `--remote-allow-origins=http://localhost:${launchPort}`,
+    ...cursorStartupWindowArgs(startupWindow, projectPath),
+  ];
+  // Normal can switch to minimal without a process restart. Chromium 148 can
+  // otherwise suspend menu animations after the window is hidden mid-session.
+  args.push(
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+  );
   const launched = await spawnDetachedSafely(spawnImpl, exe, args, {
     detached: true,
     stdio: 'ignore',
@@ -570,6 +576,7 @@ export async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: 'spawn-blocked',
       exe,
+      startupWindow,
       port: CDP_PORT,
       cursorPid: null,
       runtimeMode: effectiveRuntimeMode,
@@ -592,6 +599,7 @@ export async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: 'timeout',
       exe,
+      startupWindow,
       port: CDP_PORT,
       cursorPid: child.pid || null,
       runtimeMode: effectiveRuntimeMode,
@@ -613,6 +621,7 @@ export async function ensureCursorRunningLocal(options = {}) {
       ok: false,
       status: 'workspace-not-ready',
       exe,
+      startupWindow,
       port: CDP_PORT,
       cursorPid,
       runtimeMode: effectiveRuntimeMode,
@@ -641,6 +650,7 @@ export async function ensureCursorRunningLocal(options = {}) {
     ok: true,
     status: 'launched',
     exe,
+    startupWindow,
     port: CDP_PORT,
     cursorPid,
     runtimeMode: effectiveRuntimeMode,

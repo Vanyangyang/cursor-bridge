@@ -6,6 +6,20 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.3] - 2026-09-16
+
+### Fixed
+
+- Select one Cursor window type on cold launch from the last saved window state: Agents Window uses `--glass`; IDE uses `--classic` and opens the requested workspace in the same process launch. Existing windows are reused without applying this startup choice.
+- Observe the last closed window in the persistent supervisor and keep a Bridge-owned fallback when Cursor 3.20.21 fails to save its own state. A changed native last-window record takes precedence. Cursor settings and storage are never rewritten by Bridge.
+- Recognize the IDE's icon-based Send control as well as the Agents Window button, with matching readiness and exact-composer submission checks.
+- Keep Chromium background rendering enabled for normal launches too, so a later switch to minimal mode does not stall model-menu cleanup.
+
+### Validation
+
+- Cursor 3.20.21 acceptance passed both real closing orders followed by supervised default cold launches, plus workspace binding, CCE, FIFO, independent Agent execution, and minimal/normal switching for both window types. Installed-host pickup remains pending; see `docs/cursor-3.20.21-verification.md`.
+- Pi package `pi-cursor-bridge` 0.2.3 embeds Cursor Bridge 6.0.3.
+
 ## [6.0.2] - 2026-09-13
 
 ### Fixed

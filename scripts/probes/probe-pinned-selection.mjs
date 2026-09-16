@@ -2,8 +2,9 @@
 import { makeClient } from '../../cdp-client.mjs';
 import { CursorBridge, EXPR_MODEL_PICKER_TRIGGER } from '../../server.mjs';
 const pages = await (await fetch('http://127.0.0.1:9223/json/list', { signal: AbortSignal.timeout(4000) })).json();
-const matches = pages.filter(p => p.type === 'page' && p.title === 'Cursor Agents');
-if (matches.length !== 1) throw new Error('requires one exact Agents target');
+const legacy = process.argv.includes('--legacy');
+const matches = pages.filter(p => p.type === 'page' && (legacy ? p.title !== 'Cursor Agents' : p.title === 'Cursor Agents'));
+if (matches.length !== 1) throw new Error('requires one exact target of the requested window type');
 const client = makeClient(matches[0].webSocketDebuggerUrl, { origin: 'http://localhost:9223', commandTimeoutMs: 5000 });
 const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
 bridge._ensureCursor = async () => { throw new Error('probe must never initialize lifecycle'); };
@@ -35,6 +36,7 @@ try {
   const before = await bridge._readModelPickerTrigger(client);
   if (before.text !== 'Claude Fable 5.1 High') throw new Error('probe requires already-selected Claude Fable 5.1 High');
   report.before = before.text;
+  if (process.argv.includes('--minimal')) report.hidden = await bridge.setRuntimeMode('minimal', 'session');
   if (process.argv.includes('--model-submenu-open')) {
     const root = await bridge._openModelPicker(client);
     await bridge._openModelPickerControl(client, root, 'model_control');
@@ -49,6 +51,7 @@ try {
   report.menuClosed = !(await read(client)).open;
   report.sendState = job.sendState;
 } finally {
+  if (process.argv.includes('--minimal')) report.restored = await bridge.setRuntimeMode('normal', 'session');
   client.close();
 }
 console.log(JSON.stringify({ ...report, trace }));

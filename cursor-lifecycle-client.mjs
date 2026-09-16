@@ -628,6 +628,7 @@ export async function ensureCursorViaSupervisor(options = {}) {
       presentation: response.presentation || null,
       windowGuard: response.windowGuard || null,
       startupWindowGuard: response.startupWindowGuard || null,
+      startupWindow: response.startupWindow || null,
       adapterPid,
       supervisorPid: response.supervisorPid || conn.supervisorPid,
       reusedSupervisor: conn.reusedSupervisor,

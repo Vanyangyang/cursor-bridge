@@ -631,12 +631,13 @@ test('ensure waits for a loading Agents target before considering a workspace CL
   assert.equal(spawned.length, 0);
 });
 
-test('cold launch starts one CDP Cursor without passing a second project-window argument', async (t) => {
+test('cold launch restores an Agents window without passing a second project-window argument', async (t) => {
   const project = mkdtempSync(join(tmpdir(), 'cb-single-window-launch-'));
   t.after(() => rmSync(project, { recursive: true, force: true }));
   const { spawned, spawnImpl } = fakeSpawnRecorder();
   const result = await ensureCursorRunningLocal({
     projectPath: project,
+    readCursorStartupWindowImpl: () => ({ uiFlavor: 'agents_v2', source: 'cursor-last-active-window' }),
     cdpUpImpl: async () => false,
     cursorRunningImpl: () => false,
     findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
@@ -652,7 +653,56 @@ test('cold launch starts one CDP Cursor without passing a second project-window 
   assert.deepEqual(spawned[0].args, [
     '--remote-debugging-port=9223',
     '--remote-allow-origins=http://localhost:9223',
+    '--glass',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
   ]);
+});
+
+test('cold launch restores the last IDE directly in the requested workspace', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-last-ide-launch-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const { spawned, spawnImpl } = fakeSpawnRecorder();
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    readCursorStartupWindowImpl: () => ({ uiFlavor: 'legacy', source: 'cursor-last-active-window' }),
+    cdpUpImpl: async () => false,
+    cursorRunningImpl: () => false,
+    findCursorExeDetailsImpl: () => ({ path: 'C:\\Cursor\\Cursor.exe', source: 'test', platform: 'win32' }),
+    spawnImpl,
+    waitForCdpImpl: async () => true,
+    findCursorPidByPortImpl: () => 4242,
+    listCdpPageTargetsImpl: async () => [{ id: 'ide', title: `${project.split(/[\\/]/).pop()} - Cursor`, type: 'page' }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.startupWindow.uiFlavor, 'legacy');
+  assert.equal(result.targetId, 'ide');
+  assert.equal(result.workspaceAction, 'launched-project');
+  assert.equal(spawned.length, 1);
+  assert.deepEqual(spawned[0].args, [
+    '--remote-debugging-port=9223', '--remote-allow-origins=http://localhost:9223', '--classic', resolve(project),
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
+  ]);
+});
+
+test('existing mixed UI windows are reused without a launch or startup preference read', async (t) => {
+  const project = mkdtempSync(join(tmpdir(), 'cb-mixed-ui-'));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  const result = await ensureCursorRunningLocal({
+    projectPath: project,
+    cdpUpImpl: async () => true,
+    cdpIsCursorImpl: async () => true,
+    findCursorPidByPortImpl: () => 4242,
+    readCursorStartupWindowImpl: () => { throw new Error('must not read startup state when already running'); },
+    spawnImpl: () => { throw new Error('must not open another window'); },
+    listCdpPageTargetsImpl: async () => [
+      { id: 'ide', title: `${project.split(/[\\/]/).pop()} - Cursor`, type: 'page' },
+      { id: 'agents', title: 'Cursor Agents', type: 'page' },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'already');
 });
 
 test('Codex thread cwd escapes plugin-cache cwd without exposing a workspace tool parameter', (t) => {
