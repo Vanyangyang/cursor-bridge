@@ -11618,6 +11618,11 @@ function cdpUp(timeoutMs = 1500) {
     });
   });
 }
+function cdpListIsCursor(payload) {
+  const d = typeof payload === "string" ? payload : payload == null ? "" : JSON.stringify(payload);
+  if (WINDSURF_CDP_PATH.test(d)) return false;
+  return CURSOR_CDP_PATH.test(d);
+}
 function cdpIsCursor(timeoutMs = 1500) {
   return new Promise((resolve9) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
@@ -11625,8 +11630,7 @@ function cdpIsCursor(timeoutMs = 1500) {
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve9(false);
-          resolve9(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          resolve9(cdpListIsCursor(d));
         } catch {
           resolve9(false);
         }
@@ -12115,7 +12119,7 @@ async function waitForProjectCdpTarget(maxMs, projectPath, listImpl = listCdpPag
   }
   return null;
 }
-var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule;
+var CDP_PORT, CDP_ORIGIN, CDP_HOST, PROJECT_TARGETS, CODEX_THREAD_PROJECTS, loadModule, WINDSURF_CDP_PATH, CURSOR_CDP_PATH;
 var init_cursor_ensure_core = __esm({
   "cursor-ensure-core.mjs"() {
     init_cursor_startup_window();
@@ -12126,6 +12130,8 @@ var init_cursor_ensure_core = __esm({
     PROJECT_TARGETS = /* @__PURE__ */ new Map();
     CODEX_THREAD_PROJECTS = /* @__PURE__ */ new Map();
     loadModule = createNodeRequire(import.meta.url);
+    WINDSURF_CDP_PATH = /[\/\\](windsurf)[\/\\]/i;
+    CURSOR_CDP_PATH = /[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]|[\/\\]cursor\.app[\/\\]contents[\/\\]resources[\/\\]app[\/\\]/i;
   }
 });
 

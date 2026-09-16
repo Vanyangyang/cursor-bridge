@@ -11,6 +11,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 - Added an AI-read install playbook so a generic MCP host can copy one sentence to its current client, let that client install the committed MCP bundle and skills, and report against a fixed completion standard.
 - Added dedicated generic npm wrappers `vanyangyang-cursor-bridge` and `vanyangyang-grok-build-supervisor` so other MCP hosts do not borrow the Pi packages. The playbook prefers those wrappers, falls back to a durable git checkout on registry `E404`, and forbids the unrelated taken name `cursor-bridge-mcp`.
 
+### Fixed
+
+- Recognize standard macOS `Cursor.app/Contents/Resources/app/` CDP target URLs so `cursor_init` / `cursor_do` are not misreported as `port-not-cursor` when Cursor owns the port. Existing Windows/Linux path matching and the Windsurf exclusion are unchanged. This is an identity-rule trial only; it does not add macOS end-to-end support.
+
 ## [6.0.3] - 2026-09-16
 
 ### Fixed

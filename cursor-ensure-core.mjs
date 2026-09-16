@@ -209,6 +209,19 @@ export function cdpUp(timeoutMs = 1500) {
   });
 }
 
+const WINDSURF_CDP_PATH = /[\/\\](windsurf)[\/\\]/i;
+const CURSOR_CDP_PATH = /[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]|[\/\\]cursor\.app[\/\\]contents[\/\\]resources[\/\\]app[\/\\]/i;
+
+export function cdpListIsCursor(payload) {
+  const d = typeof payload === 'string'
+    ? payload
+    : payload == null
+      ? ''
+      : JSON.stringify(payload);
+  if (WINDSURF_CDP_PATH.test(d)) return false;
+  return CURSOR_CDP_PATH.test(d);
+}
+
 export function cdpIsCursor(timeoutMs = 1500) {
   return new Promise((resolve) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: '/json/list' }, (res) => {
@@ -216,8 +229,7 @@ export function cdpIsCursor(timeoutMs = 1500) {
       res.on('data', (c) => d += c);
       res.on('end', () => {
         try {
-          if (/[\/\\](windsurf)[\/\\]/i.test(d)) return resolve(false);
-          resolve(/[\/\\]cursor[\/\\](resources|app)|cursor\.exe|vscode-app[^"]*[\/\\]cursor[\/\\]/i.test(d));
+          resolve(cdpListIsCursor(d));
         } catch { resolve(false); }
       });
     });
