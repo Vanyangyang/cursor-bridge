@@ -358,4 +358,4 @@ grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.4.0 --trust
 grok plugin enable cursor-bridge
 ```
 
-切换前请保存工作并完整退出插件宿主。不会倒填 5.4.0 以前的版本。如果这个历史组合仍不能满足您的需求，请 Fork 本仓库并在自己的 Fork 中维护适配。
+切换前请保存工作并完整退出正在使用插件的 AI 客户端。不会倒填 5.4.0 以前的版本。如果这个历史组合仍不能满足您的需求，请 Fork 本仓库并在自己的 Fork 中维护适配。

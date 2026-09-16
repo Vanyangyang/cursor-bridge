@@ -20,20 +20,20 @@
 > [!WARNING]
 > **目前仅支持 Windows：** Cursor Bridge 和 Grok Build Supervisor 当前都只支持 Windows；macOS 和 Linux 尚不支持，也未通过端到端验收。
 
-**两个独立安装、互不影响的 Coding Agent MCP 插件，可用于 Codex、Claude Code、Grok Build 和 Pi；只安装自己需要的 Bridge 即可。其他支持 MCP 的客户端可以把[AI 安装说明](./docs/ai-install.zh-CN.md)交给当前 AI，让它自行安装 MCP 和 Skill。**
+**两个独立安装、互不影响的 Coding Agent MCP 插件，可用于 Codex、Claude Code、Grok Build 和 Pi；只安装自己需要的 Bridge 即可。其他支持 MCP 的 AI 客户端可以把[AI 安装说明](./docs/ai-install.zh-CN.md)交给当前 AI，让它自行安装 MCP 和 Skill。**
 
 | 插件 | 用途 | 文档 |
 |---|---|---|
 | **Cursor Bridge** | 让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
 | **Grok Build Supervisor** | 让 Codex / Claude Code / Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
-## 让你正在使用的客户端同时调用 Cursor 与 Grok Build
+## 让你正在使用的 AI 客户端同时调用 Cursor 与 Grok Build
 
-继续使用你原本就在用的 **Codex（推荐）**、Claude Code 或 Pi 作为常用代码客户端。两个插件互相独立：只安装 Cursor Bridge，当前客户端就能使用 Cursor；只安装 Grok Build Supervisor，就能协调 Grok Build；两者都安装后，则可以在同一段对话里同时使用这两种能力。
+继续使用你原本就在用的 **Codex（推荐）**、Claude Code 或 Pi 作为常用 AI 客户端。**AI 客户端** 是你正在对话的编程软件。它不是 `cursor_do` 可以派出的 Cursor Agent，也不是 MCP 协议里的 client。两个插件互相独立：只安装 Cursor Bridge，当前 AI 客户端就能使用 Cursor；只安装 Grok Build Supervisor，就能协调 Grok Build；两者都安装后，则可以在同一段对话里同时使用这两种能力。
 
 ```text
 Codex（推荐）/ Claude Code / Pi
-        你原本使用的开发客户端
+        你原本使用的 AI 客户端
               │
         插件赋予协调能力
           ┌───┴──────────────┐
@@ -43,10 +43,10 @@ Codex（推荐）/ Claude Code / Pi
 ```
 
 - 先用 `cursor_context_engine` 获取精简、可回到源码核验的项目理解。
-- 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由当前客户端验收。
-- 需要 Grok Build 执行时，开启 `/grok_execute on`；当前客户端继续负责计划、看进度、处理问题与核验结果。
+- 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由当前 AI 客户端验收。
+- 需要 Grok Build 执行时，开启 `/grok_execute on`；当前 AI 客户端继续负责计划、看进度、处理问题与核验结果。
 
-这个仓库不是一款新的“协调器”，而是给你正在使用的客户端增加这些能力；按需安装即可。
+这个仓库不是一款新的“协调器”，而是给你正在使用的 AI 客户端增加这些能力；按需安装即可。
 
 ## Grok Build Supervisor（New）
 
@@ -68,7 +68,7 @@ Codex（推荐）/ Claude Code / Pi
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
-> **实机验证环境：** Windows 11 + Cursor **3.19.7**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取。全新 Codex 宿主复用一个无降级的持久受监督 Agents Window，并通过了工作区绑定、`minimal` 中带源码锚点的 CCE、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、Claude Fable 5.1/high 精确模型验证，以及恢复并持久化为 `normal`。并行与持久会话路径保留回归测试覆盖，但本轮没有再次实机验证。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.19.7**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取。全新 Codex AI 客户端复用一个无降级的持久受监督 Agents Window，并通过了工作区绑定、`minimal` 中带源码锚点的 CCE、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、Claude Fable 5.1/high 精确模型验证，以及恢复并持久化为 `normal`。并行与持久会话路径保留回归测试覆盖，但本轮没有再次实机验证。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
 
 ## CCE 是什么？
 
@@ -82,9 +82,9 @@ Cursor Bridge 不检查或管理 Cursor 订阅。已登录 Cursor 能使用哪�
 
 ## 快速开始
 
-### 1. 选择当前客户端，按需安装
+### 1. 选择当前 AI 客户端，按需安装
 
-下面按你正在使用的客户端分组。Cursor Bridge 与 Grok Build Supervisor 互相独立：可以只装一个，也可以两个都装。
+下面按你正在使用的 AI 客户端分组。Cursor Bridge 与 Grok Build Supervisor 互相独立：可以只装一个，也可以两个都装。
 
 #### Codex（推荐）
 
@@ -124,23 +124,23 @@ pi install npm:pi-grok-build-supervisor
 
 <a id="other-mcp-hosts"></a>
 
-#### 其他支持 MCP 的客户端
+#### 其他支持 MCP 的 AI 客户端
 
-把这句话交给你正在使用的客户端：
+把这句话交给你正在使用的 AI 客户端：
 
 ```text
-请完整阅读 https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.zh-CN.md ，按其中步骤把 Cursor Bridge 安装到当前客户端，并按文末完成标准逐项汇报。只使用这份说明里指定的通用 npm 包。不要发明 marketplace 插件，不要借用 Pi 包，也不要发布任何包。
+请完整阅读 https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.zh-CN.md ，按其中步骤把 Cursor Bridge 安装到当前 AI 客户端，并按文末完成标准逐项汇报。只使用这份说明里指定的通用 npm 包。不要发明 marketplace 插件，不要借用 Pi 包，也不要发布任何包。
 ```
 
-这份说明会让当前 AI 先识别正在用的客户端：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`（这份可长期保留的 npm prefix；npm 返回 `E404` 时再 clone 一份 git 备份）。说明只交代 MCP bundle 和 Skill 装完后的位置，由当前客户端自行登记，然后重启当前客户端，再初始化工作区。这不是官方优先支持的安装方式，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。不要借用 `pi-cursor-bridge`，也不要安装 npm 上已被占用的无关包名 `cursor-bridge-mcp`。
+这份说明会让当前 AI 先识别正在用的 AI 客户端：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他 AI 客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`。说明只交代 MCP bundle 和 Skill 装完后的位置，由当前 AI 客户端自行登记，然后重启当前 AI 客户端，再初始化工作区。这不是官方优先支持的安装方式，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。
 
-### 2. 重启或重载当前客户端
+### 2. 重启或重载当前 AI 客户端
 
-Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；其他支持 MCP 的客户端则重启当前对话。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
+Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plugins`；Grok 可在 `/plugins` 中重载或新开会话；Pi 需要重启；其他支持 MCP 的 AI 客户端则重启当前对话。Grok 插件默认关闭，需执行 `grok plugin enable cursor-bridge`；`--trust` 用来允许运行插件自带的 MCP 和 hooks。
 
 ### 3. 初始化已经安装的插件
 
-如果安装了 Cursor Bridge，Pi 会自动绑定启动时所在的目录；其他客户端可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
+如果安装了 Cursor Bridge，Pi 会自动绑定启动时所在的目录；其他 AI 客户端可用自然语言初始化或切换项目。需要让 Pi 临时使用另一个项目时，也可以说：
 
 ```text
 初始化 CCE 工作区为 C:\absolute\path\to\project
@@ -148,7 +148,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 初始化结果会持久保存。需要切换项目时，再用另一个绝对路径重复同一句话即可。
 
-如果安装了 Grok Build Supervisor，先初始化一次（Codex 使用 `$grok-build-supervisor init`），再在需要 Grok 工作的项目中选择 **Enable Grok Execution**。选择 **Disable Grok Execution** 可恢复宿主正常执行，且不会关闭终端；两个开关都不需要额外参数。其他宿主和兼容命令见 [Grok 使用指南](./plugins/grok-build-supervisor/README.zh-CN.md#安装)。
+如果安装了 Grok Build Supervisor，先初始化一次（Codex 使用 `$grok-build-supervisor init`），再在需要 Grok 工作的项目中选择 **Enable Grok Execution**。选择 **Disable Grok Execution** 可恢复 AI 客户端正常执行，且不会关闭终端；两个开关都不需要额外参数。其他 AI 客户端和兼容命令见 [Grok 使用指南](./plugins/grok-build-supervisor/README.zh-CN.md#安装)。
 
 ### 4. 开始处理真实任务
 
@@ -158,7 +158,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 这个状态由谁持有？从存档加载、运行时使用到保存写回的完整链路是什么？
 ```
 
-开启 Grok Build Supervisor 后，直接发送正常的开发任务；当前客户端负责规划和验收，Grok Build 负责执行。
+开启 Grok Build Supervisor 后，直接发送正常的开发任务；当前 AI 客户端负责规划和验收，Grok Build 负责执行。
 
 > [!TIP]
 > **Windows 11 推荐：极简模式**
@@ -171,13 +171,13 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 当前配对、证据边界和归档安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)和[最新发布](https://github.com/Vanyangyang/cursor-bridge/releases)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
-支持的客户端：**Codex**、**Claude Code**、**Grok Build**、**Pi**。其他支持 MCP 的客户端可以使用 [AI 安装说明](./docs/ai-install.zh-CN.md)；它们不会获得 marketplace 更新，也不属于已实机验收的客户端集合。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
+支持的 AI 客户端：**Codex**、**Claude Code**、**Grok Build**、**Pi**。其他支持 MCP 的 AI 客户端可以使用 [AI 安装说明](./docs/ai-install.zh-CN.md)；它们不会获得 marketplace 更新，也不属于已实机验收的 AI 客户端集合。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
 ## 用好 CCE 与 `cursor_do`
 
 - **先理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。
 - **再用 `cursor_do` 执行有边界任务：** 它会把范围清楚的任务交给 Cursor Agent，并返回稳定的任务 ID，便于继续查看与恢复。`cursor_do` 仍是可选能力，但不再藏在边角：只要一次有边界的 Cursor 执行能节省时间，就可以直接使用；最终结果、真实工作区改动与验证证据仍由主 Agent 审核。
-- **指定一次，持续使用：** 可以说“CCE 默认使用 GPT-5.6 Terra，思考程度 max”或“`cursor_do` 默认使用 GPT-5.6 Sol，思考程度 high”。`cursor_model` 会分别持久保存 CCE 与 `cursor_do` 的默认值，跨宿主任务和重启继续生效，直到你明确修改或重置。Bridge 会在每次发送前应用并回读选择；无法确认时停止发送，不会静默退回 Auto。
+- **指定一次，持续使用：** 可以说“CCE 默认使用 GPT-5.6 Terra，思考程度 max”或“`cursor_do` 默认使用 GPT-5.6 Sol，思考程度 high”。`cursor_model` 会分别持久保存 CCE 与 `cursor_do` 的默认值，跨 AI 客户端任务和重启继续生效，直到你明确修改或重置。Bridge 会在每次发送前应用并回读选择；无法确认时停止发送，不会静默退回 Auto。
 
 ## 完整 MCP 工具说明
 
@@ -227,9 +227,9 @@ Pi：
 pi update npm:pi-cursor-bridge
 ```
 
-其他支持 MCP 的客户端：让当前 AI 重新阅读 [AI 安装说明](./docs/ai-install.zh-CN.md)，更新已安装的 npm 包，然后重启当前客户端。
+其他支持 MCP 的 AI 客户端：让当前 AI 重新阅读 [AI 安装说明](./docs/ai-install.zh-CN.md)，更新已安装的 npm 包，然后重启当前 AI 客户端。
 
-更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重启当前客户端。已经打开的任务不会热加载新 MCP、Skill 或命令。
+更新后请新建 Codex 任务；重启 Claude Code 或执行 `/reload-plugins`；在 Grok 的 `/plugins` 中重载或新开会话；重启 Pi；或者重启当前 AI 客户端。已经打开的任务不会热加载新 MCP、Skill 或命令。
 
 如果 Codex 提示 `marketplace 'vanyangyang' is not configured as a Git marketplace`，先运行一次 `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main`，再重试上面的 Codex 命令。
 
@@ -241,7 +241,7 @@ pi update npm:pi-cursor-bridge
 > **只有首次从 Cursor Bridge 5.3.6 或更早版本升级时才需要这次 Windows 清理。** 旧插件进程可能占用带版本号的缓存目录，阻止系统替换它。不要修改 ACL，也不要删除插件缓存。
 
 > [!TIP]
-> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。先核对已安装的 Cursor Bridge 版本。只有版本为 5.3.6 或更早时，才检查命令行从宿主带版本号插件缓存加载 `cursor-lifecycle-supervisor.mjs` 或 `dist/cursor-bridge.mjs` 的进程。凡是位于 `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\` 下的实例，都是新版持久运行时，不要停止。核验准确的旧缓存路径和归属后，只停止这些旧缓存进程，无需再次询问；禁止批量结束 Node 或 PowerShell、修改 ACL、删除缓存或处理无关进程。旧 adapter 停止后，当前任务中的旧 Cursor Bridge MCP 可能断开，这是预期现象。随后使用当前宿主的正常 marketplace 命令把 Cursor Bridge 更新到最新版、重载宿主，并报告安装后的版本、marketplace 来源和仍存在的旧缓存进程。”
+> **推荐把这句话交给本地 Coding Agent：**“我已保存工作。先核对已安装的 Cursor Bridge 版本。只有版本为 5.3.6 或更早时，才检查命令行从 AI 客户端带版本号的插件缓存加载 `cursor-lifecycle-supervisor.mjs` 或 `dist/cursor-bridge.mjs` 的进程。凡是位于 `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\` 下的实例，都是新版持久运行时，不要停止。核验准确的旧缓存路径和归属后，只停止这些旧缓存进程，无需再次询问；禁止批量结束 Node 或 PowerShell、修改 ACL、删除缓存或处理无关进程。旧 adapter 停止后，当前任务中的旧 Cursor Bridge MCP 可能断开，这是预期现象。随后使用当前 AI 客户端的正常 marketplace 命令把 Cursor Bridge 更新到最新版、重载 AI 客户端，并报告安装后的版本、marketplace 来源和仍存在的旧缓存进程。”
 
 完成这次一次性迁移后，后续更新不再需要特殊进程清理。
 
@@ -262,7 +262,7 @@ pi update npm:pi-cursor-bridge
 
 简单定位应快速收敛；调用链、数据流、注册关系、接口实现和所有权问题可以跨模块继续追踪，直到取得最小充分证据。
 
-安装后的 `cce-routing` Skill 会为陌生项目语义问题提供有边界的 CCE 路由指引，同时让已知文件读取、测试、日志、构建、Git 和外部文档继续使用原生工具。Grok Build 在插件启用后会加载同一套 plugin skill。Claude Code 还有一个很窄、失败开放的竞争检索路由保护；最终是否调用工具，仍由宿主模型决定。
+安装后的 `cce-routing` Skill 会为陌生项目语义问题提供有边界的 CCE 路由指引，同时让已知文件读取、测试、日志、构建、Git 和外部文档继续使用原生工具。Grok Build 在插件启用后会加载同一套 plugin skill。Claude Code 还有一个很窄、失败开放的竞争检索路由保护；最终是否调用工具，仍由当前 AI 客户端的模型决定。
 
 返回格式：
 
@@ -299,7 +299,7 @@ Shared lifecycle supervisor
 Cursor Agent + project index
 ```
 
-- `cursor_init` 为当前宿主上下文校验并持久化一个工作区；在 Agents Window 缺少该本地工作区时，通过 Cursor 的工作区服务添加，并在核验完整路径后报告就绪。再次执行即可切换项目；状态查询不会添加项目。
+- `cursor_init` 为当前 AI 客户端上下文校验并持久化一个工作区；在 Agents Window 缺少该本地工作区时，通过 Cursor 的工作区服务添加，并在核验完整路径后报告就绪。再次执行即可切换项目；状态查询不会添加项目。
 - 项目索引由 Cursor 自己负责。Bridge 只确保连接，并选择经过校验、与项目匹配的 CDP target。
 - 多个 MCP adapter 共用一个用户级 lifecycle supervisor，并在读取状态或执行生命周期操作前重新同步持久运行模式。
 - 冷启动时，Bridge 只启动带 CDP 的 Cursor 进程，不传项目路径或 `--new-window`；待 target 列表稳定后，再在 Agents v2 内绑定仓库。不会仅因某个临时 target 最先出现，就把它当作标准目标。
@@ -334,7 +334,7 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 - reconcile 确认完成后，在续发前使用 `cursor_session_control(action=collect_result)` 补收该轮完整回复。它始终返回完整回复，会还原原选中 Agent，不发送提示、不持久化正文。epoch 变化会使收集无效；成功后重复调用返回 `already_collected`。数值回复签名和读取记录覆盖重启恢复，包括完成后首次读取前中断；没有保存签名的旧版续发轮需要人工检查。
 - 最多保留 50 条任务记录。未读回复受到保护：达到限制后以 `TASK_RETENTION_FULL` 拒绝新提交，不会丢弃未读结果。对 `cursor_status().unreadResultTaskIds` 中每个 ID 调用 `cursor_status(task_id, detail="result")`；精简 status 不记录收取，任一显式 result 或 full 读取都会让相应记录允许淘汰。
 - `timeout_ms` 是发送后由 FIFO 和自动恢复共用的监视预算。到期不会取消 Cursor；显式 `reap` 可以给予新的监视预算。
-- 若宿主未提供工作区身份，Bridge 恢复共享 `default` 绑定后会以 `WORKSPACE_CONFIRMATION_REQUIRED` 阻止提交，直到 `cursor_init` 为当前 adapter 确认目标项目。按身份隔离的绑定仍保持原有重启行为。
+- 若 AI 客户端未提供工作区身份，Bridge 恢复共享 `default` 绑定后会以 `WORKSPACE_CONFIRMATION_REQUIRED` 阻止提交，直到 `cursor_init` 为当前 adapter 确认目标项目。按身份隔离的绑定仍保持原有重启行为。
 - ready 会话的原子注册表位于用户配置目录，因此可跨 MCP 重启和插件缓存替换；不会持久化提示、回复、凭据、插件路径、脚本路径或 CDP target ID。
 - `submitting`、`running`、`collecting` 都是正常非终态。
 - Bridge 会确认 Cursor 是否接受提示。提示仍留在输入框时只尝试一次精确 Send 控件，仍失败则返回 `submit_not_accepted`，不会静默制造孤儿。
@@ -351,7 +351,7 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 <details>
 <summary><strong>从源码运行与高级覆盖</strong></summary>
 
-如果只是给其他支持 MCP 的客户端安装，优先使用 [AI 安装说明](./docs/ai-install.zh-CN.md)。下面的命令用于本地开发。
+如果只是给其他支持 MCP 的 AI 客户端安装，优先使用 [AI 安装说明](./docs/ai-install.zh-CN.md)。下面的命令用于本地开发。
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git

@@ -358,4 +358,4 @@ grok plugin install Vanyangyang/cursor-bridge@cursor-bridge--v5.4.0 --trust
 grok plugin enable cursor-bridge
 ```
 
-Save your work and fully exit plugin hosts before switching. Versions earlier than 5.4.0 are intentionally not backfilled. If this archived pairing does not meet your needs, fork the repository and maintain the adaptation in your own fork.
+Save your work and fully exit the AI client that has the plugin before switching. Versions earlier than 5.4.0 are intentionally not backfilled. If this archived pairing does not meet your needs, fork the repository and maintain the adaptation in your own fork.

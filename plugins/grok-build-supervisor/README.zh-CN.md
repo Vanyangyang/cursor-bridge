@@ -4,14 +4,14 @@
 
 **让 Codex、Claude Code 或 Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
 
-Grok Build Supervisor 可以单独安装到 Codex、Claude Code 或 Pi。它会在 Windows Terminal 中打开或恢复真正的 Grok Build 窗口，并在后台保持连接；即使当前任务结束或插件重新加载，也能继续接上这个会话。负责监督的宿主可以给 Grok 派活、查看状态、处理问题和权限、取消任务，并核查最终结果。
+Grok Build Supervisor 可以单独安装到 Codex、Claude Code 或 Pi。它会在 Windows Terminal 中打开或恢复真正的 Grok Build 窗口，并在后台保持连接；即使当前任务结束或插件重新加载，也能继续接上这个会话。负责监督的 AI 客户端可以给 Grok 派活、查看状态、处理问题和权限、取消任务，并核查最终结果。
 
 > [!NOTE]
 > 已在 Windows 11、Windows Terminal、PowerShell 和 Grok Build 1.0.10 上完成实机验证；npm 包的安装与 MCP 注册也已在 Pi 0.84.3 上验证。目前不声明其他操作系统已经通过端到端支持验收。
 
 ## 安装
 
-宿主入口：Codex 初始化使用 `$grok-build-supervisor init`；之后直接选择 **Enable Grok Execution**（`$grok-executor-on`）或 **Disable Grok Execution**（`$grok-executor-off`），无需补输参数。Claude Code 使用 `/grok-build-supervisor:grok_init` 初始化，再选择 `/grok-build-supervisor:grok-executor-on` 或 `/grok-build-supervisor:grok-executor-off`。下文的 `/grok_init`、`/grok_execute on|off` 是兼容聊天口令，不代表所有宿主都注册了这些斜杠命令。正规显式调用遵守相同授权边界；仅选择 Supervisor 技能、引用示例或普通“继续”都不会激活执行。
+AI 客户端入口：Codex 初始化使用 `$grok-build-supervisor init`；之后直接选择 **Enable Grok Execution**（`$grok-executor-on`）或 **Disable Grok Execution**（`$grok-executor-off`），无需补输参数。Claude Code 使用 `/grok-build-supervisor:grok_init` 初始化，再选择 `/grok-build-supervisor:grok-executor-on` 或 `/grok-build-supervisor:grok-executor-off`。下文的 `/grok_init`、`/grok_execute on|off` 是兼容聊天口令，不代表所有 AI 客户端都注册了这些斜杠命令。正规显式调用遵守相同授权边界；仅选择 Supervisor 技能、引用示例或普通“继续”都不会激活执行。
 
 0.4.3 版本保留三个技能入口：**Grok Build Supervisor** 负责初始化和会话监督，**Enable Grok Execution** 开启执行，**Disable Grok Execution** 关闭执行。旧的 **Grok Executor Mode** 入口已移除，共用执行规则改为内部参考文档。关闭执行会保留进行中的工作和终端。
 
@@ -42,9 +42,9 @@ Pi：
 pi install npm:pi-grok-build-supervisor
 ```
 
-其他支持 MCP 的客户端：把 [AI 安装说明](../../docs/ai-install.zh-CN.md) 交给当前客户端，并要求同时安装 Grok Build Supervisor。使用专用包 `vanyangyang-grok-build-supervisor`，不要借用 `pi-grok-build-supervisor`。这条路径不是官方优先支持的安装方式，也没有做过实机验收。
+其他支持 MCP 的 AI 客户端：把 [AI 安装说明](../../docs/ai-install.zh-CN.md) 交给当前 AI 客户端，并要求同时安装 Grok Build Supervisor。使用专用包 `vanyangyang-grok-build-supervisor`，不要借用 `pi-grok-build-supervisor`。这条路径不是官方优先支持的安装方式，也没有做过实机验收。
 
-安装或更新后，新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，重启 Pi，或重启当前客户端，以加载更新后的技能和提示模板。Pi 包独立计版本，0.1.9 内置 Grok Build Supervisor 0.4.3。
+安装或更新后，新建 Codex 任务，重启 Claude Code / 执行 `/reload-plugins`，重启 Pi，或重启当前 AI 客户端，以加载更新后的技能和提示模板。Pi 包独立计版本，0.1.9 内置 Grok Build Supervisor 0.4.3。
 
 安装 Grok Build Supervisor 不会安装或启动 Cursor Bridge。
 
@@ -92,7 +92,7 @@ claude plugin update grok-build-supervisor@vanyangyang
 /grok_execute on
 ```
 
-此时 Codex、Claude Code 或 Pi 会把执行模式绑定到当前项目目录，并立即复用或启动该项目的可见 Grok 终端。开启模式不会发送开发任务。终端就绪后，像平常一样交代任务即可；宿主会发送你另行同意的任务，并持续查看状态，直到 Grok 完成、失败、提出问题或需要权限选择。你不需要管理 TUI、会话 ID 或进程。
+此时 Codex、Claude Code 或 Pi 会把执行模式绑定到当前项目目录，并立即复用或启动该项目的可见 Grok 终端。开启模式不会发送开发任务。终端就绪后，像平常一样交代任务即可；当前 AI 客户端会发送你另行同意的任务，并持续查看状态，直到 Grok 完成、失败、提出问题或需要权限选择。你不需要管理 TUI、会话 ID 或进程。
 
 如果项目里带有本地自动化配置，Grok 第一次打开时可能会在终端里询问你是否信任这个目录。Supervisor 会准确识别这个界面，保留当前终端和会话，并提醒你直接在 Grok 里确认；这时不要再次运行 `/grok_execute on`。插件不会替你按 `y`，也不会偷偷加上 `--trust`。你在 Grok 中作出选择后，启动流程会自动继续。
 
@@ -129,10 +129,10 @@ Grok Build + Windows Terminal 窗口
 
 - 关闭一个 Codex / Claude Code / Pi 任务或更新插件，不会立刻断开后台连接。
 - 不同项目使用独立的 Grok 连接、终端和执行记录。项目 B 的任务不会接管项目 A 的连接；权限回应、取消操作和结果都留在选定的项目中。
-- 多个宿主可以查看同一个 Grok 会话，但每个工作区同一时间只有一个写入方，避免两个 Agent 互相覆盖；不同工作区可以并行。目录别名会先解析成同一真实路径，再分配写入锁。
+- 多个 AI 客户端可以查看同一个 Grok 会话，但每个工作区同一时间只有一个写入方，避免两个 Agent 互相覆盖；不同工作区可以并行。目录别名会先解析成同一真实路径，再分配写入锁。
 - Grok 工作时，查看进度只会拿到“正在定位、正在修改、正在验证”等简短阶段，以及有上限的文件和工具数量。Supervisor 自己的静默心跳不会冒充 Grok 有新进展，原始工具日志和已经累计的整段回答也不会被反复取回。
 - 短答案只返回一次。长报告会保存成文件，插件只返回文件位置、大小、校验值、是否截断和短摘要。已经安装 [context-mode（推荐）](https://github.com/mksglu/context-mode) 时，可以用它提取重点；不安装也能正常使用。
-- 插件会告诉 Grok 任务究竟来自 Codex、Claude Code、Pi 还是其他宿主，不会一律冒充 Codex。
+- 插件会告诉 Grok 任务究竟来自 Codex、Claude Code、Pi 还是其他 AI 客户端，不会一律冒充 Codex。
 - 正在运行的会话所需脚本会复制到持久目录，所以刷新插件缓存不会把脚本从它脚下删掉。
 - 新版插件会等旧的后台监督程序空闲后再替换它，升级过程中不会主动打断现有任务。
 - 从尚不支持工作区路由的旧版升级时，需要先让旧的后台监督程序进入空闲状态。新版会明确报告这个升级边界，不会切换其他项目的连接。原有会话继续使用原来的状态目录，所有项目共用一次代理初始化。
@@ -146,7 +146,7 @@ Grok Build + Windows Terminal 窗口
 - 它不会模拟键盘输入，不会接管无关的 Grok 进程，也不会停止无法证明归它管理的进程。
 - 除非你明确要求不显示窗口，否则它不会把终端偷偷藏起来。
 - 它只接受真正能工作的本地代理，不保存代理密码，也不假定某个固定端口。
-- Grok 不能自己声称任务来自哪个宿主；发送者身份由本地 MCP 连接提供。
+- Grok 不能自己声称任务来自哪个 AI 客户端；发送者身份由本地 MCP 连接提供。
 - “Grok 说完成了”不等于已经验收。Codex、Claude Code 或 Pi 仍需核查文件、diff、测试和你要求的其他证据。
 - 安装插件不会自动获得删除数据、发布代码、发送外部消息、读取秘密或决定产品方向的权限。
 

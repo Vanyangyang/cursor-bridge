@@ -20,20 +20,20 @@
 > [!WARNING]
 > **Windows only:** Cursor Bridge and Grok Build Supervisor currently support Windows only. macOS and Linux are not supported or covered by end-to-end acceptance.
 
-**Two independently installable MCP plugins for Codex, Claude Code, Grok Build, and Pi. Install only the bridge you need. Other MCP-capable clients can have their current AI read the [AI install playbook](./docs/ai-install.md) and install MCP plus skills itself.**
+**Two independently installable MCP plugins for Codex, Claude Code, Grok Build, and Pi. Install only the bridge you need. Other MCP-capable AI clients can have their current AI read the [AI install playbook](./docs/ai-install.md) and install MCP plus skills itself.**
 
 | Plugin | Use it for | Documentation |
 |---|---|---|
 | **Cursor Bridge** | Let Codex, Claude Code, Grok Build, or Pi use Cursor CCE to understand the project, locate the right code, and trace relationships automatically; when needed, the optional `cursor_do` feature can execute clearly scoped tasks | [Continue below](#cursor-bridge) |
 | **Grok Build Supervisor** | Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
 
-## Give the coding client you already use access to Cursor and Grok Build
+## Give the AI client you already use access to Cursor and Grok Build
 
-Keep using **Codex (recommended)**, Claude Code, or Pi as your normal coding client. The plugins are independent: install Cursor Bridge to let that client use Cursor, install Grok Build Supervisor to let it coordinate Grok Build, or install both to combine those capabilities in one conversation.
+Keep using **Codex (recommended)**, Claude Code, or Pi as your normal AI client. An **AI client** is the coding app you already chat with. It is not the Cursor Agent that `cursor_do` can run, and it is not an MCP protocol client. The plugins are independent: install Cursor Bridge to let that AI client use Cursor, install Grok Build Supervisor to let it coordinate Grok Build, or install both to combine those capabilities in one conversation.
 
 ```text
 Codex (recommended) / Claude Code / Pi
-      your existing coding client
+      your existing AI client
               │
    plugins add coordination abilities
           ┌───┴──────────────┐
@@ -43,10 +43,10 @@ Codex (recommended) / Claude Code / Pi
 ```
 
 - Start with `cursor_context_engine` for compact, source-anchored project understanding.
-- Use the now first-class `cursor_do` path for a bounded Cursor Agent task when delegated execution saves time; your current client still reviews the real diff and tests.
-- Turn on `/grok_execute on` when Grok Build should execute while your current client plans, monitors, handles questions, and verifies the result.
+- Use the now first-class `cursor_do` path for a bounded Cursor Agent task when delegated execution saves time; your current AI client still reviews the real diff and tests.
+- Turn on `/grok_execute on` when Grok Build should execute while your current AI client plans, monitors, handles questions, and verifies the result.
 
-This repository is not a separate orchestrator. The plugins add these capabilities to the client you already use, so install only what you need.
+This repository is not a separate orchestrator. The plugins add these capabilities to the AI client you already use, so install only what you need.
 
 ## Grok Build Supervisor (New)
 
@@ -68,7 +68,7 @@ It is installed and updated independently from Cursor Bridge.
 
 CCE and `cursor_do` accept optional `request_context`, for example `{"sender":"model","source":"mixed"}`. `sender` declares who directly sends the request (`user/model/unknown`); `source` distinguishes user requirements from model additions (`user/model/mixed/unknown`). Separate both in mixed prompt text. Omitted values remain unknown, are not inferred from the selected model, and never grant extra permission. Task status reports the declaration for that turn.
 >
-> **Live-tested environment:** Windows 11 + Cursor **3.19.7**, identified from the installed executable's product and file versions. A fresh Codex host reused one undegraded persistent supervised Agents Window and passed workspace binding, source-anchored CCE in `minimal`, isolated FIFO `cursor_do` in normal and `minimal` with verified Claude Fable 5.1/high selection, and restored and persisted `normal`. Parallel and persistent-session paths retain regression coverage but were not live-rechecked in this acceptance. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, and macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.19.7**, identified from the installed executable's product and file versions. A fresh Codex AI client reused one undegraded persistent supervised Agents Window and passed workspace binding, source-anchored CCE in `minimal`, isolated FIFO `cursor_do` in normal and `minimal` with verified Claude Fable 5.1/high selection, and restored and persisted `normal`. Parallel and persistent-session paths retain regression coverage but were not live-rechecked in this acceptance. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. The legacy IDE/workbench target was not exposed, and macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -82,9 +82,9 @@ Cursor Bridge does not inspect or manage your Cursor subscription. The models, q
 
 ## Quick start
 
-### 1. Choose your client and install what you need
+### 1. Choose your AI client and install what you need
 
-The commands are grouped by the client you already use. Cursor Bridge and Grok Build Supervisor are independent: install either one, or both.
+The commands are grouped by the AI client you already use. Cursor Bridge and Grok Build Supervisor are independent: install either one, or both.
 
 #### Codex (recommended)
 
@@ -124,23 +124,23 @@ pi install npm:pi-grok-build-supervisor
 
 <a id="other-mcp-hosts"></a>
 
-#### Other MCP hosts
+#### Other MCP-capable AI clients
 
-Give this sentence to the client you are already using:
+Give this sentence to the AI client you are already using:
 
 ```text
-Read https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md completely. Install Cursor Bridge into this client. Follow every step. Report against the completion standard at the end. Use only the dedicated generic npm package named in the playbook. Do not invent a marketplace plugin, do not use a Pi package, and do not publish anything.
+Read https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md completely. Install Cursor Bridge into this AI client. Follow every step. Report against the completion standard at the end. Use only the dedicated generic npm package named in the playbook. Do not invent a marketplace plugin, do not use a Pi package, and do not publish anything.
 ```
 
-That playbook tells the current AI to detect the host, keep Codex / Claude Code / Grok / Pi on their marketplace commands, and otherwise install `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm` (or clone a durable checkout if npm returns `E404`). It then tells the AI where the MCP bundle and skills landed, so this host can register them itself, restart the current agent, and initialize the workspace. It is not a first-class host and is not live-tested. Cursor Bridge remains Windows-only. Do not borrow `pi-cursor-bridge`, and do not install the unrelated npm name `cursor-bridge-mcp`.
+That playbook tells the current AI to detect the AI client, keep Codex / Claude Code / Grok / Pi on their marketplace commands, and otherwise install `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm`. It then tells the AI where the MCP bundle and skills landed, so this AI client can register them itself, restart, and initialize the workspace. It is not a first-class AI client and is not live-tested. Cursor Bridge remains Windows-only.
 
-### 2. Restart or reload your client
+### 2. Restart or reload your AI client
 
-Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current generic-host agent. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
+Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current AI client. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
 
 ### 3. Initialize the plugin you installed
 
-If you installed Cursor Bridge, Pi automatically binds it to the directory where Pi was started. Other hosts can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
+If you installed Cursor Bridge, Pi automatically binds it to the directory where Pi was started. Other AI clients can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
 
 ```text
 Initialize CCE workspace to C:\absolute\path\to\project
@@ -148,7 +148,7 @@ Initialize CCE workspace to C:\absolute\path\to\project
 
 Initialization is persistent. Repeat the sentence with another absolute path whenever you want to switch projects.
 
-If you installed Grok Build Supervisor, initialize once (`$grok-build-supervisor init` in Codex), then select **Enable Grok Execution** in the project where Grok should work. **Disable Grok Execution** returns the host to normal execution without closing the terminal. Neither control needs an extra argument. See the [Grok guide](./plugins/grok-build-supervisor/README.md#install) for other hosts and compatibility commands.
+If you installed Grok Build Supervisor, initialize once (`$grok-build-supervisor init` in Codex), then select **Enable Grok Execution** in the project where Grok should work. **Disable Grok Execution** returns the AI client to normal execution without closing the terminal. Neither control needs an extra argument. See the [Grok guide](./plugins/grok-build-supervisor/README.md#install) for other AI clients and compatibility commands.
 
 ### 4. Start with a real task
 
@@ -158,7 +158,7 @@ With Cursor Bridge, ask the real project question:
 Who owns this state, and what is the complete path from save loading to runtime use and save write-back?
 ```
 
-With Grok Build Supervisor enabled, send your normal implementation task; the current client handles planning and verification while Grok Build executes.
+With Grok Build Supervisor enabled, send your normal implementation task; the current AI client handles planning and verification while Grok Build executes.
 
 > [!TIP]
 > **Recommended on Windows 11: minimal runtime**
@@ -171,13 +171,13 @@ With Grok Build Supervisor enabled, send your normal implementation task; the cu
 
 See [Compatibility and update history](./COMPATIBILITY.md) and the [latest release](https://github.com/Vanyangyang/cursor-bridge/releases) for the current pairing, evidence boundary, and archived installation instructions. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
 
-Supported hosts: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. Other MCP clients can use the [AI install playbook](./docs/ai-install.md); they do not receive marketplace updates, and they are not part of the live-tested host set. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
+Supported AI clients: **Codex**, **Claude Code**, **Grok Build**, and **Pi**. Other MCP-capable AI clients can use the [AI install playbook](./docs/ai-install.md); they do not receive marketplace updates, and they are not part of the live-tested AI client set. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
 
 ## Use CCE and `cursor_do`
 
 - **Start with project understanding:** `cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships, then returns compact source anchors, coverage, gaps, and confidence.
 - **Move to bounded execution with `cursor_do`:** send a clearly scoped Cursor Agent task and receive a stable task ID for collection and recovery. `cursor_do` is optional, but no longer hidden as an edge feature: use it whenever a bounded Cursor pass is the efficient execution path. The primary Agent remains responsible for reviewing the result, real workspace changes, and verification evidence.
-- **Keep the model you chose:** say “Use GPT-5.6 Terra with max effort for CCE” or “Use GPT-5.6 Sol with high effort for cursor_do.” `cursor_model` stores independent defaults for CCE and `cursor_do` across host tasks and restarts until you explicitly change or reset them. Before every prompt, Bridge applies and verifies the selection; it fails before sending instead of silently falling back to Auto.
+- **Keep the model you chose:** say “Use GPT-5.6 Terra with max effort for CCE” or “Use GPT-5.6 Sol with high effort for cursor_do.” `cursor_model` stores independent defaults for CCE and `cursor_do` across AI client tasks and restarts until you explicitly change or reset them. Before every prompt, Bridge applies and verifies the selection; it fails before sending instead of silently falling back to Auto.
 
 ## Full MCP tool reference
 
@@ -227,9 +227,9 @@ Pi:
 pi update npm:pi-cursor-bridge
 ```
 
-Other MCP hosts: ask the current client to re-read the [AI install playbook](./docs/ai-install.md) and update the durable npm prefix (or git-checkout fallback), then restart this agent.
+Other MCP-capable AI clients: ask the current AI to re-read the [AI install playbook](./docs/ai-install.md) and update the installed npm package, then restart this AI client.
 
-After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current generic-host agent. An already open task does not hot-load new MCP, Skill, or command code.
+After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current AI client. An already open task does not hot-load new MCP, Skill, or command code.
 
 If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` once, then retry the Codex commands above.
 
@@ -241,7 +241,7 @@ If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketpla
 > **Only the first Windows upgrade from Cursor Bridge 5.3.6 or earlier needs this cleanup.** Old plugin processes can keep a versioned cache directory open and block replacement. Do not change ACLs or delete the plugin cache.
 
 > [!TIP]
-> **Recommended — copy this to your local coding Agent:** “I saved my work. First check the installed Cursor Bridge version. Only if it is 5.3.6 or earlier, inspect processes whose command lines load `cursor-lifecycle-supervisor.mjs` or `dist/cursor-bridge.mjs` from the host's versioned plugin cache. Treat every instance under `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\` as the new persistent runtime and do not stop it. After verifying the exact old-cache path and ownership, stop only those old-cache processes without asking again; do not mass-stop Node or PowerShell, change ACLs, delete caches, or touch unrelated processes. The current task's old Cursor Bridge MCP may disconnect when its old adapter stops; that is expected. Then update Cursor Bridge to the latest version using the current host's normal marketplace command, reload the host, and report the installed version, marketplace source, and any old-cache process that remains.”
+> **Recommended — copy this to your local coding Agent:** “I saved my work. First check the installed Cursor Bridge version. Only if it is 5.3.6 or earlier, inspect processes whose command lines load `cursor-lifecycle-supervisor.mjs` or `dist/cursor-bridge.mjs` from the AI client's versioned plugin cache. Treat every instance under `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\` as the new persistent runtime and do not stop it. After verifying the exact old-cache path and ownership, stop only those old-cache processes without asking again; do not mass-stop Node or PowerShell, change ACLs, delete caches, or touch unrelated processes. The current task's old Cursor Bridge MCP may disconnect when its old adapter stops; that is expected. Then update Cursor Bridge to the latest version using the current AI client's normal marketplace command, reload the AI client, and report the installed version, marketplace source, and any old-cache process that remains.”
 
 After this one-time migration, later updates do not need special process cleanup.
 
@@ -262,7 +262,7 @@ Why reuse Cursor? Its project understanding already combines semantic indexing, 
 
 Simple locations should converge quickly. Call chains, data flows, registrations, interface implementations, and ownership questions can continue across modules until the evidence is sufficient.
 
-The installed `cce-routing` Skill offers bounded guidance for selecting CCE on unfamiliar-project semantic questions while leaving known-file reads, tests, logs, builds, Git work, and external documentation on native tools. Grok Build loads the same plugin skills after the plugin is enabled. Claude Code also has a narrow, fail-open routing guard for competing context collection. The host model still controls tool selection.
+The installed `cce-routing` Skill offers bounded guidance for selecting CCE on unfamiliar-project semantic questions while leaving known-file reads, tests, logs, builds, Git work, and external documentation on native tools. Grok Build loads the same plugin skills after the plugin is enabled. Claude Code also has a narrow, fail-open routing guard for competing context collection. The AI client's model still controls tool selection.
 
 Result shape:
 
@@ -299,7 +299,7 @@ Shared lifecycle supervisor
 Cursor Agent + project index
 ```
 
-- `cursor_init` validates and persists one workspace for the current host context. In Agents Window, it registers a missing local workspace through Cursor's workspace service and verifies the exact path before reporting ready. Re-running it switches that context to another workspace; status checks never register projects.
+- `cursor_init` validates and persists one workspace for the current AI client context. In Agents Window, it registers a missing local workspace through Cursor's workspace service and verifies the exact path before reporting ready. Re-running it switches that context to another workspace; status checks never register projects.
 - Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
 - Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
 - On a cold launch, Bridge starts the CDP-enabled Cursor process without a project or `--new-window` argument, waits for the target list to stabilize, then binds the repository inside Agents v2. A transient first target is never treated as canonical merely because it appeared first.
@@ -334,7 +334,7 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 - After reconciliation confirms completion, use `cursor_session_control(action=collect_result)` before continuing to retrieve that turn's complete reply. It always returns the full reply, restores the previous Agent selection, never sends a prompt, and never persists the reply. A changed epoch invalidates collection; repeating a successful collection returns `already_collected`. Numeric reply signatures and read receipts cover restart recovery, including completion before the first read. Older continuation turns without a saved signature require manual inspection.
 - Up to 50 task records are retained. Unread replies are protected: `TASK_RETENTION_FULL` rejects new submissions instead of dropping them. For each ID in `cursor_status().unreadResultTaskIds`, call `cursor_status(task_id, detail="result")`; compact status calls do not record receipt, while either explicit result or full read makes the record eligible for eviction.
 - `timeout_ms` is one post-submission monitoring budget shared by FIFO and automatic recovery. Expiry does not cancel Cursor; explicit `reap` may grant a fresh monitoring budget.
-- If the host supplies no workspace identity and Bridge restores the shared `default` binding, submission returns `WORKSPACE_CONFIRMATION_REQUIRED` until `cursor_init` confirms the intended project for this adapter. Identity-scoped bindings retain their normal restart behavior.
+- If the AI client supplies no workspace identity and Bridge restores the shared `default` binding, submission returns `WORKSPACE_CONFIRMATION_REQUIRED` until `cursor_init` confirms the intended project for this adapter. Identity-scoped bindings retain their normal restart behavior.
 - Ready session mappings survive MCP restart and plugin-cache replacement because their atomic registry lives in the user configuration directory. Prompts, replies, credentials, plugin paths, scripts, and CDP target IDs are not persisted.
 - `submitting`, `running`, and `collecting` are normal non-terminal states.
 - Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.
@@ -351,7 +351,7 @@ Internal identity, state, recovery, scope, and update invariants are defined in 
 <details>
 <summary><strong>Run from source and advanced overrides</strong></summary>
 
-For a generic MCP host, prefer the [AI install playbook](./docs/ai-install.md). The commands below are for local development.
+For a generic MCP-capable AI client, prefer the [AI install playbook](./docs/ai-install.md). The commands below are for local development.
 
 ```bash
 git clone https://github.com/Vanyangyang/cursor-bridge.git

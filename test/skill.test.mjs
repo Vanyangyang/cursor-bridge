@@ -104,14 +104,16 @@ test('bilingual READMEs present coordination as added capability of the existing
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
 
-  assert.match(english, /Give the coding client you already use access to Cursor and Grok Build/);
-  assert.match(english, /Keep using \*\*Codex \(recommended\)\*\*, Claude Code, or Pi as your normal coding client/);
+  assert.match(english, /Give the AI client you already use access to Cursor and Grok Build/);
+  assert.match(english, /Keep using \*\*Codex \(recommended\)\*\*, Claude Code, or Pi as your normal AI client/);
+  assert.match(english, /An \*\*AI client\*\* is the coding app you already chat with/);
   assert.match(english, /The plugins are independent:[\s\S]*install Cursor Bridge[\s\S]*install Grok Build Supervisor[\s\S]*install both/);
   assert.match(english, /This repository is not a separate orchestrator/);
   assert.doesNotMatch(english, /Choose one orchestrator|installed directly in Grok Build/);
 
-  assert.match(chinese, /让你正在使用的客户端同时调用 Cursor 与 Grok Build/);
-  assert.match(chinese, /继续使用你原本就在用的 \*\*Codex（推荐）\*\*、Claude Code 或 Pi 作为常用代码客户端/);
+  assert.match(chinese, /让你正在使用的 AI 客户端同时调用 Cursor 与 Grok Build/);
+  assert.match(chinese, /继续使用你原本就在用的 \*\*Codex（推荐）\*\*、Claude Code 或 Pi 作为常用 AI 客户端/);
+  assert.match(chinese, /\*\*AI 客户端\*\* 是你正在对话的编程软件/);
   assert.match(chinese, /两个插件互相独立：[\s\S]*只安装 Cursor Bridge[\s\S]*只安装 Grok Build Supervisor[\s\S]*两者都安装/);
   assert.match(chinese, /这个仓库不是一款新的“协调器”/);
   assert.doesNotMatch(chinese, /选择一个编排客户端|直接安装进 Grok Build/);
@@ -121,14 +123,14 @@ test('bilingual quick starts separate installation, reload, initialization, and 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   const englishSteps = [
-    '### 1. Choose your client and install what you need',
-    '### 2. Restart or reload your client',
+    '### 1. Choose your AI client and install what you need',
+    '### 2. Restart or reload your AI client',
     '### 3. Initialize the plugin you installed',
     '### 4. Start with a real task',
   ];
   const chineseSteps = [
-    '### 1. 选择当前客户端，按需安装',
-    '### 2. 重启或重载当前客户端',
+    '### 1. 选择当前 AI 客户端，按需安装',
+    '### 2. 重启或重载当前 AI 客户端',
     '### 3. 初始化已经安装的插件',
     '### 4. 开始处理真实任务',
   ];
@@ -142,16 +144,16 @@ test('bilingual quick starts separate installation, reload, initialization, and 
     assert.match(content, /#### Grok Build/);
     assert.match(content, /#### Pi/);
   }
-  assert.match(english, /#### Other MCP hosts/);
-  assert.match(chinese, /#### 其他支持 MCP 的客户端/);
+  assert.match(english, /#### Other MCP-capable AI clients/);
+  assert.match(chinese, /#### 其他支持 MCP 的 AI 客户端/);
   assert.match(english, /<a id="other-mcp-hosts"><\/a>/);
   assert.match(chinese, /<a id="other-mcp-hosts"><\/a>/);
   assert.match(english, /docs\/ai-install\.md/);
   assert.match(chinese, /docs\/ai-install\.zh-CN\.md/);
   assert.match(english, /Report against the completion standard/);
   assert.match(chinese, /按文末完成标准逐项汇报/);
-  const englishOther = english.match(/#### Other MCP hosts[\s\S]*?(?=### 2\.)/)?.[0] || '';
-  const chineseOther = chinese.match(/#### 其他支持 MCP 的客户端[\s\S]*?(?=### 2\.)/)?.[0] || '';
+  const englishOther = english.match(/#### Other MCP-capable AI clients[\s\S]*?(?=### 2\.)/)?.[0] || '';
+  const chineseOther = chinese.match(/#### 其他支持 MCP 的 AI 客户端[\s\S]*?(?=### 2\.)/)?.[0] || '';
   assert.match(englishOther, /vanyangyang-cursor-bridge/);
   assert.match(chineseOther, /vanyangyang-cursor-bridge/);
   assert.match(englishOther, /do not use a Pi package/);
@@ -255,8 +257,8 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   assert.match(chineseGrokSection, /负责规划和把关[\s\S]*自动调度 Grok Build[\s\S]*执行任务[\s\S]*跟进过程[\s\S]*核验结果/);
   assert.doesNotMatch(englishGrokSection, /optional/i);
   assert.doesNotMatch(chineseGrokSection, /可选/);
-  assert.match(english, /Cursor \*\*3\.19\.7\*\*[\s\S]*fresh Codex host[\s\S]*Claude Fable 5\.1\/high/);
-  assert.match(chinese, /Cursor \*\*3\.19\.7\*\*[\s\S]*全新 Codex 宿主[\s\S]*Claude Fable 5\.1\/high/);
+  assert.match(english, /Cursor \*\*3\.19\.7\*\*[\s\S]*fresh Codex AI client[\s\S]*Claude Fable 5\.1\/high/);
+  assert.match(chinese, /Cursor \*\*3\.19\.7\*\*[\s\S]*全新 Codex AI 客户端[\s\S]*Claude Fable 5\.1\/high/);
   assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);

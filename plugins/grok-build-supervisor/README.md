@@ -4,14 +4,14 @@
 
 **Let Codex, Claude Code, or Pi plan and review the work while automatically coordinating Grok Build to execute tasks, track progress, and verify results.**
 
-Grok Build Supervisor is a separate plugin for Codex, Claude Code, and Pi. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when a host task ends or the plugin is reloaded. The supervising host can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
+Grok Build Supervisor is a separate plugin for Codex, Claude Code, and Pi. It opens or resumes a real Grok Build window in Windows Terminal and keeps the connection alive in the background, even when an AI client task ends or the plugin is reloaded. The supervising AI client can send work, follow its status, handle questions and permissions, cancel it, and check the final result.
 
 > [!NOTE]
 > Live-tested on Windows 11 with Windows Terminal, PowerShell, and Grok Build 1.0.10. The npm package installation and MCP registration were also verified with Pi 0.84.3. Other operating systems are not currently claimed as end-to-end supported.
 
 ## Install
 
-Host invocation: initialize with `$grok-build-supervisor init` in Codex, then select **Enable Grok Execution** (`$grok-executor-on`) or **Disable Grok Execution** (`$grok-executor-off`) directly; no argument is needed. In Claude Code, initialize with `/grok-build-supervisor:grok_init`, then select `/grok-build-supervisor:grok-executor-on` or `/grok-build-supervisor:grok-executor-off`. The short `/grok_init` and `/grok_execute on|off` examples below are legacy chat aliases, not universally registered slash commands. Explicit native invocations have the same authorization boundaries; selecting the Supervisor skill alone, quoted examples, and ordinary “continue” never activate execution.
+AI client entry: initialize with `$grok-build-supervisor init` in Codex, then select **Enable Grok Execution** (`$grok-executor-on`) or **Disable Grok Execution** (`$grok-executor-off`) directly; no argument is needed. In Claude Code, initialize with `/grok-build-supervisor:grok_init`, then select `/grok-build-supervisor:grok-executor-on` or `/grok-build-supervisor:grok-executor-off`. The short `/grok_init` and `/grok_execute on|off` examples below are legacy chat aliases, not universally registered slash commands. Explicit native invocations have the same authorization boundaries; selecting the Supervisor skill alone, quoted examples, and ordinary “continue” never activate execution.
 
 Version 0.4.3 has three skill entries: **Grok Build Supervisor** for initialization and session supervision, **Enable Grok Execution**, and **Disable Grok Execution**. The old **Grok Executor Mode** entry was removed; its shared execution policy is now an internal reference. Disabling execution preserves active work and the terminal.
 
@@ -42,9 +42,9 @@ Pi:
 pi install npm:pi-grok-build-supervisor
 ```
 
-Other MCP hosts: give the current client the [AI install playbook](../../docs/ai-install.md) and ask it to include Grok Build Supervisor. Use the dedicated package `vanyangyang-grok-build-supervisor`; do not borrow `pi-grok-build-supervisor`. That path is not first-class and is not live-tested.
+Other MCP-capable AI clients: give the current AI client the [AI install playbook](../../docs/ai-install.md) and ask it to include Grok Build Supervisor. Use the dedicated package `vanyangyang-grok-build-supervisor`; do not borrow `pi-grok-build-supervisor`. That path is not first-class and is not live-tested.
 
-Start a new Codex task, restart Claude Code / run `/reload-plugins`, restart Pi, or reload the MCP servers of a generic host after installation or update to load the updated skills and prompts. Pi package 0.1.9 is versioned independently and embeds Grok Build Supervisor 0.4.3.
+Start a new Codex task, restart Claude Code / run `/reload-plugins`, restart Pi, or reload the MCP servers of a generic AI client after installation or update to load the updated skills and prompts. Pi package 0.1.9 is versioned independently and embeds Grok Build Supervisor 0.4.3.
 
 Installing Grok Build Supervisor does not install or start Cursor Bridge.
 
@@ -92,7 +92,7 @@ Open the project you want to work on, then turn supervised execution on:
 /grok_execute on
 ```
 
-At that moment Codex, Claude Code, or Pi binds executor mode to the current project directory and immediately reuses or starts its visible Grok terminal. Activation does not send a coding task. When the terminal is ready, ask for work normally; the host sends the separately approved task and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
+At that moment Codex, Claude Code, or Pi binds executor mode to the current project directory and immediately reuses or starts its visible Grok terminal. Activation does not send a coding task. When the terminal is ready, ask for work normally; the current AI client sends the separately approved task and keeps watching until Grok finishes, fails, asks a question, or needs a permission decision. You do not manage the TUI, session ID, or process yourself.
 
 The first time Grok sees a project containing local automation, its own terminal may ask whether you trust that directory. The Supervisor recognizes this exact screen, keeps the same terminal and session, and tells you to confirm there; do not run `/grok_execute on` again. It never presses `y` or adds `--trust` for you. After you answer in Grok, activation continues automatically.
 
@@ -129,10 +129,10 @@ The Supervisor handles the connection details. Users do not manage the underlyin
 
 - Closing one Codex, Claude Code, or Pi task, or updating the plugin, does not immediately disconnect the background Supervisor.
 - Different projects use independent Grok connections, terminals, and execution records. A task in project B does not take over project A's connection; permissions, cancellation, and results stay with the selected project.
-- More than one host can view the same Grok session, but each workspace has only one writer at a time. This prevents two agents from writing over each other while allowing different workspaces to run concurrently. Workspace paths are resolved before assigning ownership, so aliases of the same directory share one writer lock.
+- More than one AI client can view the same Grok session, but each workspace has only one writer at a time. This prevents two agents from writing over each other while allowing different workspaces to run concurrently. Workspace paths are resolved before assigning ownership, so aliases of the same directory share one writer lock.
 - Status checks return compact stages such as locating, modifying, and verifying, with bounded file and tool counts. Silent Supervisor heartbeats do not pretend that Grok made progress, and raw tool logs or the answer accumulated so far are not repeated.
 - Short final answers are returned once. A longer report is saved as a local file, and the plugin returns its location, size, checksum, truncation status, and a short summary. [context-mode (recommended)](https://github.com/mksglu/context-mode) can process that file when installed, but the Supervisor does not require it.
-- Grok is told whether the sender is Codex, Claude Code, Pi, or another host, instead of always being told that Codex sent the task.
+- Grok is told whether the sender is Codex, Claude Code, Pi, or another AI client, instead of always being told that Codex sent the task.
 - The scripts needed by an already-running session are copied to persistent storage, so refreshing the plugin cache cannot remove them mid-session.
 - A newer plugin waits until an older busy Supervisor is idle before replacing it. Existing work stays connected during the transition.
 - Upgrading from a Supervisor without workspace routing requires that older daemon to become idle first. The new plugin reports this boundary instead of switching another project's connection. Previously recorded sessions remain in their original state directory; the proxy only needs to be initialized once for all projects.
