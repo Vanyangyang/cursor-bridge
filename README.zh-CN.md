@@ -3,9 +3,9 @@
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
-<p align="center"><strong>⭐ 如果 Cursor Bridge 对你有帮助，欢迎在 GitHub 点个 Star——这能帮助更多人发现项目。</strong></p>
+<p align="center">如果 Cursor Bridge 对你有用，欢迎点个 GitHub Star。</p>
 
-<p align="center"><sub><strong>版本兼容说明：</strong>Cursor Bridge 只维护 Cursor 最新版本，不再主动兼容上一版本。如果需要使用历史 Cursor 版本，请先前往 <a href="./COMPATIBILITY.zh-CN.md">Cursor Bridge 兼容与更新历史</a>，精确切换到已列出的对应版本；历史版本不再维护。如果历史版本仍不能满足您的需求，请点击仓库右上角的 <strong>Fork</strong>，并在自己的 Fork 中自行适配。</sub></p>
+<p align="center"><sub><strong>兼容说明：</strong>我只跟着 Cursor 最新版维护。旧版 Cursor 我不会主动去适配。如果必须用历史 Cursor，先看 <a href="./COMPATIBILITY.zh-CN.md">兼容与更新历史</a>，有列出对应的 Bridge 归档版就切到那一版。归档版不再修。对不上的话，点右上角 <strong>Fork</strong>，在自己的仓库里改。</sub></p>
 
 # Cursor Bridge + Grok Build Supervisor
 
@@ -20,45 +20,45 @@
 > [!WARNING]
 > **目前仅支持 Windows：** Cursor Bridge 和 Grok Build Supervisor 当前都只支持 Windows；macOS 和 Linux 尚不支持，也未通过端到端验收。
 
-**两个独立安装、互不影响的 Coding Agent MCP 插件，可用于 Codex、Claude Code、Grok Build 和 Pi；只安装自己需要的 Bridge 即可。其他支持 MCP 的 AI 客户端可以把[AI 安装说明](./docs/ai-install.zh-CN.md)交给当前 AI，让它自行安装 MCP 和 Skill。**
+我维护了两个 MCP 插件，分开装，互不影响。Codex、Claude Code、Grok Build、Pi 都能用。你的 AI 客户端如果能走 MCP，但不在这四个里面，把[AI 安装说明](./docs/ai-install.zh-CN.md)交给当前 AI，让它自己装 MCP 和 Skill。
 
 | 插件 | 用途 | 文档 |
 |---|---|---|
-| **Cursor Bridge** | 让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务 | [继续阅读](#cursor-bridge) |
-| **Grok Build Supervisor** | 让 Codex / Claude Code / Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
+| Cursor Bridge | 让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 问项目、对到源码。可选的 `cursor_do` 可以把范围清楚的任务交给 Cursor Agent。 | [继续阅读](#cursor-bridge) |
+| Grok Build Supervisor | Codex / Claude Code / Pi 继续做计划和验收，落地交给 Grok Build。Supervisor 看着执行和核对。 | [中文](./plugins/grok-build-supervisor/README.zh-CN.md) · [English](./plugins/grok-build-supervisor/README.md) |
 
-## 让你正在使用的 AI 客户端同时调用 Cursor 与 Grok Build
+## 继续用你手头的客户端，接上 Cursor 和 Grok Build
 
-继续使用你原本就在用的 **Codex（推荐）**、Claude Code 或 Pi 作为常用 AI 客户端。**AI 客户端** 是你正在对话的编程软件。它不是 `cursor_do` 可以派出的 Cursor Agent，也不是 MCP 协议里的 client。两个插件互相独立：只安装 Cursor Bridge，当前 AI 客户端就能使用 Cursor；只安装 Grok Build Supervisor，就能协调 Grok Build；两者都安装后，则可以在同一段对话里同时使用这两种能力。
+我自己日常还是 Codex，也更建议用它。Claude Code 和 Pi 一样能接。这里说的 AI 客户端，就是你正在对话的那套编程软件，不是 `cursor_do` 派出去的 Cursor Agent，也不是 MCP 协议里的 client。
+
+两个插件不绑在一起。想用 Cursor 就装 Cursor Bridge。想调度 Grok Build 就装 Grok Build Supervisor。两个都要，就都装，同一段对话里一起用。
 
 ```text
 Codex（推荐）/ Claude Code / Pi
         你原本使用的 AI 客户端
               │
-        插件赋予协调能力
+            可选插件
           ┌───┴──────────────┐
           ▼                  ▼
     Cursor Bridge     Grok Build Supervisor
    CCE + cursor_do       受监督的 Grok Build
 ```
 
-- 先用 `cursor_context_engine` 获取精简、可回到源码核验的项目理解。
-- 需要 Cursor 动手时，直接使用现在更明确的 `cursor_do` 路径执行有边界任务；最终 diff 和测试仍由当前 AI 客户端验收。
-- 需要 Grok Build 执行时，开启 `/grok_execute on`；当前 AI 客户端继续负责计划、看进度、处理问题与核验结果。
+我一般先用 `cursor_context_engine` 拿一份能回到源码核对的项目上下文。觉得一次有边界的 Cursor 执行更省事，再用 `cursor_do`；diff 和测试还是当前 AI 客户端自己看。需要 Grok Build 动手时开 `/grok_execute on`，当前客户端继续做计划、看进度、回答问题、验收结果。
 
-这个仓库不是一款新的“协调器”，而是给你正在使用的 AI 客户端增加这些能力；按需安装即可。
+插件挂在你已经在用的客户端上。我没有再做一层协调器。
 
 ## Grok Build Supervisor（New）
 
-**让 Codex、Claude Code 或 Pi 负责规划和把关，自动调度 Grok Build 执行任务、跟进过程并核验结果。**
+Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。Supervisor 跟着看执行和核对。
 
-它与 Cursor Bridge 分别安装、分别更新。
+它和 Cursor Bridge 分开安装、分开更新。
 
 [查看介绍、安装方法和使用说明 →](./plugins/grok-build-supervisor/README.zh-CN.md)
 
 ## Cursor Bridge
 
-**让 Codex / Claude Code / Grok Build / Pi 通过 Cursor CCE 自动理解项目、找准代码、查清调用关系；需要时，可以让可选功能 `cursor_do` 执行明确的任务。**
+我想让 Codex / Claude Code / Grok Build / Pi 走 Cursor CCE 问项目时，用的就是这个插件。`cursor_do` 是可选的，用来把范围清楚的任务交给 Cursor Agent。
 
 > [!IMPORTANT]
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按照[“更新已有安装”](#windows-update-migration)完成一次旧缓存进程清理。完成后，后续更新使用正常流程。
@@ -72,19 +72,19 @@ CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model
 
 ## CCE 是什么？
 
-**Cursor Context Engine（CCE）通过 MCP，把 Cursor 已有的项目索引与 Agent 搜索能力交给 Codex / Claude Code / Grok Build / Pi 使用。**
+Cursor Context Engine（CCE）就是 Cursor 自己的项目索引和 Agent 搜索，通过 MCP 交给 Codex / Claude Code / Grok Build / Pi 用。
 
-你只需要问一次真实的项目问题。Cursor 自己决定要使用语义检索、精确搜索、源码读取、引用追踪还是 Agent 探索；Cursor Bridge 最后只把精简、可追溯到源码的 `path:line` 证据与相关性说明交回主 Agent，而不是把整个搜索过程塞进主上下文。
+问一次真实的项目问题就行。语义检索、精确搜索、读源码、追引用、还是 Agent 探索，由 Cursor 自己选。Bridge 只把精简的 `path:line` 证据和相关性说明交回主 Agent，不会把整段搜索过程塞进主上下文。
 
-这样可以减少猜目录、重复 `grep` 和无效上下文消耗。
+我写 Bridge，就是不想看主 Agent 猜目录、同一棵树 `grep` 两遍。
 
-Cursor Bridge 不检查或管理 Cursor 订阅。已登录 Cursor 能使用哪些模型、额度与 BYOK 选项，仍取决于你自己的 Cursor 配置。
+Cursor Bridge 不检查、也不管理你的 Cursor 订阅。能用哪些模型、额度、BYOK，还是你登录的那个 Cursor 自己的配置。
 
 ## 快速开始
 
 ### 1. 选择当前 AI 客户端，按需安装
 
-下面按你正在使用的 AI 客户端分组。Cursor Bridge 与 Grok Build Supervisor 互相独立：可以只装一个，也可以两个都装。
+下面按你正在用的 AI 客户端分组。Cursor Bridge 和 Grok Build Supervisor 分开装：只装一个也行，两个都装也行。
 
 #### Codex（推荐）
 
@@ -132,7 +132,7 @@ pi install npm:pi-grok-build-supervisor
 请完整阅读 https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.zh-CN.md ，按其中步骤把 Cursor Bridge 安装到当前 AI 客户端，并按文末完成标准逐项汇报。只使用这份说明里指定的通用 npm 包。不要发明 marketplace 插件，不要借用 Pi 包，也不要发布任何包。
 ```
 
-这份说明会让当前 AI 先识别正在用的 AI 客户端：Codex / Claude Code / Grok / Pi 仍走各自的 marketplace 命令；其他 AI 客户端则把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`。说明只交代 MCP bundle 和 Skill 装完后的位置，由当前 AI 客户端自行登记，然后重启当前 AI 客户端，再初始化工作区。这不是官方优先支持的安装方式，也没有做过实机验收。Cursor Bridge 目前仍只支持 Windows。
+这份说明会让当前 AI 先认客户端。Codex / Claude Code / Grok / Pi 还是走各自的 marketplace 命令；其他客户端把 `vanyangyang-cursor-bridge` 装到 `%LOCALAPPDATA%\cursor-bridge\npm`。说明只告诉 MCP bundle 和 Skill 装在哪，登记、重启、初始化工作区都由当前 AI 客户端自己做。这不是我优先维护的安装方式，也没做过实机验收。Cursor Bridge 目前仍只支持 Windows。
 
 ### 2. 重启或重载当前 AI 客户端
 
@@ -150,9 +150,9 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 如果安装了 Grok Build Supervisor，先初始化一次（Codex 使用 `$grok-build-supervisor init`），再在需要 Grok 工作的项目中选择 **Enable Grok Execution**。选择 **Disable Grok Execution** 可恢复 AI 客户端正常执行，且不会关闭终端；两个开关都不需要额外参数。其他 AI 客户端和兼容命令见 [Grok 使用指南](./plugins/grok-build-supervisor/README.zh-CN.md#安装)。
 
-### 4. 开始处理真实任务
+### 4. 拿一个真问题试试
 
-安装 Cursor Bridge 后，可以直接问真正的项目问题：
+装了 Cursor Bridge，就直接问项目里的真问题：
 
 ```text
 这个状态由谁持有？从存档加载、运行时使用到保存写回的完整链路是什么？
@@ -163,7 +163,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 > [!TIP]
 > **Windows 11 推荐：极简模式**
 >
-> 初始化完成后，说“将 CCE 切换到极简模式”。真实 Cursor、项目索引、Agent DOM 与任务队列会继续在后台运行，只隐藏顶层窗口；你可以把 Cursor 作为插件背后的能力无感使用，`cursor_context_engine` 和 `cursor_do` 仍然可用。
+> 初始化完成后，说“将 CCE 切换到极简模式”。真实 Cursor、项目索引、Agent DOM 和任务队列还在后台跑，只是顶层窗口藏起来。`cursor_context_engine` 和 `cursor_do` 还能用，只是看不见 Cursor 界面。
 >
 > **代价：**极简模式期间，手动打开 Cursor 只会复用受守卫的单实例，并继续保持隐藏。需要重新使用 Cursor 界面时，先说“将 CCE 切换到普通模式”。
 
@@ -171,23 +171,25 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 当前配对、证据边界和归档安装指令见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)和[最新发布](https://github.com/Vanyangyang/cursor-bridge/releases)。Agents Window 不可用但 Cursor 暴露 IDE/workbench 时，CCE 会使用该界面。运行中的 FIFO 在当前编辑器能提供会话身份时会发布 Agent ID，`cursor_task_control` 的 cancel 只停止这一条；没有 ID 时不会猜测点击 Stop。
 
-支持的 AI 客户端：**Codex**、**Claude Code**、**Grok Build**、**Pi**。其他支持 MCP 的 AI 客户端可以使用 [AI 安装说明](./docs/ai-install.zh-CN.md)；它们不会获得 marketplace 更新，也不属于已实机验收的 AI 客户端集合。Grok 安装后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
+支持的 AI 客户端是 Codex、Claude Code、Grok Build、Pi，这几个我做过实机验收。其他能走 MCP 的客户端可以用 [AI 安装说明](./docs/ai-install.zh-CN.md)；没有 marketplace 更新，也不算已验收集合。Grok 装完后执行 `grok plugin enable cursor-bridge`，再在 `/plugins` 按 `r`，或新开一个会话。
 
-## 用好 CCE 与 `cursor_do`
+## 怎么用 CCE 和 `cursor_do`
 
-- **先理解项目：** `cursor_context_engine` 会追踪所有权、调用链、数据流、注册关系和跨模块联系，最后只返回精简的源码锚点、覆盖范围、缺口与置信度。
-- **再用 `cursor_do` 执行有边界任务：** 它会把范围清楚的任务交给 Cursor Agent，并返回稳定的任务 ID，便于继续查看与恢复。`cursor_do` 仍是可选能力，但不再藏在边角：只要一次有边界的 Cursor 执行能节省时间，就可以直接使用；最终结果、真实工作区改动与验证证据仍由主 Agent 审核。
-- **指定一次，持续使用：** 可以说“CCE 默认使用 GPT-5.6 Terra，思考程度 max”或“`cursor_do` 默认使用 GPT-5.6 Sol，思考程度 high”。`cursor_model` 会分别持久保存 CCE 与 `cursor_do` 的默认值，跨 AI 客户端任务和重启继续生效，直到你明确修改或重置。Bridge 会在每次发送前应用并回读选择；无法确认时停止发送，不会静默退回 Auto。
+`cursor_context_engine` 会顺着所有权、调用链、数据流、注册关系和跨模块联系往下查，回来只有精简的源码锚点、覆盖范围、缺口和置信度。
 
-## 完整 MCP 工具说明
+`cursor_do` 把范围清楚的任务交给 Cursor Agent，并返回稳定的任务 ID，方便接着看、接着恢复。它是可选的。我觉得一次有边界的 Cursor 执行更省事时才会用。结果、工作区改动、验证证据还是主 Agent 审。
+
+模型可以口头指定，比如“CCE 默认使用 GPT-5.6 Terra，思考程度 max”，或“`cursor_do` 默认使用 GPT-5.6 Sol，思考程度 high”。`cursor_model` 会把 CCE 和 `cursor_do` 的默认值分开存，跨任务、跨重启都还在，除非你改或重置。Bridge 每次发送前都会套上选择并回读；对不上就停，不会悄悄退回 Auto。
+
+## MCP 工具
 
 | 工具 | 作用 |
 |---|---|
-| **`cursor_init`** | 使用一个绝对路径初始化 CCE，或切换工作区。 |
-| **`cursor_context_engine`** | 使用一个自然语言 `query` 进行只读项目理解。 |
-| **`cursor_do`** | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果。 |
-| **`cursor_model`** | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
-| **`cursor_status`** | 查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。任务视图默认精简；`cursor_status(task_id, detail="result")` 返回纯完整回复并记录收取，`detail="full"` 保留诊断任务详情和回复。 |
+| `cursor_init` | 使用一个绝对路径初始化 CCE，或切换工作区。 |
+| `cursor_context_engine` | 使用一个自然语言 `query` 进行只读项目理解。 |
+| `cursor_do` | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果。 |
+| `cursor_model` | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
+| `cursor_status` | 查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。任务视图默认精简；`cursor_status(task_id, detail="result")` 返回纯完整回复并记录收取，`detail="full"` 保留诊断任务详情和回复。 |
 | `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
 | `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`，并返回动作/状态摘要；正文需另用 `cursor_status(task_id, detail="result")` 取得。 |
 
@@ -258,9 +260,9 @@ pi update npm:pi-cursor-bridge
 - 定向源码核对；
 - 跨文件核验确实需要时使用 Cursor Explore。
 
-为什么这条路可行？因为 Cursor 的项目理解本身就结合了语义索引、精确搜索、定向读取和 Agent 探索。Cursor Bridge 选择复用这套现成能力，而不是再造一套代码搜索栈。
+我复用 Cursor，是因为它自己就有索引和 Agent 搜索。Bridge 只是把这套能力接到另一个 coding Agent 上，我不想再造一套搜索栈。
 
-简单定位应快速收敛；调用链、数据流、注册关系、接口实现和所有权问题可以跨模块继续追踪，直到取得最小充分证据。
+“这个符号在哪”这类问题应该很快结束。调用链、数据流、注册关系、接口实现、所有权可以继续跨模块追，追到证据够用为止。
 
 安装后的 `cce-routing` Skill 会为陌生项目语义问题提供有边界的 CCE 路由指引，同时让已知文件读取、测试、日志、构建、Git 和外部文档继续使用原生工具。Grok Build 在插件启用后会加载同一套 plugin skill。Claude Code 还有一个很窄、失败开放的竞争检索路由保护；最终是否调用工具，仍由当前 AI 客户端的模型决定。
 
@@ -391,7 +393,7 @@ npm run build
 
 ## 友情链接
 
-- [LINUX DO](https://linux.do) — 新的理想型社区
+- [LINUX DO](https://linux.do)
 
 ## License
 
