@@ -8,7 +8,7 @@ This repository ships two independently installable plugins, two independently v
 | Grok Build Supervisor | 0.4.3 | Codex, Claude Code |
 | Cursor Bridge for Pi | 0.2.4 | `pi-cursor-bridge` on npm |
 | Grok Build Supervisor for Pi | 0.1.9 | `pi-grok-build-supervisor` on npm |
-| Cursor Bridge generic MCP | 0.1.0 | `vanyangyang-cursor-bridge` on npm |
+| Cursor Bridge generic MCP | 0.1.1 | `vanyangyang-cursor-bridge` on npm |
 | Grok Build Supervisor generic MCP | 0.1.0 | `vanyangyang-grok-build-supervisor` on npm |
 
 The private `cursor-bridge-workspace` root exists only for development, build, and test tooling; do not publish it or the retired `cursor-mcp-bridge` package. The Pi and generic MCP versions are wrapper-package versions; their manifests must also name the exact embedded Cursor Bridge or Grok Build Supervisor version. The unscoped name `cursor-bridge-mcp` is already taken by an unrelated package; do not use it.
@@ -80,7 +80,7 @@ Keep the wrapper and embedded versions synchronized:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `vanyangyang-cursor-bridge`: package 0.1.0, embedded Cursor Bridge 6.0.4
+- `vanyangyang-cursor-bridge`: package 0.1.1, embedded Cursor Bridge 6.0.4
 - `vanyangyang-grok-build-supervisor`: package 0.1.0, embedded Grok Build Supervisor 0.4.3
 - `docs/ai-install.manifest.json` npm pins, playbooks, package READMEs, and MCP staging tests
 

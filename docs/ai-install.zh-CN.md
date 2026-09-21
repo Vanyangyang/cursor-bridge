@@ -42,7 +42,7 @@
 
 ```powershell
 $prefix = "$env:LOCALAPPDATA\cursor-bridge\npm"
-npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.0
+npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.1
 ```
 
 如果用户要求安装 Grok Build Supervisor：
@@ -51,9 +51,9 @@ npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.0
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-build-supervisor@0.1.0
 ```
 
-记录 `source: npm:vanyangyang-cursor-bridge@0.1.0`。
+记录 `source: npm:vanyangyang-cursor-bridge@0.1.1`。
 
-如果 `npm install` 返回 `E404` 或其他仓库错误，说明包可能还没发布。再 clone `%LOCALAPPDATA%\cursor-bridge\checkout` 作为后备，把 npm 错误记进 `blockers`，并设置 `source: git-checkout`。
+如果 `npm install` 返回 `E404` 或其他仓库错误，再 clone `%LOCALAPPDATA%\cursor-bridge\checkout` 作为后备，把 npm 错误记进 `blockers`，并设置 `source: git-checkout`。
 
 ## 3. 产物位置
 
@@ -100,7 +100,7 @@ MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径
 ## Cursor Bridge install report
 - host: <AI 客户端名称>
 - path: first-class marketplace | generic-ai-install
-- source: npm:vanyangyang-cursor-bridge@0.1.0 | git-checkout | repo-workspace
+- source: npm:vanyangyang-cursor-bridge@0.1.1 | git-checkout | repo-workspace
 - checkout: <npm prefix、git 检出或仓库的绝对路径>
 - mcpConfig: <配置文件绝对路径>
 - mcpBundle: <dist/cursor-bridge.mjs 的绝对路径>

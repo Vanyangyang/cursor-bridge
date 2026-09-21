@@ -6,6 +6,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Published the dedicated `vanyangyang-cursor-bridge` wrapper through its own `publish-cursor-mcp.yml` npm Trusted Publishing workflow, with a valid `cursor-bridge-mcp` executable shim and package-specific release tags.
+
 ## [6.0.4] - 2026-09-21
 
 ### Added
