@@ -27,7 +27,7 @@
   },
   "main": "./dist/cursor-bridge.mjs",
   "bin": {
-    "cursor-bridge-mcp": "./bin/cursor-bridge-mcp.mjs"
+    "cursor-bridge-mcp": "bin/cursor-bridge-mcp.mjs"
   },
   "files": [
     "bin/",
