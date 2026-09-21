@@ -27,9 +27,10 @@
   },
   "main": "./dist/cursor-bridge.mjs",
   "bin": {
-    "cursor-bridge-mcp": "./dist/cursor-bridge.mjs"
+    "cursor-bridge-mcp": "./bin/cursor-bridge-mcp.mjs"
   },
   "files": [
+    "bin/",
     "dist/",
     "skills/",
     "README.md",

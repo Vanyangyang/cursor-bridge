@@ -35,7 +35,7 @@ test('dedicated generic MCP package sources are independent of Pi wrappers', () 
   assert.equal(cursor.name, 'vanyangyang-cursor-bridge');
   assert.equal(cursor.version, '0.1.0');
   assert.equal(cursor.mcpPackage.embeddedProductVersion, '6.0.4');
-  assert.deepEqual(cursor.bin, { 'cursor-bridge-mcp': './dist/cursor-bridge.mjs' });
+  assert.deepEqual(cursor.bin, { 'cursor-bridge-mcp': './bin/cursor-bridge-mcp.mjs' });
   assert.equal(cursor.pi, undefined);
   assert.equal(String(cursor.name).startsWith('pi-'), false);
 
@@ -76,7 +76,7 @@ test('generic MCP package staging embeds committed bundles and skills without Pi
   assert.equal(cursor.name, 'vanyangyang-cursor-bridge');
   assert.equal(cursor.version, '0.1.0');
   assert.equal(cursor.mcpPackage.embeddedProductVersion, '6.0.4');
-  assert.deepEqual(cursor.bin, { 'cursor-bridge-mcp': './dist/cursor-bridge.mjs' });
+  assert.deepEqual(cursor.bin, { 'cursor-bridge-mcp': './bin/cursor-bridge-mcp.mjs' });
   assert.equal(cursor.pi, undefined);
   assert.equal(grok.name, 'vanyangyang-grok-build-supervisor');
   assert.equal(grok.version, '0.1.0');
@@ -87,6 +87,9 @@ test('generic MCP package staging embeds committed bundles and skills without Pi
   const cursorBundle = readFileSync(join(output, 'vanyangyang-cursor-bridge', 'dist', 'cursor-bridge.mjs'), 'utf8');
   assert.match(cursorBundle, /cursor_context_engine/);
   assert.match(cursorBundle, /cursor_model/);
+  const cursorBin = readFileSync(join(output, 'vanyangyang-cursor-bridge', 'bin', 'cursor-bridge-mcp.mjs'), 'utf8');
+  assert.match(cursorBin, /^#!\/usr\/bin\/env node/);
+  assert.match(cursorBin, /import "\.\.\/dist\/cursor-bridge\.mjs"/);
   assert.equal(
     existsSync(join(output, 'vanyangyang-cursor-bridge', 'dist', 'cursor-lifecycle-supervisor.mjs')),
     true,
