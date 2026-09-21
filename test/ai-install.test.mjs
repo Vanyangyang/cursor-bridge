@@ -24,7 +24,7 @@ test('AI install manifest matches committed bundles, skills, and commands', () =
   assert.equal(grok.required, false);
   assert.deepEqual(cursor.npm, {
     package: 'vanyangyang-cursor-bridge',
-    version: '0.1.1',
+    version: '0.1.2',
     bundle: 'dist/cursor-bridge.mjs',
     skillsRoot: 'skills',
     bin: 'cursor-bridge-mcp',
@@ -73,9 +73,9 @@ test('bilingual AI install playbooks share the same completion standard', () => 
     assert.match(content, /ai-install\.manifest\.json/);
     assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\checkout/);
     assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\npm/);
-    assert.match(content, /vanyangyang-cursor-bridge@0\.1\.1/);
+    assert.match(content, /vanyangyang-cursor-bridge@0\.1\.2/);
     assert.match(content, /vanyangyang-grok-build-supervisor@0\.1\.0/);
-    assert.match(content, /source: npm:vanyangyang-cursor-bridge@0\.1\.1 \| git-checkout \| repo-workspace/);
+    assert.match(content, /source: npm:vanyangyang-cursor-bridge@0\.1\.2 \| git-checkout \| repo-workspace/);
     assert.match(content, /Windows only|只支持 Windows/);
     assert.match(content, /first-class marketplace \| generic-ai-install/);
     assert.match(content, /result: PASS \| FAIL/);

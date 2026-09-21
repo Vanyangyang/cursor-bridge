@@ -23,7 +23,7 @@ appendFileSync(process.env.FAKE_NPM_LOG, JSON.stringify(args) + "\\n");
 if (command === "run" && args[1] === "build:mcp-packages") {
   const packageRoot = resolve(".mcp-package-stage", "vanyangyang-cursor-bridge");
   mkdirSync(packageRoot, { recursive: true });
-  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "vanyangyang-cursor-bridge", version: "0.1.1" }));
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "vanyangyang-cursor-bridge", version: "0.1.2" }));
   process.exit(0);
 }
 if (command === "pack") {
@@ -60,7 +60,7 @@ process.exit(2);
   return fakeNpmCommand;
 }
 
-function runScenario(t, { lookup, mismatch = false, tag = "cursor-bridge-mcp--v0.1.1", token } = {}) {
+function runScenario(t, { lookup, mismatch = false, tag = "cursor-bridge-mcp--v0.1.2", token } = {}) {
   const root = mkdtempSync(join(tmpdir(), "cursor-bridge-mcp-publisher-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const logFile = join(root, "npm-calls.jsonl");
@@ -113,8 +113,8 @@ test("Cursor generic MCP publisher skips an identical immutable version and reje
 test("Cursor generic MCP publisher rejects wrong tags, uncertain registry state, and real tokens", (t) => {
   for (const scenario of [
     { tag: "cursor-bridge-mcp--v9.9.9", lookup: "missing" },
-    { tag: "cursor-bridge-mcp--v0.1.1", lookup: "error" },
-    { tag: "cursor-bridge-mcp--v0.1.1", lookup: "missing", token: "real-secret" },
+    { tag: "cursor-bridge-mcp--v0.1.2", lookup: "error" },
+    { tag: "cursor-bridge-mcp--v0.1.2", lookup: "missing", token: "real-secret" },
   ]) {
     const { result, calls } = runScenario(t, scenario);
     assert.notEqual(result.status, 0, result.stderr || result.stdout);

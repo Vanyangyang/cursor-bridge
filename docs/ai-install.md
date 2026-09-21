@@ -42,7 +42,7 @@ Rules:
 
 ```powershell
 $prefix = "$env:LOCALAPPDATA\cursor-bridge\npm"
-npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.1
+npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.2
 ```
 
 If the user asked for Grok Build Supervisor:
@@ -51,7 +51,7 @@ If the user asked for Grok Build Supervisor:
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-build-supervisor@0.1.0
 ```
 
-Record `source: npm:vanyangyang-cursor-bridge@0.1.1`.
+Record `source: npm:vanyangyang-cursor-bridge@0.1.2`.
 
 If `npm install` returns `E404` or another registry failure, clone `%LOCALAPPDATA%\cursor-bridge\checkout` as a fallback, record the npm error in `blockers`, and set `source: git-checkout`.
 
@@ -100,7 +100,7 @@ Fill every field. Use `PASS` only when every required item is true.
 ## Cursor Bridge install report
 - host: <AI client name>
 - path: first-class marketplace | generic-ai-install
-- source: npm:vanyangyang-cursor-bridge@0.1.1 | git-checkout | repo-workspace
+- source: npm:vanyangyang-cursor-bridge@0.1.2 | git-checkout | repo-workspace
 - checkout: <absolute npm prefix, git checkout, or repo path>
 - mcpConfig: <absolute config file>
 - mcpBundle: <absolute dist/cursor-bridge.mjs>
