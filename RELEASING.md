@@ -4,10 +4,10 @@ This repository ships two independently installable plugins, two independently v
 
 | Product | Current release target | Distribution |
 |---|---:|---|
-| Cursor Bridge | 6.0.1 | Codex, Claude Code, Grok Build |
-| Grok Build Supervisor | 0.4.1 | Codex, Claude Code |
-| Cursor Bridge for Pi | 0.2.1 | `pi-cursor-bridge` on npm |
-| Grok Build Supervisor for Pi | 0.1.7 | `pi-grok-build-supervisor` on npm |
+| Cursor Bridge | 6.0.4 | Codex, Claude Code, Grok Build |
+| Grok Build Supervisor | 0.4.3 | Codex, Claude Code |
+| Cursor Bridge for Pi | 0.2.4 | `pi-cursor-bridge` on npm |
+| Grok Build Supervisor for Pi | 0.1.9 | `pi-grok-build-supervisor` on npm |
 | Cursor Bridge generic MCP | 0.1.0 | `vanyangyang-cursor-bridge` on npm |
 | Grok Build Supervisor generic MCP | 0.1.0 | `vanyangyang-grok-build-supervisor` on npm |
 
@@ -48,7 +48,7 @@ Installed plugins execute these bundles directly; their hosts do not install run
 
 ### Cursor Bridge
 
-Keep 6.0.1 synchronized in:
+Keep 6.0.4 synchronized in:
 
 - `package.json` (the root `package-lock.json` remains an ignored local build input)
 - `server.mjs` (`PLUGIN_VERSION`)
@@ -72,7 +72,7 @@ Keep 0.4.1 synchronized in:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `pi-cursor-bridge`: package and adapter 0.2.1, embedded Cursor Bridge 6.0.1
+- `pi-cursor-bridge`: package and adapter 0.2.4, embedded Cursor Bridge 6.0.4
 - `pi-grok-build-supervisor`: package and adapter 0.1.7, embedded Grok Build Supervisor 0.4.1
 - package READMEs and Pi staging tests
 
@@ -80,7 +80,7 @@ Keep the wrapper and embedded versions synchronized:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `vanyangyang-cursor-bridge`: package 0.1.0, embedded Cursor Bridge 6.0.3
+- `vanyangyang-cursor-bridge`: package 0.1.0, embedded Cursor Bridge 6.0.4
 - `vanyangyang-grok-build-supervisor`: package 0.1.0, embedded Grok Build Supervisor 0.4.3
 - `docs/ai-install.manifest.json` npm pins, playbooks, package READMEs, and MCP staging tests
 
@@ -108,14 +108,14 @@ Also validate both plugin structures with the current Claude/Codex validators, i
 4. Create annotated component tags at the verified release commit:
 
 ```powershell
-git tag -a cursor-bridge--v6.0.1 -m "Cursor Bridge 6.0.1"
-git push origin refs/tags/cursor-bridge--v6.0.1
+git tag -a cursor-bridge--v6.0.4 -m "Cursor Bridge 6.0.4"
+git push origin refs/tags/cursor-bridge--v6.0.4
 ```
 
 5. Publish one combined GitHub Release whose title always names both products and marks only changed components with `(New)`, for example:
 
 ```text
-Cursor Bridge 6.0.1 (New) + Grok Build Supervisor 0.4.1
+Cursor Bridge 6.0.4 (New) + Grok Build Supervisor 0.4.3
 ```
 
 6. Configure npm Trusted Publishing once for each existing Pi package. Both packages use the same GitHub Actions trust coordinates, but npm stores the relationship per package:

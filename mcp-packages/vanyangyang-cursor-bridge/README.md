@@ -10,7 +10,7 @@ The unscoped name `cursor-bridge-mcp` is already taken on npm by an unrelated pa
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-cursor-bridge@0.1.0
 ```
 
-The MCP bundle is `dist/cursor-bridge.mjs`. The skills are `skills/cce-routing` and `skills/cursor-delegate`. The current AI client registers those paths itself, then restarts. Wrapper 0.1.0 embeds Cursor Bridge 6.0.3.
+The MCP bundle is `dist/cursor-bridge.mjs`. The skills are `skills/cce-routing` and `skills/cursor-delegate`. The current AI client registers those paths itself, then restarts. Wrapper 0.1.0 embeds Cursor Bridge 6.0.4.
 
 Do not publish the private repository root, and do not restore `cursor-mcp-bridge`.
 

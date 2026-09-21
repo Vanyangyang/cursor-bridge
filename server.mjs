@@ -63,7 +63,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.3';
+const PLUGIN_VERSION = '6.0.4';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -666,6 +666,28 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
   return JSON.stringify({open:menus.length>0,rows});
 })()`;
 
+const EXPR_SELECTED_AGENT_MODEL_CONFIG = `(function(){
+  ${INPUT_PICKER_BODY}
+  const inputs=inputCandidates();
+  if(inputs.length!==1)return JSON.stringify({found:false,state:'input_ambiguous',inputCount:inputs.length});
+  const configs=[];
+  for(let node=inputs[0],n=0;node&&n<12;n++,node=node.parentElement){
+    const key=Object.keys(node).find(key=>key.startsWith('__reactFiber$'));
+    for(let f=key&&node[key],i=0;f&&i<48;i++,f=f.return){
+      const reference=f.memoizedProps&&f.memoizedProps.selectedAgent&&f.memoizedProps.selectedAgent.reference;
+      const handle=reference&&(reference._composerDataHandle||reference.composerDataHandle);
+      const data=handle&&(handle._cachedData||handle.data);
+      if(data&&data.modelConfig&&!configs.includes(data.modelConfig))configs.push(data.modelConfig);
+    }
+  }
+  if(configs.length!==1)return JSON.stringify({found:false,state:'model_config_ambiguous',configCount:configs.length});
+  const config=configs[0];
+  return JSON.stringify({found:true,modelName:String(config.modelName||''),selectedModels:(config.selectedModels||[]).map(model=>({
+    modelId:String(model&&model.modelId||''),
+    parameters:Object.fromEntries((model&&model.parameters||[]).map(parameter=>[String(parameter&&parameter.id||''),String(parameter&&parameter.value||'')]))
+  }))});
+})()`;
+
 function normalizeModelPickerText(value) {
   return String(value || '')
     .trim()
@@ -806,13 +828,12 @@ const WORKSPACE_SECTION_BODY = String.raw`
     if(matches.length!==1)return {diagnostic:fail('workspace_ambiguous')};
     const {section,project}=matches[0];
     if(project.remoteAuthority||!project.workspaceIdentifier.id)return {diagnostic:fail('workspace_environment_unverified')};
-    // Cursor's section-level New Agent action chooses among registered targets.
-    // Do not click it when a second workspace could win that choice.
-    if(section.source.projects.length!==1)return {diagnostic:fail('workspace_creation_target_ambiguous')};
     if(!section.button)return {diagnostic:fail('workspace_new_agent_unavailable')};
     return {section,diagnostic:{ok:true,state:'workspace_ready',workspace:wanted,
       workspaceId:project.workspaceIdentifier.id,sectionId:section.metadata.id,
-      environment:'local',identitySource:'registered_workspace_file_uri',repoUrls:Array.isArray(project.repoUrls)?project.repoUrls:[]}};
+      environment:'local',identitySource:'registered_workspace_file_uri',
+      workspaceSelectionRequired:section.source.projects.length!==1,
+      repoUrls:Array.isArray(project.repoUrls)?project.repoUrls:[]}};
   };
 `;
 
@@ -826,6 +847,57 @@ function exprCreateAgentForWorkspace(projectPath) {
       .map(header=>String(workspaceScalar(header.id)||'')).filter(Boolean))];
     result.section.button.click();
     return JSON.stringify({...result.diagnostic,state:'workspace_agent_creation_requested',previousAgentIds});
+  })()`;
+}
+
+function matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort) {
+  if (!snapshot || snapshot.found !== true) return null;
+  const requested = normalizeModelPickerText(requestedModel);
+  const entries = Array.isArray(snapshot.selectedModels) && snapshot.selectedModels.length
+    ? snapshot.selectedModels
+    : [{ modelId: snapshot.modelName, parameters: {} }];
+  const matches = entries.filter((entry) => {
+    const candidate = normalizeModelPickerText(entry && entry.modelId);
+    return candidate && (candidate === requested || requested === `cursor${candidate}`);
+  });
+  if (matches.length !== 1) return null;
+  const match = matches[0];
+  const effort = normalizeCursorModelEffort(match.parameters && match.parameters.effort, '');
+  if (requestedEffort && effort !== requestedEffort) return null;
+  return { modelId: match.modelId, effort: effort || null };
+}
+
+// Cursor 3.21 groups multiple local workspaces for the same repository under
+// one sidebar section. The section-level New Agent action starts a draft using
+// one default project; select the exact registered file URI before any prompt
+// is filled or submitted.
+function exprSelectAgentWorkspace(projectPath) {
+  return `(async function(){
+    const wanted=String(${JSON.stringify(String(projectPath || ''))}).replace(/\\\\/g,'/').replace(/^\\/([a-z]:\\/)/i,'$1').replace(/\\/+$/,'').toLowerCase();
+    const normalize=value=>String(value||'').replace(/\\\\/g,'/').replace(/^\\/([a-z]:\\/)/i,'$1').replace(/\\/+$/,'').toLowerCase();
+    const visible=node=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
+    const pathTriggers=()=>[...document.querySelectorAll('button.ui-select-trigger,button[aria-haspopup="menu"]')]
+      .filter(visible).filter(node=>/^[a-z]:\\//i.test(normalize(node.innerText||node.textContent)));
+    const triggers=pathTriggers();
+    const fail=(state,extra={})=>JSON.stringify({ok:false,state,wanted,...extra,
+      nextStep:'Select the exact local workspace '+${JSON.stringify(String(projectPath || ''))}+' in the new Agent project picker before retrying.'});
+    if(triggers.length!==1)return fail(triggers.length?'workspace_project_selector_ambiguous':'workspace_project_selector_unavailable',{triggerCount:triggers.length});
+    triggers[0].click();
+    await new Promise(resolve=>setTimeout(resolve,350));
+    const menus=[...document.querySelectorAll('[data-component="menu-popup"],[role="menu"]')].filter(visible)
+      .filter(menu=>String(menu.getAttribute('aria-label')||'')==='Select a project'||menu.querySelector('[aria-label="Select a project"]'));
+    const rows=[];const seen=new Set();
+    for(const menu of menus){
+      for(const row of menu.querySelectorAll('[data-component="menu-row"][role="menuitem"],[role="option"]')){
+        if(!visible(row)||seen.has(row))continue;seen.add(row);rows.push(row);
+      }
+    }
+    const available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim());
+    const matches=rows.filter(row=>normalize(row.innerText||row.textContent)===wanted);
+    if(matches.length!==1)return fail(matches.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{available});
+    matches[0].click();
+    await new Promise(resolve=>setTimeout(resolve,350));
+    return JSON.stringify({ok:true,state:'workspace_project_selection_requested',workspace:wanted,available});
   })()`;
 }
 
@@ -1133,7 +1205,8 @@ const EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
   const hasLegacyInput=!!document.querySelector('.aislash-editor-input');
   const hasLegacyHistory=!!document.querySelector('.compact-agent-history-react-menu-label')||
     [...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].some(e=>/Show Chat History|Chat History|Agent History/i.test((e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')));
-  const dialogs=[...document.querySelectorAll('[role="dialog"],dialog[open],.monaco-dialog-box,.quick-input-widget')].filter(visible);
+  const dialogs=[...document.querySelectorAll('[role="dialog"],dialog[open],.monaco-dialog-box,.quick-input-widget')]
+    .filter(visible).filter(node=>node.getAttribute('data-component')!=='preview-card-layer-popup');
   const dialog=dialogs[dialogs.length-1]||null;
   const dialogHeading=dialog&&dialog.querySelector('h1,h2,h3,[role="heading"]');
   const dialogLabel=dialog?String(dialog.getAttribute('aria-label')||dialog.getAttribute('title')||label(dialogHeading)||'').slice(0,120):null;
@@ -2868,6 +2941,10 @@ class CursorBridge {
     return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
   }
 
+  async _readSelectedAgentModelConfig(c, options) {
+    return this._readModelPickerValue(c, EXPR_SELECTED_AGENT_MODEL_CONFIG, 'selected_agent_model_config', options);
+  }
+
   async _clickModelPickerPoint(c, point) {
     if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
       throw new Error('Cursor model picker returned an invalid target');
@@ -3055,6 +3132,32 @@ class CursorBridge {
     const selectionStartedAt = Date.now();
     let stage = 'open_picker';
     try {
+      if (this.runtimeMode === 'minimal') {
+        stage = 'verify_hidden_model_config';
+        const snapshot = await this._readSelectedAgentModelConfig(c);
+        const verified = matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort);
+        if (!verified) {
+          throw createModelSelectionError(
+            `Cursor minimal runtime could not confirm ${requestedModel}${requestedEffort ? ` / ${requestedEffort}` : ''}; switch Cursor runtime to normal and retry`,
+            'hidden_model_not_confirmed',
+            true,
+            { available: (snapshot.selectedModels || []).map((entry) => entry.modelId).filter(Boolean) },
+          );
+        }
+        const result = {
+          configured: true,
+          applied: true,
+          requestedModel,
+          requestedEffort,
+          effectiveModel: verified.modelId,
+          effectiveEffort: verified.effort,
+          pickerDetail: null,
+          verificationSource: 'selected_agent_model_config',
+          verifiedAt: new Date().toISOString(),
+        };
+        if (job) job.modelSelection = result;
+        return result;
+      }
       const opened = await this._openModelPicker(c);
       stage = 'locate_model';
       let located = await this._findModelPickerModel(c, opened, requestedModel);
@@ -3113,6 +3216,34 @@ class CursorBridge {
         const selectedEffort = await resolveEffort();
         if (!selectedEffort.row) throwEffortFailure(selectedEffort);
         if (!selectedEffort.row.selected || !modelRow.selected) {
+          this._throwIfCancelledBeforeSend(job);
+          await this._clickModelPickerPoint(c, selectedEffort.row);
+          await sleep(550);
+        }
+      } else if (requestedEffort) {
+        // Cursor 3.21 exposes model and effort as separate root controls. Its
+        // model-list rows no longer advertise a submenu, so select the model
+        // first and then apply the requested effort through the root control.
+        if (!modelRow.selected) {
+          stage = 'select_model';
+          this._throwIfCancelledBeforeSend(job);
+          await this._clickModelPickerPoint(c, modelRow);
+          await sleep(550);
+          const reopened = await this._openModelPicker(c);
+          located = await this._findModelPickerModel(c, reopened, requestedModel);
+          modelRow = located.modelRow;
+          if (!modelRow) {
+            throw createModelSelectionError(
+              `Cursor model row disappeared while applying effort: ${requestedModel}`,
+              'model_unavailable',
+              true,
+            );
+          }
+        }
+        stage = 'select_effort';
+        const selectedEffort = await resolveEffort();
+        if (!selectedEffort.row) throwEffortFailure(selectedEffort);
+        if (!selectedEffort.row.selected) {
           this._throwIfCancelledBeforeSend(job);
           await this._clickModelPickerPoint(c, selectedEffort.row);
           await sleep(550);
@@ -3295,7 +3426,13 @@ class CursorBridge {
       if (!created.ok) {
         throw createWorkspaceBindingError(created);
       }
-      await sleep(1100);
+      if (created.workspaceSelectionRequired) {
+        await sleep(250);
+        const selected = JSON.parse(await evalJS(c, exprSelectAgentWorkspace(options.projectPath)) || '{}');
+        if (options.job) options.job.workspaceBindingChecks.project_selection = { ...selected, checkedAt: new Date().toISOString() };
+        if (!selected.ok) throw createWorkspaceBindingError(selected);
+      }
+      await sleep(created.workspaceSelectionRequired ? 750 : 1100);
       const actual = JSON.parse(await evalJS(c, exprInspectAgentWorkspace(options.projectPath, { excludedAgentIds: created.previousAgentIds })) || '{}');
       if (options.job) options.job.workspaceBindingChecks.after_create = { ...actual, checkedAt: new Date().toISOString() };
       if (!actual.ok) throw createWorkspaceBindingError(actual);
@@ -5365,7 +5502,10 @@ export {
   EXPR_FIND_NEWAGENT,
   EXPR_MODEL_PICKER_TRIGGER,
   EXPR_MODEL_PICKER_ROWS,
+  EXPR_SELECTED_AGENT_MODEL_CONFIG,
+  matchSelectedAgentModelConfig,
   exprCreateAgentForWorkspace,
+  exprSelectAgentWorkspace,
   exprInspectWorkspaceRepository,
   exprRegisterAgentsWorkspace,
   exprInspectAgentWorkspace,

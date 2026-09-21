@@ -210,6 +210,7 @@ test('input and New Agent expressions cover legacy and Cursor Agents UI contract
   assert.match(EXPR_VISIBLE, /tiptap\.ProseMirror/);
   assert.match(EXPR_VISIBLE, /aislash-editor-input/);
   assert.match(EXPR_PAGE_CAPABILITIES, /role="dialog"/);
+  assert.match(EXPR_PAGE_CAPABILITIES, /preview-card-layer-popup/);
   assert.match(EXPR_PAGE_CAPABILITIES, /settingsOrCustomizeVisible/);
   assert.match(EXPR_PAGE_CAPABILITIES, /ui-customize-view/);
   assert.match(EXPR_PAGE_CAPABILITIES, /signInControlVisible/);

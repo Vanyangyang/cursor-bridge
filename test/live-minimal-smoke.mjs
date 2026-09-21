@@ -18,6 +18,9 @@ const bridge = new CursorBridge({
   projectPath: process.cwd(),
   workspaceFile: null,
 });
+const liveModel = String(process.env.CURSOR_BRIDGE_LIVE_MODEL || '').trim();
+const liveEffort = String(process.env.CURSOR_BRIDGE_LIVE_EFFORT || '').trim() || null;
+if (liveModel) bridge.modelPreferences.targets.cce = { model: liveModel, effort: liveEffort };
 
 let result = null;
 let error = null;
@@ -40,4 +43,4 @@ try {
   }
 }
 
-process.exitCode = error ? 1 : 0;
+process.exit(error ? 1 : 0);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CursorBridge, exprCreateAgentForWorkspace, exprInspectWorkspaceRepository, exprInspectAgentWorkspace, exprRegisterAgentsWorkspace } from '../server.mjs';
+import { CursorBridge, exprCreateAgentForWorkspace, exprSelectAgentWorkspace, exprInspectWorkspaceRepository, exprInspectAgentWorkspace, exprRegisterAgentsWorkspace } from '../server.mjs';
 
 const path = 'G:/VibeProj/spellcast';
 const environment = (localPath = path, id = 'workspace-spellcast') => ({ id, uri: { scheme: 'file', path: localPath } });
@@ -140,13 +140,11 @@ test('same names, aliases and remote repositories cannot select another checkout
   assert.equal(exact.clicks, 1);
 });
 
-test('multiple registrations and multiple targets in one section fail without a click', () => {
+test('multiple registrations for the exact path fail without a click', () => {
   for (const sections of [
     [section([project()]), section([project()])],
     [section([project()]), section([project()], { id: 'repo:another/alias' })],
     [section([project(), project()])],
-    [section([project(), project('G:/other/spellcast')])],
-    [section([{ type: 'repo', repoUrls: ['github.com/vanyangyang/spellcast'] }, project()])],
   ]) {
     const document = page(sections);
     const result = evaluate(exprCreateAgentForWorkspace(path), document);
@@ -154,6 +152,38 @@ test('multiple registrations and multiple targets in one section fail without a 
     assert.match(result.state, /ambiguous/);
     assert.equal(document.clicks, 0);
   }
+});
+
+test('Cursor 3.21 grouped repository selects the exact registered workspace in the draft picker', async () => {
+  const grouped = page([section([project('G:/other/spellcast', { workspaceIdentifier: environment('G:/other/spellcast', 'workspace-other') }), project()])]);
+  const ready = evaluate(exprInspectWorkspaceRepository(path), grouped);
+  assert.equal(ready.ok, true);
+  assert.equal(ready.workspaceSelectionRequired, true);
+  const created = evaluate(exprCreateAgentForWorkspace(path), grouped);
+  assert.equal(created.ok, true);
+  assert.equal(created.workspaceSelectionRequired, true);
+  assert.equal(grouped.clicks, 1);
+
+  let triggerClicks = 0;
+  let rowClicks = 0;
+  const trigger = { offsetParent: {}, innerText: 'G:\\other\\spellcast', textContent: 'G:\\other\\spellcast', click: () => triggerClicks++ };
+  const row = { offsetParent: {}, innerText: path, textContent: path, click: () => rowClicks++ };
+  const menu = {
+    offsetParent: {},
+    getAttribute: () => null,
+    querySelector: selector => selector === '[aria-label="Select a project"]' ? {} : null,
+    querySelectorAll: selector => selector.includes('menu-row') ? [row] : [],
+  };
+  const document = {
+    querySelectorAll: selector => selector.startsWith('button.ui-select-trigger') ? [trigger]
+      : selector.startsWith('[data-component="menu-popup"]') ? [menu]
+      : [],
+  };
+  const selected = await evaluateAsync(exprSelectAgentWorkspace(path), document);
+  assert.equal(selected.ok, true);
+  assert.equal(selected.state, 'workspace_project_selection_requested');
+  assert.equal(triggerClicks, 1);
+  assert.equal(rowClicks, 1);
 });
 
 test('remote authority, missing workspace ID, SSH URI and substituted target source fail closed', () => {

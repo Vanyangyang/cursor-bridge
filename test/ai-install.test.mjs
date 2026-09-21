@@ -112,14 +112,14 @@ test('public READMEs send other hosts to the AI install playbook', () => {
 
   assert.match(english, /docs\/ai-install\.md completely/);
   assert.match(chinese, /docs\/ai-install\.zh-CN\.md/);
-  assert.match(english, /not a first-class AI client/);
-  assert.match(chinese, /不是官方优先支持/);
+  assert.match(english, /do not treat that path as a first-class client/);
+  assert.match(chinese, /不是我优先维护的安装方式/);
   assert.match(english, /vanyangyang-cursor-bridge/);
   assert.match(chinese, /vanyangyang-cursor-bridge/);
   assert.match(english, /do not use a Pi package/);
   assert.match(chinese, /不要借用 Pi 包/);
-  assert.match(english, /register them itself/);
-  assert.match(chinese, /自行登记/);
+  assert.match(english, /this AI client can register them/);
+  assert.match(chinese, /登记、重启、初始化工作区都由当前 AI 客户端自己做/);
   assert.doesNotMatch(english + chinese, /copy `cce-routing`|原样复制 `cce-routing`/);
   assert.match(englishGrok, /docs\/ai-install\.md/);
   assert.match(chineseGrok, /docs\/ai-install\.zh-CN\.md/);

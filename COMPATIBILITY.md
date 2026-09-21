@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.20.21** | **6.0.3** | `main` | Restores one window of the last closed type, including when Cursor fails to save its own window state. Both IDE and Agents Window passed real workspace binding, CCE, FIFO, independent Agent execution and minimal/normal checks. Native 6.0.3 pickup remains pending. See [verification scope](./docs/cursor-3.20.21-verification.md). |
+| **3.21.16** | **6.0.4** | `main` | Adapts the separate Model/Effort controls, exact worktree selection inside grouped repositories, preview-card dialogs, and hidden model verification. IDE and Agents Window passed real Grok/high CCE and FIFO; Agents also passed two simultaneous independent Agents, persistent-session recovery, and minimal/normal. Both close orders restored exactly one last-closed window type. Native 6.0.4 pickup remains pending. See [verification scope](./docs/cursor-3.21.16-verification.md). |
+| 3.20.21 | 6.0.3 | `cursor-bridge--v6.0.3` | Archived. Last-closed single-window restoration and both-UI acceptance. |
 | 3.20.17 | 6.0.2 | `cursor-bridge--v6.0.2` | Archived. Auto-menu adaptation and standalone MCP acceptance. |
 | 3.19.19 | 6.0.1 | `cursor-bridge--v6.0.1` | Archived. Standalone MCP compatibility was verified locally after this tag; that compatibility-only update was not separately released. |
 | 3.19.13 | 6.0.0 | `cursor-bridge--v6.0.0` | Archived. Compact default status and explicit result collection. |

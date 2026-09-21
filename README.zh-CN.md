@@ -68,7 +68,7 @@ Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
-> **实机验证环境：** Windows 11 + Cursor **3.19.7**；版本由已安装可执行文件的 ProductVersion 与 FileVersion 读取。全新 Codex AI 客户端复用一个无降级的持久受监督 Agents Window，并通过了工作区绑定、`minimal` 中带源码锚点的 CCE、normal 与 `minimal` 中的隔离 FIFO `cursor_do`、Claude Fable 5.1/high 精确模型验证，以及恢复并持久化为 `normal`。并行与持久会话路径保留回归测试覆盖，但本轮没有再次实机验证。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目。本次没有暴露旧版 IDE/workbench；macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.21.16**；版本由 Cursor 内置包元数据与当前用户卸载注册表共同确认。6.0.4 源码和重建 bundle 在 IDE 与 Agents Window 中都通过了精确工作区绑定、CCE 和只读 FIFO `cursor_do`，模型固定为 Cursor Grok 4.6/high。Agents Window 另通过两个同时运行的独立 Agent、持续会话重启恢复、未读结果补收，以及 `minimal` CCE 后恢复 normal。两种关闭顺序都只恢复最后关闭的一种窗口。原生 6.0.4 host 加载仍待验收。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
 
 ## CCE 是什么？
 

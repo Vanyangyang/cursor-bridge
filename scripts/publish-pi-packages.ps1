@@ -72,7 +72,10 @@ foreach ($package in $packages) {
     $publishedShasumOutput = @(& $NpmCommand view $packageSpec dist.shasum --json 2>&1)
     $publishedLookupExitCode = $LASTEXITCODE
     if ($publishedLookupExitCode -eq 0) {
-        $publishedValues = @(($publishedShasumOutput -join [Environment]::NewLine) | ConvertFrom-Json)
+        $publishedJsonLines = @($publishedShasumOutput | Where-Object {
+            $_ -is [string] -and -not [string]::IsNullOrWhiteSpace($_)
+        })
+        $publishedValues = @(($publishedJsonLines -join [Environment]::NewLine) | ConvertFrom-Json)
         if ($publishedValues.Count -ne 1 -or $publishedValues[0] -isnot [string] -or [string]::IsNullOrWhiteSpace($publishedValues[0])) {
             throw "npm view returned success without exactly one tarball shasum for $packageSpec."
         }

@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.4] - 2026-09-21
+
 ### Added
 
 - Added an AI-read install playbook so a generic MCP host can copy one sentence to its current client, let that client install the committed MCP bundle and skills, and report against a fixed completion standard.
@@ -13,7 +15,18 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Apply Cursor 3.21's separate root Model and Effort controls in the correct order, then verify `Cursor Grok 4.6` and `high` before prompt submission.
+- Select the exact registered local path from Cursor 3.21's project picker when one repository section groups multiple worktrees, and verify the created Agent's workspace ID before filling a prompt.
+- Exclude Cursor 3.21 preview-card popups from blocking-dialog detection while preserving fail-closed handling for real dialogs.
+- In minimal mode, verify the hidden selected Agent's exact `modelConfig` instead of requiring a model popup that Cursor 3.21 no longer renders while hidden.
 - Recognize standard macOS `Cursor.app/Contents/Resources/app/` CDP target URLs so `cursor_init` / `cursor_do` are not misreported as `port-not-cursor` when Cursor owns the port. Existing Windows/Linux path matching and the Windsurf exclusion are unchanged. This is an identity-rule trial only; it does not add macOS end-to-end support.
+- Ignore empty PowerShell native-command error records when a successful npm registry lookup returns valid JSON, while retaining fail-closed handling for nonzero and ambiguous publication preflights.
+
+### Validation
+
+- Cursor 3.21.16 source and built-bundle acceptance passed exact workspace binding, CCE and read-only FIFO with Cursor Grok 4.6/high in both IDE and Agents Window. Agents Window also passed two simultaneous independent Agents, three-turn persistent-session recovery, unread-result collection after adapter restart, and hidden CCE followed by normal restoration.
+- Both supervised close orders restored exactly one page of the last closed window type. Native 6.0.4 host pickup remains pending; see `docs/cursor-3.21.16-verification.md`.
+- Pi package `pi-cursor-bridge` 0.2.4 embeds Cursor Bridge 6.0.4.
 
 ## [6.0.3] - 2026-09-16
 

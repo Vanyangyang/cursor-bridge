@@ -34,7 +34,7 @@ test('dedicated generic MCP package sources are independent of Pi wrappers', () 
 
   assert.equal(cursor.name, 'vanyangyang-cursor-bridge');
   assert.equal(cursor.version, '0.1.0');
-  assert.equal(cursor.mcpPackage.embeddedProductVersion, '6.0.3');
+  assert.equal(cursor.mcpPackage.embeddedProductVersion, '6.0.4');
   assert.deepEqual(cursor.bin, { 'cursor-bridge-mcp': './dist/cursor-bridge.mjs' });
   assert.equal(cursor.pi, undefined);
   assert.equal(String(cursor.name).startsWith('pi-'), false);
@@ -75,7 +75,7 @@ test('generic MCP package staging embeds committed bundles and skills without Pi
   const grok = JSON.parse(readFileSync(join(output, 'vanyangyang-grok-build-supervisor', 'package.json'), 'utf8'));
   assert.equal(cursor.name, 'vanyangyang-cursor-bridge');
   assert.equal(cursor.version, '0.1.0');
-  assert.equal(cursor.mcpPackage.embeddedProductVersion, '6.0.3');
+  assert.equal(cursor.mcpPackage.embeddedProductVersion, '6.0.4');
   assert.deepEqual(cursor.bin, { 'cursor-bridge-mcp': './dist/cursor-bridge.mjs' });
   assert.equal(cursor.pi, undefined);
   assert.equal(grok.name, 'vanyangyang-grok-build-supervisor');

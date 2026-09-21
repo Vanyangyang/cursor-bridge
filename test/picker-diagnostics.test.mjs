@@ -99,7 +99,7 @@ test('picker reads receive the remaining polling budget', async () => {
 });
 
 for (const hasSubmenu of [false, true]) {
-  test(`selection diagnostics identify ${hasSubmenu ? 'selection' : 'verification'} failure before cleanup`, async () => {
+  test(`selection diagnostics identify ${hasSubmenu ? 'nested' : 'root'} effort failure before cleanup`, async () => {
     const b = bridge();
     const row = { text: 'Pinned High', kind: 'model', selected: true, hasSubmenu };
     b._openModelPicker = async () => ({ open: true, rows: [row] });
@@ -111,7 +111,7 @@ for (const hasSubmenu of [false, true]) {
     const client = { send: async () => { throw Object.assign(new Error('socket lost'), { code: 'ECONNRESET' }); } };
     await assert.rejects(b._applyModelPreference(client, { model: 'Pinned', effort: 'high' }, job), error => {
       assert.equal(error.modelSelection.failureClass, 'picker_read_failed');
-      assert.equal(error.modelSelection.stage, hasSubmenu ? 'select_effort' : 'verify_effort');
+      assert.equal(error.modelSelection.stage, 'select_effort');
       assert.equal(error.modelSelection.taskId, job.id);
       assert.equal(error.modelSelection.targetId, job.targetId);
       assert.equal(error.modelSelection.errorCode, 'ECONNRESET');

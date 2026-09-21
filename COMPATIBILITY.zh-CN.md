@@ -11,7 +11,8 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.20.21** | **6.0.3** | `main` | 默认只恢复最后关闭的一种窗口，兼容 Cursor 自身窗口状态保存失败。IDE 与 Agents Window 均通过真实工作区绑定、CCE、FIFO、独立 Agent 执行及 minimal/normal 验收。原生 6.0.3 加载仍待验收，详见[验收范围](./docs/cursor-3.20.21-verification.md)。 |
+| **3.21.16** | **6.0.4** | `main` | 适配独立的 Model/Effort 控件、同仓库多工作树精确选择、预览卡 dialog 以及隐藏模式模型核验。IDE 与 Agents Window 均通过真实 Grok/high CCE 和 FIFO；Agents Window 另通过两个同时运行的独立 Agent、持续会话恢复和 minimal/normal。两种关闭顺序都只恢复最后关闭的一种窗口。原生 6.0.4 加载仍待验收，详见[验收范围](./docs/cursor-3.21.16-verification.md)。 |
+| 3.20.21 | 6.0.3 | `cursor-bridge--v6.0.3` | 已归档。最后关闭窗口类型恢复及双 UI 验收。 |
 | 3.20.17 | 6.0.2 | `cursor-bridge--v6.0.2` | 已归档。Auto 菜单适配及独立 MCP 验收。 |
 | 3.19.19 | 6.0.1 | `cursor-bridge--v6.0.1` | 已归档。该标签之后曾完成本地独立 MCP 兼容性验收，当时未为兼容记录单独发版。 |
 | 3.19.13 | 6.0.0 | `cursor-bridge--v6.0.0` | 已归档。默认精简状态与显式结果收取。 |

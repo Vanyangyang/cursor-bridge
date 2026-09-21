@@ -9,6 +9,7 @@ import {
   CURSOR_MODEL_EFFORTS,
   CURSOR_MODEL_TARGETS,
   CursorBridge,
+  matchSelectedAgentModelConfig,
   EXPR_MODEL_PICKER_ROWS,
   EXPR_MODEL_PICKER_TRIGGER,
   buildToolDefinitions,
@@ -372,6 +373,70 @@ test('effort confirmation never clicks the same option a second time', async () 
     (error) => error.modelSelection.failureClass === 'effort_not_confirmed',
   );
   assert.equal(bridge.selectionClicks, 1);
+});
+
+test('minimal runtime verifies exact selected Agent model configuration without opening a hidden picker', async () => {
+  const snapshot = {
+    found: true,
+    modelName: 'grok-4.6',
+    selectedModels: [{ modelId: 'grok-4.6', parameters: { effort: 'high', fast: 'false' } }],
+  };
+  assert.deepEqual(matchSelectedAgentModelConfig(snapshot, 'Cursor Grok 4.6', 'high'), {
+    modelId: 'grok-4.6', effort: 'high',
+  });
+  assert.equal(matchSelectedAgentModelConfig(snapshot, 'Cursor Grok 4.6', 'xhigh'), null);
+  assert.equal(matchSelectedAgentModelConfig(snapshot, 'Claude Fable 5.1', 'high'), null);
+
+  const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, runtimeMode: 'minimal' });
+  bridge._readSelectedAgentModelConfig = async () => snapshot;
+  bridge._openModelPicker = async () => assert.fail('minimal verification must not open the picker');
+  bridge._closeModelPicker = async () => {};
+  const result = await bridge._applyModelPreference(null, { model: 'Cursor Grok 4.6', effort: 'high' });
+  assert.equal(result.applied, true);
+  assert.equal(result.verificationSource, 'selected_agent_model_config');
+});
+
+test('Cursor 3.21 separate root effort control is applied when model rows have no submenu', async () => {
+  class SeparateRootEffortBridge extends CursorBridge {
+    constructor(modelSelected) {
+      super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
+      this.modelRow = {
+        kind: 'model', text: 'Cursor Grok 4.6 Extra High', selected: modelSelected, hasSubmenu: false,
+      };
+      this.effortSelected = false;
+      this.clicks = [];
+    }
+    async _openModelPicker() {
+      return { open: true, rows: [
+        { kind: 'effort_control', text: `Effort ${this.effortSelected ? 'High' : 'Extra High'}`, hasSubmenu: true },
+        this.modelRow,
+      ] };
+    }
+    async _findModelPickerModel(_client, snapshot) { return { snapshot, modelRow: this.modelRow }; }
+    async _selectedEffortRow() {
+      return {
+        row: { kind: 'parameter', text: 'High', selected: this.effortSelected },
+        state: 'matched', available: ['Low', 'Medium', 'High', 'Extra High'], attempts: ['effort_control'],
+      };
+    }
+    async _clickModelPickerPoint(_client, row) {
+      this.clicks.push(row.text);
+      if (row.kind === 'model') this.modelRow.selected = true;
+      if (row.kind === 'parameter') this.effortSelected = true;
+    }
+    async _readModelPickerTrigger() { return { found: true, text: 'High', detail: '' }; }
+    async _closeModelPicker() {}
+  }
+
+  for (const modelSelected of [true, false]) {
+    const bridge = new SeparateRootEffortBridge(modelSelected);
+    const result = await bridge._applyModelPreference(null, { model: 'Cursor Grok 4.6', effort: 'high' });
+    assert.equal(result.applied, true);
+    assert.equal(result.effectiveEffort, 'high');
+    assert.deepEqual(bridge.clicks, modelSelected
+      ? ['High']
+      : ['Cursor Grok 4.6 Extra High', 'High']);
+  }
 });
 
 test('Cursor 3.18.25 reports the verified model row when the trigger shows only effort', async () => {

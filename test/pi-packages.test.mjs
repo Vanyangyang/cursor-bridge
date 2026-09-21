@@ -24,7 +24,7 @@ const shasums = JSON.parse(process.env.FAKE_NPM_SHASUMS || "{}");
 appendFileSync(process.env.FAKE_NPM_LOG, JSON.stringify(args) + "\\n");
 
 if (command === "run" && args[1] === "build:pi-packages") {
-  for (const [name, version] of [["pi-cursor-bridge", "0.2.3"], ["pi-grok-build-supervisor", "0.1.9"]]) {
+  for (const [name, version] of [["pi-cursor-bridge", "0.2.4"], ["pi-grok-build-supervisor", "0.1.9"]]) {
     const packageRoot = resolve(".pi-package-stage", name);
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, version, pi: { extensions: [] } }));
@@ -126,8 +126,8 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   const cursor = JSON.parse(readFileSync(join(output, "pi-cursor-bridge", "package.json"), "utf8"));
   const grok = JSON.parse(readFileSync(join(output, "pi-grok-build-supervisor", "package.json"), "utf8"));
   assert.equal(cursor.name, "pi-cursor-bridge");
-  assert.equal(cursor.version, "0.2.3");
-  assert.equal(cursor.piPackage.embeddedProductVersion, "6.0.3");
+  assert.equal(cursor.version, "0.2.4");
+  assert.equal(cursor.piPackage.embeddedProductVersion, "6.0.4");
   assert.equal(grok.name, "pi-grok-build-supervisor");
   assert.equal(grok.version, "0.1.9");
   assert.equal(grok.piPackage.embeddedProductVersion, "0.4.3");
@@ -203,7 +203,7 @@ test("Pi publisher skips an identical package without calling publish", (t) => {
   const { result, calls } = runPublisherScenario(t, {
     packageNames: ["pi-cursor-bridge"],
     lookups: {
-      "pi-cursor-bridge@0.2.3": { kind: "existing", shasum: "cursor-local" },
+      "pi-cursor-bridge@0.2.4": { kind: "existing", shasum: "cursor-local" },
     },
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -228,7 +228,7 @@ test("Pi publisher publishes only a registry-confirmed missing package", (t) => 
   const { result, calls } = runPublisherScenario(t, {
     packageNames: ["pi-cursor-bridge"],
     lookups: {
-      "pi-cursor-bridge@0.2.3": { kind: "missing" },
+      "pi-cursor-bridge@0.2.4": { kind: "missing" },
     },
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -242,7 +242,7 @@ test("Pi publisher accepts setup-node's documented placeholder token in an OIDC 
     packageNames: ["pi-cursor-bridge"],
     nodeAuthToken: "XXXXX-XXXXX-XXXXX-XXXXX",
     lookups: {
-      "pi-cursor-bridge@0.2.3": { kind: "missing" },
+      "pi-cursor-bridge@0.2.4": { kind: "missing" },
     },
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -255,7 +255,7 @@ test("Pi publisher accepts npm 12's package-keyed pack JSON", (t) => {
     nodeAuthToken: "XXXXX-XXXXX-XXXXX-XXXXX",
     packShape: "keyed",
     lookups: {
-      "pi-cursor-bridge@0.2.3": { kind: "missing" },
+      "pi-cursor-bridge@0.2.4": { kind: "missing" },
     },
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -277,18 +277,18 @@ test("Pi publisher fails closed on an uncertain registry lookup", (t) => {
   const { result, calls } = runPublisherScenario(t, {
     packageNames: ["pi-cursor-bridge"],
     lookups: {
-      "pi-cursor-bridge@0.2.3": { kind: "error", code: "E503" },
+      "pi-cursor-bridge@0.2.4": { kind: "error", code: "E503" },
     },
   });
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stdout}\n${result.stderr}`, /Unable to determine whether pi-cursor-bridge@0\.2\.3 already exists on npm/);
+  assert.match(`${result.stdout}\n${result.stderr}`, /Unable to determine whether pi-cursor-bridge@0\.2\.4 already exists on npm/);
   assert.equal(calls.some(([command]) => command === "publish"), false);
 });
 
 test("Pi publisher preflights every selected package before the first publish", (t) => {
   const { result, calls } = runPublisherScenario(t, {
     lookups: {
-      "pi-cursor-bridge@0.2.3": { kind: "missing" },
+      "pi-cursor-bridge@0.2.4": { kind: "missing" },
       "pi-grok-build-supervisor@0.1.9": { kind: "existing", shasum: "different-grok-tarball" },
     },
   });
