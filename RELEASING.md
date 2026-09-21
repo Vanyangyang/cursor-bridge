@@ -84,7 +84,7 @@ Keep the wrapper and embedded versions synchronized:
 - `vanyangyang-grok-build-supervisor`: package 0.1.0, embedded Grok Build Supervisor 0.4.3
 - `docs/ai-install.manifest.json` npm pins, playbooks, package READMEs, and MCP staging tests
 
-These wrappers are not Pi packages. Do not extend `scripts/publish-pi-packages.ps1` or `.github/workflows/publish-pi.yml` to the new names. First publish of each unscoped name requires its own npm Trusted Publishing setup. Until that exists, `npm install` may return `E404`; the AI install playbook treats that as expected and falls back to a durable git checkout.
+These wrappers are not Pi packages. Do not extend `scripts/publish-pi-packages.ps1` or `.github/workflows/publish-pi.yml` to the new names. Each unscoped name requires its own npm Trusted Publishing relationship and package-specific release workflow. `vanyangyang-cursor-bridge` uses `.github/workflows/publish-cursor-mcp.yml`; the Grok wrapper remains unpublished until its own relationship is configured.
 
 ## Validation
 
@@ -129,6 +129,19 @@ Environment: leave blank unless the workflow job is updated to use the exact sam
 ```
 
 The trusted workflow is `.github/workflows/publish-pi.yml`. It uses a GitHub-hosted Windows runner with `permissions.id-token: write`, Node 24, and npm 12. The Windows checkout preserves the established tarball byte convention used by the existing Pi releases. Do not add `NPM_TOKEN` or `NODE_AUTH_TOKEN` to its publish job. npm exchanges the GitHub OIDC identity only during `npm publish`; `npm whoami` is intentionally skipped by the publisher in GitHub Actions.
+
+The Cursor Bridge generic MCP package has a separate Trusted Publisher relationship:
+
+```text
+Package: vanyangyang-cursor-bridge
+GitHub owner: Vanyangyang
+Repository: cursor-bridge
+Workflow filename: publish-cursor-mcp.yml
+Allowed action: npm publish
+Environment: blank
+```
+
+Its workflow accepts only `cursor-bridge-mcp--v*` tags, verifies that the tag version matches the wrapper version, and invokes `scripts/publish-cursor-mcp.ps1`. The first package creation is an interactive local bootstrap because npm package settings do not exist before the package exists; configure the Trusted Publisher immediately afterward, then use OIDC for later releases. Do not add a token secret to the workflow.
 
 7. A newly pushed `cursor-bridge--v*` or `grok-build-supervisor--v*` tag automatically publishes only that component's corresponding Pi package. For an already-existing release tag, manually dispatch `Publish Pi packages` with that exact tag as the `ref`; the workflow rejects non-component-tag refs, uses the current trusted tooling, and packages source from the exact requested tag. The publisher preflights every selected package before any write, treats only a confirmed registry `E404` as unpublished, skips byte-identical versions, and stops on an immutable-version mismatch or uncertain registry response.
 

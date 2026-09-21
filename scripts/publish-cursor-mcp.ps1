@@ -1,0 +1,108 @@
+param(
+    [string]$RepositoryRoot,
+    [string]$NpmCommand = 'npm',
+    [string]$ExpectedTag
+)
+
+$ErrorActionPreference = 'Stop'
+
+$repositoryRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+} else {
+    (Resolve-Path -LiteralPath $RepositoryRoot).Path
+}
+Set-Location -LiteralPath $repositoryRoot
+
+$runningInGitHubActions = $env:GITHUB_ACTIONS -eq 'true'
+if ($runningInGitHubActions) {
+    if ([string]::IsNullOrWhiteSpace($env:ACTIONS_ID_TOKEN_REQUEST_URL)) {
+        throw 'GitHub Actions publishing requires permissions.id-token: write so npm Trusted Publishing can obtain an OIDC credential.'
+    }
+    $nodeAuthTokenIsSetupNodePlaceholder = -not [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN) `
+        -and $env:NODE_AUTH_TOKEN -match '^(?:X+-?)+$'
+    $hasRealNodeAuthToken = -not [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN) `
+        -and -not $nodeAuthTokenIsSetupNodePlaceholder
+    if ($hasRealNodeAuthToken -or -not [string]::IsNullOrWhiteSpace($env:NPM_TOKEN)) {
+        throw 'GitHub Actions publishing must use npm Trusted Publishing without a real NODE_AUTH_TOKEN or NPM_TOKEN.'
+    }
+    Write-Host 'Using npm Trusted Publishing (OIDC); npm whoami is intentionally skipped because OIDC is exchanged only during npm publish.' -ForegroundColor DarkGray
+} else {
+    $expectedNpmUser = ([string]$env:NPM_EXPECTED_USER).Trim()
+    if ([string]::IsNullOrWhiteSpace($expectedNpmUser)) {
+        throw 'Set NPM_EXPECTED_USER before local publish.'
+    }
+    $npmUserOutput = @(& $NpmCommand whoami 2>&1)
+    $npmWhoamiExitCode = $LASTEXITCODE
+    $npmUser = ([string]($npmUserOutput | Select-Object -Last 1)).Trim()
+    if ($npmWhoamiExitCode -ne 0 -or $npmUser -ne $expectedNpmUser) {
+        throw "Expected npm account $expectedNpmUser, received '$npmUser'."
+    }
+}
+
+& $NpmCommand run build:mcp-packages
+if ($LASTEXITCODE -ne 0) {
+    throw 'Generic MCP package staging build failed.'
+}
+
+$package = Join-Path '.mcp-package-stage' 'vanyangyang-cursor-bridge'
+$manifest = Get-Content -Raw -LiteralPath (Join-Path $package 'package.json') | ConvertFrom-Json
+if ($manifest.name -ne 'vanyangyang-cursor-bridge') {
+    throw "Unexpected generic MCP package name: $($manifest.name)"
+}
+$packageSpec = "$($manifest.name)@$($manifest.version)"
+
+if (-not [string]::IsNullOrWhiteSpace($ExpectedTag)) {
+    $expectedPackageTag = "cursor-bridge-mcp--v$($manifest.version)"
+    if ($ExpectedTag -ne $expectedPackageTag) {
+        throw "Release tag $ExpectedTag does not match package version $packageSpec; expected $expectedPackageTag."
+    }
+}
+
+$localPackOutput = @(& $NpmCommand pack $package --json --dry-run)
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to calculate the local package digest for $packageSpec."
+}
+$localPack = ($localPackOutput -join [Environment]::NewLine) | ConvertFrom-Json
+$namedPackProperty = $localPack.PSObject.Properties[$manifest.name]
+$localPackRecord = if ($localPack -is [array]) {
+    $localPack | Select-Object -First 1
+} elseif ($namedPackProperty) {
+    $namedPackProperty.Value
+} else {
+    $localPack
+}
+$localShasum = ([string]$localPackRecord.shasum).Trim()
+if (-not $localShasum) {
+    throw "npm pack did not return a shasum for $packageSpec."
+}
+
+$publishedShasumOutput = @(& $NpmCommand view $packageSpec dist.shasum --json 2>&1)
+$publishedLookupExitCode = $LASTEXITCODE
+if ($publishedLookupExitCode -eq 0) {
+    $publishedJsonLines = @($publishedShasumOutput | Where-Object {
+        $_ -is [string] -and -not [string]::IsNullOrWhiteSpace($_)
+    })
+    $publishedValues = @(($publishedJsonLines -join [Environment]::NewLine) | ConvertFrom-Json)
+    if ($publishedValues.Count -ne 1 -or $publishedValues[0] -isnot [string] -or [string]::IsNullOrWhiteSpace($publishedValues[0])) {
+        throw "npm view returned success without exactly one tarball shasum for $packageSpec."
+    }
+    $publishedShasum = $publishedValues[0].Trim()
+    if ($publishedShasum -ne $localShasum) {
+        throw "$packageSpec already exists on npm, but its published tarball differs from the local package. Bump the package version instead of skipping it."
+    }
+    Write-Host "`nSkipping $packageSpec because the identical tarball is already published." -ForegroundColor DarkGray
+    exit 0
+}
+
+$publishedLookupError = ([string]($publishedShasumOutput -join [Environment]::NewLine)).Trim()
+if ($publishedLookupError -notmatch '(?i)(?:\bE404\b|No match found for version|is not in this registry)') {
+    throw "Unable to determine whether $packageSpec already exists on npm: $publishedLookupError"
+}
+
+Write-Host "`nPublishing $packageSpec ..." -ForegroundColor Cyan
+& $NpmCommand publish $package --access public
+if ($LASTEXITCODE -ne 0) {
+    throw "npm publish failed for $packageSpec."
+}
+
+Write-Host "`nCursor Bridge generic MCP package completed successfully." -ForegroundColor Green
