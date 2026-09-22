@@ -40,7 +40,7 @@
       ],
       "npm": {
         "package": "vanyangyang-cursor-bridge",
-        "version": "0.1.2",
+        "version": "0.1.3",
         "bundle": "dist/cursor-bridge.mjs",
         "skillsRoot": "skills",
         "bin": "cursor-bridge-mcp"

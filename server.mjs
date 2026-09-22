@@ -63,7 +63,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.4';
+const PLUGIN_VERSION = '6.0.5';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);

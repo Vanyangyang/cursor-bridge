@@ -3,19 +3,19 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.21.16",
-    "cursorBridgeVersion": "6.0.4",
+    "cursorBridgeVersion": "6.0.5",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
-      "inheritedEvidenceRelease": "6.0.3",
-      "currentReleaseEvidence": "3.21.16-built-source-and-bundle-live-agents-and-ide-cce-fifo-parallel-session-minimal-pass; native-6.0.4-pickup-pending",
+      "inheritedEvidenceRelease": "6.0.4",
+      "currentReleaseEvidence": "3.21.16-native-exact-workspace-readonly-fifo-grok-4.7-high-pass; source-cdp-grok-4.7-reasoning-effort-high-pass",
       "workspaceIdentity": "3.21.16-exact-workspace-verified-both-ui-types-and-grouped-worktree-selector",
       "requestProvenance": "regression-and-protocol-tested; caller-declared-not-authenticated",
       "cursorVersionEvidence": "installed-package-json-and-uninstall-registry-version",
       "ideWorkbench": "3.21.16-live-tested-single-window-cce-fifo",
       "agentsWindow": "3.21.16-live-tested-single-window-cce-fifo-parallel-session",
-      "modelPreferences": "3.21.16-live-verified-cursor-grok-4.6-high-both-ui-types-and-minimal-react-config",
-      "readOnlyMcpSupervisor": "3.21.16-built-bundle-cce-fifo-parallel-session-repeat-result-pass; native-6.0.4-pickup-pending",
+      "modelPreferences": "3.21.16-live-verified-grok-4.7-high-native-fifo-and-source-cdp-reasoning-effort",
+      "readOnlyMcpSupervisor": "3.21.16-native-exact-workspace-readonly-fifo-grok-4.7-high-pass; broader-6.0.4-cce-fifo-parallel-session-repeat-result-pass",
       "attachedFallback": "inherited-not-live-rechecked-on-3.21.16",
       "lifecycleDiagnostics": "3.21.16-real-close-order-and-supervised-cold-launch-pass",
       "fifoExecution": "3.21.16-readonly-fifo-completed-both-ui-types",
@@ -24,13 +24,19 @@
       "persistentSessions": "3.21.16-three-turn-session-restart-reconcile-and-unread-result-recovery-pass",
       "singleWindow": "3.21.16-default-cold-launch-restores-last-closed-type-both-close-orders",
       "minimalNormalRuntime": "3.21.16-hidden-cce-and-normal-restoration-pass-agents-window",
-      "modelPickerTrigger": "3.21.16-separate-root-model-effort-selection-pass-both-ui-types",
+      "modelPickerTrigger": "3.21.16-provider-alias-normalization-and-separate-root-model-effort-selection-pass",
       "chatPanelDiagnostics": "3.21.16-preview-card-dialog-exclusion-and-blocking-dialog-regression-tested",
       "promptSubmission": "3.21.16-live-tested-ide-icon-send-and-agents-button",
-      "knownGaps": "native-6.0.4-pickup-pending; attached-fallback-not-live-rechecked; macOS-real-device-acceptance-pending; historical-ETIMEDOUT-root-UNKNOWN"
+      "knownGaps": "native-6.0.5-label-pickup-pending; attached-fallback-not-live-rechecked; macOS-real-device-acceptance-pending; historical-ETIMEDOUT-root-UNKNOWN"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.21.16",
+      "cursorBridgeVersion": "6.0.4",
+      "gitRef": "cursor-bridge--v6.0.4",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.20.21",
       "cursorBridgeVersion": "6.0.3",

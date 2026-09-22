@@ -1,6 +1,6 @@
 {
   "name": "vanyangyang-cursor-bridge",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Windows only. Generic stdio MCP package for Cursor Bridge: CCE search and bounded Cursor Agent execution.",
   "type": "module",
   "license": "MIT",
@@ -37,6 +37,6 @@
   ],
   "mcpPackage": {
     "embeddedProduct": "Cursor Bridge",
-    "embeddedProductVersion": "6.0.4"
+    "embeddedProductVersion": "6.0.5"
   }
 }

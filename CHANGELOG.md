@@ -6,9 +6,23 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.5] - 2026-09-22
+
 ### Changed
 
 - Published the dedicated `vanyangyang-cursor-bridge` wrapper through its own `publish-cursor-mcp.yml` npm Trusted Publishing workflow and package-specific release tags. Its `cursor-bridge-mcp` command points directly at the executable bundle so the bundle's main-entry guard starts the MCP server.
+
+### Fixed
+
+- Match model names symmetrically when older preferences include the `Cursor` provider prefix but Cursor 3.21 picker rows omit it, so stored names such as `Cursor Grok 4.6` and canonical names such as `grok-4.7` select the current model rows.
+- Verify Cursor 3.21's current `reasoning_effort` field while retaining the legacy `effort` fallback, preventing a correct Grok 4.7/high selection from failing before prompt submission.
+
+### Validation
+
+- Full repository tests passed 304/304 and the production bundle rebuilt successfully.
+- CDP verification selected `Grok 4.7 High` with internal model name `grok-4.7` and `reasoning_effort=high` before prompt submission.
+- A native read-only FIFO `cursor_do` task completed after cache refresh with requested `grok-4.7`/`high`, applied `Grok 4.7 High`, and made no file changes.
+- `pi-cursor-bridge` 0.2.5 and `vanyangyang-cursor-bridge` 0.1.3 embed Cursor Bridge 6.0.5.
 
 ## [6.0.4] - 2026-09-21
 

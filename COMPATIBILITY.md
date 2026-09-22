@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.21.16** | **6.0.4** | `main` | Adapts the separate Model/Effort controls, exact worktree selection inside grouped repositories, preview-card dialogs, and hidden model verification. IDE and Agents Window passed real Grok/high CCE and FIFO; Agents also passed two simultaneous independent Agents, persistent-session recovery, and minimal/normal. Both close orders restored exactly one last-closed window type. Native 6.0.4 pickup remains pending. See [verification scope](./docs/cursor-3.21.16-verification.md). |
+| **3.21.16** | **6.0.5** | `main` | Matches current model rows when stored preferences include the older `Cursor` provider prefix and verifies Cursor 3.21's `reasoning_effort`. Native exact-workspace FIFO passed with Grok 4.7/high after cache refresh. Broader IDE and Agents Window acceptance is inherited from 6.0.4. See [verification scope](./docs/cursor-3.21.16-verification.md). |
+| 3.21.16 | 6.0.4 | `cursor-bridge--v6.0.4` | Archived. Separate Model/Effort controls, grouped-worktree selection, preview-card dialogs, hidden model verification, both UI types, parallel Agents, persistent sessions, minimal/normal, and last-closed single-window restoration. |
 | 3.20.21 | 6.0.3 | `cursor-bridge--v6.0.3` | Archived. Last-closed single-window restoration and both-UI acceptance. |
 | 3.20.17 | 6.0.2 | `cursor-bridge--v6.0.2` | Archived. Auto-menu adaptation and standalone MCP acceptance. |
 | 3.19.19 | 6.0.1 | `cursor-bridge--v6.0.1` | Archived. Standalone MCP compatibility was verified locally after this tag; that compatibility-only update was not separately released. |
