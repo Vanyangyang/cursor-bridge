@@ -3,12 +3,12 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.21.16",
-    "cursorBridgeVersion": "6.0.5",
+    "cursorBridgeVersion": "6.0.6",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
       "inheritedEvidenceRelease": "6.0.4",
-      "currentReleaseEvidence": "3.21.16-native-exact-workspace-readonly-fifo-grok-4.7-high-pass; source-cdp-grok-4.7-reasoning-effort-high-pass",
+      "currentReleaseEvidence": "native-confirmation-gate-and-cce-cursor_do-mismatch-rejection-pass; native-exact-workspace-cce-grok-4.7-high-pass; tested-under-fixed-6.0.5-label",
       "workspaceIdentity": "3.21.16-exact-workspace-verified-both-ui-types-and-grouped-worktree-selector",
       "requestProvenance": "regression-and-protocol-tested; caller-declared-not-authenticated",
       "cursorVersionEvidence": "installed-package-json-and-uninstall-registry-version",
@@ -27,10 +27,17 @@
       "modelPickerTrigger": "3.21.16-provider-alias-normalization-and-separate-root-model-effort-selection-pass",
       "chatPanelDiagnostics": "3.21.16-preview-card-dialog-exclusion-and-blocking-dialog-regression-tested",
       "promptSubmission": "3.21.16-live-tested-ide-icon-send-and-agents-button",
-      "knownGaps": "native-6.0.5-label-pickup-pending; attached-fallback-not-live-rechecked; macOS-real-device-acceptance-pending; historical-ETIMEDOUT-root-UNKNOWN"
+      "workspaceAdmission": "native-confirmation-required-structured-recovery-submissionStarted-false; both-tools-mismatch-no-task-created; existing-workspace-reused",
+      "knownGaps": "native-6.0.6-label-pickup-pending; new-workspace-registration-and-cross-restart-stability-not-rechecked; attached-fallback-not-live-rechecked; macOS-real-device-acceptance-pending; historical-ETIMEDOUT-root-UNKNOWN"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.21.16",
+      "cursorBridgeVersion": "6.0.5",
+      "gitRef": "cursor-bridge--v6.0.5",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.21.16",
       "cursorBridgeVersion": "6.0.4",

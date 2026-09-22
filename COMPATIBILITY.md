@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.21.16** | **6.0.5** | `main` | Matches current model rows when stored preferences include the older `Cursor` provider prefix and verifies Cursor 3.21's `reasoning_effort`. Native exact-workspace FIFO passed with Grok 4.7/high after cache refresh. Broader IDE and Agents Window acceptance is inherited from 6.0.4. See [verification scope](./docs/cursor-3.21.16-verification.md). |
+| **3.21.16** | **6.0.6** | `main` | Native confirmation and mismatch guards passed for CCE and `cursor_do`; a correctly bound read-only CCE completed with Grok 4.7/high. Tested under the fixed 6.0.5 cache label before the version bump. Broader IDE and Agents Window acceptance is inherited from 6.0.4. See [verification scope](./docs/cursor-3.21.16-verification.md). |
+| 3.21.16 | 6.0.5 | `cursor-bridge--v6.0.5` | Archived. Model-provider alias matching and `reasoning_effort` verification. |
 | 3.21.16 | 6.0.4 | `cursor-bridge--v6.0.4` | Archived. Separate Model/Effort controls, grouped-worktree selection, preview-card dialogs, hidden model verification, both UI types, parallel Agents, persistent sessions, minimal/normal, and last-closed single-window restoration. |
 | 3.20.21 | 6.0.3 | `cursor-bridge--v6.0.3` | Archived. Last-closed single-window restoration and both-UI acceptance. |
 | 3.20.17 | 6.0.2 | `cursor-bridge--v6.0.2` | Archived. Auto-menu adaptation and standalone MCP acceptance. |

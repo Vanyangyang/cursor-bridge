@@ -221,20 +221,20 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '6.0.5');
+  assert.equal(rootPackage.version, '6.0.6');
   assert.equal(rootPackage.name, 'cursor-bridge-workspace');
   assert.equal(rootPackage.private, true);
   assert.match(rootPackage.scripts.prepublishOnly, /repository root is private/);
-  assert.match(codexCursorManifest.version, /^6\.0\.5(?:\+codex\.)?/);
-  assert.equal(claudeCursorManifest.version, '6.0.5');
-  assert.match(serverSource, /const PLUGIN_VERSION = '6\.0\.5';/);
+  assert.match(codexCursorManifest.version, /^6\.0\.6(?:\+codex\.)?/);
+  assert.equal(claudeCursorManifest.version, '6.0.6');
+  assert.match(serverSource, /const PLUGIN_VERSION = '6\.0\.6';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '6.0.5');
+  assert.equal(claudeCursor?.version, '6.0.6');
   assert.match(claudeCursor?.description || '', /Cursor 3\.21\.16/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.4.3');
@@ -443,7 +443,7 @@ test('bilingual compatibility docs keep Cursor 3.21.16 acceptance evidence scope
   assert.match(changelog, /3\.17\.8 Agents v2[\s\S]*rowHandlers\.onSelect[\s\S]*selectedAgentId[\s\S]*parallel_agent/);
 });
 
-test('compatibility history keeps 6.0.5 current for Cursor 3.21.16 and archives 6.0.4', () => {
+test('compatibility history keeps 6.0.6 current for Cursor 3.21.16 and archives 6.0.5', () => {
   const englishReadme = readProjectFile('README.md');
   const chineseReadme = readProjectFile('README.zh-CN.md');
   const english = readProjectFile('COMPATIBILITY.md');
@@ -453,7 +453,7 @@ test('compatibility history keeps 6.0.5 current for Cursor 3.21.16 and archives 
   assert.equal(data.policy, 'latest-only');
   assert.equal(data.candidate, undefined);
   assert.equal(data.current.cursorVersion, '3.21.16');
-  assert.equal(data.current.cursorBridgeVersion, '6.0.5');
+  assert.equal(data.current.cursorBridgeVersion, '6.0.6');
   assert.equal(data.current.sourceRef, 'main');
   assert.equal(data.current.status, 'current');
   assert.equal(data.current.acceptance.cursorVersionEvidence, 'installed-package-json-and-uninstall-registry-version');
@@ -466,8 +466,14 @@ test('compatibility history keeps 6.0.5 current for Cursor 3.21.16 and archives 
   assert.equal(data.current.acceptance.minimalNormalRuntime, '3.21.16-hidden-cce-and-normal-restoration-pass-agents-window');
   assert.equal(data.current.acceptance.parallelAgentIdentity, '3.21.16-exact-agent-ids-without-fifo-fallback');
   assert.equal(data.current.acceptance.promptSubmission, '3.21.16-live-tested-ide-icon-send-and-agents-button');
-  assert.match(data.current.acceptance.knownGaps, /native-6\.0\.5-label-pickup-pending.*macOS-real-device-acceptance-pending.*ETIMEDOUT-root-UNKNOWN/);
+  assert.match(data.current.acceptance.knownGaps, /native-6\.0\.6-label-pickup-pending.*macOS-real-device-acceptance-pending.*ETIMEDOUT-root-UNKNOWN/);
   assert.deepEqual(data.history, [
+    {
+      cursorVersion: '3.21.16',
+      cursorBridgeVersion: '6.0.5',
+      gitRef: 'cursor-bridge--v6.0.5',
+      status: 'archived',
+    },
     {
       cursorVersion: '3.21.16',
       cursorBridgeVersion: '6.0.4',
@@ -600,8 +606,8 @@ test('compatibility history keeps 6.0.5 current for Cursor 3.21.16 and archives 
   assert.match(chineseReadme, /href="\.\/COMPATIBILITY\.zh-CN\.md"/);
   assert.match(english, /maintains only the latest Cursor release/);
   assert.match(chinese, /只维护 Cursor 最新版本/);
-  assert.match(english, /Current maintained baseline[\s\S]*3\.21\.16[\s\S]*6\.0\.5[\s\S]*Grok 4\.7\/high/);
-  assert.match(chinese, /当前维护基线[\s\S]*3\.21\.16[\s\S]*6\.0\.5[\s\S]*Grok 4\.7\/high/);
+  assert.match(english, /Current maintained baseline[\s\S]*3\.21\.16[\s\S]*6\.0\.6[\s\S]*Grok 4\.7\/high/);
+  assert.match(chinese, /当前维护基线[\s\S]*3\.21\.16[\s\S]*6\.0\.6[\s\S]*Grok 4\.7\/high/);
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);
   assert.match(english, /Cursor Bridge 5\.8\.1 — Cursor 3\.18\.25/);

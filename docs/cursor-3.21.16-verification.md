@@ -4,15 +4,29 @@
 - Platform: Windows 11
 - Cursor executable: `D:\tool\cursor\Cursor.exe`
 - Cursor evidence: embedded `resources/app/package.json` and the current-user uninstall registry both report `3.21.16`
-- Cursor Bridge candidate: `6.0.5`
+- Cursor Bridge candidate: `6.0.6`
 
 ## Evidence boundary
 
-This report covers the checked-out source and rebuilt bundles against the real installed Cursor 3.21.16. The broad IDE and Agents Window acceptance was completed for 6.0.4. The model-provider alias fix was then installed through a refreshed Codex cache and passed a native task before the version-only bump to 6.0.5; that native host reported `pluginVersion=6.0.4`. The 6.0.5 bundle contains the tested fix plus release metadata changes. Exact native pickup of the 6.0.5 label remains pending a fresh host task after publication.
+This report covers the checked-out source and rebuilt bundles against the real installed Cursor 3.21.16. The broad IDE and Agents Window acceptance was completed for 6.0.4. The model-provider alias fix passed a native task under the pre-bump 6.0.4 label before the 6.0.5 release. A fresh Codex task subsequently verified the workspace admission fix in commit `c568afd`, installed under the fixed 6.0.5 cache label, before the version-only bump to 6.0.6. These are distinct acceptance runs; exact native pickup of the 6.0.6 release label remains pending.
 
 The macOS `Cursor.app` CDP identity fix is covered by source tests and generated bundles. No macOS device was available, so this report does not claim macOS end-to-end support.
 
 ## Live results
+
+### Workspace admission fix: fresh native Codex task
+
+Observed on 2026-09-22, with no standalone stdio or direct HTTP/CDP substitute:
+
+- Native schemas exposed `workspace_path` on CCE and `cursor_do`. Initial status reported `pluginVersion=6.0.5`, `adapterPid=29160`, `workspaceKey=default`, `workspaceIdentitySource=unavailable`, `workspaceConfirmationRequired=true`, and no active, queued, or blocking work.
+- One pre-init CCE returned `WORKSPACE_CONFIRMATION_REQUIRED` with structured `workspaceRecovery` and `submissionStarted=false`.
+- Explicit `cursor_init` reused the intended local project outside the validation checkout: `ready=true`, `workspaceBinding.ok=true`, `identitySource=registered_workspace_file_uri`, `workspaceAction=reused-agents-repository`, and confirmation cleared.
+- CCE and read-only `cursor_do` each rejected an existing but mismatched checkout with `WORKSPACE_MISMATCH` and `submissionStarted=false`. `recentTasks` remained empty before and after both probes.
+- One correctly bound read-only CCE, task `cursor-muct0wqm-1`, returned normal `CCE_SEARCH_RESULT`. Its source anchors were checked with FastCtx. Creation, fill, and send workspace checks passed; effective model was `Grok 4.7 High` with `high`, and request provenance was `sender=model`, `source=model`.
+- At completion (`2026-09-22T15:06:51.777Z`), the adapter PID was unchanged, `busy=false`, `idle=true`, `workspaceBusy=false`, `queued=0`, and `blockingTaskIds=[]`. Both persistent model preferences remained `grok-4.7` / `high`.
+- This run covered existing-workspace reuse, not new registration or cross-restart stability. Correct-path `cursor_do` execution was not repeated. `runtimeUpgradeDeferred=true` remained visible, so it does not establish a supervisor upgrade.
+
+### Earlier model and broader compatibility runs
 
 | Area | Result | Evidence |
 |---|---|---|
@@ -38,7 +52,7 @@ The macOS `Cursor.app` CDP identity fix is covered by source tests and generated
 
 ## Remaining gaps
 
-- Exact native Codex host pickup of the Cursor Bridge 6.0.5 version label remains pending publication, reinstall, and a fresh host task; the release code path itself passed under the pre-bump 6.0.4 cache label.
+- Exact native Codex host pickup of the Cursor Bridge 6.0.6 version label remains pending; the workspace fix passed under the fixed 6.0.5 cache label.
 - Attached-mode fallback was inherited and was not live rechecked on Cursor 3.21.16.
 - macOS real-device acceptance remains pending.
 - The historical `ETIMEDOUT` root cause remains `UNKNOWN`.

@@ -68,7 +68,7 @@ Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
-> **实机验证环境：** Windows 11 + Cursor **3.21.16**；版本由 Cursor 内置包元数据与当前用户卸载注册表共同确认。Cursor Bridge 6.0.5 的发布代码在刷新缓存后通过了原生精确工作区绑定和 Grok 4.7/high 的只读 FIFO `cursor_do`；CDP 在提交前确认内部模型为 `grok-4.7`、`reasoning_effort=high`。原生 host 当时仍报告升级版本前的 6.0.4 标签，因此精确的 6.0.5 标签加载仍待发布后由新任务确认。继承自 6.0.4 的 IDE 与 Agents Window 完整验收覆盖 CCE、两个同时运行的独立 Agent、持续会话重启恢复、未读结果补收、`minimal` CCE 后恢复 normal，以及两种关闭顺序均只恢复最后关闭的一种窗口。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.21.16**；版本由 Cursor 内置包元数据与当前用户卸载注册表共同确认。Cursor Bridge 6.0.6 增加工作区提交门禁：全新原生 Codex 任务已验证显式确认、精确复用既有工作区、CCE 与 `cursor_do` 均拒绝错绑，以及 Grok 4.7/high 的只读 CCE 正常完成。修复在升级发布版本前使用已修复的 6.0.5 缓存标签通过验收，精确的 6.0.6 标签加载仍待验证。继承自 6.0.4 的 IDE 与 Agents Window 完整验收覆盖 CCE、两个同时运行的独立 Agent、持续会话重启恢复、未读结果补收、`minimal` CCE 后恢复 normal，以及两种关闭顺序均只恢复最后关闭的一种窗口。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
 
 ## CCE 是什么？
 

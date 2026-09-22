@@ -6,6 +6,22 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [6.0.6] - 2026-09-22
+
+### Fixed
+
+- Require explicit workspace confirmation when the adapter has no host workspace identity; a saved default path no longer authorizes a new request.
+- Check the optional `workspace_path` on CCE and `cursor_do` before submission, rejecting mismatches with structured `workspaceRecovery` guidance and `submissionStarted=false`.
+- Recover initialization for a known target only when idle, then verify its exact registered file-URI identity before retrying the unsent request.
+
+### Validation
+
+- Full repository tests passed 316/316; the unchanged Supervisor passed 147/147 plus its MCP smoke test. All four runtime bundles rebuilt, and Codex/Claude plugin validation passed.
+- A fresh native Codex task verified the confirmation gate, exact existing-workspace reuse, and both CCE and read-only `cursor_do` mismatch rejection without creating tasks.
+- One correctly bound read-only CCE returned `CCE_SEARCH_RESULT`; source anchors were checked locally, final status was idle without queued or blocking work, and Grok 4.7/high preferences were preserved.
+- Native acceptance used the fixed 6.0.5 cache before this version-only release bump. New-workspace registration, cross-restart stability, and exact 6.0.6 host pickup were not revalidated in that run.
+- `pi-cursor-bridge` 0.2.6 and `vanyangyang-cursor-bridge` 0.1.4 embed Cursor Bridge 6.0.6.
+
 ## [6.0.5] - 2026-09-22
 
 ### Changed
