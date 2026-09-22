@@ -17,6 +17,7 @@ import {
   isCursorEffortOptionText,
   modelPickerAvailableIsDecisive,
   normalizeCursorModelEffort,
+  normalizeModelPickerModelText,
   normalizeModelPickerText,
   selectModelPickerRow,
 } from '../server.mjs';
@@ -186,6 +187,7 @@ test('model picker matching handles model IDs, display names, and effort aliases
     { kind: 'parameter', text: 'High', selected: false },
   ];
   assert.equal(normalizeModelPickerText('GPT-5.6 Sol'), 'gpt56sol');
+  assert.equal(normalizeModelPickerModelText('Cursor Grok 4.7'), 'grok47');
   assert.equal(normalizeModelPickerText('Extra High'), 'xhigh');
   assert.equal(selectModelPickerRow(rows, 'gpt-5.6-sol', 'model').text, 'GPT-5.6 Sol');
   assert.equal(selectModelPickerRow(rows, 'xhigh', 'parameter').text, 'Extra High');
@@ -197,6 +199,13 @@ test('model picker matching handles model IDs, display names, and effort aliases
     { kind: 'parameter', text: 'High', selected: true },
   ], 'high', 'parameter'), null);
   assert.equal(selectModelPickerRow(rows, 'missing-model', 'model'), null);
+  assert.equal(selectModelPickerRow([
+    { kind: 'model', text: 'Grok 4.7 Extra High' },
+    { kind: 'model', text: 'Grok 4.6 High' },
+  ], 'Cursor Grok 4.6', 'model').text, 'Grok 4.6 High');
+  assert.equal(selectModelPickerRow([
+    { kind: 'model', text: 'Grok 4.7 Extra High' },
+  ], 'grok-4.7', 'model').text, 'Grok 4.7 Extra High');
   assert.equal(selectModelPickerRow([
     { kind: 'model', text: 'Model A' },
     { kind: 'model', text: 'Model-A' },
@@ -378,20 +387,24 @@ test('effort confirmation never clicks the same option a second time', async () 
 test('minimal runtime verifies exact selected Agent model configuration without opening a hidden picker', async () => {
   const snapshot = {
     found: true,
-    modelName: 'grok-4.6',
-    selectedModels: [{ modelId: 'grok-4.6', parameters: { effort: 'high', fast: 'false' } }],
+    modelName: 'grok-4.7',
+    selectedModels: [{ modelId: 'grok-4.7', parameters: { reasoning_effort: 'high', fast: 'false' } }],
   };
-  assert.deepEqual(matchSelectedAgentModelConfig(snapshot, 'Cursor Grok 4.6', 'high'), {
-    modelId: 'grok-4.6', effort: 'high',
+  assert.deepEqual(matchSelectedAgentModelConfig(snapshot, 'Cursor Grok 4.7', 'high'), {
+    modelId: 'grok-4.7', effort: 'high',
   });
-  assert.equal(matchSelectedAgentModelConfig(snapshot, 'Cursor Grok 4.6', 'xhigh'), null);
+  assert.equal(matchSelectedAgentModelConfig(snapshot, 'Cursor Grok 4.7', 'xhigh'), null);
   assert.equal(matchSelectedAgentModelConfig(snapshot, 'Claude Fable 5.1', 'high'), null);
+  assert.deepEqual(matchSelectedAgentModelConfig({
+    found: true,
+    selectedModels: [{ modelId: 'grok-4.6', parameters: { effort: 'high' } }],
+  }, 'Cursor Grok 4.6', 'high'), { modelId: 'grok-4.6', effort: 'high' });
 
   const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, runtimeMode: 'minimal' });
   bridge._readSelectedAgentModelConfig = async () => snapshot;
   bridge._openModelPicker = async () => assert.fail('minimal verification must not open the picker');
   bridge._closeModelPicker = async () => {};
-  const result = await bridge._applyModelPreference(null, { model: 'Cursor Grok 4.6', effort: 'high' });
+  const result = await bridge._applyModelPreference(null, { model: 'Cursor Grok 4.7', effort: 'high' });
   assert.equal(result.applied, true);
   assert.equal(result.verificationSource, 'selected_agent_model_config');
 });
@@ -401,7 +414,7 @@ test('Cursor 3.21 separate root effort control is applied when model rows have n
     constructor(modelSelected) {
       super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
       this.modelRow = {
-        kind: 'model', text: 'Cursor Grok 4.6 Extra High', selected: modelSelected, hasSubmenu: false,
+        kind: 'model', text: 'Grok 4.7 Extra High', selected: modelSelected, hasSubmenu: false,
       };
       this.effortSelected = false;
       this.clicks = [];
@@ -424,18 +437,18 @@ test('Cursor 3.21 separate root effort control is applied when model rows have n
       if (row.kind === 'model') this.modelRow.selected = true;
       if (row.kind === 'parameter') this.effortSelected = true;
     }
-    async _readModelPickerTrigger() { return { found: true, text: 'High', detail: '' }; }
+    async _readModelPickerTrigger() { return { found: true, text: 'Grok 4.7 High', detail: '' }; }
     async _closeModelPicker() {}
   }
 
   for (const modelSelected of [true, false]) {
     const bridge = new SeparateRootEffortBridge(modelSelected);
-    const result = await bridge._applyModelPreference(null, { model: 'Cursor Grok 4.6', effort: 'high' });
+    const result = await bridge._applyModelPreference(null, { model: 'grok-4.7', effort: 'high' });
     assert.equal(result.applied, true);
     assert.equal(result.effectiveEffort, 'high');
     assert.deepEqual(bridge.clicks, modelSelected
       ? ['High']
-      : ['Cursor Grok 4.6 Extra High', 'High']);
+      : ['Grok 4.7 Extra High', 'High']);
   }
 });
 

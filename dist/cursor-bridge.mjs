@@ -23550,6 +23550,10 @@ var EXPR_SELECTED_AGENT_MODEL_CONFIG = `(function(){
 function normalizeModelPickerText(value) {
   return String(value || "").trim().toLowerCase().replace(/extra[\s_-]*high/g, "xhigh").replace(/[^a-z0-9]+/g, "");
 }
+function normalizeModelPickerModelText(value) {
+  const normalized = normalizeModelPickerText(value);
+  return normalized.startsWith("cursor") && normalized.length > "cursor".length ? normalized.slice("cursor".length) : normalized;
+}
 function isCursorEffortOptionText(text) {
   return CURSOR_MODEL_EFFORTS.includes(normalizeModelPickerText(text));
 }
@@ -23559,10 +23563,11 @@ function modelPickerAvailableIsDecisive(kind, available) {
   return available.some((text) => isCursorEffortOptionText(text));
 }
 function selectModelPickerRow(rows, requested, kind = "model") {
-  const wanted = normalizeModelPickerText(requested);
+  const normalize = kind === "parameter" ? normalizeModelPickerText : normalizeModelPickerModelText;
+  const wanted = normalize(requested);
   if (!wanted) return null;
   const candidates = (Array.isArray(rows) ? rows : []).filter((row) => row && row.disabled !== true && (kind === "any" || row.kind === kind)).map((row) => {
-    const normalized = normalizeModelPickerText(row.text);
+    const normalized = normalize(row.text);
     let score = normalized === wanted ? 1e3 : 0;
     if (kind !== "parameter") {
       if (!score && normalized.startsWith(wanted)) score = 800;
@@ -23690,15 +23695,16 @@ function exprCreateAgentForWorkspace(projectPath) {
 }
 function matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort) {
   if (!snapshot || snapshot.found !== true) return null;
-  const requested = normalizeModelPickerText(requestedModel);
+  const requested = normalizeModelPickerModelText(requestedModel);
   const entries = Array.isArray(snapshot.selectedModels) && snapshot.selectedModels.length ? snapshot.selectedModels : [{ modelId: snapshot.modelName, parameters: {} }];
   const matches = entries.filter((entry) => {
-    const candidate = normalizeModelPickerText(entry && entry.modelId);
-    return candidate && (candidate === requested || requested === `cursor${candidate}`);
+    const candidate = normalizeModelPickerModelText(entry && entry.modelId);
+    return candidate && candidate === requested;
   });
   if (matches.length !== 1) return null;
   const match = matches[0];
-  const effort = normalizeCursorModelEffort(match.parameters && match.parameters.effort, "");
+  const parameters = match.parameters || {};
+  const effort = normalizeCursorModelEffort(parameters.reasoning_effort ?? parameters.effort, "");
   if (requestedEffort && effort !== requestedEffort) return null;
   return { modelId: match.modelId, effort: effort || null };
 }
@@ -25905,7 +25911,7 @@ var CursorBridge = class {
       }
       stage = "verify_model";
       let trigger2 = await this._readModelPickerTrigger(c);
-      if (!trigger2.found || !normalizeModelPickerText(trigger2.text).includes(normalizeModelPickerText(requestedModel))) {
+      if (!trigger2.found || !normalizeModelPickerModelText(trigger2.text).includes(normalizeModelPickerModelText(requestedModel))) {
         const reopened = await this._openModelPicker(c);
         located = await this._findModelPickerModel(c, reopened, requestedModel);
         const selected = selectModelPickerRow(located.snapshot.rows.filter((row) => row.selected), requestedModel, "model");
@@ -28033,6 +28039,7 @@ export {
   normalizeCursorModelEffort,
   normalizeCursorRuntimeMode,
   normalizeDelegationMode,
+  normalizeModelPickerModelText,
   normalizeModelPickerText,
   normalizeRequestContext,
   pathsOverlap,
