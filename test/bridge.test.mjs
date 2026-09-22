@@ -1162,7 +1162,8 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.match(search.description, /minimum sufficient context/);
   assert.match(search.description, /NOT_FOUND/);
   assert.match(search.description, /not a filesystem sandbox/);
-  assert.deepEqual(Object.keys(search.inputSchema.properties), ['query', 'request_context']);
+  assert.deepEqual(Object.keys(search.inputSchema.properties), ['query', 'workspace_path', 'request_context']);
+  assert.deepEqual(search.inputSchema.required, ['query']);
   assert.deepEqual(Object.keys(init.inputSchema.properties), ['path']);
   assert.deepEqual(init.inputSchema.required, ['path']);
   assert.match(init.description, /never force-closes Cursor/);
@@ -1175,6 +1176,7 @@ test('CCE tool description states real capabilities and explicit limits', () => 
   assert.deepEqual(runtime.inputSchema.required, ['mode']);
   assert.match(runtime.description, /UI suppression, not a headless reimplementation/);
   const cursorDo = tools.find((tool) => tool.name === 'cursor_do');
+  assert.deepEqual(cursorDo.inputSchema.properties.workspace_path, search.inputSchema.properties.workspace_path);
   assert.match(cursorDo.description, /first in, first out/);
   assert.equal(Object.hasOwn(cursorDo.inputSchema.properties, 'new_chat'), false);
   assert.deepEqual(cursorDo.inputSchema.properties.session_mode.enum, ['isolated', 'create', 'continue']);
@@ -1252,7 +1254,7 @@ test('bundled MCP hides cursor_do in off mode and rejects direct calls', async (
     assert.equal(listed.tools.some((tool) => tool.name === 'cursor_launch'), false);
     const search = listed.tools.find((tool) => tool.name === 'cursor_context_engine');
     assert.match(search.description, /Cursor Context Engine \(CCE\)/);
-    assert.equal(Object.keys(search.inputSchema.properties).length, 2);
+    assert.deepEqual(Object.keys(search.inputSchema.properties), ['query', 'workspace_path', 'request_context']);
     assert.equal(Object.hasOwn(search.inputSchema.properties, 'max_results'), false);
     const runtime = listed.tools.find((tool) => tool.name === 'cursor_runtime');
     assert.deepEqual(Object.keys(runtime.inputSchema.properties), ['mode']);

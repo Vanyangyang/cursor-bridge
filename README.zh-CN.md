@@ -186,12 +186,20 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 | 工具 | 作用 |
 |---|---|
 | `cursor_init` | 使用一个绝对路径初始化 CCE，或切换工作区。 |
-| `cursor_context_engine` | 使用一个自然语言 `query` 进行只读项目理解。 |
-| `cursor_do` | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果。 |
+| `cursor_context_engine` | 使用一个自然语言 `query` 进行只读项目理解；发送前可断言目标工作区。 |
+| `cursor_do` | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果；发送前可断言目标工作区。 |
 | `cursor_model` | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
 | `cursor_status` | 查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。任务视图默认精简；`cursor_status(task_id, detail="result")` 返回纯完整回复并记录收取，`detail="full"` 保留诊断任务详情和回复。 |
 | `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
 | `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`，并返回动作/状态摘要；正文需另用 `cursor_status(task_id, detail="result")` 取得。 |
+
+| 参数 | 适用工具 | 含义 |
+|---|---|---|
+| `workspace_path` | `cursor_context_engine`、`cursor_do` | 可选的绝对工作区断言。目标不匹配或未确认会在发送前失败；它不会切换或注册项目。 |
+
+当前 AI 客户端知道目标项目时，应传 `workspace_path`。使用宿主提供的工作区根目录或当前任务 cwd；若请求明确指定另一个项目，则使用指定路径，不从仓库名或保存的默认绑定推断。初始化、注册和切换仍只由 `cursor_init` 明确执行。`initialized=true` 只表示已有绑定，不表示本次请求的目标已确认。
+
+发送前返回 `WORKSPACE_CONFIRMATION_REQUIRED`、`WORKSPACE_INITIALIZATION_REQUIRED` 或 `WORKSPACE_MISMATCH`，且目标路径已知时，先查看 `cursor_status`。只有在它显示空闲、没有排队或阻塞工作，且暴露了该字段时 `workspaceBusy=false`，才对该精确路径执行 `cursor_init`；再核验 ready 和精确路径，然后只重试原调用一次。忙碌、身份歧义、`needs_attention` 或发送状态不确定时，应说明情况并改用必要的本地回退。
 
 > [!WARNING]
 > Cursor 是 Agent，不是文件系统沙箱。CCE 会强提示只读调查，但提示词与允许路径并不是操作系统级隔离；重要结论和工作区改动仍需核验。
@@ -250,7 +258,7 @@ pi update npm:pi-cursor-bridge
 <details>
 <summary><strong>CCE 如何搜索，以及返回什么证据</strong></summary>
 
-`cursor_context_engine` 只有一个公开参数：`query`。问题需要多深，由 Cursor 根据实际发现的证据自行决定。
+`query` 承载项目问题；可选的绝对 `workspace_path` 会在 CCE 发送前断言目标项目。问题需要多深，由 Cursor 根据实际发现的证据自行决定。
 
 它可以组合：
 
@@ -336,7 +344,7 @@ macOS 的路径规范化与可执行文件发现只是已实现逻辑，不代�
 - reconcile 确认完成后，在续发前使用 `cursor_session_control(action=collect_result)` 补收该轮完整回复。它始终返回完整回复，会还原原选中 Agent，不发送提示、不持久化正文。epoch 变化会使收集无效；成功后重复调用返回 `already_collected`。数值回复签名和读取记录覆盖重启恢复，包括完成后首次读取前中断；没有保存签名的旧版续发轮需要人工检查。
 - 最多保留 50 条任务记录。未读回复受到保护：达到限制后以 `TASK_RETENTION_FULL` 拒绝新提交，不会丢弃未读结果。对 `cursor_status().unreadResultTaskIds` 中每个 ID 调用 `cursor_status(task_id, detail="result")`；精简 status 不记录收取，任一显式 result 或 full 读取都会让相应记录允许淘汰。
 - `timeout_ms` 是发送后由 FIFO 和自动恢复共用的监视预算。到期不会取消 Cursor；显式 `reap` 可以给予新的监视预算。
-- 若 AI 客户端未提供工作区身份，Bridge 恢复共享 `default` 绑定后会以 `WORKSPACE_CONFIRMATION_REQUIRED` 阻止提交，直到 `cursor_init` 为当前 adapter 确认目标项目。按身份隔离的绑定仍保持原有重启行为。
+- 若 AI 客户端未提供工作区身份，每个新 adapter 都必须先通过 `cursor_init` 确认目标项目，无论是否保存过共享 `default` 路径。`initialized=true` 本身不表示本次请求的目标已确认。按身份隔离的绑定仍保持原有重启行为。已知目标时，每次调用都传入 `workspace_path`。
 - ready 会话的原子注册表位于用户配置目录，因此可跨 MCP 重启和插件缓存替换；不会持久化提示、回复、凭据、插件路径、脚本路径或 CDP target ID。
 - `submitting`、`running`、`collecting` 都是正常非终态。
 - Bridge 会确认 Cursor 是否接受提示。提示仍留在输入框时只尝试一次精确 Send 控件，仍失败则返回 `submit_not_accepted`，不会静默制造孤儿。

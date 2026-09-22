@@ -20,7 +20,7 @@ Call `cursor_context_engine` when one or more of these are true:
 
 Prefer one CCE investigation over starting an Explore subagent merely to locate or understand project code. Let Cursor choose focused or extended depth from what it discovers.
 
-When these semantic conditions match, make CCE the first project-discovery surface. Do not establish the answer through generic context-mode, grep, or blind local exploration before trying CCE. If Claude Code denies an initial context-mode collection call with a CCE routing message, call `cursor_context_engine` once instead of retrying another `ctx_*` tool. A failed, denied, unavailable, or `NOT_FOUND` CCE attempt releases this priority and allows a bounded local fallback.
+When these semantic conditions match, make CCE the first project-discovery surface. Do not establish the answer through generic context-mode, grep, or blind local exploration before trying CCE. If Claude Code denies an initial context-mode collection call with a CCE routing message, call `cursor_context_engine` once instead of retrying another `ctx_*` tool. A failed, denied, unavailable, or `NOT_FOUND` CCE attempt releases this priority and allows a bounded local fallback. A pre-send workspace-confirmation error may be recoverable; handle it below before falling back.
 
 ## Keep deterministic work local
 
@@ -30,9 +30,27 @@ Do not call CCE when any of these apply:
 - The needed code is already present in the current context.
 - The work is a trivial single-file edit or only requires running tests, inspecting logs, checking a build, or examining Git state.
 - The question concerns external libraries, APIs, current documentation, or the public web.
-- The user opted out of Cursor, CCE is unavailable, or the workspace is not initialized.
+- The user opted out of Cursor or CCE is unavailable.
 
 Do not submit the same lookup to CCE and another semantic system in parallel. Use a second evidence surface only to close a specific gap or verify a consequential claim.
+
+## Bind a known workspace before sending
+
+Pass the intended absolute `workspace_path` to `cursor_context_engine` when the installed schema supports it. Use the host-provided workspace root/current-task cwd unless the request explicitly targets another project. The field asserts the target before sending; it never switches or registers a project. Do not infer the target from a repository basename or a saved default binding.
+
+For an older schema without `workspace_path`, use `cursor_status` to verify the exact ready project path before sending. `initialized=true` only shows that a binding exists; it does not prove the current request is confirmed for the intended workspace. `cursor_init` is the only explicit operation that may initialize, register, or switch a workspace.
+
+If no target is known, do not infer or add `workspace_path`, and never call `cursor_init` for a guessed path. Existing safe host bindings may still be used; a workspace-confirmation error without a known target cannot use this recovery and should be reported before any necessary local fallback.
+
+## Recover one known workspace
+
+For a pre-send `WORKSPACE_CONFIRMATION_REQUIRED`, `WORKSPACE_INITIALIZATION_REQUIRED`, or `WORKSPACE_MISMATCH` error with a known target:
+
+1. Call `cursor_status`. Continue only when it confirms idle, no queued or blocking work, and `workspaceBusy=false` when that field is exposed.
+2. Call `cursor_init` with that exact absolute path. Require `ready=true`, `workspaceConfirmationRequired=false`, and the exact `projectPath`; in Agents Window also check `workspaceBinding.ok`, the local file-URI identity and workspace ID.
+3. Retry the original CCE query once.
+
+Do not treat these errors as CCE unavailability before this recovery. Do not initialize when status is busy, identity is ambiguous, `needs_attention` is present, or send state is uncertain; explain the condition and use only the necessary local fallback. Do not cancel other work, change the model, or retry in a loop.
 
 ## Submit one natural-language intent
 

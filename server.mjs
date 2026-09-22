@@ -47,6 +47,8 @@ import {
   updateCursorModelPreferences,
 } from './cursor-model-preferences.mjs';
 import {
+  isAbsoluteWorkspacePath,
+  normalizeWorkspacePath,
   readWorkspaceBinding,
   resolveWorkspaceBindingFile,
   resolveWorkspaceBindingKey,
@@ -1518,7 +1520,7 @@ class CursorBridge {
     this.workspaceFile = options.workspaceFile === null
       ? null
       : resolve(options.workspaceFile || resolveWorkspaceBindingFile());
-    this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey();
+    this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey(process.env, { cwd: this.adapterStartCwd });
     const persistedWorkspace = options.projectPath === undefined
       ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey)
       : null;
@@ -1531,7 +1533,7 @@ class CursorBridge {
         ? 'persistent_init'
         : 'auto_detect';
     this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
-    this.workspaceConfirmationRequired = this.workspaceKey === 'default' && !!persistedWorkspace;
+    this.workspaceConfirmationRequired = this.workspaceKey === 'default' && options.projectPath === undefined;
     this.modelPreferencesFile = options.modelPreferencesFile === null
       ? null
       : resolve(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
@@ -1551,6 +1553,8 @@ class CursorBridge {
     this.activeParallel = new Map();
     this.currentJob = null;
     this._uiTail = Promise.resolve();
+    this._workspaceTail = Promise.resolve();
+    this._workspacePending = 0;
     this.parallelRestoreAgentId = null;
     this.parallelRestoreTargetId = null;
   }
@@ -1559,6 +1563,8 @@ class CursorBridge {
     const resolvedProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
     return {
       workspaceKey: this.workspaceKey,
+      workspaceIdentitySource: this.workspaceKey === 'default' ? 'unavailable' : this.workspaceKey.split(':')[0],
+      workspaceBusy: this._workspacePending > 0,
       workspaceConfirmationRequired: this.workspaceConfirmationRequired,
       workspaceBindingWarning: this.workspaceConfirmationRequired
         ? 'This adapter has no host workspace identity. Run cursor_init with the intended project before using its shared saved binding.' : null,
@@ -1969,8 +1975,12 @@ class CursorBridge {
     if (!['reconcile', 'collect_result', 'close', 'forget', 'abandon'].includes(action)) {
       throw cursorSessionError('SESSION_ACTION_UNSUPPORTED', 'expected reconcile, collect_result, close, forget, or abandon');
     }
-    if (action === 'reconcile') return this._reconcileSession(id);
-    if (action === 'collect_result') return this._reconcileSession(id, { collectResult: true });
+    if (action === 'reconcile' || action === 'collect_result') {
+      return this._withWorkspaceAdmission(() => {
+        this._assertWorkspaceConfirmed();
+        return this._reconcileSession(id, { collectResult: action === 'collect_result' });
+      });
+    }
     let result;
     updateCursorSessionRegistry(this.sessionFile, (registry) => {
       const session = registry.sessions[id];
@@ -2024,6 +2034,11 @@ class CursorBridge {
   }
 
   async initializeWorkspace(projectPath) {
+    const result = await this._withWorkspaceAdmission(() => this._initializeWorkspace(projectPath));
+    return { ...result, workspaceBusy: this._workspacePending > 0 };
+  }
+
+  async _initializeWorkspace(projectPath) {
     // Finish a prior read-only heal before changing its target or requesting registration.
     if (this._healing) await this._healing.catch(() => {});
     if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
@@ -2269,19 +2284,23 @@ class CursorBridge {
     if (!text) throw new Error('query must not be empty');
     if (text.length > 20000) throw new Error('query exceeds the 20,000-character limit');
     const requestContext = normalizeRequestContext(options.requestContext);
-    this._assertWorkspaceConfirmed();
-    if (this._hasGlobalReservation()) {
-      throw new Error('A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first');
-    }
-    await this._ensureCursor();
-    const job = this._enqueue('context_engine', buildContextEnginePrompt(text, requestContext), {
-      requestContext,
-      timeoutMs: QUERY_TIMEOUT,
-      newChat: true,
-      execution: 'fifo',
-      readOnly: true,
-      allowedPaths: [],
-      modelPreference: this._modelPreferenceFor('cce'),
+    const job = await this._withWorkspaceAdmission(async () => {
+      this._assertWorkspaceConfirmed(options.workspacePath);
+      if (this._hasGlobalReservation()) {
+        throw new Error('A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first');
+      }
+      await this._ensureCursor();
+      this._assertWorkspaceConfirmed(options.workspacePath);
+      return this._enqueue('context_engine', buildContextEnginePrompt(text, requestContext), {
+        requestContext,
+        timeoutMs: QUERY_TIMEOUT,
+        newChat: true,
+        execution: 'fifo',
+        readOnly: true,
+        allowedPaths: [],
+        modelPreference: this._modelPreferenceFor('cce'),
+        projectPath: this._lastLifecycle?.projectPath || this.projectPath || null,
+      });
     });
     const result = normalizeCceSearchResult(await job.promise);
     this._markTaskResultCollected(job);
@@ -2293,6 +2312,15 @@ class CursorBridge {
   async searchDeep(query) { return this.contextEngine(query); }
 
   async doTask(prompt, options = {}) {
+    const admitted = await this._withWorkspaceAdmission(() => this._prepareTask(prompt, options));
+    if (admitted.duplicate) return admitted.response;
+    const job = admitted.job;
+    if (options.background !== false) return this._compactTaskView(job);
+    await job.promise;
+    return this._collectedTaskView(job);
+  }
+
+  async _prepareTask(prompt, options = {}) {
     if (!this.delegationEnabled) {
       throw new Error('cursor_do is disabled by CURSOR_BRIDGE_DELEGATION=off; restart the MCP server without that setting to enable delegation');
     }
@@ -2300,7 +2328,7 @@ class CursorBridge {
     if (!text) throw new Error('prompt must not be empty');
     if (text.length > 100000) throw new Error('prompt exceeds the 100,000-character limit');
     const requestContext = normalizeRequestContext(options.requestContext);
-    this._assertWorkspaceConfirmed();
+    this._assertWorkspaceConfirmed(options.workspacePath);
     if (this._hasGlobalReservation()) {
       throw new Error('A global Cursor reservation has an unconfirmed Stop state; no new task may be submitted until it is explicitly recovered or released');
     }
@@ -2349,6 +2377,7 @@ class CursorBridge {
     }
 
     await this._ensureCursor();
+    this._assertWorkspaceConfirmed(options.workspacePath);
     const projectPath = this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null;
     if (sessionMode !== 'isolated' && !projectPath) {
       throw cursorSessionError('SESSION_WORKSPACE_REQUIRED', 'initialize one workspace before creating or continuing a session');
@@ -2391,11 +2420,12 @@ class CursorBridge {
       modelPreference = session.modelPreference || null;
       if (duplicate) {
         const existing = this.tasks.get(session.activeTaskId || session.lastTask && session.lastTask.taskId || '');
-        return existing
+        const response = existing
           ? { duplicate: true, ...(options.background === false
             ? this._collectedTaskView(existing)
             : this._compactTaskView(existing)) }
           : { duplicate: true, ...this._sessionView(session) };
+        return { duplicate: true, response };
       }
     }
 
@@ -2420,9 +2450,7 @@ class CursorBridge {
       agentId: sessionMode === 'continue' ? session && session.agentId : null,
       agentLabel: sessionMode === 'continue' ? session && session.agentLabel : null,
     });
-    if (options.background !== false) return this._compactTaskView(job);
-    await job.promise;
-    return this._collectedTaskView(job);
+    return { job };
   }
 
   _assertNoParallelPathConflict(allowedPaths) {
@@ -2624,6 +2652,15 @@ class CursorBridge {
     return run;
   }
 
+  // Serialize target changes with preparation through enqueue, never with a running Agent.
+  // The UI lock cannot serve this purpose: initialization may acquire it to register a project.
+  _withWorkspaceAdmission(fn) {
+    this._workspacePending++;
+    const run = this._workspaceTail.then(fn, fn).finally(() => { this._workspacePending--; });
+    this._workspaceTail = run.catch(() => {});
+    return run;
+  }
+
   _withJobLock(job, fn) {
     const previous = job.controlTail || Promise.resolve();
     const run = previous.then(fn, fn);
@@ -2661,6 +2698,8 @@ class CursorBridge {
           reason: 'adapter-heal',
           runtimeMode: this.runtimeMode,
           adapterStartCwd: this.adapterStartCwd,
+          workspaceKey: this.workspaceKey,
+          workspaceFile: this.workspaceFile,
           ...(this.projectPath ? { projectPath: this.projectPath } : {}),
         });
         this._lastLifecycle = lifecycleFromEnsureResult(rr, this.runtimeMode);
@@ -4951,6 +4990,8 @@ class CursorBridge {
       pluginVersion: PLUGIN_VERSION,
       statusPath: 'json-list',
       workspaceKey: workspace.workspaceKey,
+      workspaceIdentitySource: workspace.workspaceIdentitySource,
+      workspaceBusy: workspace.workspaceBusy,
       workspaceConfirmationRequired: workspace.workspaceConfirmationRequired,
       workspaceBindingWarning: workspace.workspaceBindingWarning,
       projectPath: workspace.projectPath,
@@ -4986,9 +5027,46 @@ class CursorBridge {
     };
   }
 
-  _assertWorkspaceConfirmed() {
+  _workspaceRecoveryError(code, message, expectedProjectPath = null) {
+    const error = new Error(`${code}: ${message}`);
+    error.code = code;
+    error.workspaceRecovery = {
+      workspaceKey: this.workspaceKey,
+      currentProjectPath: this._lastLifecycle?.projectPath || this.projectPath || null,
+      expectedProjectPath,
+      tool: 'cursor_init',
+      arguments: expectedProjectPath ? { path: expectedProjectPath } : null,
+      requiresIdle: true,
+      retrySafe: true,
+      submissionStarted: false,
+      nextStep: 'Read cursor_status. When idle with no blocking tasks, run cursor_init with the caller\'s intended absolute project path, verify ready and the exact path, then retry this unsent request once. Never infer the target from a saved default binding or repository name.',
+    };
+    return error;
+  }
+
+  _assertWorkspaceConfirmed(workspacePath) {
+    let expected = null;
+    if (workspacePath !== undefined) {
+      if (typeof workspacePath !== 'string' || !isAbsoluteWorkspacePath(workspacePath)) {
+        throw cursorSessionError('WORKSPACE_PATH_INVALID', 'workspace_path must be an absolute project directory or .code-workspace path');
+      }
+      expected = normalizeWorkspacePath(workspacePath);
+    }
     if (this.workspaceConfirmationRequired) {
-      throw new Error('WORKSPACE_CONFIRMATION_REQUIRED: the saved default binding has no host workspace identity. Run cursor_init with the intended project before submitting work.');
+      throw this._workspaceRecoveryError('WORKSPACE_CONFIRMATION_REQUIRED', 'this adapter has no host workspace identity. Run cursor_init with the intended project before submitting work; a saved default path is not confirmation.', expected);
+    }
+    if (expected) {
+      const current = this._lastLifecycle?.projectPath || this.projectPath;
+      if (!current) {
+        throw this._workspaceRecoveryError('WORKSPACE_INITIALIZATION_REQUIRED', 'Run cursor_init with workspace_path before submitting work.', expected);
+      }
+      const canonical = path => {
+        const normalized = normalizeWorkspacePath(path);
+        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+      };
+      if (canonical(current) !== canonical(expected)) {
+        throw this._workspaceRecoveryError('WORKSPACE_MISMATCH', 'workspace_path does not match the current binding. Run cursor_init with the intended project when idle; no work was submitted.', expected);
+      }
     }
   }
 
@@ -5039,10 +5117,10 @@ class CursorBridge {
       ...this.runtimeModeView(),
       ...this.modelPreferencesView(),
       ...this.sessionRegistryView(),
-      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
+      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
       parallelRunning,
-      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0,
+      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
@@ -5073,10 +5151,10 @@ class CursorBridge {
       },
     } : {
       ...this._compactStatusCommon(),
-      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0,
+      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
       parallelRunning,
-      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0,
+      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
@@ -5107,6 +5185,7 @@ function buildSearchInputSchema() {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Describe the behavior, concept, symbol relationship, or ownership boundary to locate. State intent instead of guessing a directory.' },
+      workspace_path: WORKSPACE_PATH_SCHEMA,
       request_context: REQUEST_CONTEXT_SCHEMA,
     },
     required: ['query'],
@@ -5129,6 +5208,11 @@ const REQUEST_CONTEXT_SCHEMA = {
     sender: { type: 'string', enum: ['user', 'model', 'unknown'], description: 'Who directly sends this Bridge request. AI callers should declare model, even when acting on a user request.' },
     source: { type: 'string', enum: ['user', 'model', 'mixed', 'unknown'], description: 'user for explicitly supplied user requirements, model for model-authored tasks/inferences, mixed when the prompt clearly separates both; unknown when not established.' },
   },
+};
+
+const WORKSPACE_PATH_SCHEMA = {
+  type: 'string',
+  description: 'The caller\'s intended absolute project directory or .code-workspace path. Supply it when known to reject stale or cross-task bindings before sending. This is a target assertion, not an automatic workspace switch. On a workspace confirmation, initialization, or mismatch error, check idle status, run cursor_init with this path, verify ready, and retry once.',
 };
 
 function buildToolDefinitions(bridgeInstance) {
@@ -5167,6 +5251,7 @@ function buildToolDefinitions(bridgeInstance) {
         type: 'object',
         properties: {
           prompt: { type: 'string', description: 'The task Cursor should receive. State the goal, boundaries, and what a complete result looks like.' },
+          workspace_path: WORKSPACE_PATH_SCHEMA,
           request_context: REQUEST_CONTEXT_SCHEMA,
           background: { type: 'boolean', default: true, description: 'When true, return the task ID immediately. When false, wait for the task to finish or need attention.' },
           execution: { type: 'string', enum: ['fifo', 'parallel_agent'], default: 'fifo', description: 'fifo is the first-in, first-out serial queue and runs one task at a time in a clean chat. parallel_agent creates a separate top-level Cursor Agent.' },
@@ -5274,32 +5359,39 @@ const server = new Server(
 );
 
 async function ensureBridgeCursor(targetBridge, reason) {
-  targetBridge._refreshPersistedRuntimeMode();
-  const { ensureCursorRunning } = await import('./launch-cursor.mjs');
-  const r = await ensureCursorRunning({
-    reason,
-    runtimeMode: targetBridge.runtimeMode,
-    adapterStartCwd: targetBridge.adapterStartCwd,
-    ...(targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}),
+  return targetBridge._withWorkspaceAdmission(async () => {
+    targetBridge._refreshPersistedRuntimeMode();
+    const { ensureCursorRunning } = await import('./launch-cursor.mjs');
+    const r = await ensureCursorRunning({
+      reason,
+      runtimeMode: targetBridge.runtimeMode,
+      adapterStartCwd: targetBridge.adapterStartCwd,
+      workspaceKey: targetBridge.workspaceKey,
+      workspaceFile: targetBridge.workspaceFile,
+      // Prewarming Cursor is not permission to open another task's saved default project.
+      ...(targetBridge.workspaceConfirmationRequired ? { projectPath: null }
+        : targetBridge.projectPath ? { projectPath: targetBridge.projectPath } : {}),
+    });
+    targetBridge._lastLifecycle = lifecycleFromEnsureResult(r, targetBridge.runtimeMode);
+    if (targetBridge.runtimeMode === 'minimal') {
+      targetBridge._lastPresentation = r.presentation
+        ? { ...r.presentation, at: new Date().toISOString() }
+        : await targetBridge.applyRuntimePresentation('hide');
+    }
+    return r;
   });
-  targetBridge._lastLifecycle = lifecycleFromEnsureResult(r, targetBridge.runtimeMode);
-  if (targetBridge.runtimeMode === 'minimal') {
-    targetBridge._lastPresentation = r.presentation
-      ? { ...r.presentation, at: new Date().toISOString() }
-      : await targetBridge.applyRuntimePresentation('hide');
-  }
-  return r;
 }
 
 function toolErrorResult(error) {
   const message = error instanceof Error ? error.message : String(error);
-  if (error && (error.uiDiagnostic || error.modelSelection || error.pickerRead || error.cdp)) {
+  if (error && (error.uiDiagnostic || error.modelSelection || error.pickerRead || error.cdp || error.workspaceRecovery)) {
     const payload = {
       error: { code: error.code || error.uiDiagnostic?.code || 'CURSOR_BRIDGE_ERROR', message },
       ...(error.uiDiagnostic ? { uiDiagnostic: error.uiDiagnostic } : {}),
       ...(error.modelSelection ? { modelSelection: error.modelSelection } : {}),
       ...(error.pickerRead ? { pickerRead: error.pickerRead } : {}),
       ...(error.cdp ? { cdp: error.cdp } : {}),
+      ...(error.workspaceRecovery ? { workspaceRecovery: error.workspaceRecovery } : {}),
     };
     return {
       content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
@@ -5322,11 +5414,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_context_engine' || name === 'cursor_search' || name === 'cursor_search_deep') {
-      const result = await bridge.contextEngine(String((args && args.query) || ''), { requestContext: args && args.request_context });
+      const result = await bridge.contextEngine(String((args && args.query) || ''), { requestContext: args && args.request_context, workspacePath: args && args.workspace_path });
       return { content: [{ type: 'text', text: String(result) }] };
     }
     if (name === 'cursor_do') {
       const result = await bridge.doTask(String((args && args.prompt) || ''), {
+        workspacePath: args && args.workspace_path,
         requestContext: args && args.request_context,
         background: !args || args.background !== false,
         execution: args && args.execution,

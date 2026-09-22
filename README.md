@@ -186,12 +186,20 @@ Model choice sticks if you say it out loud: “Use GPT-5.6 Terra with max effort
 | Tool | What it does |
 |---|---|
 | `cursor_init` | Initializes or switches CCE to one absolute workspace path. |
-| `cursor_context_engine` | Read-only project understanding from one natural-language `query`. |
-| `cursor_do` | Submits a clear, bounded subtask to Cursor Agent for execution. Background submissions return a compact receipt; synchronous `background=false` returns the full result. |
+| `cursor_context_engine` | Read-only project understanding from one natural-language `query`; it can assert an intended workspace before sending. |
+| `cursor_do` | Submits a clear, bounded subtask to Cursor Agent for execution. Background submissions return a compact receipt; synchronous `background=false` returns the full result. It can assert an intended workspace before sending. |
 | `cursor_model` | Shows, sets, or resets persistent model and reasoning-effort defaults for CCE, `cursor_do`, or both. |
 | `cursor_status` | Reads connection, queue, runtime, persistent model defaults, and configured/effective task state. Task views are compact by default; `cursor_status(task_id, detail="result")` returns the plain complete reply and records receipt. `detail="full"` retains diagnostic task detail plus the reply. |
 | `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
 | `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery and returns an action/state summary; retrieve the reply separately with `cursor_status(task_id, detail="result")`. |
+
+| Parameter | Used by | Meaning |
+|---|---|---|
+| `workspace_path` | `cursor_context_engine`, `cursor_do` | Optional absolute workspace assertion. A mismatch or unconfirmed target fails before sending; it never switches or registers a project. |
+
+When the AI client knows the target project, pass `workspace_path`. Use the host-provided workspace root/current-task cwd unless the request explicitly targets another project; never infer it from a repository name or a saved default. `cursor_init` remains the explicit operation for initialization, registration, and switching. `initialized=true` only means a binding exists, not that this request's target is confirmed.
+
+For pre-send `WORKSPACE_CONFIRMATION_REQUIRED`, `WORKSPACE_INITIALIZATION_REQUIRED`, or `WORKSPACE_MISMATCH` with a known target, first inspect `cursor_status`. If it is idle with no queued or blocking work and `workspaceBusy=false` when exposed, run `cursor_init` for that exact path, verify ready status and the exact path, then retry the original call once. Busy, ambiguous, `needs_attention`, or uncertain send state requires reporting the condition and using the necessary local fallback instead.
 
 > [!WARNING]
 > Cursor is an Agent, not a filesystem sandbox. CCE strongly prompts read-only investigation, but prompts and allowed paths are not OS-level isolation. Verify consequential anchors and workspace changes.
@@ -250,7 +258,7 @@ After this one-time migration, later updates do not need special process cleanup
 <details>
 <summary><strong>How CCE searches and returns evidence</strong></summary>
 
-`cursor_context_engine` has one public parameter: `query`. Cursor adapts the investigation depth to the evidence it discovers.
+`query` carries the project question. The optional absolute `workspace_path` asserts the target project before CCE sends; Cursor adapts the investigation depth to the evidence it discovers.
 
 It can combine:
 
@@ -336,7 +344,7 @@ If Cursor is already running without the connection Bridge needs, Bridge returns
 - After reconciliation confirms completion, use `cursor_session_control(action=collect_result)` before continuing to retrieve that turn's complete reply. It always returns the full reply, restores the previous Agent selection, never sends a prompt, and never persists the reply. A changed epoch invalidates collection; repeating a successful collection returns `already_collected`. Numeric reply signatures and read receipts cover restart recovery, including completion before the first read. Older continuation turns without a saved signature require manual inspection.
 - Up to 50 task records are retained. Unread replies are protected: `TASK_RETENTION_FULL` rejects new submissions instead of dropping them. For each ID in `cursor_status().unreadResultTaskIds`, call `cursor_status(task_id, detail="result")`; compact status calls do not record receipt, while either explicit result or full read makes the record eligible for eviction.
 - `timeout_ms` is one post-submission monitoring budget shared by FIFO and automatic recovery. Expiry does not cancel Cursor; explicit `reap` may grant a fresh monitoring budget.
-- If the AI client supplies no workspace identity and Bridge restores the shared `default` binding, submission returns `WORKSPACE_CONFIRMATION_REQUIRED` until `cursor_init` confirms the intended project for this adapter. Identity-scoped bindings retain their normal restart behavior.
+- If the AI client supplies no workspace identity, every new adapter requires `cursor_init` to confirm the intended project before submission, whether or not a shared `default` path was saved. `initialized=true` does not by itself confirm a request's target. Identity-scoped bindings retain their normal restart behavior. Supply `workspace_path` on each request when the intended path is known.
 - Ready session mappings survive MCP restart and plugin-cache replacement because their atomic registry lives in the user configuration directory. Prompts, replies, credentials, plugin paths, scripts, and CDP target IDs are not persisted.
 - `submitting`, `running`, and `collecting` are normal non-terminal states.
 - Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.

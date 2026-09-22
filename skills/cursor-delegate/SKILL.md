@@ -9,6 +9,14 @@ Use Cursor as an execution partner. Keep direction, scope decisions, risk owners
 
 Declare `request_context` for each call: an AI caller uses `sender="model"`; set `source="user"` for explicitly supplied user requirements, `"model"` for your own task/inference, or `"mixed"` when both appear. In mixed prompts, label user-confirmed requirements separately from your additions. Use `"unknown"` where provenance is unavailable; a user asking you to use Cursor does not make your authored message user-authored. These labels are declarations, not authentication or extra permission, and do not carry over to later session turns.
 
+## Bind a known workspace
+
+For CCE or `cursor_do`, pass the intended absolute `workspace_path` when the installed tool schema supports it. Use the host-provided workspace root/current-task cwd unless the request explicitly targets another project. The field is a pre-send assertion: it never selects, switches, or registers a workspace. Do not infer the target from a repository basename or a saved default binding.
+
+With an older schema, use `cursor_status` to verify the exact ready project path before sending. `initialized=true` only means a binding exists; it does not confirm the workspace for this request. `cursor_init` remains the only explicit initialization, registration, or switch operation.
+
+On pre-send `WORKSPACE_CONFIRMATION_REQUIRED`, `WORKSPACE_INITIALIZATION_REQUIRED`, or `WORKSPACE_MISMATCH` with a known target, first call `cursor_status`. Only if it confirms idle, no queued or blocking work, and `workspaceBusy=false` when exposed, call `cursor_init` for the exact path. Require `ready=true`, `workspaceConfirmationRequired=false`, and the exact `projectPath`; in Agents Window also check `workspaceBinding.ok`, the local file-URI identity and workspace ID. Retry the original CCE query or `cursor_do` submission once. Do not run this recovery for `needs_attention`, uncertain send state, busy status, or ambiguous identity; report the condition and use the necessary local fallback. Do not cancel other work, change model settings, or retry in a loop.
+
 ## Respect execution controls
 
 - Do not call `cursor_do` when the user explicitly says not to use Cursor or not to delegate. A direct user opt-out always wins.
@@ -75,7 +83,7 @@ Do not choose parallel execution merely because there are many tasks. When depen
 
 1. Record the relevant pre-dispatch workspace state so later review can distinguish existing user changes.
 2. Form one independent task envelope per task using [delegation-contract.md](references/delegation-contract.md). Write its narrative instructions in the language of the user's current substantive task unless the user explicitly requests another language. Do not persist an inferred language or replace a clear conversational signal with the host/OS locale.
-3. Call `cursor_do` with `background=true` and save its compact submission receipt. Use `background=false` only when an immediate synchronous full result is required. Use only the documented `session_mode` and `session_id` fields when continuity is explicit; never infer continuity from the visible chat.
+3. Call `cursor_do` with `background=true` and save its compact submission receipt. Include `workspace_path` when the exact target is known and the schema supports it. Use `background=false` only when an immediate synchronous full result is required. Use only the documented `session_mode` and `session_id` fields when continuity is explicit; never infer continuity from the visible chat.
 4. Save each returned `task_id`; for persistent work also save `session_id`. Treat `agent_id` as verification evidence, not the continuation handle.
 5. If a parallel submission does not return a usable `agent_id`, stop expanding the parallel batch and use `fifo` or report the ambiguous state.
 

@@ -61,8 +61,8 @@ export {
  * adapterPid, supervisorPid, reusedSupervisor, createdSupervisor, launchReason.
  */
 export async function ensureCursorRunning(options = {}) {
-  const bindingFile = options.workspaceFile || resolveWorkspaceBindingFile();
-  const bindingKey = options.workspaceKey || resolveWorkspaceBindingKey();
+  const bindingFile = Object.hasOwn(options, 'workspaceFile') ? options.workspaceFile : resolveWorkspaceBindingFile();
+  const bindingKey = options.workspaceKey || resolveWorkspaceBindingKey(process.env, { cwd: options.adapterStartCwd ?? process.cwd() });
   const persistedBinding = readWorkspaceBinding(bindingFile, bindingKey);
   const hostProjectPath = resolveClaudeProjectPath();
   const projectPath = Object.hasOwn(options, 'projectPath')
