@@ -10,7 +10,7 @@
 
 The automated and packaging checks below passed. Live Cursor 3.22.12 acceptance is pending. The running Cursor instance has no remote debugging connection, and `cursor_init` reports `running-no-debug`. Cursor Bridge does not force-close it. Save work, exit Cursor normally once, then initialize the exact test workspace again before running the live checks.
 
-The current native host still reports Cursor Bridge `6.0.5`. Its configured marketplace points to a local checkout containing unrelated uncommitted changes. Reinstalling from that marketplace selected the same `6.0.5+codex.20260922142048` cache. The isolated source, rebuilt bundle, and staged wrapper checks used `6.0.6`; they do not establish native host pickup of that version.
+At the start of this run, the native host reported Cursor Bridge `6.0.5`, and the configured marketplace pointed to a local checkout containing unrelated uncommitted changes. Reinstalling from that marketplace selected the same `6.0.5+codex.20260922142048` cache. After pushing the checked changes, the normal installation commands switched the marketplace to `Vanyangyang/cursor-bridge` on GitHub `main` and installed the remote `6.0.6` cache. That installed bundle passed the isolated stdio smoke. The originating host task retains its earlier tool registration; exact native pickup of `6.0.6` still requires a fresh host task. No local checkout changes or persistent model preferences were discarded.
 
 The existing Cursor 3.21.16 results are historical evidence. They are not counted as live passes for Cursor 3.22.12, and `compatibility.json` retains the previous verified pairing until current-version acceptance is complete.
 
@@ -28,6 +28,8 @@ The existing Cursor 3.21.16 results are historical evidence. They are not counte
 | Staged generic Cursor Bridge MCP smoke | Pass | The staged `vanyangyang-cursor-bridge` bundle passed the same stdio checks. |
 | Staged Pi Cursor Bridge MCP smoke | Pass | The staged `pi-cursor-bridge` bundle passed the same stdio checks. |
 | Packed Cursor Bridge wrappers | Pass | Both `.tgz` archives were unpacked; their embedded generic/Pi bundles passed the same stdio version, schema, and admission checks. |
+| Remote installation | Pass | `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` and `codex plugin add cursor-bridge@vanyangyang` installed the `6.0.6` cache; its bundle passed the isolated stdio smoke. |
+| GitHub CI | Pass | Commit `464ea9609cf00d68bdb0767408d288ddca38e1ee`: [Windows and macOS basic checks](https://github.com/Vanyangyang/cursor-bridge/actions/runs/36892539887) both completed successfully. |
 
 `test/smoke-mcp.mjs` uses temporary settings, disables auto-launch, and reserves a private port whose probes are rejected. It never initializes a workspace, sends a real Cursor prompt, or changes persistent model defaults. It skips the runtime tool when its schema requires arguments that could change presentation. The Windows CI job now runs this check after the unit suite.
 
