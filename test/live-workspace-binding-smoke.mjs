@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-const [projectArg, pluginCwdArg] = process.argv.slice(2);
-if (!projectArg || !pluginCwdArg) throw new Error('Usage: node test/live-workspace-binding-smoke.mjs <absolute project> <existing plugin-cache directory>');
+const [projectArg, pluginCwdArg, queryArg] = process.argv.slice(2);
+if (!projectArg || !pluginCwdArg) throw new Error('Usage: node test/live-workspace-binding-smoke.mjs <absolute project> <existing plugin-cache directory> [read-only CCE query]');
 const project = resolve(projectArg);
+const query = String(queryArg || '').trim()
+  || '只读查找这个工作区中 MCP 工具的注册入口，给出三条可以核对的文件路径与行号；如果没有 MCP 实现，明确回复 NOT_FOUND。不要修改文件。';
 const scratch = mkdtempSync(join(tmpdir(), 'cursor-workspace-live-'));
 const other = join(scratch, 'other-project');
 mkdirSync(other);
@@ -68,7 +70,7 @@ try {
   assert.deepEqual(rejected.recentTasks, ready.recentTasks);
   idle(rejected);
   const result = await call('cursor_context_engine', {
-    query: '只读定位 Canvas 工具栏「从画布移除」按钮到 HTTP API 的调用关系，返回三条可核验的文件行号。不要修改文件。',
+    query,
     workspace_path: project,
     request_context: { sender: 'model', source: 'model' },
   });

@@ -92,6 +92,7 @@ Run the smallest relevant suite after each block, then the complete repository a
 
 ```powershell
 npm test
+npm run smoke:mcp
 npm --prefix plugins/grok-build-supervisor test
 npm --prefix plugins/grok-build-supervisor run smoke:mcp
 npm run build:pi-packages
@@ -99,6 +100,8 @@ npm run build:mcp-packages
 ```
 
 Also validate both plugin structures with the current Claude/Codex validators, inspect staged npm package contents, and verify source, committed bundles, and staged tarballs agree. Live compatibility claims require the documented Windows 11 + current Cursor/Grok/Pi user paths; unit tests alone are not sufficient.
+
+`smoke:mcp` exercises the committed Cursor Bridge bundle through MCP stdio without launching Cursor. It verifies the bundle version, required tool schemas, workspace confirmation rejection before submission, idle task state, and unchanged isolated settings. To check a staged or unpacked wrapper, run `node test/smoke-mcp.mjs <bundle-path> <embedded-product-version>`. This protocol check does not replace live Cursor acceptance.
 
 ## Commit, tag, and publish
 
