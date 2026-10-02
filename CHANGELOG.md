@@ -4,6 +4,21 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [6.0.8] - 2026-10-03
+
+### Fixed
+
+- Replace the model picker's single 450ms wait with bounded polling. If the same enabled, hit-tested trigger explicitly remains closed, allow one guarded activation through its normal click handler; never toggle a menu already reported open.
+- Resolve the trigger from the unique writable composer, follow exact root/submenu accessibility links, and wait for an enabled, stable, hit-tested point instead of choosing global coordinates.
+- Preserve cancellation, model/effort confirmation, and transport errors; include the last trigger, menu, and attempts in pre-send failure diagnostics. Exhausting the polling budget no longer creates a 1ms read that hides those observations.
+
+### Validation
+
+- The released 6.0.7 bundle fails a controlled 600ms render delay at 450ms; patched 6.0.8 opens it with one click. The original screenshot's transient scene is not assumed to be reconstructed.
+- A real Cursor fault-injection check swallowed exactly the first native trigger click: released 6.0.7 failed at 470ms; patched 6.0.8 opened at 950ms with zero submitted tasks.
+- Added 44 meaningful picker regressions and retained persistent Grok 4.7/high preferences. Full regression and live scope are recorded in the [patch verification](./docs/cursor-6.0.8-model-picker-verification.md).
+- `pi-cursor-bridge` 0.2.8 and `vanyangyang-cursor-bridge` 0.1.6 embed Cursor Bridge 6.0.8; Grok Build Supervisor remains 0.4.3.
+
 ## [6.0.7] - 2026-10-02
 
 ### Fixed

@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.23.12** | **6.0.7** | `main` | Grok 4.7/high CCE, FIFO, exact cancellation, and hidden CCE/normal restoration passed in both UI types. Agents Window parallel execution, persistent-session restart/unread recovery, new-workspace registration, and both single-window close orders passed. Hidden execution verifies the current selection and rejects Auto or mismatches before submission; attached fallback uses an injected IPC denial against real CDP. See [verification scope](./docs/cursor-3.23.12-verification.md). |
+| **3.23.12** | **6.0.8** | `main` | Fixes the model picker's premature 450ms timeout, requires the unique writable composer and linked menus, checks a stable clickable point, and permits one verified recovery only while the trigger stays closed. Grok 4.7/high validation and inherited acceptance boundaries are in the [patch verification scope](./docs/cursor-6.0.8-model-picker-verification.md). |
+| 3.23.12 | 6.0.7 | `cursor-bridge--v6.0.7` | Archived. Project identity, collapsed History, exact cancellation, IDE hidden model verification, both-UI and lifecycle acceptance; see [original scope](./docs/cursor-3.23.12-verification.md). |
 | 3.21.16 | 6.0.6 | `cursor-bridge--v6.0.6` | Archived. Workspace confirmation, exact existing-workspace reuse, and mismatch rejection; broader acceptance inherited from 6.0.4. |
 | 3.21.16 | 6.0.5 | `cursor-bridge--v6.0.5` | Archived. Model-provider alias matching and `reasoning_effort` verification. |
 | 3.21.16 | 6.0.4 | `cursor-bridge--v6.0.4` | Archived. Separate Model/Effort controls, grouped-worktree selection, preview-card dialogs, hidden model verification, both UI types, parallel Agents, persistent sessions, minimal/normal, and last-closed single-window restoration. |

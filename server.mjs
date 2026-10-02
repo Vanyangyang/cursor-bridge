@@ -65,7 +65,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.7';
+const PLUGIN_VERSION = '6.0.8';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -614,22 +614,47 @@ function exprClickBoundComposerStop(agentId) {
 const EXPR_FIND_NEWAGENT = `(function(){const b=[...document.querySelectorAll('button,[role=button],a.action-label,.codicon')].find(e=>{if(e.offsetParent===null||e.closest('.glass-sidebar-agent-menu-btn'))return false;const s=(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')+' '+(e.innerText||'');return /(?:^|\\s)New (?:Agent|Chat)(?:\\s|$)/i.test(s);});if(!b)return '';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)});})()`;
 
 const MODEL_PICKER_VISIBLE_BODY = `
+  ${INPUT_PICKER_BODY}
   const visible=(node)=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
-  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root,.agent-prompt-input-root,.ui-prompt-input')].filter(visible);
-  const composer=composers[composers.length-1]||document;
+  const inputs=inputCandidates();
+  const ownerSelector='.composer-bar[data-composer-id],.composer-bar,.ui-prompt-input-root,.agent-prompt-input-root,.ui-prompt-input';
+  const composer=inputs.length===1?inputs[0].closest(ownerSelector):null;
+  const triggerSelector='.ui-model-picker__trigger,.vscode-model-picker__trigger';
+  const candidates=composer?[...composer.querySelectorAll(triggerSelector)]
+    .filter(node=>visible(node)&&node.closest(ownerSelector)===composer):[];
+  const trigger=candidates.length===1?candidates[0]:null;
+  const shell=inputs.length===1?inputs[0].closest('[data-agent-panel-conversation-shell][data-glass-agent-id]'):null;
+  const owner=trigger?{triggerId:trigger.getAttribute('id'),composerId:composer.getAttribute('data-composer-id'),agentId:shell&&shell.getAttribute('data-glass-agent-id')}:null;
 `;
 
 const EXPR_MODEL_PICKER_TRIGGER = `(function(){
   ${MODEL_PICKER_VISIBLE_BODY}
-  const triggerSelector='.ui-model-picker__trigger,.vscode-model-picker__trigger';
-  const candidates=[...composer.querySelectorAll(triggerSelector)].filter(visible);
-  const trigger=candidates[candidates.length-1]||[...document.querySelectorAll(triggerSelector)].filter(visible).pop();
-  if(!trigger)return JSON.stringify({found:false,state:'trigger_missing'});
+  if(!trigger)return JSON.stringify({found:false,state:inputs.length!==1?'input_ambiguous':!composer?'composer_missing':candidates.length>1?'trigger_ambiguous':'trigger_missing',inputCount:inputs.length,triggerCount:candidates.length});
   const rect=trigger.getBoundingClientRect();
   const text=String(trigger.querySelector('.ui-model-picker__trigger-text,.vscode-model-picker__trigger-text')?.innerText||trigger.innerText||'').replace(/\\s+/g,' ').trim();
   const detail=String(trigger.querySelector('.ui-model-picker__trigger-variant-suffix,.vscode-model-picker__trigger-variant-suffix')?.innerText||'').replace(/\\s+/g,' ').trim();
-  return JSON.stringify({found:true,state:'ready',text,detail,x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)});
+  const x=Math.round(rect.x+rect.width/2),y=Math.round(rect.y+rect.height/2);
+  let state='ready';
+  if(trigger.disabled||trigger.getAttribute('aria-disabled')==='true'||trigger.closest('[inert]')||getComputedStyle(trigger).pointerEvents==='none')state='trigger_disabled';
+  else if(!Number.isFinite(x)||!Number.isFinite(y)||rect.width<=0||rect.height<=0||x<0||y<0||x>=innerWidth||y>=innerHeight)state='trigger_offscreen';
+  else {const hit=document.elementFromPoint(x,y);if(!hit||hit!==trigger&&!trigger.contains(hit))state='trigger_occluded';}
+  return JSON.stringify({found:true,state,interactive:state==='ready',expanded:trigger.getAttribute('aria-expanded'),text,detail,x,y,...owner});
 })()`;
+
+function exprActivateClosedModelPicker(expected) {
+  return `(function(){
+    const expected=${JSON.stringify(expected)};
+    const current=JSON.parse(${EXPR_MODEL_PICKER_TRIGGER});
+    if(!current.found||current.interactive!==true||current.expanded!=='false')return JSON.stringify({clicked:false,state:'trigger_not_closed_and_interactive'});
+    if(!current.triggerId||['triggerId','composerId','agentId','x','y'].some(key=>(current[key]??null)!==(expected[key]??null)))return JSON.stringify({clicked:false,state:'trigger_changed'});
+    ${MODEL_PICKER_VISIBLE_BODY}
+    if(!trigger||trigger.getAttribute('id')!==current.triggerId)return JSON.stringify({clicked:false,state:'trigger_changed'});
+    // Use the same button's normal click handler after a native click failed
+    // to expand it. The closed-state and hit checks occur in this same turn.
+    trigger.click();
+    return JSON.stringify({clicked:true,state:'closed_trigger_activated',owner});
+  })()`;
+}
 
 function classifyModelPickerRowKind(text, hasItemName, menuTestId, submenuTestId, ariaHaspopup, hasParamCheck, inSubmenu) {
   const menu = String(menuTestId || '').toLowerCase();
@@ -648,7 +673,32 @@ function classifyModelPickerRowKind(text, hasItemName, menuTestId, submenuTestId
 const EXPR_MODEL_PICKER_ROWS = `(function(){
   ${MODEL_PICKER_VISIBLE_BODY}
   ${classifyModelPickerRowKind.toString()}
-  const menus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid="selected-auto-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
+  const visibleMenus=[...document.querySelectorAll('[data-testid="model-picker-menu"],[data-testid="selected-auto-menu"],[data-testid*="model-parameters"],[data-testid*="parameter-submenu"],[data-component="menu-popup"][data-submenu]')].filter(visible);
+  const menus=[];
+  if(trigger){
+    // Modern menus are portalled. Follow the exact trigger's accessibility
+    // links, including submenu triggers, instead of adopting another picker.
+    const ids=new Set(),controls=new Set();
+    const link=node=>{
+      const id=node.getAttribute('id');if(id)ids.add(id);
+      for(const id of String(node.getAttribute('aria-controls')||'').split(/\\s+/).filter(Boolean))controls.add(id);
+    };
+    link(trigger);
+    for(let pass=0;pass<visibleMenus.length;pass++){
+      let changed=false;
+      for(const menu of visibleMenus){
+        if(menus.includes(menu))continue;
+        const id=menu.getAttribute('id'),labelledBy=String(menu.getAttribute('aria-labelledby')||'').split(/\\s+/).filter(Boolean);
+        if(!(id&&controls.has(id))&&!labelledBy.some(id=>ids.has(id)))continue;
+        menus.push(menu);link(menu);
+        for(const node of menu.querySelectorAll('[id],[aria-controls]'))link(node);
+        changed=true;
+      }
+      if(!changed)break;
+    }
+    if(!ids.size&&!controls.size&&visibleMenus.length===1
+      &&[...document.querySelectorAll(triggerSelector)].filter(visible).length===1)menus.push(visibleMenus[0]);
+  }
   const rows=[];
   const seen=new Set();
   for(const menu of menus){
@@ -683,8 +733,12 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
       });
     }
   }
-  return JSON.stringify({open:menus.length>0,rows});
+  return JSON.stringify({open:menus.length>0,rows,owner});
 })()`;
+
+function modelPickerOwnerKey(owner) {
+  return owner && JSON.stringify([owner.triggerId || null, owner.composerId || null, owner.agentId || null]);
+}
 
 const EXPR_SELECTED_AGENT_MODEL_CONFIG = `(function(){
   ${INPUT_PICKER_BODY}
@@ -3170,7 +3224,7 @@ class CursorBridge {
 
   async _readModelPickerRows(c, options) {
     const snapshot = await this._readModelPickerValue(c, EXPR_MODEL_PICKER_ROWS, 'rows', options);
-    return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [] };
+    return { open: snapshot.open === true, rows: Array.isArray(snapshot.rows) ? snapshot.rows : [], owner: snapshot.owner || null };
   }
 
   async _readSelectedAgentModelConfig(c, options) {
@@ -3192,19 +3246,70 @@ class CursorBridge {
     await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Number(point.x), y: Number(point.y) });
   }
 
-  async _openModelPicker(c) {
-    const trigger = await this._readModelPickerTrigger(c);
-    if (!trigger.found) {
-      throw new Error('Cursor model picker is unavailable in the active Agent composer');
-    }
-    let snapshot = await this._readModelPickerRows(c);
-    if (!snapshot.open) {
-      await this._clickModelPickerPoint(c, trigger);
-      await sleep(450);
-      snapshot = await this._readModelPickerRows(c);
-    }
-    if (!snapshot.open) throw new Error('Cursor model picker did not open');
-    return { trigger, ...snapshot };
+  async _activateClosedModelPicker(c, trigger, options) {
+    return this._readModelPickerValue(c, exprActivateClosedModelPicker(trigger), 'closed_trigger_activation', options);
+  }
+
+  async _openModelPicker(c, job = null, options = {}) {
+    const timeoutMs = Math.max(0, Number(options.timeoutMs ?? 2000));
+    const pollMs = Math.max(10, Number(options.pollMs ?? 50));
+    const stableMs = Math.max(0, Number(options.stableMs ?? 100));
+    const recoveryDelayMs = Math.max(0, Number(options.recoveryDelayMs ?? 750));
+    const deadline = Date.now() + timeoutMs;
+    let trigger = null, snapshot = { open: false, rows: [] };
+    let stableSignature = null, stableSince = 0, clicked = false, clickedOwner = null;
+    let clickedAt = 0, recoveryAttempted = false, lastPollError = null;
+    const attempts = [];
+    do {
+      this._throwIfCancelledBeforeSend(job);
+      // Exhaust the polling budget without inventing a one-millisecond CDP
+      // failure that hides the last useful trigger/menu observations.
+      if (deadline - Date.now() < 10) break;
+      try {
+        snapshot = await this._readModelPickerRows(c, { timeoutMs: deadline - Date.now() });
+        if (deadline - Date.now() < 10) break;
+        trigger = await this._readModelPickerTrigger(c, { timeoutMs: deadline - Date.now() });
+      } catch (error) {
+        if (error.code !== 'CDP_COMMAND_TIMEOUT' || Date.now() < deadline) throw error;
+        lastPollError = error.pickerRead || { code: error.code, message: error.message };
+        break;
+      }
+      this._throwIfCancelledBeforeSend(job);
+      const sameOwner = modelPickerOwnerKey(snapshot.owner) === modelPickerOwnerKey(trigger);
+      if (snapshot.open && trigger.found && sameOwner && (!clicked || clickedOwner === modelPickerOwnerKey(trigger))) return { trigger, ...snapshot };
+      if (snapshot.open && !sameOwner && !attempts.includes('owner_changed')) attempts.push('owner_changed');
+      if (!clicked) {
+        const interactive = trigger.found && trigger.interactive !== false;
+        const signature = interactive ? JSON.stringify([trigger.triggerId, trigger.composerId, trigger.agentId, trigger.x, trigger.y]) : null;
+        if (!interactive || signature !== stableSignature) {
+          stableSignature = signature;
+          stableSince = Date.now();
+          const state = trigger.state || (interactive ? 'ready' : 'trigger_missing');
+          if (!attempts.includes(state)) attempts.push(state);
+        }
+        if (interactive && Date.now() - stableSince >= stableMs) {
+          this._throwIfCancelledBeforeSend(job);
+          await this._clickModelPickerPoint(c, trigger);
+          clicked = true;
+          clickedAt = Date.now();
+          clickedOwner = modelPickerOwnerKey(trigger);
+          attempts.push('click_once', 'wait_menu');
+        }
+      } else if (!recoveryAttempted && !snapshot.open && sameOwner
+        && clickedOwner === modelPickerOwnerKey(trigger)
+        && trigger.interactive === true && trigger.expanded === 'false'
+        && Date.now() - clickedAt >= recoveryDelayMs && deadline - Date.now() >= 10) {
+        this._throwIfCancelledBeforeSend(job);
+        recoveryAttempted = true;
+        const recovered = await this._activateClosedModelPicker(c, trigger, { timeoutMs: deadline - Date.now() });
+        attempts.push(recovered.clicked ? 'activate_confirmed_closed_trigger' : recovered.state || 'activation_rejected');
+      }
+      if (Date.now() >= deadline) break;
+      await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
+    } while (Date.now() < deadline);
+    throw createModelSelectionError('Cursor model picker did not open', 'picker_did_not_open', true, {
+      attempts, trigger, lastPollError, menu: { open: snapshot.open, rows: (snapshot.rows || []).slice(0, 20) },
+    });
   }
 
   async _closeModelPicker(c) {
@@ -3218,14 +3323,17 @@ class CursorBridge {
     if ((await this._readModelPickerRows(c)).open) throw new Error('Cursor model picker did not close after selection');
   }
 
-  async _openModelPickerControl(c, snapshot, controlKind) {
+  async _openModelPickerControl(c, snapshot, controlKind, job = null) {
+    this._throwIfCancelledBeforeSend(job);
     const control = (snapshot && snapshot.rows || []).find((row) => row.kind === controlKind && row.disabled !== true);
     if (!control) return snapshot;
+    this._throwIfCancelledBeforeSend(job);
     await this._clickModelPickerPoint(c, control);
     await sleep(400);
     let next = await this._readModelPickerRows(c);
     const expectedKind = controlKind === 'model_control' ? 'model' : 'parameter';
     if (!next.rows.some((row) => row.kind === expectedKind)) {
+      this._throwIfCancelledBeforeSend(job);
       await this._hoverModelPickerPoint(c, control);
       await sleep(350);
       next = await this._readModelPickerRows(c);
@@ -3233,10 +3341,12 @@ class CursorBridge {
     return next;
   }
 
-  async _findModelPickerModel(c, snapshot, requestedModel) {
+  async _findModelPickerModel(c, snapshot, requestedModel, job = null) {
+    this._throwIfCancelledBeforeSend(job);
     let modelRow = selectModelPickerRow(snapshot && snapshot.rows, requestedModel, 'model');
     if (modelRow) return { snapshot, modelRow };
-    const expanded = await this._openModelPickerControl(c, snapshot, 'model_control');
+    const expanded = await this._openModelPickerControl(c, snapshot, 'model_control', job);
+    this._throwIfCancelledBeforeSend(job);
     modelRow = selectModelPickerRow(expanded && expanded.rows, requestedModel, 'model');
     return { snapshot: expanded, modelRow };
   }
@@ -3390,9 +3500,9 @@ class CursorBridge {
         if (job) job.modelSelection = result;
         return result;
       }
-      const opened = await this._openModelPicker(c);
+      const opened = await this._openModelPicker(c, job);
       stage = 'locate_model';
-      let located = await this._findModelPickerModel(c, opened, requestedModel);
+      let located = await this._findModelPickerModel(c, opened, requestedModel, job);
       modelRow = located.modelRow;
       if (!modelRow) {
         throw createModelSelectionError(
@@ -3409,8 +3519,8 @@ class CursorBridge {
         if (!outcome.row && outcome.state === 'not_rendered' && !effortPickerReopened) {
           effortPickerReopened = true;
           await this._closeModelPicker(c);
-          const reopened = await this._openModelPicker(c);
-          located = await this._findModelPickerModel(c, reopened, requestedModel);
+          const reopened = await this._openModelPicker(c, job);
+          located = await this._findModelPickerModel(c, reopened, requestedModel, job);
           modelRow = located.modelRow;
           if (!modelRow) {
             throw createModelSelectionError(
@@ -3461,8 +3571,8 @@ class CursorBridge {
           this._throwIfCancelledBeforeSend(job);
           await this._clickModelPickerPoint(c, modelRow);
           await sleep(550);
-          const reopened = await this._openModelPicker(c);
-          located = await this._findModelPickerModel(c, reopened, requestedModel);
+          const reopened = await this._openModelPicker(c, job);
+          located = await this._findModelPickerModel(c, reopened, requestedModel, job);
           modelRow = located.modelRow;
           if (!modelRow) {
             throw createModelSelectionError(
@@ -3490,8 +3600,8 @@ class CursorBridge {
       stage = 'verify_model';
       let trigger = await this._readModelPickerTrigger(c);
       if (!trigger.found || !normalizeModelPickerModelText(trigger.text).includes(normalizeModelPickerModelText(requestedModel))) {
-        const reopened = await this._openModelPicker(c);
-        located = await this._findModelPickerModel(c, reopened, requestedModel);
+        const reopened = await this._openModelPicker(c, job);
+        located = await this._findModelPickerModel(c, reopened, requestedModel, job);
         const selected = selectModelPickerRow(located.snapshot.rows.filter((row) => row.selected), requestedModel, 'model');
         if (!selected) {
           throw createModelSelectionError(
@@ -3505,8 +3615,8 @@ class CursorBridge {
 
       if (requestedEffort) {
         stage = 'verify_effort';
-        const reopened = await this._openModelPicker(c);
-        located = await this._findModelPickerModel(c, reopened, requestedModel);
+        const reopened = await this._openModelPicker(c, job);
+        located = await this._findModelPickerModel(c, reopened, requestedModel, job);
         modelRow = located.modelRow;
         if (!modelRow) {
           throw createModelSelectionError(
@@ -3561,6 +3671,8 @@ class CursorBridge {
         errorCode: primaryError.code || `CURSOR_MODEL_${String(failure.failureClass).toUpperCase()}`,
         available: failure.available || [],
         attempts: failure.attempts || [],
+        trigger: failure.trigger || null,
+        lastPollError: failure.lastPollError || null,
         menu: failure.menu || null,
         runtimeMode: this.runtimeMode,
         lastError: primaryError.message,
@@ -5788,6 +5900,7 @@ export {
   EXPR_VISIBLE,
   EXPR_FIND_NEWAGENT,
   EXPR_MODEL_PICKER_TRIGGER,
+  exprActivateClosedModelPicker,
   EXPR_MODEL_PICKER_ROWS,
   EXPR_SELECTED_AGENT_MODEL_CONFIG,
   matchSelectedAgentModelConfig,

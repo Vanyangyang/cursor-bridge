@@ -115,15 +115,26 @@ test('Cursor 3.20.17 Auto menu exposes its Model control and closes through the 
     getAttribute: key => attributes[key] ?? null,
     querySelectorAll: () => [row],
   };
+  const composer = { querySelectorAll: () => [trigger], getAttribute: () => null };
+  const trigger = { offsetParent: {}, getAttribute: () => null, closest: () => composer };
+  const input = {
+    offsetParent: {}, classList: { contains: () => false },
+    getAttribute: key => key === 'contenteditable' ? 'true' : null,
+    closest: () => composer,
+  };
   const document = {
-    querySelectorAll: selectors => selectors.split(',').some(selector => {
+    querySelectorAll: selectors => {
+      if (selectors.includes('.aislash-editor-input')) return [input];
+      if (selectors.includes('.ui-model-picker__trigger')) return [trigger];
+      return selectors.split(',').some(selector => {
       if (!selector.startsWith('[')) return false;
       const clauses = [...selector.matchAll(/\[([\w-]+)(?:(\*?=)"([^"]*)")?\]/g)];
       return clauses.length > 0 && clauses.every(([, key, operator, value]) =>
         operator === '=' ? attributes[key] === value
           : operator === '*=' ? String(attributes[key] || '').includes(value)
             : key in attributes);
-    }) ? [menu] : [],
+      }) ? [menu] : [];
+    },
   };
   const b = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
   b._readModelPickerTrigger = async () => ({ found: true, text: 'Auto', x: 10, y: 20 });

@@ -3,11 +3,12 @@
   "policy": "latest-only",
   "current": {
     "cursorVersion": "3.23.12",
-    "cursorBridgeVersion": "6.0.7",
+    "cursorBridgeVersion": "6.0.8",
     "sourceRef": "main",
     "status": "current",
     "acceptance": {
-      "currentReleaseEvidence": "3.23.12-source-and-rebuilt-stdio-acceptance-under-6.0.6-label; IDE-hidden-reader-and-cce-under-6.0.7; root-and-staged-6.0.7-stdio-smoke-pass",
+      "currentReleaseEvidence": "6.0.8-delayed-picker-before-after-regression; source-and-rebuilt-stdio-model-selection-acceptance; see-docs/cursor-6.0.8-model-picker-verification.md",
+      "inheritedEvidenceRelease": "6.0.7",
       "workspaceIdentity": "3.23.12-exact-local-file-uri-and-current-react-project-proof; both-ui-types-live-tested",
       "requestProvenance": "regression-and-protocol-tested; caller-declared-not-authenticated",
       "cursorVersionEvidence": "installed-cli-version-commit-and-package-json",
@@ -24,14 +25,20 @@
       "singleWindow": "3.23.12-default-cold-launch-restores-last-closed-type-both-close-orders",
       "minimalNormalRuntime": "3.23.12-hidden-cce-and-normal-restoration-pass-both-ui-types; hidden-model-or-effort-mismatch-fail-closed",
       "minimalModelSelection": "verifies-current-composer-config; Auto-or-different-effort-rejected-before-send; use-normal-to-change",
-      "modelPickerTrigger": "3.23.12-grok-4.7-high-normal-selection-pass-both-ui-types",
+      "modelPickerTrigger": "6.0.8-unique-input-owner-and-linked-menus; stable-hit-point-and-bounded-poll; one-recovery-only-for-confirmed-closed-trigger; grok-4.7-high-both-ui-types",
       "chatPanelDiagnostics": "preview-card-dialog-exclusion-and-blocking-dialog-regression-tested",
       "promptSubmission": "3.23.12-live-tested-ide-icon-send-and-agents-button",
       "workspaceAdmission": "3.23.12-stdio-confirmation-required-and-both-tools-mismatch-no-task; new-workspace-exact-registration-and-adapter-restart-pass",
-      "knownGaps": "native-6.0.7-label-pickup-pending; real-OS-attached-policy-denial-not-tested; macOS-real-device-acceptance-pending; historical-ETIMEDOUT-root-UNKNOWN"
+      "knownGaps": "native-6.0.8-label-pickup-pending; real-OS-attached-policy-denial-not-tested; macOS-real-device-acceptance-pending; historical-ETIMEDOUT-root-UNKNOWN; historical-picker-failure-scene-not-recorded"
     }
   },
   "history": [
+    {
+      "cursorVersion": "3.23.12",
+      "cursorBridgeVersion": "6.0.7",
+      "gitRef": "cursor-bridge--v6.0.7",
+      "status": "archived"
+    },
     {
       "cursorVersion": "3.21.16",
       "cursorBridgeVersion": "6.0.6",

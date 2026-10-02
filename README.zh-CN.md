@@ -68,7 +68,7 @@ Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
-> **实机验证环境：** Windows 11 + Cursor **3.23.12**；版本由 CLI 与内置包元数据共同确认。Cursor Bridge 6.0.7 适配项目选择、折叠 History、精确取消及 IDE 隐藏模型核验。Grok 4.7/high 的 CCE、FIFO、取消和 `minimal` CCE 后恢复 normal，已在 IDE 与 Agents Window 通过实机验证。Agents Window 还覆盖两个同时运行的独立 Agent、持续会话重启与未读结果恢复、新工作区注册，以及两种关闭顺序均只恢复最后关闭的一种窗口。隐藏模式核验当前模型与 effort，切换选择请先使用普通模式。发布与宿主加载边界见[验收范围](./docs/cursor-3.23.12-verification.md)。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
+> **实机验证环境：** Windows 11 + Cursor **3.23.12**；版本由 CLI 与内置包元数据共同确认。Cursor Bridge 6.0.8 修复模型菜单提前报错：限定唯一输入区及关联菜单，确认点击位置稳定且可命中，有界等待；按钮明确保持关闭时允许一次核验后的恢复。Grok 4.7/high 测试和宿主加载边界见[补丁验收范围](./docs/cursor-6.0.8-model-picker-verification.md)。[6.0.7 验收](./docs/cursor-3.23.12-verification.md)覆盖精确项目选择、折叠 History、IDE 与 Agents Window、精确取消、并行 Agent、持续会话恢复、工作区注册及单窗口恢复。隐藏模式核验当前模型与 effort，切换选择请先使用普通模式。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
 
 ## CCE 是什么？
 
