@@ -6,6 +6,15 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve lifecycle recovery actions, retry steps, retryability, and the detected Cursor executable across the Supervisor IPC client, so an already-running Cursor without Bridge access returns the specific normal-exit recovery instruction through `cursor_init`.
+
+### Validation
+
+- Cursor 3.23.12 preflight passed 320 Bridge tests and 147 unchanged Supervisor tests. New real IPC regressions cover both `retryable=true` and `retryable=false`; initialization consumer tests verify the saved workspace and zero task submissions.
+- A rebuilt-bundle MCP check against the real running Cursor 3.23.12 verified `running-no-debug`, `close_cursor_and_retry`, the concrete recovery step, and unchanged model preferences. Full connected IDE/Agents Window acceptance remains pending; see [verification scope](./docs/cursor-3.23.12-verification.md).
+
 ## [6.0.6] - 2026-09-22
 
 ### Fixed

@@ -190,6 +190,53 @@ test('adapter project path is forwarded through a reused supervisor', async () =
   }
 });
 
+for (const retryable of [true, false]) {
+  test(`adapter preserves running-no-debug recovery diagnostics over IPC (retryable=${retryable})`, async () => {
+    const { dir, counter } = makeLifecycleSandbox();
+    const ensureModule = join(dir, 'recovery-ensure.mjs');
+    const diagnostics = {
+      needsAction: 'close_cursor_and_retry',
+      nextStep: 'Save your work, exit Cursor normally once, then retry the previous CCE operation.',
+      retryable,
+      cursorExecutable: join(dir, 'Cursor.exe'),
+      cursorExecutableSource: 'CURSOR_EXE',
+    };
+    writeFileSync(ensureModule, `
+import { ensureCursorRunningLocal as mockEnsure } from ${JSON.stringify(pathToFileURL(MOCK_ENSURE).href)};
+export async function ensureCursorRunningLocal(options) {
+  return {
+    ...await mockEnsure(options),
+    ok: false,
+    status: 'running-no-debug',
+    ...${JSON.stringify(diagnostics)},
+  };
+}
+`, 'utf8');
+    const env = {
+      ...envFor(dir, counter),
+      CURSOR_BRIDGE_ENSURE_MODULE: ensureModule,
+    };
+    try {
+      await withEnv(env, async () => {
+        const ready = await pingSupervisor();
+        assert.equal(ready.ok, true);
+        const result = await ensureCursorViaSupervisor({ reason: 'recovery-diagnostics', waitMs: 1000 });
+        assert.equal(result.ok, false);
+        assert.equal(result.status, 'running-no-debug');
+        assert.equal(result.supervisorPid, ready.supervisorPid);
+        assert.equal(result.reusedSupervisor, true);
+        for (const [key, value] of Object.entries(diagnostics)) {
+          assert.equal(result[key], value, `${key} must survive the supervisor IPC response`);
+        }
+        assert.equal(readCount(counter), 1);
+      });
+    } finally {
+      await stopSupervisor(dir);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
 test('singleton reconnect after supervisor restart', async () => {
   const { dir, counter } = makeLifecycleSandbox();
   const env = envFor(dir, counter);

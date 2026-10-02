@@ -442,6 +442,44 @@ test('a failed preparation releases admission for a later explicit init', async 
   assert.equal((await bridge.status()).workspaceBusy, false);
 });
 
+for (const retryable of [true, false]) {
+  test(`init retains recoverable lifecycle guidance and retryable=${retryable}`, async (t) => {
+    const f = fixture(t);
+    const bridge = new AdmissionBridge(f);
+    const nextStep = `Save your work, exit Cursor normally once, then initialize CCE for workspace ${f.projectA} again.`;
+    bridge.ensureHook = async () => {
+      bridge._lastLifecycle = {
+        status: 'running-no-debug',
+        lifecycleMode: 'supervised',
+        message: 'Cursor is running without CCE access.',
+        needsAction: 'close_cursor_and_retry',
+        nextStep,
+        retryable,
+        cursorExecutable: 'D:\\tool\\cursor\\Cursor.exe',
+        cursorExecutableSource: 'windows_registry',
+      };
+      throw new Error('Cursor is running without CCE access.');
+    };
+
+    const result = await bridge.initializeWorkspace(f.projectA);
+    assert.equal(result.ready, false);
+    assert.equal(result.bindingPersisted, true);
+    assert.equal(result.workspaceConfirmationRequired, false);
+    assert.equal(result.workspaceBusy, false);
+    assert.equal(result.status, 'running-no-debug');
+    assert.equal(result.nextStep, nextStep);
+    assert.equal(result.retryable, retryable);
+    assert.equal(result.lifecycle.needsAction, 'close_cursor_and_retry');
+    assert.equal(result.lifecycle.nextStep, nextStep);
+    assert.equal(result.lifecycle.retryable, retryable);
+    assert.equal(result.lifecycle.cursorExecutable, 'D:\\tool\\cursor\\Cursor.exe');
+    assert.equal(result.lifecycle.cursorExecutableSource, 'windows_registry');
+    assert.equal(readWorkspaceBinding(f.workspaceFile, 'default').projectPath, resolve(f.projectA));
+    assert.equal(bridge.tasks.size, 0);
+    assert.equal(bridge.enqueueCalls.length, 0);
+  });
+}
+
 test('session reconcile and collect_result require an explicit default workspace identity before dispatch', async (t) => {
   const f = fixture(t);
   writeWorkspaceBinding(f.workspaceFile, 'default', f.projectA);
