@@ -11,7 +11,8 @@
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.21.16** | **6.0.6** | `main` | 原生确认门禁及 CCE、`cursor_do` 错绑拒绝通过；正确绑定的只读 CCE 使用 Grok 4.7/high 完成。修复在升级版本前使用已修复的 6.0.5 缓存标签验收；更完整的 IDE 与 Agents Window 验收继承自 6.0.4。详见[验收范围](./docs/cursor-3.21.16-verification.md)。 |
+| **3.23.12** | **6.0.7** | `main` | Grok 4.7/high CCE、FIFO、精确取消和隐藏 CCE 后恢复 normal 已在双 UI 通过；Agents Window 并行执行、持续会话重启与未读恢复、新工作区注册，以及两种单窗口关闭顺序通过。隐藏执行核验当前选择，Auto 或不匹配在发送前拒绝；附加降级以注入 IPC 拒绝验证真实 CDP。详见[验收范围](./docs/cursor-3.23.12-verification.md)。 |
+| 3.21.16 | 6.0.6 | `cursor-bridge--v6.0.6` | 已归档。工作区确认、精确复用已有工作区与错绑拒绝；更完整验收继承自 6.0.4。 |
 | 3.21.16 | 6.0.5 | `cursor-bridge--v6.0.5` | 已归档。模型提供方别名匹配及 `reasoning_effort` 核验。 |
 | 3.21.16 | 6.0.4 | `cursor-bridge--v6.0.4` | 已归档。独立 Model/Effort 控件、同仓库多工作树、预览卡 dialog、隐藏模式模型核验、双 UI、并行 Agent、持续会话、minimal/normal 以及最后关闭单窗口恢复。 |
 | 3.20.21 | 6.0.3 | `cursor-bridge--v6.0.3` | 已归档。最后关闭窗口类型恢复及双 UI 验收。 |

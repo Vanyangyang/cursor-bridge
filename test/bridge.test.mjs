@@ -581,6 +581,134 @@ test('Cursor Agents v2 React adapter supports Cursor 3.17 split row handlers', a
   assert.equal(selected[0][1], undefined);
 });
 
+test('Cursor 3.23 React adapter reads all headers from a collapsed section and opens by id', async () => {
+  const selected = [];
+  const headers = [
+    { id: 'agent-323-a', name: 'Same title', status: 'done', lastUpdatedAt: 32300 },
+    { id: 'agent-323-b', name: 'Same title', status: 'in_progress', lastUpdatedAt: 32301 },
+    { id: 'agent-323-c', name: 'Third Agent', status: 'needs_attention', lastUpdatedAt: 32302 },
+  ];
+  const head = {
+    parentElement: null,
+    '__reactFiber$test': {
+      memoizedProps: {
+        section: {
+          id: 'repo:github.com/vanyangyang/cursor-bridge',
+          displayName: 'cursor-bridge',
+          isOpen: false,
+          headers,
+        },
+        selectedAgentId: 'agent-323-a',
+        committedSelectedAgentId: 'agent-323-a',
+        rowHandlers: { onSelect(header) { selected.push(header); } },
+      },
+      return: null,
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.ui-sidebar-section-head') return [head];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.kind, 'agents_v2');
+  assert.deepEqual(snapshot.entries.map((entry) => [
+    entry.id, entry.label, entry.isSelected, entry.icon, entry.workspaceId, entry.workspaceLabel, entry.durable,
+  ]), [
+    ['local:agent-323-a', 'Same title', true, 'check-circled', 'repo:github.com/vanyangyang/cursor-bridge', 'cursor-bridge', true],
+    ['local:agent-323-b', 'Same title', false, 'loading', 'repo:github.com/vanyangyang/cursor-bridge', 'cursor-bridge', true],
+    ['local:agent-323-c', 'Third Agent', false, 'needs-attention', 'repo:github.com/vanyangyang/cursor-bridge', 'cursor-bridge', true],
+  ]);
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:agent-323-b')};`)(document), 'OPENED');
+  assert.deepEqual(selected, [headers[1]]);
+  assert.equal(selected[0], headers[1]);
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:missing-agent')};`)(document), 'AGENT_NOT_FOUND');
+  assert.equal(selected.length, 1);
+});
+
+test('Cursor 3.23 React adapter rejects section headers without a select callback', async () => {
+  for (const rowHandlers of [undefined, { onSelect: true }]) {
+    const head = {
+      parentElement: null,
+      '__reactProps$test': {
+        section: { headers: [{ id: 'unopenable-agent', name: 'Unopenable Agent' }] },
+        rowHandlers,
+      },
+    };
+    const document = {
+      querySelectorAll(selector) {
+        if (selector === '.ui-sidebar-section-head') return [head];
+        return [];
+      },
+    };
+
+    assert.deepEqual(JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document)), {
+      ok: false,
+      error: 'REACT_ADAPTER_UNAVAILABLE',
+    });
+    assert.equal(await Function('document', `return ${exprOpenAgent('local:unopenable-agent')};`)(document), 'REACT_ADAPTER_UNAVAILABLE');
+  }
+});
+
+test('Cursor 3.23 React adapter deduplicates overlapping section head and list anchors', async () => {
+  const selected = [];
+  const header = { id: 'shared-agent', name: 'Shared Agent', status: 'done' };
+  const props = {
+    section: { headers: [header] },
+    rowHandlers: { onSelect(value) { selected.push(value); } },
+  };
+  const head = { parentElement: null, '__reactProps$head': props };
+  const list = { parentElement: head, '__reactProps$list': props };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.glass-sidebar-agent-list-container') return [list];
+      if (selector === '.ui-sidebar-section-head') return [head, list];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.equal(snapshot.ok, true);
+  assert.deepEqual(snapshot.entries.map((entry) => entry.id), ['local:shared-agent']);
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:shared-agent')};`)(document), 'OPENED');
+  assert.deepEqual(selected, [header]);
+});
+
+test('Cursor 3.23 section head without a callback preserves the legacy History fallback', async () => {
+  const selected = [];
+  const head = {
+    parentElement: null,
+    '__reactProps$head': { section: { headers: [{ id: 'unopenable-agent' }] } },
+  };
+  const label = {
+    parentElement: null,
+    offsetParent: {},
+    '__reactProps$legacy': {
+      entries: [{ id: 'local:legacy-agent', label: 'Legacy Agent', timestamp: 123, icon: 'check-circled' }],
+      onOpenEntry(id) { selected.push(id); },
+    },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      if (selector === '.ui-sidebar-section-head') return [head];
+      if (selector === '.compact-agent-history-react-menu-label') return [label];
+      return [];
+    },
+  };
+
+  const snapshot = JSON.parse(Function('document', `return ${EXPR_HISTORY_ENTRIES};`)(document));
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.kind, 'legacy');
+  assert.deepEqual(snapshot.entries.map((entry) => [entry.id, entry.label, entry.durable]), [
+    ['local:legacy-agent', 'Legacy Agent', true],
+  ]);
+  assert.equal(await Function('document', `return ${exprOpenAgent('local:legacy-agent')};`)(document), 'OPENED');
+  assert.deepEqual(selected, ['local:legacy-agent']);
+});
+
 test('Cursor Agents v2 React adapter exposes a selected 3.17 draft before History inserts it', async () => {
   const selected = [];
   const headers = [
@@ -1799,7 +1927,7 @@ test('targeted Stop confirmation requires a real click and two stable terminal o
   assert.match(expression, /aria-label="Stop generation"/);
   assert.match(expression, /ui-shell-tool-call__glass-stop/);
   assert.match(expression, /aria-label="Stop command"/);
-  assert.match(expression, /composerStatus!==\'generating\'/);
+  assert.match(expression, /status!==\'generating\'/);
   assert.doesNotMatch(expression, /aria-label\*=Cancel|debug-stop/);
 });
 
@@ -1876,6 +2004,182 @@ test('targeted Stop expression accepts the exact foreground command stop control
   assert.equal(result.clicked, true);
   assert.equal(result.control, 'stop_command');
   assert.equal(clicks, 1);
+});
+
+function modernStopFixture({ shellId = 'exact-agent', shellCount = 1, entries, controls = [{}], ownStatus } = {}) {
+  let clicks = 0;
+  const label = {
+    offsetParent: {},
+    parentElement: null,
+    '__reactProps$test': {
+      entries: entries ?? [{ id: 'local:exact-agent', isSelected: true, showSpinner: true, icon: 'loading' }],
+      onOpenEntry() {},
+    },
+  };
+  const shells = Array.from({ length: shellCount }, () => {
+    const shell = {
+      offsetParent: {},
+      dataset: { glassAgentId: shellId, ...(ownStatus ? { composerStatus: ownStatus } : {}) },
+      querySelectorAll(selector) {
+        return buttons.filter(button => selector.includes(button.command ? 'ui-shell-tool-call__glass-stop' : 'ui-prompt-input-submit-button'));
+      },
+    };
+    const buttons = controls.map(control => ({
+      command: !!control.command,
+      offsetParent: control.hidden ? null : {},
+      disabled: !!control.disabled,
+      closest(selector) {
+        assert.equal(selector, '[data-glass-agent-id]');
+        return control.nested ? { dataset: { glassAgentId: control.nested } } : shell;
+      },
+      click() { clicks++; },
+    }));
+    return shell;
+  });
+  return {
+    document: {
+      querySelectorAll(selector) {
+        if (selector === '.compact-agent-history-react-menu-label') return [label];
+        if (selector === '[data-agent-panel-conversation-shell][data-glass-agent-id]') return shells;
+        return [];
+      },
+    },
+    clicks: () => clicks,
+  };
+}
+
+for (const [mode, expression] of [['selected', exprClickSelectedAgentStop], ['bound', exprClickBoundComposerStop]]) {
+  test(`Cursor 3.23 ${mode} Stop clicks the exact generating shell without legacy data-state`, () => {
+    const fixture = modernStopFixture();
+    const result = JSON.parse(Function('document', `return ${expression('local:exact-agent')};`)(fixture.document));
+    assert.equal(result.clicked, true);
+    assert.equal(result.composerId, 'exact-agent');
+    assert.equal(result.control, 'stop_generation');
+    assert.equal(fixture.clicks(), 1);
+  });
+
+  test(`Cursor 3.23 ${mode} Stop accepts a same-id loading entry or foreground command`, () => {
+    const fixture = modernStopFixture({
+      entries: [{ id: 'local:exact-agent', isSelected: true, icon: 'loading' }],
+      controls: [{ command: true }],
+    });
+    const result = JSON.parse(Function('document', `return ${expression('local:exact-agent')};`)(fixture.document));
+    assert.equal(result.clicked, true);
+    assert.equal(result.control, 'stop_command');
+    assert.equal(fixture.clicks(), 1);
+  });
+
+  test(`Cursor 3.23 ${mode} Stop reads generating status from the modern section adapter`, () => {
+    const fixture = modernStopFixture();
+    const head = {
+      parentElement: null,
+      '__reactProps$test': {
+        section: { headers: [{ id: 'exact-agent', status: 'in_progress' }] },
+        selectedAgentId: 'exact-agent',
+        rowHandlers: { onSelect() {} },
+      },
+    };
+    const document = {
+      querySelectorAll(selector) {
+        if (selector === '.compact-agent-history-react-menu-label') return [];
+        if (selector === '.ui-sidebar-section-head') return [head];
+        return fixture.document.querySelectorAll(selector);
+      },
+    };
+    const result = JSON.parse(Function('document', `return ${expression('local:exact-agent')};`)(document));
+    assert.equal(result.clicked, true);
+    assert.equal(fixture.clicks(), 1);
+    const snapshot = JSON.parse(Function('document', `return ${EXPR_VISIBLE_COMPOSER};`)(document));
+    assert.equal(snapshot.id, 'local:exact-agent');
+    assert.equal(snapshot.status, 'generating');
+  });
+
+  test(`Cursor 3.23 ${mode} Stop does not use a global Stop outside its shell`, () => {
+    const fixture = modernStopFixture({ controls: [] });
+    let foreignClicks = 0;
+    const document = {
+      querySelectorAll(selector) {
+        if (selector.includes('aria-label="Stop generation"')) return [{ offsetParent: {}, disabled: false, click() { foreignClicks++; } }];
+        return fixture.document.querySelectorAll(selector);
+      },
+    };
+    const result = JSON.parse(Function('document', `return ${expression('local:exact-agent')};`)(document));
+    assert.equal(result.clicked, false);
+    assert.equal(result.state, 'stop_control_missing');
+    assert.equal(fixture.clicks(), 0);
+    assert.equal(foreignClicks, 0);
+  });
+
+  for (const [name, options, expectedState] of [
+    ['wrong shell ID', { shellId: 'other-agent' }, 'composer_identity_mismatch'],
+    ['duplicate exact shells', { shellCount: 2 }, 'composer_identity_mismatch'],
+    ['disabled Stop', { controls: [{ disabled: true }] }, 'stop_control_missing'],
+    ['hidden Stop', { controls: [{ hidden: true }] }, 'stop_control_missing'],
+    ['duplicate generation Stops', { controls: [{}, {}] }, 'ambiguous_stop_controls'],
+    ['generation and command Stops', { controls: [{}, { command: true }] }, 'ambiguous_stop_controls'],
+    ['nested other Agent Stop', { controls: [{ nested: 'other-agent' }] }, 'stop_control_missing'],
+    ['nested same-id container Stop', { controls: [{ nested: 'exact-agent' }] }, 'stop_control_missing'],
+    ['completed same-id history', { entries: [{ id: 'local:exact-agent', isSelected: true, icon: 'check-circled', showSpinner: false }] }, 'composer_not_generating'],
+    ['missing generation state', { entries: [{ id: 'local:exact-agent', isSelected: true }] }, 'composer_not_generating'],
+    ['duplicate same-id history', { entries: [{ id: 'local:exact-agent', isSelected: true, showSpinner: true }, { id: 'local:exact-agent', showSpinner: true }] }, 'composer_not_generating'],
+  ]) {
+    test(`Cursor 3.23 ${mode} Stop rejects ${name}`, () => {
+      const fixture = modernStopFixture(options);
+      const result = JSON.parse(Function('document', `return ${expression('local:exact-agent')};`)(fixture.document));
+      assert.equal(result.clicked, false);
+      assert.equal(result.state, expectedState);
+      assert.equal(fixture.clicks(), 0);
+    });
+  }
+}
+
+test('Cursor 3.23 selected Stop still requires the unique selected expected Agent', () => {
+  for (const entries of [
+    [{ id: 'local:other-agent', isSelected: true, showSpinner: true }],
+    [{ id: 'local:exact-agent', isSelected: false, showSpinner: true }],
+    [{ id: 'local:exact-agent', isSelected: true, showSpinner: true }, { id: 'local:other-agent', isSelected: true, showSpinner: true }],
+  ]) {
+    const fixture = modernStopFixture({ entries, ownStatus: 'generating' });
+    const result = JSON.parse(Function('document', `return ${exprClickSelectedAgentStop('local:exact-agent')};`)(fixture.document));
+    assert.equal(result.clicked, false);
+    assert.equal(result.state, 'selected_agent_mismatch');
+    assert.equal(fixture.clicks(), 0);
+  }
+});
+
+test('Cursor 3.23 bound Stop never borrows generation status from another Agent', () => {
+  const fixture = modernStopFixture({ entries: [{ id: 'local:other-agent', isSelected: true, showSpinner: true }] });
+  const result = JSON.parse(Function('document', `return ${exprClickBoundComposerStop('local:exact-agent')};`)(fixture.document));
+  assert.equal(result.clicked, false);
+  assert.equal(result.state, 'composer_not_generating');
+  assert.equal(result.status, null);
+  assert.equal(fixture.clicks(), 0);
+});
+
+test('Cursor 3.23 bound Stop accepts explicit shell status when history has no same-id entry', () => {
+  const fixture = modernStopFixture({ entries: [], ownStatus: 'generating' });
+  const result = JSON.parse(Function('document', `return ${exprClickBoundComposerStop('local:exact-agent')};`)(fixture.document));
+  assert.equal(result.clicked, true);
+  assert.equal(fixture.clicks(), 1);
+});
+
+test('Cursor 3.23 visible composer reads exact shell identity and known history status', () => {
+  for (const [entries, status] of [
+    [[{ id: 'local:exact-agent', showSpinner: true }], 'generating'],
+    [[{ id: 'local:exact-agent', icon: 'loading' }], 'generating'],
+    [[{ id: 'local:exact-agent', icon: 'check-circled' }], 'completed'],
+    [[{ id: 'local:exact-agent', icon: 'circle-slash' }], 'cancelled'],
+    [[{ id: 'local:exact-agent' }], null],
+    [[{ id: 'local:other-agent', showSpinner: true }], null],
+  ]) {
+    const fixture = modernStopFixture({ entries });
+    const result = JSON.parse(Function('document', `return ${EXPR_VISIBLE_COMPOSER};`)(fixture.document));
+    assert.deepEqual(result, { ok: true, id: 'local:exact-agent', composerId: 'exact-agent', status });
+    assert.equal(fixture.clicks(), 0);
+  }
+  const fixture = modernStopFixture({ shellCount: 2 });
+  const result = JSON.parse(Function('document', `return ${EXPR_VISIBLE_COMPOSER};`)(fixture.document));
+  assert.deepEqual(result, { ok: false, state: 'ambiguous_composers', count: 2 });
 });
 
 test('parallel failure icons require two identical stable observations', () => {

@@ -11,7 +11,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.21.16** | **6.0.6** | `main` | Native confirmation and mismatch guards passed for CCE and `cursor_do`; a correctly bound read-only CCE completed with Grok 4.7/high. Tested under the fixed 6.0.5 cache label before the version bump. Broader IDE and Agents Window acceptance is inherited from 6.0.4. See [verification scope](./docs/cursor-3.21.16-verification.md). |
+| **3.23.12** | **6.0.7** | `main` | Grok 4.7/high CCE, FIFO, exact cancellation, and hidden CCE/normal restoration passed in both UI types. Agents Window parallel execution, persistent-session restart/unread recovery, new-workspace registration, and both single-window close orders passed. Hidden execution verifies the current selection and rejects Auto or mismatches before submission; attached fallback uses an injected IPC denial against real CDP. See [verification scope](./docs/cursor-3.23.12-verification.md). |
+| 3.21.16 | 6.0.6 | `cursor-bridge--v6.0.6` | Archived. Workspace confirmation, exact existing-workspace reuse, and mismatch rejection; broader acceptance inherited from 6.0.4. |
 | 3.21.16 | 6.0.5 | `cursor-bridge--v6.0.5` | Archived. Model-provider alias matching and `reasoning_effort` verification. |
 | 3.21.16 | 6.0.4 | `cursor-bridge--v6.0.4` | Archived. Separate Model/Effort controls, grouped-worktree selection, preview-card dialogs, hidden model verification, both UI types, parallel Agents, persistent sessions, minimal/normal, and last-closed single-window restoration. |
 | 3.20.21 | 6.0.3 | `cursor-bridge--v6.0.3` | Archived. Last-closed single-window restoration and both-UI acceptance. |

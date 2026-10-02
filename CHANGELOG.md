@@ -4,16 +4,24 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [6.0.7] - 2026-10-02
 
 ### Fixed
 
 - Preserve lifecycle recovery actions, retry steps, retryability, and the detected Cursor executable across the Supervisor IPC client, so an already-running Cursor without Bridge access returns the specific normal-exit recovery instruction through `cursor_init`.
+- Match Cursor 3.23 project rows by exact local file-URI metadata and prove their current React tree before selection; basename-only rows, stale alternates, remote identities, and ambiguous matches cannot redirect a request.
+- Collect Agents History from collapsed section headers as well as expanded lists, restoring draft-to-durable identity promotion and parallel execution without expanding the sidebar.
+- Cancel only the exact running Agent in Cursor 3.23's conversation shell, with unique scoped Stop controls and the existing expected-Agent checks; retain the legacy IDE path.
+- Verify the IDE's hidden model and reasoning effort through its exact composer's committed React model-trigger props, without opening a popup or invoking selection callbacks. Auto, stale branches, and ambiguous configuration fail before submission.
+- Make the opt-in cancellation harnesses follow durable task identity and request full IDE diagnostics before exercising cancellation.
 
 ### Validation
 
-- Cursor 3.23.12 preflight passed 320 Bridge tests and 147 unchanged Supervisor tests. New real IPC regressions cover both `retryable=true` and `retryable=false`; initialization consumer tests verify the saved workspace and zero task submissions.
-- A rebuilt-bundle MCP check against the real running Cursor 3.23.12 verified `running-no-debug`, `close_cursor_and_retry`, the concrete recovery step, and unchanged model preferences. Full connected IDE/Agents Window acceptance remains pending; see [verification scope](./docs/cursor-3.23.12-verification.md).
+- Full repository regression passed 381/381; the unchanged Supervisor passed 147/147 plus MCP smoke. All four runtime bundles rebuilt and root/Pi/generic Cursor Bridge stdio smokes passed with version 6.0.7.
+- Cursor 3.23.12 live acceptance passed Grok 4.7/high CCE, FIFO, exact cancellation, and hidden CCE followed by normal restoration in both UI types; Agents Window parallel execution, persistent-session restart/unread recovery, and new-workspace admission also passed. Both close orders restored exactly one last-closed window type.
+- The real unconnected initialization returned the concrete normal-exit recovery instruction with unchanged preferences and zero submissions. Attached fallback used an injected IPC policy denial against real CDP; it is not a real OS policy test.
+- Hidden model verification rejects Auto or model/effort mismatches; use normal mode to change the selection first. Release-label loading and remaining platform limits are recorded in the [verification scope](./docs/cursor-3.23.12-verification.md).
+- `pi-cursor-bridge` 0.2.7 and `vanyangyang-cursor-bridge` 0.1.5 embed Cursor Bridge 6.0.7; Grok Build Supervisor remains 0.4.3.
 
 ## [6.0.6] - 2026-09-22
 

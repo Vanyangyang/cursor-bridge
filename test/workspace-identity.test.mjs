@@ -9,6 +9,83 @@ const section = (projects, extra = {}) => ({ id: 'repo:github.com/vanyangyang/sp
 const evaluate = (expression, document) => JSON.parse(Function('document', `return ${expression}`)(document));
 const evaluateAsync = async (expression, document) => JSON.parse(await Function('document', `return ${expression}`)(document));
 
+function workspacePicker(rowSpecs, { outsideProject, bounded = true, ancestorDepth = 0 } = {}) {
+  let triggerClicks = 0;
+  const rowClicks = rowSpecs.map(() => 0);
+  const selections = [];
+  const pair = (oldProps = {}, currentProps = oldProps, stateNode = null) => {
+    const old = { memoizedProps: oldProps, stateNode };
+    const current = { memoizedProps: currentProps, stateNode };
+    old.alternate = current; current.alternate = old;
+    return [old, current];
+  };
+  const root = {};
+  const roots = pair({}, {}, root);
+  root.current = roots[1];
+  const trigger = { offsetParent: {}, innerText: 'G:\\other\\spellcast', click: () => triggerClicks++ };
+  const menu = {
+    offsetParent: {},
+    getAttribute: key => key === 'role' ? 'menu' : key === 'aria-label' ? 'Select a project' : null,
+    querySelector: () => null,
+    querySelectorAll: () => rows,
+  };
+  const menuPair = pair({}, {}, bounded ? menu : {});
+  const topPair = outsideProject ? pair({ project: outsideProject }) : menuPair;
+  if (outsideProject) for (let side = 0; side < 2; side++) {
+    topPair[side].child = menuPair[side]; menuPair[side].return = topPair[side];
+  }
+  let ancestorPair = topPair;
+  for (let depth = 0; depth < ancestorDepth; depth++) {
+    const parentPair = pair();
+    for (let side = 0; side < 2; side++) {
+      parentPair[side].child = ancestorPair[side]; ancestorPair[side].return = parentPair[side];
+    }
+    ancestorPair = parentPair;
+  }
+  for (let side = 0; side < 2; side++) {
+    roots[side].child = ancestorPair[side]; ancestorPair[side].return = roots[side];
+  }
+  const rowPairs = [];
+  const rows = rowSpecs.map((spec, index) => {
+    const currentProjects = spec.currentProjects || spec.projects || ('project' in spec ? [spec.project] : []);
+    const oldProjects = spec.oldProjects || currentProjects;
+    assert.equal(oldProjects.length, currentProjects.length);
+    const selectedProject = currentProjects[0];
+    const onClick = () => {
+      rowClicks[index]++;
+      const identifier = selectedProject?.workspaceIdentifier;
+      const uri = identifier?.uri || identifier?.configPath;
+      selections.push({ path: uri?.path || spec.text, id: identifier?.id || null });
+    };
+    const row = { offsetParent: {}, innerText: spec.text, click: () => row.__reactProps$test.onClick() };
+    row.__reactProps$test = { onClick };
+    const chain = [pair(row.__reactProps$test, row.__reactProps$test, row)];
+    // Cursor 3.23 exposes the row project several component fibers above the host row.
+    for (let depth = 0; depth < 9; depth++) chain.push(pair());
+    for (let depth = 0; depth < currentProjects.length; depth++) {
+      chain.push(pair({ project: oldProjects[depth] }, { project: currentProjects[depth] }));
+    }
+    for (let side = 0; side < 2; side++) {
+      for (let depth = 0; depth < chain.length - 1; depth++) {
+        chain[depth][side].return = chain[depth + 1][side];
+        chain[depth + 1][side].child = chain[depth][side];
+      }
+      chain.at(-1)[side].return = menuPair[side];
+      if (index) rowPairs[index - 1].at(-1)[side].sibling = chain.at(-1)[side];
+      else menuPair[side].child = chain.at(-1)[side];
+    }
+    rowPairs.push(chain);
+    row.__reactFiber$test = chain[0][0];
+    return row;
+  });
+  const popup = { offsetParent: {}, getAttribute: () => null, querySelector: () => menu };
+  return {
+    get triggerClicks() { return triggerClicks; }, rowClicks, selections, rows, rowPairs, root, roots, menuPair,
+    querySelectorAll: selector => selector.startsWith('button.ui-select-trigger') ? [trigger]
+      : selector.startsWith('[data-component="menu-popup"]') ? [popup, menu] : [],
+  };
+}
+
 function page(sections, composers = [], hasTranscript = true) {
   let clicks = 0;
   const heads = sections.map(metadata => {
@@ -164,26 +241,166 @@ test('Cursor 3.21 grouped repository selects the exact registered workspace in t
   assert.equal(created.workspaceSelectionRequired, true);
   assert.equal(grouped.clicks, 1);
 
-  let triggerClicks = 0;
-  let rowClicks = 0;
-  const trigger = { offsetParent: {}, innerText: 'G:\\other\\spellcast', textContent: 'G:\\other\\spellcast', click: () => triggerClicks++ };
-  const row = { offsetParent: {}, innerText: path, textContent: path, click: () => rowClicks++ };
-  const menu = {
-    offsetParent: {},
-    getAttribute: () => null,
-    querySelector: selector => selector === '[aria-label="Select a project"]' ? {} : null,
-    querySelectorAll: selector => selector.includes('menu-row') ? [row] : [],
-  };
-  const document = {
-    querySelectorAll: selector => selector.startsWith('button.ui-select-trigger') ? [trigger]
-      : selector.startsWith('[data-component="menu-popup"]') ? [menu]
-      : [],
-  };
+  const document = workspacePicker([{ text: path }]);
   const selected = await evaluateAsync(exprSelectAgentWorkspace(path), document);
   assert.equal(selected.ok, true);
   assert.equal(selected.state, 'workspace_project_selection_requested');
-  assert.equal(triggerClicks, 1);
-  assert.equal(rowClicks, 1);
+  assert.equal(document.triggerClicks, 1);
+  assert.deepEqual(document.rowClicks, [1]);
+});
+
+test('Cursor 3.23 basename rows select only the exact local project file URI and workspace ID', async () => {
+  const target = 'C:/Users/Administrator/.codex/worktrees/cursor-3-21-16/cursor-bridge';
+  const identifier = { id: 'd37abfbf7a774f6e5470cc8cdd1c140e', uri: {
+    scheme: 'file', authority: '', path: '/' + target, fsPath: target.replaceAll('/', '\\'), _fsPath: target.replaceAll('/', '\\'),
+  } };
+  const document = workspacePicker([
+    { text: 'cursor-bridge', project: { workspaceIdentifier: environment('C:/Users/Administrator/plugins/cursor-bridge', 'other') } },
+    { text: 'cursor-bridge', project: { id: 'workspace:' + identifier.id, workspaceIdentifier: identifier, name: 'cursor-bridge' } },
+  ]);
+  const result = await evaluateAsync(exprSelectAgentWorkspace(target), document);
+  assert.equal(result.ok, true);
+  assert.equal(result.workspace, target.toLowerCase());
+  assert.deepEqual(document.rowClicks, [0, 1]);
+  assert.deepEqual(document.selections, [{ path: '/' + target, id: identifier.id }]);
+});
+
+test('same basename and repository URL cannot establish the requested picker path', async () => {
+  const document = workspacePicker([{ text: 'spellcast', project: project('G:/other/spellcast', { repoUrls: ['github.com/vanyangyang/spellcast'] }) }]);
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).state, 'workspace_project_option_unavailable');
+  assert.deepEqual(document.rowClicks, [0]);
+});
+
+test('basename picker rows preserve exact code-workspace configPath identity', async () => {
+  const target = 'G:/projects/app.code-workspace';
+  const document = workspacePicker([{ text: 'app', project: {
+    workspaceIdentifier: { id: 'multi-root', configPath: { scheme: 'file', path: '/' + target } },
+  } }]);
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(target), document)).ok, true);
+  assert.deepEqual(document.rowClicks, [1]);
+  assert.deepEqual(document.selections, [{ path: '/' + target, id: 'multi-root' }]);
+});
+
+test('picker project metadata rejects remote, missing and conflicting identities despite exact row text', async () => {
+  for (const metadata of [
+    project(path, { remoteAuthority: 'ssh-remote+host' }),
+    project(path, { workspaceIdentifier: { ...environment(), remoteAuthority: 'ssh-remote+host' } }),
+    project(path, { workspaceIdentifier: { id: 'remote', uri: { scheme: 'file', authority: 'host', path } } }),
+    project(path, { workspaceIdentifier: { id: 'remote', uri: { scheme: 'file', remoteAuthority: 'ssh-remote+host', path } } }),
+    project(path, { workspaceIdentifier: { id: 'remote', uri: { scheme: 'vscode-remote', path } } }),
+    project(path, { workspaceIdentifier: { uri: environment().uri } }),
+    project(path, { workspaceIdentifier: { id: 'conflicting', uri: { scheme: 'file', path, fsPath: 'G:/other/spellcast' } } }),
+    project(path, { workspaceIdentifier: { id: 'missing-uri' } }),
+    null,
+  ]) {
+    const document = workspacePicker([{ text: path, project: metadata }]);
+    assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).state, 'workspace_project_option_unavailable');
+    assert.deepEqual(document.rowClicks, [0]);
+  }
+});
+
+test('duplicate exact project rows and conflicting row project metadata fail without selecting', async () => {
+  const duplicate = workspacePicker([{ text: 'spellcast', project: project() }, { text: 'spellcast', project: project() }]);
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), duplicate)).state, 'workspace_project_option_ambiguous');
+  assert.deepEqual(duplicate.rowClicks, [0, 0]);
+  for (const conflictingProject of [project('G:/other/spellcast'), project(path, { workspaceIdentifier: environment(path, 'other-id') })]) {
+    const document = workspacePicker([{ text: path, projects: [project(), conflictingProject] }]);
+    assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, false);
+    assert.deepEqual(document.rowClicks, [0]);
+  }
+});
+
+test('picker metadata search stops at the menu host and requires a verified fiber boundary', async () => {
+  for (const document of [
+    workspacePicker([{ text: 'spellcast' }], { outsideProject: project() }),
+    workspacePicker([{ text: 'spellcast', project: project('G:/other/spellcast') }], { outsideProject: project() }),
+    workspacePicker([{ text: path, project: project() }], { bounded: false }),
+  ]) {
+    assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, false);
+    assert.deepEqual(document.rowClicks, [0]);
+  }
+});
+
+test('picker resolves swapped old/current project identities through committed child edges', async () => {
+  const wanted = project(path, { workspaceIdentifier: environment(path, 'current-wanted') });
+  const other = project('G:/other/spellcast', { workspaceIdentifier: environment('G:/other/spellcast', 'current-other') });
+  const document = workspacePicker([
+    { text: 'spellcast', oldProjects: [wanted], currentProjects: [other] },
+    { text: 'spellcast', oldProjects: [other], currentProjects: [wanted] },
+  ]);
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, true);
+  assert.deepEqual(document.rowClicks, [0, 1]);
+  assert.deepEqual(document.selections, [{ path, id: 'current-wanted' }]);
+});
+
+test('a raw return chain reaching currentRoot cannot override its alternate child selection', async () => {
+  const other = project('G:/other/spellcast', { workspaceIdentifier: environment('G:/other/spellcast', 'other-id') });
+  const document = workspacePicker([{ text: path, oldProjects: [project()], currentProjects: [other] }]);
+  document.menuPair[0].return = document.roots[1];
+  assert.equal(document.root.current.child, document.menuPair[1]);
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, false);
+  assert.deepEqual(document.selections, []);
+  assert.deepEqual(document.rowClicks, [0]);
+});
+
+test('shared child and identical host props still use the committed project ancestor', async () => {
+  const other = project('G:/other/spellcast');
+  const wanted = project(path, { workspaceIdentifier: environment(path, 'shared-current') });
+  const document = workspacePicker([{ text: 'spellcast', oldProjects: [other], currentProjects: [wanted] }]);
+  const chain = document.rowPairs[0];
+  chain.at(-1)[1].child = chain.at(-2)[0];
+  assert.equal(chain[0][0].memoizedProps, chain[0][1].memoizedProps);
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, true);
+  assert.deepEqual(document.selections, [{ path, id: 'shared-current' }]);
+});
+
+test('the observed 148-level Cursor 3.23 picker proves its current local identity', async () => {
+  const metadata = project(path, { workspaceIdentifier: environment(path, 'deep-local') });
+  const document = workspacePicker([{ text: 'spellcast', project: metadata }], { ancestorDepth: 135 });
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, true);
+  assert.deepEqual(document.selections, [{ path, id: 'deep-local' }]);
+});
+
+test('unprovable current fiber paths, cycles and traversal limits never click a metadata row', async () => {
+  const corruptions = [
+    document => { document.root.current = {}; },
+    document => { document.rowPairs[0].at(-1)[1].child = null; },
+    document => { const chain = document.rowPairs[0]; chain.at(-2)[1].sibling = chain.at(-2)[0]; },
+    document => { const node = document.rowPairs[0].at(-1)[0]; node.return = node; },
+    document => { const node = document.rowPairs[0].at(-1)[1]; node.sibling = node; },
+    document => { document.rowPairs[0][0][1].stateNode = {}; },
+    document => { document.rowPairs[0][0][1].alternate = {}; },
+    document => {
+      let tail = document.menuPair[0];
+      for (let depth = 0; depth < 256; depth++) tail = { return: tail };
+      document.rowPairs[0].at(-1)[0].return = tail;
+    },
+    document => {
+      let tail = document.menuPair[1].child;
+      for (let count = 0; count < 2048; count++) tail = { sibling: tail };
+      document.menuPair[1].child = tail;
+    },
+  ];
+  for (const corrupt of corruptions) {
+    const document = workspacePicker([{ text: path, project: project() }]);
+    corrupt(document);
+    assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, false);
+    assert.deepEqual(document.rowClicks, [0]);
+    assert.deepEqual(document.selections, []);
+  }
+});
+
+test('a root commit change after metadata validation prevents the row click', async () => {
+  const metadata = project();
+  const document = workspacePicker([{ text: path, project: metadata }]);
+  const identifier = metadata.workspaceIdentifier;
+  Object.defineProperty(metadata, 'workspaceIdentifier', { get() {
+    document.root.current = document.roots[0];
+    return identifier;
+  } });
+  assert.equal((await evaluateAsync(exprSelectAgentWorkspace(path), document)).ok, false);
+  assert.deepEqual(document.rowClicks, [0]);
+  assert.deepEqual(document.selections, []);
 });
 
 test('remote authority, missing workspace ID, SSH URI and substituted target source fail closed', () => {

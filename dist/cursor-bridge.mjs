@@ -22990,7 +22990,7 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 // server.mjs
 init_cursor_ensure_core();
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.0.6";
+var PLUGIN_VERSION = "6.0.7";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -23378,6 +23378,24 @@ var EXPR_PROVIDER_ERROR = `(function(){
   const signature=[title,message,requestId||''].join('|');
   return JSON.stringify({found:true,title,message,requestId,retryAvailable,signature});
 })()`;
+var STOP_COMPOSER_BODY = `
+  const findStopComposers=(rawId)=>{
+    const legacy=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+      .filter(e=>e.offsetParent!==null&&e.dataset.composerId&&(!rawId||e.dataset.composerId===rawId));
+    if(legacy.length)return {modern:false,composers:legacy};
+    return {modern:true,composers:[...document.querySelectorAll('[data-agent-panel-conversation-shell][data-glass-agent-id]')]
+      .filter(e=>e.offsetParent!==null&&e.dataset.glassAgentId&&(!rawId||e.dataset.glassAgentId===rawId))};
+  };
+  const modernComposerStatus=(composer,entries)=>{
+    const ownStatus=composer.dataset.composerStatus;
+    if(ownStatus)return ownStatus;
+    const matches=entries.filter(e=>e&&e.id==='local:'+composer.dataset.glassAgentId);
+    if(matches.length!==1)return null;
+    const entry=matches[0];
+    if(entry.showSpinner||entry.icon==='loading')return 'generating';
+    return ({'check-circled':'completed','circle-slash':'cancelled',warning:'failed','needs-attention':'needs_attention'})[entry.icon]||null;
+  };
+`;
 function exprClickSelectedAgentStop(agentId) {
   const expected = JSON.stringify(String(agentId));
   return `(function(){
@@ -23390,52 +23408,52 @@ function exprClickSelectedAgentStop(agentId) {
     if(!selected||selected.id!==${expected}){
       return JSON.stringify({clicked:false,state:'selected_agent_mismatch',selectedId:selected&&selected.id||null,selectedCount:selectedEntries.length});
     }
+    ${STOP_COMPOSER_BODY}
     const expectedComposerId=String(${expected}).replace(/^local:/,'');
-    const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
-      .filter(e=>e.offsetParent!==null&&e.dataset.composerId===expectedComposerId);
+    const {modern,composers}=findStopComposers(expectedComposerId);
     if(composers.length!==1){
       return JSON.stringify({clicked:false,state:'composer_identity_mismatch',selectedId:selected.id,count:composers.length});
     }
     const composer=composers[0];
-    if(composer.dataset.composerStatus!=='generating'){
-      return JSON.stringify({clicked:false,state:'composer_not_generating',selectedId:selected.id,status:composer.dataset.composerStatus||null});
+    const status=modern?modernComposerStatus(composer,entries):composer.dataset.composerStatus||null;
+    if(status!=='generating'){
+      return JSON.stringify({clicked:false,state:'composer_not_generating',selectedId:selected.id,status});
     }
-    const generationButtons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[data-state="stop"][aria-label="Stop generation"]')]
-      .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===composer);
+    const belongs=button=>button.offsetParent!==null&&!button.disabled&&button.closest(modern?'[data-glass-agent-id]':'.composer-bar')===composer;
+    const generationButtons=[...composer.querySelectorAll(modern?'button.ui-prompt-input-submit-button[aria-label="Stop generation"]':'button.ui-prompt-input-submit-button[data-state="stop"][aria-label="Stop generation"]')]
+      .filter(belongs);
     const commandButtons=[...composer.querySelectorAll('button.ui-shell-tool-call__glass-stop[aria-label="Stop command"]')]
-      .filter(button=>button.offsetParent!==null&&!button.disabled&&button.closest('.composer-bar')===composer);
+      .filter(belongs);
     const buttons=[...generationButtons,...commandButtons];
     if(buttons.length!==1){
       return JSON.stringify({clicked:false,state:buttons.length?'ambiguous_stop_controls':'stop_control_missing',selectedId:selected.id,count:buttons.length});
     }
     buttons[0].click();
-    return JSON.stringify({clicked:true,state:'clicked',selectedId:selected.id,composerId:composer.dataset.composerId,control:generationButtons.length?'stop_generation':'stop_command'});
+    return JSON.stringify({clicked:true,state:'clicked',selectedId:selected.id,composerId:expectedComposerId,control:generationButtons.length?'stop_generation':'stop_command'});
   })()`;
 }
-var EXPR_VISIBLE_COMPOSER = `(function(){
-  const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
-    .filter(e=>e.offsetParent!==null&&e.dataset.composerId);
-  if(composers.length!==1){
-    return JSON.stringify({ok:false,state:composers.length?'ambiguous_composers':'composer_missing',count:composers.length});
-  }
-  const composer=composers[0];
-  return JSON.stringify({
-    ok:true,
-    id:'local:'+composer.dataset.composerId,
-    composerId:composer.dataset.composerId,
-    status:composer.dataset.composerStatus||null
-  });
-})()`;
 function exprClickBoundComposerStop(agentId) {
   const expected = JSON.stringify(String(agentId));
   return `(function(){
+    ${STOP_COMPOSER_BODY}
     const expectedComposerId=String(${expected}).replace(/^local:/,'');
-    const composers=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
-      .filter(e=>e.offsetParent!==null&&e.dataset.composerId===expectedComposerId);
+    const {modern,composers}=findStopComposers(expectedComposerId);
     if(composers.length!==1){
       return JSON.stringify({clicked:false,state:'composer_identity_mismatch',count:composers.length});
     }
     const composer=composers[0];
+    if(modern){
+      ${REACT_ADAPTER_BODY}
+      const status=modernComposerStatus(composer,a?a.entries():[]);
+      if(status!=='generating')return JSON.stringify({clicked:false,state:'composer_not_generating',status,composerId:expectedComposerId});
+      const belongs=button=>button.offsetParent!==null&&!button.disabled&&button.closest('[data-glass-agent-id]')===composer;
+      const generationButtons=[...composer.querySelectorAll('button.ui-prompt-input-submit-button[aria-label="Stop generation"]')].filter(belongs);
+      const commandButtons=[...composer.querySelectorAll('button.ui-shell-tool-call__glass-stop[aria-label="Stop command"]')].filter(belongs);
+      const buttons=[...generationButtons,...commandButtons];
+      if(buttons.length!==1)return JSON.stringify({clicked:false,state:buttons.length?'ambiguous_stop_controls':'stop_control_missing',count:buttons.length,composerId:expectedComposerId});
+      buttons[0].click();
+      return JSON.stringify({clicked:true,state:'clicked',composerId:expectedComposerId,control:generationButtons.length?'stop_generation':'stop_command'});
+    }
     if(composer.dataset.composerStatus!=='generating'){
       return JSON.stringify({clicked:false,state:'composer_not_generating',status:composer.dataset.composerStatus||null,composerId:composer.dataset.composerId});
     }
@@ -23545,12 +23563,90 @@ var EXPR_SELECTED_AGENT_MODEL_CONFIG = `(function(){
       if(data&&data.modelConfig&&!configs.includes(data.modelConfig))configs.push(data.modelConfig);
     }
   }
-  if(configs.length!==1)return JSON.stringify({found:false,state:'model_config_ambiguous',configCount:configs.length});
-  const config=configs[0];
-  return JSON.stringify({found:true,modelName:String(config.modelName||''),selectedModels:(config.selectedModels||[]).map(model=>({
-    modelId:String(model&&model.modelId||''),
-    parameters:Object.fromEntries((model&&model.parameters||[]).map(parameter=>[String(parameter&&parameter.id||''),String(parameter&&parameter.value||'')]))
-  }))});
+  if(configs.length>1)return JSON.stringify({found:false,state:'model_config_ambiguous',configCount:configs.length});
+  if(configs.length===1){
+    const config=configs[0];
+    return JSON.stringify({found:true,modelName:String(config.modelName||''),selectedModels:(config.selectedModels||[]).map(model=>({
+      modelId:String(model&&model.modelId||''),
+      parameters:Object.fromEntries((model&&model.parameters||[]).map(parameter=>[String(parameter&&parameter.id||''),String(parameter&&parameter.value||'')]))
+    }))});
+  }
+  // Cursor 3.23's IDE input is Solid; its model trigger is a mounted React
+  // picker whose initialSelections/initialAutoMode come from this composer.
+  const source='legacy_composer_model_trigger';
+  const fail=(state)=>JSON.stringify({found:false,state,source});
+  const input=inputs[0],composer=input.closest('.composer-bar[data-composer-id]');
+  if(!composer||input.closest('.composer-bar')!==composer
+    ||composer.parentElement&&composer.parentElement.closest('.composer-bar')
+    ||composer.querySelectorAll('.composer-bar').length)return fail('legacy_composer_ambiguous');
+  const composerId=composer.getAttribute('data-composer-id');
+  const owners=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
+    .filter(node=>node.getAttribute('data-composer-id')===composerId);
+  if(typeof composerId!=='string'||!composerId.trim()||owners.length!==1||owners[0]!==composer)return fail('legacy_composer_ambiguous');
+  const triggers=[...composer.querySelectorAll('.vscode-model-picker__trigger')];
+  if(triggers.length!==1||!triggers[0].classList.contains('vscode-model-picker__trigger')
+    ||triggers[0].closest('.composer-bar')!==composer)return fail('legacy_model_trigger_ambiguous');
+  const trigger=triggers[0],keys=Object.keys(trigger).filter(key=>key.startsWith('__reactFiber$'));
+  if(keys.length!==1)return fail('legacy_model_tree_unconfirmed');
+  const levels=[],visited=new Set();
+  let root=null,currentRoot=null;
+  for(let fiber=trigger[keys[0]];fiber;fiber=fiber.return){
+    if(levels.length>=256||visited.has(fiber))return fail('legacy_model_tree_unconfirmed');
+    const alternate=fiber.alternate||null;
+    if(alternate&&(alternate===fiber||alternate.alternate!==fiber||visited.has(alternate)))return fail('legacy_model_tree_unconfirmed');
+    visited.add(fiber);if(alternate)visited.add(alternate);
+    const pair=alternate?[fiber,alternate]:[fiber];
+    levels.push(pair);
+    const state=fiber.stateNode;
+    if(state&&state.current){
+      if(fiber.tag!==3||fiber.return||!pair.includes(state.current)||alternate&&(alternate.tag!==3||alternate.stateNode!==state))return fail('legacy_model_tree_unconfirmed');
+      root=state;currentRoot=state.current;break;
+    }
+  }
+  if(!root)return fail('legacy_model_tree_unconfirmed');
+  // DOM expandos may retain an old fiber or a borrowed return chain. Each
+  // edge must belong to the committed parent's actual child/sibling list.
+  const currentPath=[currentRoot],currentVisited=new Set(currentPath);
+  let parent=currentRoot,nodeBudget=2048;
+  for(let depth=levels.length-2;depth>=0;depth--){
+    const candidates=[],siblings=new Set();
+    for(let child=parent.child;child;child=child.sibling){
+      if(--nodeBudget<0||siblings.has(child))return fail('legacy_model_tree_unconfirmed');
+      siblings.add(child);
+      if(levels[depth].includes(child))candidates.push(child);
+    }
+    if(candidates.length!==1||currentVisited.has(candidates[0]))return fail('legacy_model_tree_unconfirmed');
+    parent=candidates[0];currentVisited.add(parent);currentPath.push(parent);
+  }
+  if(parent.stateNode!==trigger)return fail('legacy_model_tree_unconfirmed');
+  const snapshots=new Set();
+  for(const fiber of currentPath){
+    const props=fiber.memoizedProps;
+    if(!props||!Object.prototype.hasOwnProperty.call(props,'initialSelections')
+      &&!Object.prototype.hasOwnProperty.call(props,'initialAutoMode'))continue;
+    if(!Object.prototype.hasOwnProperty.call(props,'initialSelections')||!Object.prototype.hasOwnProperty.call(props,'initialAutoMode')
+      ||!Array.isArray(props.initialSelections)||typeof props.initialAutoMode!=='boolean')return fail('legacy_model_schema_unconfirmed');
+    // Auto is never evidence for a named model, even if stale selections remain.
+    if(props.initialAutoMode)return fail('legacy_model_auto');
+    if(props.initialSelections.length!==1)return fail('legacy_model_selection_ambiguous');
+    const selected=props.initialSelections[0];
+    if(!selected||typeof selected.modelId!=='string'||!selected.modelId.trim()
+      ||selected.modelId!==selected.modelId.trim()||selected.count!==1||!Array.isArray(selected.parameters))return fail('legacy_model_schema_unconfirmed');
+    if(selected.modelId.toLowerCase()==='default')return fail('legacy_model_auto');
+    const parameters=[];
+    for(const parameter of selected.parameters){
+      if(!parameter||typeof parameter.id!=='string'||!parameter.id.trim()||parameter.id!==parameter.id.trim()
+        ||typeof parameter.value!=='string'||!parameter.value.length||parameters.some(entry=>entry[0]===parameter.id))return fail('legacy_model_schema_unconfirmed');
+      parameters.push([parameter.id,parameter.value]);
+    }
+    parameters.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
+    snapshots.add(JSON.stringify({modelName:selected.modelId,selectedModels:[{modelId:selected.modelId,parameters:Object.fromEntries(parameters)}]}));
+  }
+  if(!snapshots.size)return fail('legacy_model_schema_unconfirmed');
+  if(snapshots.size!==1)return fail('legacy_model_config_ambiguous');
+  const snapshot=JSON.parse([...snapshots][0]);
+  if(root.current!==currentRoot)return fail('legacy_model_tree_unconfirmed');
+  return JSON.stringify({found:true,...snapshot,source});
 })()`;
 function normalizeModelPickerText(value) {
   return String(value || "").trim().toLowerCase().replace(/extra[\s_-]*high/g, "xhigh").replace(/[^a-z0-9]+/g, "");
@@ -23714,30 +23810,93 @@ function matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort
   return { modelId: match.modelId, effort: effort || null };
 }
 function exprSelectAgentWorkspace(projectPath) {
-  return `(async function(){
-    const wanted=String(${JSON.stringify(String(projectPath || ""))}).replace(/\\\\/g,'/').replace(/^\\/([a-z]:\\/)/i,'$1').replace(/\\/+$/,'').toLowerCase();
-    const normalize=value=>String(value||'').replace(/\\\\/g,'/').replace(/^\\/([a-z]:\\/)/i,'$1').replace(/\\/+$/,'').toLowerCase();
+  return String.raw`(async function(){
+    const normalize=value=>String(value||'').replace(/\\/g,'/').replace(/^\/([a-z]:\/)/i,'$1').replace(/\/+$/,'').toLowerCase();
+    const wanted=normalize(${JSON.stringify(String(projectPath || ""))});
     const visible=node=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
     const pathTriggers=()=>[...document.querySelectorAll('button.ui-select-trigger,button[aria-haspopup="menu"]')]
-      .filter(visible).filter(node=>/^[a-z]:\\//i.test(normalize(node.innerText||node.textContent)));
+      .filter(visible).filter(node=>/^[a-z]:\//i.test(normalize(node.innerText||node.textContent)));
     const triggers=pathTriggers();
     const fail=(state,extra={})=>JSON.stringify({ok:false,state,wanted,...extra,
       nextStep:'Select the exact local workspace '+${JSON.stringify(String(projectPath || ""))}+' in the new Agent project picker before retrying.'});
     if(triggers.length!==1)return fail(triggers.length?'workspace_project_selector_ambiguous':'workspace_project_selector_unavailable',{triggerCount:triggers.length});
     triggers[0].click();
     await new Promise(resolve=>setTimeout(resolve,350));
-    const menus=[...document.querySelectorAll('[data-component="menu-popup"],[role="menu"]')].filter(visible)
-      .filter(menu=>String(menu.getAttribute('aria-label')||'')==='Select a project'||menu.querySelector('[aria-label="Select a project"]'));
+    const menus=[...new Set([...document.querySelectorAll('[data-component="menu-popup"],[role="menu"]')].filter(visible)
+      .map(menu=>menu.getAttribute('role')==='menu'&&menu.getAttribute('aria-label')==='Select a project'
+        ?menu:menu.querySelector('[role="menu"][aria-label="Select a project"]')).filter(visible))];
+    if(menus.length!==1)return fail(menus.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{menuCount:menus.length});
     const rows=[];const seen=new Set();
     for(const menu of menus){
       for(const row of menu.querySelectorAll('[data-component="menu-row"][role="menuitem"],[role="option"]')){
         if(!visible(row)||seen.has(row))continue;seen.add(row);rows.push(row);
       }
     }
-    const available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim());
-    const matches=rows.filter(row=>normalize(row.innerText||row.textContent)===wanted);
+    const available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\s+/g,' ').trim());
+    const rowWorkspace=row=>{
+      const key=Object.keys(row).find(key=>key.startsWith('__reactFiber$'));
+      const levels=[];const visited=new Set();
+      let root=null,currentRoot=null,hasProject=false,belowMenu=true;
+      for(let fiber=key&&row[key];fiber;fiber=fiber.return){
+        if(levels.length>=256||visited.has(fiber))return null;
+        visited.add(fiber);
+        const alternate=fiber.alternate||null;
+        if(alternate&&(alternate===fiber||alternate.alternate!==fiber||visited.has(alternate)))return null;
+        const pair=alternate?[fiber,alternate]:[fiber];
+        levels.push(pair);
+        if(pair.some(node=>node.stateNode===menus[0]))belowMenu=false;
+        if(belowMenu&&pair.some(node=>node.memoizedProps&&Object.prototype.hasOwnProperty.call(node.memoizedProps,'project')))hasProject=true;
+        const state=fiber.stateNode;
+        if(state&&state.current){
+          if(!pair.includes(state.current)||alternate&&alternate.stateNode!==state)return null;
+          root=state;currentRoot=state.current;break;
+        }
+      }
+      // Older pickers expose the complete path as row text without project metadata.
+      if(!hasProject)return {path:normalize(row.innerText||row.textContent)};
+      if(!root)return null;
+      // A DOM expando can retain an old fiber, including a borrowed current return
+      // chain. Prove every edge through the committed parent's child/sibling list.
+      const currentPath=[currentRoot];const currentVisited=new Set(currentPath);
+      let parent=currentRoot,nodeBudget=2048;
+      for(let depth=levels.length-2;depth>=0;depth--){
+        const candidates=[];const siblings=new Set();
+        for(let child=parent.child;child;child=child.sibling){
+          if(--nodeBudget<0||siblings.has(child))return null;
+          siblings.add(child);
+          if(levels[depth].includes(child))candidates.push(child);
+        }
+        if(candidates.length!==1||currentVisited.has(candidates[0]))return null;
+        parent=candidates[0];currentVisited.add(parent);currentPath.push(parent);
+      }
+      if(parent.stateNode!==row)return null;
+      const menuIndexes=currentPath.flatMap((node,index)=>node.stateNode===menus[0]?[index]:[]);
+      if(menuIndexes.length!==1)return null;
+      const projects=new Set();
+      for(const fiber of currentPath.slice(menuIndexes[0]+1)){
+        const props=fiber.memoizedProps;
+        if(props&&Object.prototype.hasOwnProperty.call(props,'project'))projects.add(props.project);
+      }
+      if(!projects.size)return null;
+      const identities=new Set();
+      for(const project of projects){
+        const identifier=project&&project.workspaceIdentifier;
+        const uri=identifier&&(identifier.uri||identifier.configPath);
+        if(!project||project.remoteAuthority||!identifier||identifier.remoteAuthority||typeof identifier.id!=='string'||!identifier.id.trim()
+          ||!uri||uri.scheme!=='file'||uri.authority||uri.remoteAuthority)return null;
+        const paths=[uri.fsPath,uri._fsPath,uri.path].filter(value=>typeof value==='string'&&value.length).map(normalize);
+        if(!paths.length||paths.some(path=>path!==paths[0]))return null;
+        identities.add(JSON.stringify([identifier.id,paths[0]]));
+      }
+      if(identities.size!==1)return null;
+      const [workspaceId,path]=JSON.parse([...identities][0]);
+      return {path,workspaceId,root,currentRoot};
+    };
+    const matches=rows.map(row=>({row,identity:rowWorkspace(row)})).filter(match=>match.identity&&match.identity.path===wanted);
     if(matches.length!==1)return fail(matches.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{available});
-    matches[0].click();
+    const selected=matches[0];
+    if(selected.identity.root&&selected.identity.root.current!==selected.identity.currentRoot)return fail('workspace_project_option_unavailable',{available});
+    selected.row.click();
     await new Promise(resolve=>setTimeout(resolve,350));
     return JSON.stringify({ok:true,state:'workspace_project_selection_requested',workspace:wanted,available});
   })()`;
@@ -23907,7 +24066,11 @@ var REACT_ADAPTER_BODY = `
     let globalSelectAgent=null;
     let globalSelectedAgentId=null;
     let sectionIdByAgentId=null;
-    for(const root of document.querySelectorAll('.glass-sidebar-agent-list-container')){
+    const roots=new Set([
+      ...document.querySelectorAll('.glass-sidebar-agent-list-container'),
+      ...document.querySelectorAll('.ui-sidebar-section-head')
+    ]);
+    for(const root of roots){
       const nodes=[]; let n=root;
       for(let i=0;n&&i<24;i++,n=n.parentElement)nodes.push(n);
       for(const node of nodes){
@@ -24026,6 +24189,26 @@ var REACT_ADAPTER_BODY = `
     };
   };
   const a=findAdapter();`;
+var EXPR_VISIBLE_COMPOSER = `(function(){
+  ${STOP_COMPOSER_BODY}
+  const {modern,composers}=findStopComposers(null);
+  if(composers.length!==1){
+    return JSON.stringify({ok:false,state:composers.length?'ambiguous_composers':'composer_missing',count:composers.length});
+  }
+  const composer=composers[0];
+  let status=composer.dataset.composerStatus||null;
+  if(modern){
+    ${REACT_ADAPTER_BODY}
+    status=modernComposerStatus(composer,a?a.entries():[]);
+  }
+  const composerId=modern?composer.dataset.glassAgentId:composer.dataset.composerId;
+  return JSON.stringify({
+    ok:true,
+    id:'local:'+composerId,
+    composerId,
+    status
+  });
+})()`;
 var EXPR_AGENT_ADAPTER_READY = `(function(){${REACT_ADAPTER_BODY}return !!a;})()`;
 var EXPR_PAGE_CAPABILITIES = `(function(){${INPUT_PICKER_BODY}
   const visible=node=>!!(node&&(node.offsetParent!==null||(typeof node.getClientRects==='function'&&node.getClientRects().length>0)));

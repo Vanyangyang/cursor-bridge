@@ -5,10 +5,10 @@ import { isAgentsWindowTitle } from '../cursor-ensure-core.mjs';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = Date.now().toString(36).toUpperCase();
 const marker = `CURSOR_BRIDGE_WB_FIFO_CANCEL_${stamp}`;
-const bridge = new CursorBridge();
+const bridge = new CursorBridge({ workspaceFile: null, projectPath: process.cwd() });
 
 await bridge._ensureCursor();
-const preflight = await bridge.status();
+const preflight = await bridge.status(null, { detail: 'full' });
 const pageTitles = Array.isArray(preflight.pageTitles) ? preflight.pageTitles : [];
 const legacyWorkbenchPresent = pageTitles.some((title) => !isAgentsWindowTitle(title));
 if (!legacyWorkbenchPresent) {
@@ -38,7 +38,7 @@ console.log(JSON.stringify({ event: 'submitted', taskId: submitted.taskId }));
 let ready = null;
 const bindDeadline = Date.now() + 35000;
 while (Date.now() < bindDeadline) {
-  const snapshot = await bridge.status(submitted.taskId);
+  const snapshot = await bridge.status(submitted.taskId, { detail: 'full' });
   console.log(JSON.stringify({
     event: 'poll',
     status: snapshot.status,
@@ -77,6 +77,10 @@ if (ready.targetUiFlavor !== 'legacy') {
 }
 
 await sleep(2000);
+ready = await bridge.status(submitted.taskId, { detail: 'full' });
+if (!ready.agentId || ready.sendState !== 'sent' || ready.status !== 'running') {
+  throw new Error(`Workbench FIFO is no longer running with an exact Agent identity: ${ready.status}`);
+}
 const cancelled = await bridge.taskControl(submitted.taskId, {
   action: 'cancel',
   confirm: true,

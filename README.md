@@ -68,7 +68,7 @@ This is the plugin I use when I want Codex, Claude Code, Grok Build, or Pi to go
 
 CCE and `cursor_do` accept optional `request_context`, for example `{"sender":"model","source":"mixed"}`. `sender` declares who directly sends the request (`user/model/unknown`); `source` distinguishes user requirements from model additions (`user/model/mixed/unknown`). Separate both in mixed prompt text. Omitted values remain unknown, are not inferred from the selected model, and never grant extra permission. Task status reports the declaration for that turn.
 >
-> **Live-tested environment:** Windows 11 + Cursor **3.21.16**, verified from Cursor's embedded package metadata and the current-user uninstall registry. Cursor Bridge 6.0.6 adds workspace admission guards: a fresh native Codex task verified explicit confirmation, exact existing-workspace reuse, mismatch rejection by both CCE and `cursor_do`, and a completed read-only CCE with Grok 4.7/high. This fix was tested under the fixed 6.0.5 cache label before the release version bump; exact 6.0.6 host pickup remains pending. The broader IDE and Agents Window acceptance inherited from 6.0.4 covers CCE, two simultaneous independent Agents, persistent-session restart recovery, unread-result collection, `minimal` CCE followed by normal restoration, and both close orders restoring exactly one last-closed window type. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+> **Live-tested environment:** Windows 11 + Cursor **3.23.12**, verified from the CLI and embedded package metadata. Cursor Bridge 6.0.7 adapts project selection, collapsed History, scoped cancellation, and IDE hidden model verification. Grok 4.7/high CCE, FIFO, cancellation, and `minimal` CCE followed by normal restoration passed in the IDE and Agents Window. Agents Window acceptance also covers two simultaneous independent Agents, persistent-session restart and unread-result recovery, new-workspace registration, and both close orders restoring exactly one last-closed window type. Hidden mode verifies the current model and effort; change them in normal mode first. See the [verification scope](./docs/cursor-3.23.12-verification.md) for release and host-loading boundaries. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
 ## What is CCE?
 
@@ -164,6 +164,8 @@ With Grok Build Supervisor enabled, send your normal implementation task; the cu
 > **Recommended on Windows 11: minimal runtime**
 >
 > After initialization, say “Switch CCE to minimal mode.” The real Cursor process, project index, Agent DOM, and task queue keep running in the background. Top-level windows stay hidden. `cursor_context_engine` and `cursor_do` still work; you just do not see the Cursor UI.
+>
+> Cursor 3.23.12 hidden CCE is verified in both UI types. Hidden mode verifies the current model and effort; if you change the requested selection or the chat uses Auto, switch to normal mode first.
 >
 > **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and remains hidden. Before you need the Cursor UI again, say “Switch CCE to normal mode.”
 

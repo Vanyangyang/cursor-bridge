@@ -4,7 +4,7 @@ import { CursorBridge } from '../server.mjs';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = Date.now().toString(36).toUpperCase();
 const marker = `CURSOR_BRIDGE_FIFO_CANCEL_${stamp}`;
-const bridge = new CursorBridge();
+const bridge = new CursorBridge({ workspaceFile: null, projectPath: process.cwd() });
 
 const submitted = await bridge.doTask(
   `这是只读 FIFO 取消测试。不要读取或修改任何文件。在终端执行 PowerShell Start-Sleep -Seconds 90，随后最终只回复 ${marker}。在任务被停止前不要结束。`,
@@ -59,6 +59,11 @@ if (!ready || !ready.agentId) {
 }
 
 await sleep(2000);
+// Cursor can replace a draft ID with its persistent ID after submission.
+ready = await bridge.status(submitted.taskId);
+if (!ready.agentId || ready.sendState !== 'sent' || ready.status !== 'running') {
+  throw new Error(`FIFO is no longer running with an exact Agent identity: ${ready.status}`);
+}
 const cancelled = await bridge.taskControl(submitted.taskId, {
   action: 'cancel',
   confirm: true,
