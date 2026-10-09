@@ -65,7 +65,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.8';
+const PLUGIN_VERSION = '6.0.9';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -634,11 +634,20 @@ const EXPR_MODEL_PICKER_TRIGGER = `(function(){
   const text=String(trigger.querySelector('.ui-model-picker__trigger-text,.vscode-model-picker__trigger-text')?.innerText||trigger.innerText||'').replace(/\\s+/g,' ').trim();
   const detail=String(trigger.querySelector('.ui-model-picker__trigger-variant-suffix,.vscode-model-picker__trigger-variant-suffix')?.innerText||'').replace(/\\s+/g,' ').trim();
   const x=Math.round(rect.x+rect.width/2),y=Math.round(rect.y+rect.height/2);
-  let state='ready';
+  let state='ready',occluder=null;
   if(trigger.disabled||trigger.getAttribute('aria-disabled')==='true'||trigger.closest('[inert]')||getComputedStyle(trigger).pointerEvents==='none')state='trigger_disabled';
   else if(!Number.isFinite(x)||!Number.isFinite(y)||rect.width<=0||rect.height<=0||x<0||y<0||x>=innerWidth||y>=innerHeight)state='trigger_offscreen';
-  else {const hit=document.elementFromPoint(x,y);if(!hit||hit!==trigger&&!trigger.contains(hit))state='trigger_occluded';}
-  return JSON.stringify({found:true,state,interactive:state==='ready',expanded:trigger.getAttribute('aria-expanded'),text,detail,x,y,...owner});
+  else {
+    const hit=document.elementFromPoint(x,y);
+    if(!hit||hit!==trigger&&!trigger.contains(hit)){
+      state='trigger_occluded';
+      const menu=hit&&hit.closest('[data-component="menu-popup"]');
+      // A transient Cursor menu can consume/block a click on the composer.
+      // Never dismiss dialogs, arbitrary overlays, or offscreen controls.
+      if(menu&&!hit.closest('[role="dialog"],[aria-modal="true"]'))occluder={kind:'menu',id:menu.getAttribute('id')||null};
+    }
+  }
+  return JSON.stringify({found:true,state,interactive:state==='ready',expanded:trigger.getAttribute('aria-expanded'),occluder,text,detail,x,y,...owner});
 })()`;
 
 function exprActivateClosedModelPicker(expected) {
@@ -1043,19 +1052,24 @@ function exprSelectAgentWorkspace(projectPath) {
     const fail=(state,extra={})=>JSON.stringify({ok:false,state,wanted,...extra,
       nextStep:'Select the exact local workspace '+${JSON.stringify(String(projectPath || ''))}+' in the new Agent project picker before retrying.'});
     if(triggers.length!==1)return fail(triggers.length?'workspace_project_selector_ambiguous':'workspace_project_selector_unavailable',{triggerCount:triggers.length});
-    triggers[0].click();
+    if(triggers[0].getAttribute?.('aria-expanded')!=='true')triggers[0].click();
     await new Promise(resolve=>setTimeout(resolve,350));
-    const menus=[...new Set([...document.querySelectorAll('[data-component="menu-popup"],[role="menu"]')].filter(visible)
+    const readMenus=()=>[...new Set([...document.querySelectorAll('[data-component="menu-popup"],[role="menu"]')].filter(visible)
       .map(menu=>menu.getAttribute('role')==='menu'&&menu.getAttribute('aria-label')==='Select a project'
         ?menu:menu.querySelector('[role="menu"][aria-label="Select a project"]')).filter(visible))];
+    let menus=readMenus();
     if(menus.length!==1)return fail(menus.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{menuCount:menus.length});
-    const rows=[];const seen=new Set();
-    for(const menu of menus){
-      for(const row of menu.querySelectorAll('[data-component="menu-row"][role="menuitem"],[role="option"]')){
-        if(!visible(row)||seen.has(row))continue;seen.add(row);rows.push(row);
+    const readRows=()=>{
+      const rows=[];const seen=new Set();
+      for(const menu of menus){
+        for(const row of menu.querySelectorAll('[data-component="menu-row"][role="menuitem"],[role="option"]')){
+          if(!visible(row)||seen.has(row))continue;seen.add(row);rows.push(row);
+        }
       }
-    }
-    const available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\s+/g,' ').trim());
+      return rows;
+    };
+    let rows=readRows();
+    let available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\s+/g,' ').trim());
     const rowWorkspace=row=>{
       const key=Object.keys(row).find(key=>key.startsWith('__reactFiber$'));
       const levels=[];const visited=new Set();
@@ -1115,7 +1129,26 @@ function exprSelectAgentWorkspace(projectPath) {
       const [workspaceId,path]=JSON.parse([...identities][0]);
       return {path,workspaceId,root,currentRoot};
     };
-    const matches=rows.map(row=>({row,identity:rowWorkspace(row)})).filter(match=>match.identity&&match.identity.path===wanted);
+    const findMatches=()=>rows.map(row=>({row,identity:rowWorkspace(row)})).filter(match=>match.identity&&match.identity.path===wanted);
+    let matches=findMatches();
+    if(!matches.length){
+      // Cursor's Recents view omits older registered workspaces. Search the
+      // full path, then apply the same committed local-identity checks.
+      const searches=[...menus[0].querySelectorAll('input[aria-label="Search menu items"]')].filter(visible);
+      if(searches.length===1&&typeof HTMLInputElement!=='undefined'){
+        const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
+        if(setter){
+          setter.call(searches[0],${JSON.stringify(String(projectPath || ''))});
+          searches[0].dispatchEvent(new Event('input',{bubbles:true}));
+          await new Promise(resolve=>setTimeout(resolve,350));
+          menus=readMenus();
+          if(menus.length!==1)return fail(menus.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{menuCount:menus.length});
+          rows=readRows();
+          available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\s+/g,' ').trim());
+          matches=findMatches();
+        }
+      }
+    }
     if(matches.length!==1)return fail(matches.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{available});
     const selected=matches[0];
     if(selected.identity.root&&selected.identity.root.current!==selected.identity.currentRoot)return fail('workspace_project_option_unavailable',{available});
@@ -3259,6 +3292,7 @@ class CursorBridge {
     let trigger = null, snapshot = { open: false, rows: [] };
     let stableSignature = null, stableSince = 0, clicked = false, clickedOwner = null;
     let clickedAt = 0, recoveryAttempted = false, lastPollError = null;
+    let dismissedMenus = 0, dismissalOwner = null;
     const attempts = [];
     do {
       this._throwIfCancelledBeforeSend(job);
@@ -3276,8 +3310,24 @@ class CursorBridge {
       }
       this._throwIfCancelledBeforeSend(job);
       const sameOwner = modelPickerOwnerKey(snapshot.owner) === modelPickerOwnerKey(trigger);
+      if (dismissalOwner !== null && dismissalOwner !== modelPickerOwnerKey(trigger)) {
+        attempts.push('owner_changed_after_menu_dismissal');
+        break;
+      }
       if (snapshot.open && trigger.found && sameOwner && (!clicked || clickedOwner === modelPickerOwnerKey(trigger))) return { trigger, ...snapshot };
       if (snapshot.open && !sameOwner && !attempts.includes('owner_changed')) attempts.push('owner_changed');
+      if (!clicked && !snapshot.open && trigger.found && trigger.state === 'trigger_occluded'
+        && trigger.expanded === 'false' && trigger.occluder?.kind === 'menu' && dismissedMenus < 3) {
+        this._throwIfCancelledBeforeSend(job);
+        dismissalOwner = modelPickerOwnerKey(trigger);
+        dismissedMenus++;
+        attempts.push('dismiss_occluding_menu');
+        await c.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+        await c.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
+        stableSignature = null;
+        await sleep(Math.min(150, Math.max(0, deadline - Date.now())));
+        continue;
+      }
       if (!clicked) {
         const interactive = trigger.found && trigger.interactive !== false;
         const signature = interactive ? JSON.stringify([trigger.triggerId, trigger.composerId, trigger.agentId, trigger.x, trigger.y]) : null;

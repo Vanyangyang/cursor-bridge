@@ -7,11 +7,13 @@
 
 The machine-readable source for this page is [`compatibility.json`](./compatibility.json).
 
-## Current maintained baseline
+## Latest release and last completed baseline
+
+Cursor Bridge **6.0.9** is the latest patch. Its focused Cursor 3.23.23 CCE check passed; full Cursor **3.24.9** live acceptance remains pending. The table retains the last completed broader acceptance and does not certify 3.24.9. See [6.0.9 verification](./docs/cursor-6.0.9-verification.md).
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|
-| **3.23.12** | **6.0.8** | `main` | Fixes the model picker's premature 450ms timeout, requires the unique writable composer and linked menus, checks a stable clickable point, and permits one verified recovery only while the trigger stays closed. Grok 4.7/high validation and inherited acceptance boundaries are in the [patch verification scope](./docs/cursor-6.0.8-model-picker-verification.md). |
+| **3.23.12** | **6.0.8** | `cursor-bridge--v6.0.8` | Fixes the model picker's premature 450ms timeout, requires the unique writable composer and linked menus, checks a stable clickable point, and permits one verified recovery only while the trigger stays closed. Grok 4.7/high validation and inherited acceptance boundaries are in the [patch verification scope](./docs/cursor-6.0.8-model-picker-verification.md). |
 | 3.23.12 | 6.0.7 | `cursor-bridge--v6.0.7` | Archived. Project identity, collapsed History, exact cancellation, IDE hidden model verification, both-UI and lifecycle acceptance; see [original scope](./docs/cursor-3.23.12-verification.md). |
 | 3.21.16 | 6.0.6 | `cursor-bridge--v6.0.6` | Archived. Workspace confirmation, exact existing-workspace reuse, and mismatch rejection; broader acceptance inherited from 6.0.4. |
 | 3.21.16 | 6.0.5 | `cursor-bridge--v6.0.5` | Archived. Model-provider alias matching and `reasoning_effort` verification. |

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { cursorWindowStatePath, readCursorStartupWindow, cursorStartupWindowArgs } from '../cursor-startup-window.mjs';
 
-const read = saved => readCursorStartupWindow({ file: 'fixture', readFileSyncImpl: () => JSON.stringify(saved) });
+const read = saved => readCursorStartupWindow({ file: 'fixture', readStartupPreferenceImpl: () => null, readFileSyncImpl: () => JSON.stringify(saved) });
 
 test('last closed window type wins over other restored windows', () => {
   assert.deepEqual(read({ windowsState: {
@@ -21,7 +21,7 @@ test('missing, corrupt, or unreadable last-window state selects one Agents windo
     assert.deepEqual(read(saved), { uiFlavor: 'agents_v2', source: 'default-agents-window' });
   }
   for (const readFileSyncImpl of [() => '{invalid', () => { throw new Error('EACCES'); }]) {
-    assert.equal(readCursorStartupWindow({ file: 'fixture', readFileSyncImpl }).source, 'default-agents-window');
+    assert.equal(readCursorStartupWindow({ file: 'fixture', readStartupPreferenceImpl: () => null, readFileSyncImpl }).source, 'default-agents-window');
   }
 });
 

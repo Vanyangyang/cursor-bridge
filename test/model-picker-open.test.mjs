@@ -120,6 +120,31 @@ test('production trigger expression refuses a blocked or noninteractive center',
   }
 });
 
+test('production trigger expression identifies menu occlusion without treating dialogs as dismissible menus', async t => {
+  for (const [name, dialogAttrs, menuId, expected] of [
+    ['ordinary menu', null, 'project-picker', { kind: 'menu', id: 'project-picker' }],
+    ['menu without id', null, '', { kind: 'menu', id: null }],
+    ['menu inside dialog', { role: 'dialog' }, 'project-picker', null],
+    ['menu inside modal', { 'aria-modal': 'true' }, 'project-picker', null],
+  ]) {
+    await t.test(name, () => {
+      const f = pickerFixture();
+      const parent = dialogAttrs ? f.root.append(new NodeFixture({ attrs: dialogAttrs })) : f.root;
+      const popup = parent.append(new NodeFixture({ attrs: { id: menuId, 'data-component': 'menu-popup' } }));
+      const item = popup.append(new NodeFixture({ text: 'Select a project' }));
+      f.document.elementFromPoint = () => item;
+      const result = f.evaluate(EXPR_MODEL_PICKER_TRIGGER);
+      assert.equal(result.state, 'trigger_occluded');
+      assert.equal(result.interactive, false);
+      assert.deepEqual(result.occluder, expected);
+    });
+  }
+  const f = pickerFixture();
+  assert.equal(f.evaluate(EXPR_MODEL_PICKER_TRIGGER).occluder, null);
+  f.document.elementFromPoint = () => f.root;
+  assert.equal(f.evaluate(EXPR_MODEL_PICKER_TRIGGER).occluder, null);
+});
+
 test('production menu reader rejects a foreign root when the owner link is absent', () => {
   const f = pickerFixture();
   const foreign = f.menu('menu-foreign');
@@ -170,6 +195,117 @@ test('production menu reader allows only the unique legacy root without ownershi
 const createBridge = () => new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
 const readyTrigger = (x = 80) => ({ found: true, state: 'ready', interactive: true, x, y: 35, text: 'Grok 4.7', detail: 'High', triggerId: 'trigger-owned', composerId: 'composer-owned', agentId: 'agent-owned' });
 const pickerOwner = (trigger = readyTrigger()) => ({ triggerId: trigger.triggerId, composerId: trigger.composerId, agentId: trigger.agentId });
+
+test('opening dismisses a covering menu and clicks only the freshly observed trigger coordinates', async () => {
+  const f = pickerFixture();
+  f.trigger.attrs['aria-expanded'] = 'false';
+  const coveringMenu = f.menu('project-picker', 'project-picker');
+  const item = f.row(coveringMenu, 'Select a project');
+  f.document.elementFromPoint = () => item;
+  const b = createBridge();
+  const events = [];
+  const clicks = [];
+  let open = false;
+  b._readModelPickerTrigger = async () => { events.push('trigger'); return f.evaluate(EXPR_MODEL_PICKER_TRIGGER); };
+  b._readModelPickerRows = async () => { events.push('rows'); return { open, rows: [], owner: pickerOwner() }; };
+  b._clickModelPickerPoint = async (_c, trigger) => { events.push('click'); clicks.push(trigger); open = true; };
+  const client = { send: async (method, params) => {
+    assert.equal(method, 'Input.dispatchKeyEvent');
+    assert.equal(params.key, 'Escape');
+    events.push(params.type);
+    if (params.type === 'keyUp') {
+      f.trigger.rect.x = 240;
+      f.document.elementFromPoint = () => f.label;
+    }
+    return {};
+  } };
+  const result = await b._openModelPicker(client, null, { timeoutMs: 500, pollMs: 5, stableMs: 10 });
+  assert.equal(result.open, true);
+  assert.equal(clicks.length, 1);
+  assert.equal(clicks[0].interactive, true);
+  assert.equal(clicks[0].x, 300);
+  assert.deepEqual(events.filter(event => event.startsWith('key')), ['keyDown', 'keyUp']);
+  const afterEscape = events.slice(events.indexOf('keyUp') + 1, events.indexOf('click'));
+  assert.ok(afterEscape.includes('rows'));
+  assert.ok(afterEscape.includes('trigger'));
+});
+
+test('persistent menu occlusion is dismissed at most three times and never clicked', async () => {
+  const b = createBridge();
+  const keys = [];
+  b._readModelPickerTrigger = async () => ({ ...readyTrigger(), state: 'trigger_occluded', interactive: false, expanded: 'false', occluder: { kind: 'menu', id: 'project-picker' } });
+  b._readModelPickerRows = async () => ({ open: false, rows: [], owner: pickerOwner() });
+  b._clickModelPickerPoint = async () => assert.fail('a persistently occluded trigger must not be clicked');
+  b._activateClosedModelPicker = async () => assert.fail('an occluded trigger must not be activated');
+  const client = { send: async (method, params) => {
+    assert.equal(method, 'Input.dispatchKeyEvent');
+    assert.equal(params.key, 'Escape');
+    keys.push(params.type);
+    return {};
+  } };
+  await assert.rejects(b._openModelPicker(client, null, { timeoutMs: 500, pollMs: 5, stableMs: 0 }), error => error.modelSelectionFailure?.failureClass === 'picker_did_not_open');
+  assert.deepEqual(keys, ['keyDown', 'keyUp', 'keyDown', 'keyUp', 'keyDown', 'keyUp']);
+});
+
+test('opening never dismisses non-menu occlusion or an expanded or unknown trigger', async t => {
+  for (const [name, expanded, occluder] of [
+    ['non-menu', 'false', null],
+    ['expanded', 'true', { kind: 'menu', id: 'project-picker' }],
+    ['unknown expansion', null, { kind: 'menu', id: 'project-picker' }],
+  ]) {
+    await t.test(name, async () => {
+      const b = createBridge();
+      b._readModelPickerTrigger = async () => ({ ...readyTrigger(), state: 'trigger_occluded', interactive: false, expanded, occluder });
+      b._readModelPickerRows = async () => ({ open: false, rows: [], owner: pickerOwner() });
+      b._clickModelPickerPoint = async () => assert.fail('occluded trigger must not click');
+      const client = { send: async () => assert.fail('this occlusion must not dispatch Escape') };
+      await assert.rejects(b._openModelPicker(client, null, { timeoutMs: 70, pollMs: 5, stableMs: 0 }));
+    });
+  }
+});
+
+test('an already open owned picker returns without dismissing the menu covering its trigger', async () => {
+  const b = createBridge();
+  const trigger = { ...readyTrigger(), state: 'trigger_occluded', interactive: false, expanded: 'false', occluder: { kind: 'menu', id: 'menu-owned' } };
+  b._readModelPickerTrigger = async () => trigger;
+  b._readModelPickerRows = async () => ({ open: true, rows: [], owner: pickerOwner() });
+  b._clickModelPickerPoint = async () => assert.fail('already open picker must not click');
+  const client = { send: async () => assert.fail('already open picker must not dispatch Escape') };
+  const result = await b._openModelPicker(client, null, { timeoutMs: 100, pollMs: 5, stableMs: 0 });
+  assert.equal(result.open, true);
+});
+
+test('occlusion appearing after the native trigger click is not dismissed', async () => {
+  const b = createBridge();
+  let clicks = 0;
+  b._readModelPickerTrigger = async () => clicks
+    ? { ...readyTrigger(), state: 'trigger_occluded', interactive: false, expanded: 'false', occluder: { kind: 'menu', id: 'project-picker' } }
+    : { ...readyTrigger(), expanded: 'false' };
+  b._readModelPickerRows = async () => ({ open: false, rows: [], owner: pickerOwner() });
+  b._clickModelPickerPoint = async () => { clicks++; };
+  b._activateClosedModelPicker = async () => assert.fail('covered trigger must not be activated');
+  const client = { send: async () => assert.fail('post-click occlusion must not dispatch Escape') };
+  await assert.rejects(b._openModelPicker(client, null, { timeoutMs: 100, pollMs: 5, stableMs: 0, recoveryDelayMs: 10 }));
+  assert.equal(clicks, 1);
+});
+
+test('cancellation before or during occlusion observation never dispatches Escape', async t => {
+  for (const cancelledBeforeRead of [true, false]) {
+    await t.test(cancelledBeforeRead ? 'before read' : 'during trigger read', async () => {
+      const b = createBridge();
+      const job = { cancelRequested: cancelledBeforeRead, sendState: 'not_sent' };
+      b._readModelPickerRows = async () => ({ open: false, rows: [], owner: pickerOwner() });
+      b._readModelPickerTrigger = async () => {
+        job.cancelRequested = true;
+        return { ...readyTrigger(), state: 'trigger_occluded', interactive: false, expanded: 'false', occluder: { kind: 'menu', id: 'project-picker' } };
+      };
+      b._clickModelPickerPoint = async () => assert.fail('cancelled job must not click');
+      const client = { send: async () => assert.fail('cancelled job must not dispatch Escape') };
+      await assert.rejects(b._openModelPicker(client, job, { timeoutMs: 100, pollMs: 5, stableMs: 0 }), error => error.cancelled === true);
+      assert.equal(job.sendState, 'not_sent');
+    });
+  }
+});
 
 test('opening waits for fresh stable coordinates and an interactive trigger before its only click', async () => {
   const b = createBridge();

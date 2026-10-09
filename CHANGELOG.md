@@ -4,6 +4,20 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [6.0.9] - 2026-10-09
+
+### Fixed
+
+- Recover a model trigger covered by a transient Cursor menu with at most three Escape attempts. Re-read the menu, owner, and hit-tested coordinates before clicking; dialogs, changed owners, cancellation, and already-open model menus remain protected.
+- Search the complete local workspace path when the project picker's Recents list omits it. Re-read the filtered rows and retain the committed React identity checks; an already-expanded project menu is no longer toggled closed.
+- Honor Cursor's explicit Agent Window startup preference before older last-closed IDE records. Read only the two native preference keys through optional built-in SQLite support; unsupported runtimes or unreadable databases retain the existing last-window behavior.
+
+### Validation and distribution
+
+- Repository regression: 457 tests passed. Cursor 3.23.23 reproduced the covered trigger and verified recovery, exact workspace selection, and a complete Grok 4.7/high CCE result.
+- Cursor 3.24.9 was detected and its native startup preference was read successfully. Cold launch, CCE, FIFO, parallel execution, and hidden-mode acceptance on 3.24.9 remain pending because the existing Cursor process has no CDP connection. This release does not claim full 3.24.9 compatibility; see the [verification scope](./docs/cursor-6.0.9-verification.md).
+- `pi-cursor-bridge` 0.2.9 and `vanyangyang-cursor-bridge` 0.1.7 embed Cursor Bridge 6.0.9. Grok Build Supervisor remains 0.4.3.
+
 ## [6.0.8] - 2026-10-03
 
 ### Fixed

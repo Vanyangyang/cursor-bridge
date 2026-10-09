@@ -2,6 +2,37 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import * as startupModule from 'node:module';
+
+const requireOptional = startupModule.createRequire(import.meta.url);
+const STARTUP_PREFERENCE_KEY = 'cursor/userWindowRestorationPreference';
+const LEGACY_STARTUP_PREFERENCE_KEY = 'cursor/userOpenAgentsWindowOnStartupPreference';
+
+// node:sqlite is optional so Node 18/20 installations retain the existing
+// last-window fallback. Never create or modify Cursor's state database.
+export function readCursorStartupPreference(options = {}) {
+  let database;
+  try {
+    const { DatabaseSync } = (options.requireImpl || requireOptional)('node:sqlite');
+    const file = join(dirname(options.file || cursorWindowStatePath(options)), 'state.vscdb');
+    database = new DatabaseSync(file, { readOnly: true });
+    const rows = database.prepare('SELECT key, value FROM ItemTable WHERE key IN (?, ?)')
+      .all(STARTUP_PREFERENCE_KEY, LEGACY_STARTUP_PREFERENCE_KEY);
+    const values = new Map(rows.map(({ key, value }) => {
+      try { return [key, JSON.parse(value)]; } catch { return [key, value]; }
+    }));
+    const preference = values.get(STARTUP_PREFERENCE_KEY);
+    if (['default', 'agentWindow', 'lastUsedWindows'].includes(preference)) return preference;
+    const legacy = values.get(LEGACY_STARTUP_PREFERENCE_KEY);
+    if (legacy === true || legacy === 'true' || legacy === 'agentWindow') return 'agentWindow';
+    if (legacy === false || legacy === 'false' || legacy === 'lastUsedWindows') return 'lastUsedWindows';
+    return 'default';
+  } catch {
+    return null;
+  } finally {
+    try { database?.close(); } catch { /* Preference reads must not block startup. */ }
+  }
+}
 
 export function cursorWindowStatePath(options = {}) {
   const env = options.env || process.env;
@@ -38,6 +69,10 @@ function stateSignature(last) {
 // close observation only while Cursor's saved last-window record is unchanged.
 // A newly saved native record takes precedence, including external Cursor use.
 export function readCursorStartupWindow(options = {}) {
+  let preference = null;
+  try { preference = (options.readStartupPreferenceImpl || readCursorStartupPreference)(options); }
+  catch { /* Optional preference reader: preserve the last-window fallback. */ }
+  if (preference === 'agentWindow') return { uiFlavor: 'agents_v2', source: 'cursor-startup-preference' };
   const file = options.file || cursorWindowStatePath(options);
   const last = nativeWindowState(options);
   try {

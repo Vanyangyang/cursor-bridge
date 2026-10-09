@@ -4,7 +4,7 @@
   "current": {
     "cursorVersion": "3.23.12",
     "cursorBridgeVersion": "6.0.8",
-    "sourceRef": "main",
+    "sourceRef": "cursor-bridge--v6.0.8",
     "status": "current",
     "acceptance": {
       "currentReleaseEvidence": "6.0.8-delayed-picker-before-after-regression; source-and-rebuilt-stdio-model-selection-acceptance; see-docs/cursor-6.0.8-model-picker-verification.md",
@@ -177,5 +177,12 @@
       "gitRef": "cursor-bridge--v5.4.0",
       "status": "archived"
     }
-  ]
+  ],
+  "latestRelease": {
+    "cursorBridgeVersion": "6.0.9",
+    "status": "regression-verified-live-partial",
+    "verification": "docs/cursor-6.0.9-verification.md",
+    "focusedLiveCursorVersion": "3.23.23",
+    "pendingLiveCursorVersion": "3.24.9"
+  }
 }

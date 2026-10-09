@@ -3713,6 +3713,36 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from "node
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import * as startupModule from "node:module";
+function readCursorStartupPreference(options = {}) {
+  let database;
+  try {
+    const { DatabaseSync } = (options.requireImpl || requireOptional)("node:sqlite");
+    const file = join(dirname(options.file || cursorWindowStatePath(options)), "state.vscdb");
+    database = new DatabaseSync(file, { readOnly: true });
+    const rows = database.prepare("SELECT key, value FROM ItemTable WHERE key IN (?, ?)").all(STARTUP_PREFERENCE_KEY, LEGACY_STARTUP_PREFERENCE_KEY);
+    const values = new Map(rows.map(({ key, value }) => {
+      try {
+        return [key, JSON.parse(value)];
+      } catch {
+        return [key, value];
+      }
+    }));
+    const preference = values.get(STARTUP_PREFERENCE_KEY);
+    if (["default", "agentWindow", "lastUsedWindows"].includes(preference)) return preference;
+    const legacy = values.get(LEGACY_STARTUP_PREFERENCE_KEY);
+    if (legacy === true || legacy === "true" || legacy === "agentWindow") return "agentWindow";
+    if (legacy === false || legacy === "false" || legacy === "lastUsedWindows") return "lastUsedWindows";
+    return "default";
+  } catch {
+    return null;
+  } finally {
+    try {
+      database?.close();
+    } catch {
+    }
+  }
+}
 function cursorWindowStatePath(options = {}) {
   const env = options.env || process.env;
   const home = options.home || homedir();
@@ -3742,6 +3772,12 @@ function stateSignature(last) {
   return createHash("sha256").update(JSON.stringify(last)).digest("hex");
 }
 function readCursorStartupWindow(options = {}) {
+  let preference = null;
+  try {
+    preference = (options.readStartupPreferenceImpl || readCursorStartupPreference)(options);
+  } catch {
+  }
+  if (preference === "agentWindow") return { uiFlavor: "agents_v2", source: "cursor-startup-preference" };
   const file = options.file || cursorWindowStatePath(options);
   const last = nativeWindowState(options);
   try {
@@ -3779,8 +3815,12 @@ function cursorStartupWindowArgs(startupWindow, projectPath) {
   if (startupWindow.uiFlavor !== "legacy") return ["--glass"];
   return ["--classic", ...projectPath ? [projectPath] : ["--new-window"]];
 }
+var requireOptional, STARTUP_PREFERENCE_KEY, LEGACY_STARTUP_PREFERENCE_KEY;
 var init_cursor_startup_window = __esm({
   "cursor-startup-window.mjs"() {
+    requireOptional = startupModule.createRequire(import.meta.url);
+    STARTUP_PREFERENCE_KEY = "cursor/userWindowRestorationPreference";
+    LEGACY_STARTUP_PREFERENCE_KEY = "cursor/userOpenAgentsWindowOnStartupPreference";
   }
 });
 

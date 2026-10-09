@@ -80,10 +80,41 @@ function workspacePicker(rowSpecs, { outsideProject, bounded = true, ancestorDep
   });
   const popup = { offsetParent: {}, getAttribute: () => null, querySelector: () => menu };
   return {
-    get triggerClicks() { return triggerClicks; }, rowClicks, selections, rows, rowPairs, root, roots, menuPair,
+    get triggerClicks() { return triggerClicks; }, rowClicks, selections, rows, rowPairs, root, roots, menuPair, trigger, menu,
     querySelectorAll: selector => selector.startsWith('button.ui-select-trigger') ? [trigger]
       : selector.startsWith('[data-component="menu-popup"]') ? [popup, menu] : [],
   };
+}
+
+function searchableWorkspacePicker(initialSpecs, filteredSpecs, { expanded = false, searchCount = 1 } = {}) {
+  const initial = workspacePicker(initialSpecs);
+  const filtered = workspacePicker(filteredSpecs);
+  const writes = [];
+  const events = [];
+  let active = initial;
+  initial.trigger.getAttribute = key => key === 'aria-expanded' ? String(expanded) : null;
+  class HTMLInputElement {
+    constructor() { this.offsetParent = {}; }
+    get value() { return this.currentValue || ''; }
+    set value(value) { writes.push(value); this.currentValue = value; }
+    dispatchEvent(event) {
+      events.push({ type: event.type, bubbles: event.bubbles, value: this.value });
+      if (event.type === 'input' && event.bubbles) active = filtered;
+      return true;
+    }
+  }
+  const inputs = Array.from({ length: searchCount }, () => new HTMLInputElement());
+  for (const picker of [initial, filtered]) {
+    const queryRows = picker.menu.querySelectorAll;
+    picker.menu.querySelectorAll = selector => selector.includes('input') ? inputs : queryRows(selector);
+    picker.menu.querySelector = selector => selector.includes('input') ? inputs[0] || null : null;
+  }
+  const document = {
+    querySelectorAll: selector => selector.startsWith('button.ui-select-trigger') ? [initial.trigger]
+      : selector.includes('input') ? inputs : active.querySelectorAll(selector),
+  };
+  const evaluate = async target => JSON.parse(await Function('document', 'HTMLInputElement', 'Event', `return ${exprSelectAgentWorkspace(target)}`)(document, HTMLInputElement, Event));
+  return { initial, filtered, writes, events, evaluate };
 }
 
 function page(sections, composers = [], hasTranscript = true) {
@@ -263,6 +294,93 @@ test('Cursor 3.23 basename rows select only the exact local project file URI and
   assert.equal(result.workspace, target.toLowerCase());
   assert.deepEqual(document.rowClicks, [0, 1]);
   assert.deepEqual(document.selections, [{ path: '/' + target, id: identifier.id }]);
+});
+
+test('project search exposes a missing exact workspace and excludes its dist child', async () => {
+  const target = 'C:\\Users\\Administrator\\plugins\\cursor-bridge';
+  const normalized = target.replaceAll('\\', '/');
+  const f = searchableWorkspacePicker(
+    [{ text: 'other', project: project('C:/other') }],
+    [
+      { text: 'cursor-bridge', project: project(normalized, { workspaceIdentifier: environment(normalized, 'exact-root') }) },
+      { text: 'dist', project: project(normalized + '/dist', { workspaceIdentifier: environment(normalized + '/dist', 'dist-child') }) },
+    ],
+  );
+  const result = await f.evaluate(target);
+  assert.equal(result.ok, true);
+  assert.deepEqual(f.writes, [target]);
+  assert.deepEqual(f.events, [{ type: 'input', bubbles: true, value: target }]);
+  assert.deepEqual(f.initial.rowClicks, [0]);
+  assert.deepEqual(f.filtered.rowClicks, [1, 0]);
+  assert.deepEqual(f.filtered.selections, [{ path: normalized, id: 'exact-root' }]);
+});
+
+test('project search with no exact result fails without selecting another workspace', async () => {
+  const f = searchableWorkspacePicker(
+    [{ text: 'other', project: project('G:/other') }],
+    [{ text: 'spellcast', project: project(path + '/dist') }],
+  );
+  const result = await f.evaluate(path);
+  assert.equal(result.ok, false);
+  assert.equal(result.state, 'workspace_project_option_unavailable');
+  assert.deepEqual(f.writes, [path]);
+  assert.deepEqual(f.initial.rowClicks, [0]);
+  assert.deepEqual(f.filtered.rowClicks, [0]);
+});
+
+test('initially ambiguous exact project rows are rejected without searching', async () => {
+  const f = searchableWorkspacePicker(
+    [{ text: 'spellcast', project: project() }, { text: 'spellcast', project: project() }],
+    [{ text: 'spellcast', project: project() }],
+  );
+  const result = await f.evaluate(path);
+  assert.equal(result.state, 'workspace_project_option_ambiguous');
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.events, []);
+  assert.deepEqual(f.initial.rowClicks, [0, 0]);
+  assert.deepEqual(f.filtered.rowClicks, [0]);
+});
+
+test('filtered project rows cannot replace committed identity with matching text or stale metadata', async () => {
+  const f = searchableWorkspacePicker(
+    [{ text: 'other', project: project('G:/other') }],
+    [{ text: path, oldProjects: [project()], currentProjects: [project('G:/wrong/spellcast')] }],
+  );
+  const result = await f.evaluate(path);
+  assert.equal(result.ok, false);
+  assert.equal(result.state, 'workspace_project_option_unavailable');
+  assert.deepEqual(f.writes, [path]);
+  assert.deepEqual(f.initial.rowClicks, [0]);
+  assert.deepEqual(f.filtered.rowClicks, [0]);
+});
+
+test('an already expanded project menu is searched without toggling its trigger closed', async () => {
+  const f = searchableWorkspacePicker(
+    [{ text: 'other', project: project('G:/other') }],
+    [{ text: 'spellcast', project: project() }],
+    { expanded: true },
+  );
+  const result = await f.evaluate(path);
+  assert.equal(result.ok, true);
+  assert.equal(f.initial.triggerClicks, 0);
+  assert.deepEqual(f.writes, [path]);
+  assert.deepEqual(f.filtered.rowClicks, [1]);
+});
+
+test('missing or ambiguous project search inputs preserve fail-closed selection', async t => {
+  for (const searchCount of [0, 2]) {
+    await t.test(String(searchCount) + ' search inputs', async () => {
+      const f = searchableWorkspacePicker(
+        [{ text: 'other', project: project('G:/other') }],
+        [{ text: 'spellcast', project: project() }],
+        { searchCount },
+      );
+      assert.equal((await f.evaluate(path)).ok, false);
+      assert.deepEqual(f.writes, []);
+      assert.deepEqual(f.initial.rowClicks, [0]);
+      assert.deepEqual(f.filtered.rowClicks, [0]);
+    });
+  }
 });
 
 test('same basename and repository URL cannot establish the requested picker path', async () => {

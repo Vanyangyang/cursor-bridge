@@ -7,11 +7,13 @@
 
 本页面的机器可读数据源是 [`compatibility.json`](./compatibility.json)。
 
-## 当前维护基线
+## 最新发布与上次完整验收基线
+
+Cursor Bridge **6.0.9** 是最新补丁。Cursor 3.23.23 的定向 CCE 检查已通过，Cursor **3.24.9** 的完整实机验收仍待完成。下表保留上次完成的较完整验收记录，不代表 3.24.9 已通过。详见 [6.0.9 验收范围](./docs/cursor-6.0.9-verification.md)。
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|
-| **3.23.12** | **6.0.8** | `main` | 修复模型菜单固定等待 450ms 提前报错；仅操作唯一可写输入区及关联菜单，确认点击位置稳定且可命中；按钮明确保持关闭时允许一次核验后的恢复。Grok 4.7/high 验证及继承的验收边界见[补丁验收范围](./docs/cursor-6.0.8-model-picker-verification.md)。 |
+| **3.23.12** | **6.0.8** | `cursor-bridge--v6.0.8` | 修复模型菜单固定等待 450ms 提前报错；仅操作唯一可写输入区及关联菜单，确认点击位置稳定且可命中；按钮明确保持关闭时允许一次核验后的恢复。Grok 4.7/high 验证及继承的验收边界见[补丁验收范围](./docs/cursor-6.0.8-model-picker-verification.md)。 |
 | 3.23.12 | 6.0.7 | `cursor-bridge--v6.0.7` | 已归档。项目身份、折叠 History、精确取消、IDE 隐藏模型核验、双界面及生命周期验收；见[原验收范围](./docs/cursor-3.23.12-verification.md)。 |
 | 3.21.16 | 6.0.6 | `cursor-bridge--v6.0.6` | 已归档。工作区确认、精确复用已有工作区与错绑拒绝；更完整验收继承自 6.0.4。 |
 | 3.21.16 | 6.0.5 | `cursor-bridge--v6.0.5` | 已归档。模型提供方别名匹配及 `reasoning_effort` 核验。 |
