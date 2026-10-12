@@ -413,4 +413,4 @@ Advanced lifecycle overrides are compatibility controls. Bypassing the Windows s
 
 ## Star History
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=810eacca6aa1)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=332a2963a3d9)](https://github.com/Vanyangyang/cursor-bridge)
