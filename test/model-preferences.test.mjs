@@ -143,6 +143,11 @@ test('Cursor 3.20.17 Auto menu exposes its Model control and closes through the 
     if (method === 'Runtime.evaluate') return { result: { value:
       Function('document', 'getComputedStyle', `return ${params.expression}`)(document, () => ({ pointerEvents: 'auto' })),
     } };
+    if (method === 'Input.dispatchMouseEvent') {
+      assert.equal(params.type, 'mouseMoved');
+      assert.deepEqual([params.x, params.y], [10, 20]);
+      return {};
+    }
     assert.equal(method, 'Input.dispatchKeyEvent');
     assert.equal(params.key, 'Escape');
     if (params.type === 'keyUp') open = false;

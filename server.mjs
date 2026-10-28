@@ -65,7 +65,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.9';
+const PLUGIN_VERSION = '6.0.10';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -715,24 +715,38 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
       if(!visible(row)||seen.has(row))continue;
       seen.add(row);
       const rect=row.getBoundingClientRect();
-      const text=String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim();
+      const itemName=row.querySelector('[data-model-picker-item-name]');
+      const text=String(itemName&&(itemName.innerText||itemName.textContent)||row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim();
       if(!text)continue;
       const menuTestId=String(menu.getAttribute('data-testid')||'');
       const submenuRoot=row.closest('[data-submenu],[data-testid*="parameter-submenu"],[data-testid*="model-list"]');
       const submenuTestId=String((submenuRoot&&submenuRoot.getAttribute('data-testid'))||'');
       const kind=classifyModelPickerRowKind(
         text,
-        !!row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'),
+        !!itemName||!!row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'),
         menuTestId,
         submenuTestId,
         row.getAttribute('aria-haspopup'),
         !!row.querySelector('.ui-model-picker__param-check,.vscode-model-picker__param-check'),
         !!row.closest('[data-submenu]')
       );
+      const edits=[...(row.querySelectorAll?.('button[data-testid="parameter-edit-btn"]')||[])]
+        .filter(edit=>!edit.disabled&&edit.getAttribute('aria-disabled')!=='true'&&!['','true'].includes(edit.getAttribute('data-disabled')));
+      const edit=edits.length===1?edits[0]:null;
+      let parameterEdit=null;
+      if(edit&&visible(edit)&&getComputedStyle(edit).pointerEvents!=='none'){
+        const point=edit.getBoundingClientRect();
+        if(point.width>0&&point.height>0)parameterEdit={x:Math.round(point.x+point.width/2),y:Math.round(point.y+point.height/2)};
+      }
+      const check=row.querySelector('[data-component="menu-item-right"] [data-icon-name="check"]');
+      const ownCheck=!!check&&check.closest('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]')===row;
       rows.push({
         text,
         kind,
-        selected:row.getAttribute('data-selected')==='true'||row.getAttribute('aria-checked')==='true'||!!row.querySelector('.ui-model-picker__item-check,.ui-model-picker__param-check'),
+        modelId:itemName&&itemName.getAttribute('data-model-picker-item-name')||null,
+        hasParameterEdit:!!edit,
+        parameterEdit,
+        selected:row.getAttribute('data-selected')==='true'||row.getAttribute('aria-checked')==='true'||ownCheck||!!row.querySelector('.ui-model-picker__item-check,.ui-model-picker__param-check'),
         disabled:row.getAttribute('data-disabled')==='true'||row.getAttribute('aria-disabled')==='true',
         pointerEvents:getComputedStyle(row).pointerEvents,
         hasSubmenu:row.getAttribute('aria-haspopup')==='menu',
@@ -1041,35 +1055,43 @@ function matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort
 // one sidebar section. The section-level New Agent action starts a draft using
 // one default project; select the exact registered file URI before any prompt
 // is filled or submitted.
-function exprSelectAgentWorkspace(projectPath) {
+function exprSelectAgentWorkspace(projectPath, options = {}) {
   return String.raw`(async function(){
-    const normalize=value=>String(value||'').replace(/\\/g,'/').replace(/^\/([a-z]:\/)/i,'$1').replace(/\/+$/,'').toLowerCase();
-    const wanted=normalize(${JSON.stringify(String(projectPath || ''))});
+    const path=${JSON.stringify(String(projectPath || ''))};
+    const expectedWorkspaceId=${JSON.stringify(options.workspaceId || null)};
+    const normalize=value=>{
+      const path=String(value||'').trim().replace(/\\/g,'/').replace(/^\/([a-z]:\/)/i,'$1').replace(/\/+$/,'');
+      return /^[a-z]:\//i.test(path)||path.startsWith('//')?path.toLowerCase():path;
+    };
+    const wanted=normalize(path);
     const visible=node=>!!(node&&(node.offsetParent!==null||(node.getClientRects&&node.getClientRects().length>0)));
     const pathTriggers=()=>[...document.querySelectorAll('button.ui-select-trigger,button[aria-haspopup="menu"]')]
-      .filter(visible).filter(node=>/^[a-z]:\//i.test(normalize(node.innerText||node.textContent)));
+      .filter(visible).filter(node=>/^(?:[a-z]:\/|\/)/i.test(normalize(node.innerText||node.textContent)));
     const triggers=pathTriggers();
     const fail=(state,extra={})=>JSON.stringify({ok:false,state,wanted,...extra,
-      nextStep:'Select the exact local workspace '+${JSON.stringify(String(projectPath || ''))}+' in the new Agent project picker before retrying.'});
+      nextStep:'Select the exact local workspace '+path+' in the new Agent project picker before retrying.'});
     if(triggers.length!==1)return fail(triggers.length?'workspace_project_selector_ambiguous':'workspace_project_selector_unavailable',{triggerCount:triggers.length});
-    if(triggers[0].getAttribute?.('aria-expanded')!=='true')triggers[0].click();
-    await new Promise(resolve=>setTimeout(resolve,350));
-    const readMenus=()=>[...new Set([...document.querySelectorAll('[data-component="menu-popup"],[role="menu"]')].filter(visible)
-      .map(menu=>menu.getAttribute('role')==='menu'&&menu.getAttribute('aria-label')==='Select a project'
-        ?menu:menu.querySelector('[role="menu"][aria-label="Select a project"]')).filter(visible))];
-    let menus=readMenus();
-    if(menus.length!==1)return fail(menus.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{menuCount:menus.length});
-    const readRows=()=>{
-      const rows=[];const seen=new Set();
-      for(const menu of menus){
-        for(const row of menu.querySelectorAll('[data-component="menu-row"][role="menuitem"],[role="option"]')){
-          if(!visible(row)||seen.has(row))continue;seen.add(row);rows.push(row);
-        }
+    const trigger=triggers[0];
+    if(trigger.getAttribute?.('aria-expanded')!=='true')trigger.click();
+    const readPopups=()=>[...document.querySelectorAll('[data-component="menu-popup"],[data-component="search-menu-popup"],[role="menu"],[role="dialog"],[role="listbox"]')].filter(visible)
+      .filter(menu=>menu.getAttribute('aria-label')==='Select a project'||menu.querySelector('[aria-label="Select a project"]'));
+    const readMenus=()=>[...new Set(readPopups()
+      .map(menu=>{
+        const nested=menu.querySelector('[role="menu"][aria-label="Select a project"],[role="listbox"][aria-label="Select a project"]');
+        return visible(nested)?nested:menu.getAttribute('aria-label')==='Select a project'||menu.querySelector('[aria-label="Select a project"]')?menu:null;
+      }).filter(visible))];
+    const waitFor=async read=>{
+      for(let attempt=0;attempt<20;attempt++){
+        const result=read();
+        if(result.length)return result;
+        await new Promise(resolve=>setTimeout(resolve,100));
       }
-      return rows;
+      return read();
     };
-    let rows=readRows();
-    let available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\s+/g,' ').trim());
+    let menus=await waitFor(readMenus);
+    if(!menus.length)return fail('workspace_project_menu_unavailable',{available:[],menuCount:0});
+    if(menus.length!==1)return fail('workspace_project_option_ambiguous',{menuCount:menus.length});
+    const modern=menus.some(menu=>/^search-menu-/.test(menu.getAttribute('data-component')||'')||['dialog','listbox'].includes(menu.getAttribute('role')));
     const rowWorkspace=row=>{
       const key=Object.keys(row).find(key=>key.startsWith('__reactFiber$'));
       const levels=[];const visited=new Set();
@@ -1089,11 +1111,10 @@ function exprSelectAgentWorkspace(projectPath) {
           root=state;currentRoot=state.current;break;
         }
       }
-      // Older pickers expose the complete path as row text without project metadata.
-      if(!hasProject)return {path:normalize(row.innerText||row.textContent)};
+      if(!hasProject)return modern?null:{path:normalize(row.innerText||row.textContent)};
       if(!root)return null;
-      // A DOM expando can retain an old fiber, including a borrowed current return
-      // chain. Prove every edge through the committed parent's child/sibling list.
+      // DOM expandos can retain old fibers. Prove every edge against the
+      // committed parent's child/sibling list before trusting project metadata.
       const currentPath=[currentRoot];const currentVisited=new Set(currentPath);
       let parent=currentRoot,nodeBudget=2048;
       for(let depth=levels.length-2;depth>=0;depth--){
@@ -1119,7 +1140,9 @@ function exprSelectAgentWorkspace(projectPath) {
       for(const project of projects){
         const identifier=project&&project.workspaceIdentifier;
         const uri=identifier&&(identifier.uri||identifier.configPath);
-        if(!project||project.remoteAuthority||!identifier||identifier.remoteAuthority||typeof identifier.id!=='string'||!identifier.id.trim()
+        if(!project||project.type&&project.type!=='workspace'||project.remoteAuthority||!identifier||identifier.remoteAuthority
+          ||typeof identifier.id!=='string'||!identifier.id.trim()
+          ||expectedWorkspaceId&&identifier.id!==expectedWorkspaceId||project.worktreePath&&!expectedWorkspaceId
           ||!uri||uri.scheme!=='file'||uri.authority||uri.remoteAuthority)return null;
         const paths=[uri.fsPath,uri._fsPath,uri.path].filter(value=>typeof value==='string'&&value.length).map(normalize);
         if(!paths.length||paths.some(path=>path!==paths[0]))return null;
@@ -1129,32 +1152,59 @@ function exprSelectAgentWorkspace(projectPath) {
       const [workspaceId,path]=JSON.parse([...identities][0]);
       return {path,workspaceId,root,currentRoot};
     };
-    const findMatches=()=>rows.map(row=>({row,identity:rowWorkspace(row)})).filter(match=>match.identity&&match.identity.path===wanted);
-    let matches=findMatches();
-    if(!matches.length){
-      // Cursor's Recents view omits older registered workspaces. Search the
-      // full path, then apply the same committed local-identity checks.
-      const searches=[...menus[0].querySelectorAll('input[aria-label="Search menu items"]')].filter(visible);
-      if(searches.length===1&&typeof HTMLInputElement!=='undefined'){
-        const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
+    const readRows=()=>{
+      menus=readMenus();
+      if(menus.length!==1)return [];
+      const rows=[];const seen=new Set();
+      for(const menu of menus){
+        for(const row of menu.querySelectorAll('[data-component="menu-row"][role="menuitem"],[role="option"]')){
+          if(!visible(row)||seen.has(row))continue;
+          seen.add(row);
+          const identity=rowWorkspace(row);
+          const text=String(row.innerText||row.textContent||'').trim();
+          const disabled=row.getAttribute?.('aria-disabled')==='true'||['','true'].includes(row.getAttribute?.('data-disabled'));
+          const matches=!disabled&&identity&&identity.path===wanted;
+          rows.push({row,text,matches,identity});
+        }
+      }
+      return rows;
+    };
+    let rows=readRows();
+    // Cursor's searchable picker initially shows basename-only recents. Search
+    // the full path to expose registered local workspaces outside that list.
+    if(!rows.some(row=>row.matches)){
+      const inputs=[...new Set(readPopups().flatMap(menu=>[...(menu.querySelectorAll?.('input[role="combobox"],input[aria-label="Search menu items"]')||[])]))].filter(visible);
+      if(inputs.length===1){
+        const input=inputs[0];
+        const searchPath=modern&&/^(?:[a-z]:\/|\/\/)/i.test(wanted)?wanted.replace(/\//g,'\\'):path;
+        const setter=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input),'value')?.set;
         if(setter){
-          setter.call(searches[0],${JSON.stringify(String(projectPath || ''))});
-          searches[0].dispatchEvent(new Event('input',{bubbles:true}));
-          await new Promise(resolve=>setTimeout(resolve,350));
-          menus=readMenus();
-          if(menus.length!==1)return fail(menus.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{menuCount:menus.length});
-          rows=readRows();
-          available=rows.map(row=>String(row.innerText||row.textContent||'').replace(/\s+/g,' ').trim());
-          matches=findMatches();
+          setter.call(input,searchPath);
+          input.dispatchEvent(new Event('input',{bubbles:true}));
         }
       }
     }
+    let matches=rows.filter(row=>row.matches);
+    if(!matches.length)matches=await waitFor(()=>{rows=readRows();return rows.filter(row=>row.matches);});
+    const available=rows.map(row=>row.text.replace(/\s+/g,' '));
     if(matches.length!==1)return fail(matches.length?'workspace_project_option_ambiguous':'workspace_project_option_unavailable',{available});
     const selected=matches[0];
     if(selected.identity.root&&selected.identity.root.current!==selected.identity.currentRoot)return fail('workspace_project_option_unavailable',{available});
     selected.row.click();
     await new Promise(resolve=>setTimeout(resolve,350));
-    return JSON.stringify({ok:true,state:'workspace_project_selection_requested',workspace:wanted,available});
+    // Selecting the already-current project can leave Cursor's search dialog
+    // open. Close only the exact project trigger, after its displayed path
+    // confirms the requested target, so its backdrop cannot block the model.
+    let expanded=pathTriggers().filter(node=>node.getAttribute?.('aria-expanded')==='true');
+    if(expanded.length){
+      if(expanded.length!==1||normalize(expanded[0].innerText||expanded[0].textContent)!==wanted)return fail('workspace_project_menu_did_not_close',{available});
+      expanded[0].click();
+      await new Promise(resolve=>setTimeout(resolve,100));
+      expanded=pathTriggers().filter(node=>node.getAttribute?.('aria-expanded')==='true');
+      if(expanded.length)return fail('workspace_project_menu_did_not_close',{available});
+    }
+    return JSON.stringify({ok:true,state:'workspace_project_selection_requested',workspace:wanted,
+      workspaceId:selected.identity.workspaceId||null,identitySource:modern?'project_picker_file_uri':'project_picker_path_text',available});
   })()`;
 }
 
@@ -3366,6 +3416,13 @@ class CursorBridge {
     for (let attempt = 0; attempt < 3; attempt++) {
       const snapshot = await this._readModelPickerRows(c);
       if (!snapshot.open) return;
+      const trigger = await this._readModelPickerTrigger(c);
+      if (snapshot.owner && ['triggerId', 'composerId', 'agentId'].some(key => (snapshot.owner[key] ?? null) !== (trigger[key] ?? null))) {
+        throw new Error('Cursor model picker changed owner before closing');
+      }
+      // A hovered model preview can consume Escape and reopen immediately.
+      // Move to this composer's trigger before dismissing the menu layers.
+      await this._hoverModelPickerPoint(c, trigger);
       await c.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
       await c.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 });
       await sleep(150);
@@ -3451,6 +3508,11 @@ class CursorBridge {
     if (immediate.row) return { ...immediate, state: 'matched', attempts: ['visible'] };
 
     const attempts = [];
+    const ownerKey = owner => owner ? JSON.stringify([owner.triggerId ?? null, owner.composerId ?? null, owner.agentId ?? null]) : null;
+    const expectedOwner = ownerKey(snapshot.owner);
+    const finish = result => ownerKey(result.snapshot?.owner) === expectedOwner
+      ? { ...result, attempts }
+      : { ...result, row: null, state: 'owner_changed', attempts: [...attempts, 'owner_changed'] };
     let effortControl = (snapshot.rows || [])
       .find((row) => row.kind === 'effort_control' && row.disabled !== true);
     if (effortControl) {
@@ -3467,6 +3529,7 @@ class CursorBridge {
         do {
           this._throwIfCancelledBeforeSend(job);
           snapshot = await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) });
+          if (ownerKey(snapshot.owner) !== expectedOwner) return finish({ snapshot });
           if (!snapshot.open) break;
           effortControl = snapshot.rows.find(row => row.kind === 'effort_control' && row.disabled !== true && row.pointerEvents !== 'none');
           if (effortControl && !modelSubmenuOpen()) { attempts.push('fresh_effort_control'); break; }
@@ -3481,14 +3544,44 @@ class CursorBridge {
       this._throwIfCancelledBeforeSend(job);
       await this._clickModelPickerPoint(c, effortControl);
       const result = await this._waitForModelPickerMatch(c, requested, 'parameter', job, { timeoutMs: 700 });
-      return { ...result, attempts };
+      return finish(result);
+    }
+
+    const matchingModels = () => (snapshot.rows || []).filter(row => row.kind === 'model' && row.disabled !== true
+      && modelRow && (modelRow.modelId ? row.modelId === modelRow.modelId : row.text === modelRow.text));
+    let editModels = matchingModels();
+    const hasEdit = modelRow && (modelRow.hasParameterEdit || modelRow.parameterEdit)
+      || editModels.length === 1 && editModels[0].hasParameterEdit;
+    if (editModels.length === 1 && editModels[0].hasParameterEdit && !editModels[0].parameterEdit) {
+      this._throwIfCancelledBeforeSend(job);
+      attempts.push('reveal_parameter_edit');
+      await this._hoverModelPickerPoint(c, editModels[0]);
+      const deadline = Date.now() + 700;
+      do {
+        this._throwIfCancelledBeforeSend(job);
+        snapshot = await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) });
+        if (ownerKey(snapshot.owner) !== expectedOwner) return finish({ snapshot });
+        editModels = matchingModels();
+        if (!snapshot.open || editModels.length !== 1 || editModels[0].parameterEdit || Date.now() >= deadline) break;
+        await sleep(Math.min(50, Math.max(0, deadline - Date.now())));
+      } while (Date.now() <= deadline);
+    }
+    if (editModels.length === 1 && editModels[0].parameterEdit) {
+      this._throwIfCancelledBeforeSend(job);
+      attempts.push('parameter_edit');
+      await this._clickModelPickerPoint(c, editModels[0].parameterEdit);
+      const result = await this._waitForModelPickerMatch(c, requested, 'parameter', job, { timeoutMs: 700 });
+      return finish(result);
+    }
+    if (hasEdit) {
+      return { ...this._inspectModelPickerRows(snapshot, requested, 'parameter'), state: 'not_rendered', attempts: [...attempts, 'parameter_edit_unavailable'] };
     }
 
     this._throwIfCancelledBeforeSend(job);
     attempts.push('model_hover');
     await this._hoverModelPickerPoint(c, modelRow);
     let result = await this._waitForModelPickerMatch(c, requested, 'parameter', job, { timeoutMs: 700 });
-    if (result.state !== 'not_rendered') return { ...result, attempts };
+    if (result.state !== 'not_rendered') return finish(result);
 
     if (modelRow && modelRow.hasSubmenu) {
       this._throwIfCancelledBeforeSend(job);
@@ -3496,7 +3589,7 @@ class CursorBridge {
       await this._clickModelPickerPoint(c, modelRow);
       result = await this._waitForModelPickerMatch(c, requested, 'parameter', job, { timeoutMs: 1100 });
     }
-    return { ...result, attempts };
+    return finish(result);
   }
 
   async _waitForSelectedModelPickerRow(c, requested, kind, job, timeoutMs = 1500) {
@@ -3822,7 +3915,7 @@ class CursorBridge {
       }
       if (created.workspaceSelectionRequired) {
         await sleep(250);
-        const selected = JSON.parse(await evalJS(c, exprSelectAgentWorkspace(options.projectPath)) || '{}');
+        const selected = JSON.parse(await evalJS(c, exprSelectAgentWorkspace(options.projectPath, { workspaceId: created.workspaceId })) || '{}');
         if (options.job) options.job.workspaceBindingChecks.project_selection = { ...selected, checkedAt: new Date().toISOString() };
         if (!selected.ok) throw createWorkspaceBindingError(selected);
       }

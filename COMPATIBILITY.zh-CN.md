@@ -9,7 +9,7 @@
 
 ## 最新发布与上次完整验收基线
 
-Cursor Bridge **6.0.9** 是最新补丁。Cursor 3.23.23 的定向 CCE 检查已通过，Cursor **3.24.9** 的完整实机验收仍待完成。下表保留上次完成的较完整验收记录，不代表 3.24.9 已通过。详见 [6.0.9 验收范围](./docs/cursor-6.0.9-verification.md)。
+Cursor Bridge **6.0.10** 是最新补丁。定向检查覆盖 Cursor **3.27.22** Agents Window 的项目选择和模型参数控件，使用 Grok 4.7/high。更完整的实机验收仍待完成。下表保留上次完成的较完整验收记录，不代表 3.27.22 的完整矩阵已通过。详见 [6.0.10 验收范围](./docs/cursor-6.0.10-verification.md)。
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|

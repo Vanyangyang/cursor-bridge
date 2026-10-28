@@ -4,6 +4,20 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [6.0.10] - 2026-10-28
+
+### Fixed
+
+- Recognize Cursor's searchable project dialog and listbox, resolve basename-only rows through their committed local file-URI metadata, and retain the registered workspace ID when selecting among same-path Worktree entries.
+- Search the complete path when Recents omits the requested project, wait within a bounded budget, and close a remaining project dialog only through its matching expanded trigger before model selection.
+- Use each model row's parameter Edit button, including controls revealed on hover, with fresh coordinates and selected-state checks. Move the pointer away from model previews before dismissing menu layers.
+
+### Validation and distribution
+
+- Added project-picker and parameter-control regressions while retaining the existing React-current-tree, composer ownership, cancellation, and pre-submission checks. Focused Cursor 3.27.22 Agents Window evidence is recorded in the [verification scope](./docs/cursor-6.0.10-verification.md).
+- Repository regression passed 479/479, the unchanged Supervisor passed 147/147, and rebuilt stdio checks passed. Focused Grok 4.7/high CCE and read-only FIFO requests completed with explicit result collection.
+- `pi-cursor-bridge` 0.2.10 and `vanyangyang-cursor-bridge` 0.1.8 embed Cursor Bridge 6.0.10. Grok Build Supervisor remains 0.4.3.
+
 ## [6.0.9] - 2026-10-09
 
 ### Fixed

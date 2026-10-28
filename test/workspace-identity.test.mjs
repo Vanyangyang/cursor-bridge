@@ -92,7 +92,10 @@ function searchableWorkspacePicker(initialSpecs, filteredSpecs, { expanded = fal
   const writes = [];
   const events = [];
   let active = initial;
-  initial.trigger.getAttribute = key => key === 'aria-expanded' ? String(expanded) : null;
+  let isExpanded = expanded;
+  const toggle = initial.trigger.click;
+  initial.trigger.click = () => { toggle(); isExpanded = !isExpanded; };
+  initial.trigger.getAttribute = key => key === 'aria-expanded' ? String(isExpanded) : null;
   class HTMLInputElement {
     constructor() { this.offsetParent = {}; }
     get value() { return this.currentValue || ''; }
@@ -105,6 +108,14 @@ function searchableWorkspacePicker(initialSpecs, filteredSpecs, { expanded = fal
   }
   const inputs = Array.from({ length: searchCount }, () => new HTMLInputElement());
   for (const picker of [initial, filtered]) {
+    for (const row of picker.rows) {
+      const select = row.click;
+      row.click = () => {
+        select();
+        initial.trigger.innerText = picker.selections.at(-1).path;
+        isExpanded = false;
+      };
+    }
     const queryRows = picker.menu.querySelectorAll;
     picker.menu.querySelectorAll = selector => selector.includes('input') ? inputs : queryRows(selector);
     picker.menu.querySelector = selector => selector.includes('input') ? inputs[0] || null : null;
