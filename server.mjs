@@ -65,7 +65,7 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.0.10';
+const PLUGIN_VERSION = '6.0.11';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -346,6 +346,26 @@ function makeClient(wsUrl, options = {}) {
   return createCdpClient(wsUrl, { origin: ORIGIN,
     connectTimeoutMs: Number(process.env.CURSOR_BRIDGE_CONNECT_TIMEOUT || 5000),
     commandTimeoutMs: Number(process.env.CURSOR_BRIDGE_CMD_TIMEOUT || 30000), ...options });
+}
+async function activateCursorRenderer(c) {
+  // Hidden Electron pages can retain closed popups and their hit-test backdrops
+  // indefinitely. Keep this CDP session's page active while a task uses the UI;
+  // this does not restore, move, or focus the native Cursor window. Chromium
+  // releases this per-session override when the client disconnects as well.
+  try {
+    await c.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+  } catch (error) {
+    if (error.code === -32601) return async () => {};
+    throw error;
+  }
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    // The caller closes the session in finally even if explicit restoration
+    // fails; cleanup must not replace a submission or transport error.
+    try { await c.send('Emulation.setFocusEmulationEnabled', { enabled: false }, { timeoutMs: 1000 }); } catch {}
+  };
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function evalJS(c, expr, options) {
@@ -721,7 +741,7 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
       const menuTestId=String(menu.getAttribute('data-testid')||'');
       const submenuRoot=row.closest('[data-submenu],[data-testid*="parameter-submenu"],[data-testid*="model-list"]');
       const submenuTestId=String((submenuRoot&&submenuRoot.getAttribute('data-testid'))||'');
-      const kind=classifyModelPickerRowKind(
+      const kind=row.getAttribute('data-testid')==='auto-mode-toggle'?'auto_control':classifyModelPickerRowKind(
         text,
         !!itemName||!!row.querySelector('.ui-model-picker__item-content-name,.vscode-model-picker__item-content-name'),
         menuTestId,
@@ -743,6 +763,7 @@ const EXPR_MODEL_PICKER_ROWS = `(function(){
       rows.push({
         text,
         kind,
+        ...(kind==='auto_control'?{menuId:menu.getAttribute('id')||null,autoMode:row.getAttribute('aria-checked')==='true'?true:row.getAttribute('aria-checked')==='false'?false:null}:{}),
         modelId:itemName&&itemName.getAttribute('data-model-picker-item-name')||null,
         hasParameterEdit:!!edit,
         parameterEdit,
@@ -763,104 +784,102 @@ function modelPickerOwnerKey(owner) {
   return owner && JSON.stringify([owner.triggerId || null, owner.composerId || null, owner.agentId || null]);
 }
 
-const EXPR_SELECTED_AGENT_MODEL_CONFIG = `(function(){
-  ${INPUT_PICKER_BODY}
-  const inputs=inputCandidates();
-  if(inputs.length!==1)return JSON.stringify({found:false,state:'input_ambiguous',inputCount:inputs.length});
-  const configs=[];
-  for(let node=inputs[0],n=0;node&&n<12;n++,node=node.parentElement){
-    const key=Object.keys(node).find(key=>key.startsWith('__reactFiber$'));
-    for(let f=key&&node[key],i=0;f&&i<48;i++,f=f.return){
-      const reference=f.memoizedProps&&f.memoizedProps.selectedAgent&&f.memoizedProps.selectedAgent.reference;
-      const handle=reference&&(reference._composerDataHandle||reference.composerDataHandle);
-      const data=handle&&(handle._cachedData||handle.data);
-      if(data&&data.modelConfig&&!configs.includes(data.modelConfig))configs.push(data.modelConfig);
-    }
-  }
-  if(configs.length>1)return JSON.stringify({found:false,state:'model_config_ambiguous',configCount:configs.length});
-  if(configs.length===1){
-    const config=configs[0];
-    return JSON.stringify({found:true,modelName:String(config.modelName||''),selectedModels:(config.selectedModels||[]).map(model=>({
-      modelId:String(model&&model.modelId||''),
-      parameters:Object.fromEntries((model&&model.parameters||[]).map(parameter=>[String(parameter&&parameter.id||''),String(parameter&&parameter.value||'')]))
-    }))});
-  }
-  // Cursor 3.23's IDE input is Solid; its model trigger is a mounted React
-  // picker whose initialSelections/initialAutoMode come from this composer.
-  const source='legacy_composer_model_trigger';
-  const fail=(state)=>JSON.stringify({found:false,state,source});
-  const input=inputs[0],composer=input.closest('.composer-bar[data-composer-id]');
-  if(!composer||input.closest('.composer-bar')!==composer
-    ||composer.parentElement&&composer.parentElement.closest('.composer-bar')
-    ||composer.querySelectorAll('.composer-bar').length)return fail('legacy_composer_ambiguous');
-  const composerId=composer.getAttribute('data-composer-id');
-  const owners=[...document.querySelectorAll('.composer-bar[data-composer-id]')]
-    .filter(node=>node.getAttribute('data-composer-id')===composerId);
-  if(typeof composerId!=='string'||!composerId.trim()||owners.length!==1||owners[0]!==composer)return fail('legacy_composer_ambiguous');
-  const triggers=[...composer.querySelectorAll('.vscode-model-picker__trigger')];
-  if(triggers.length!==1||!triggers[0].classList.contains('vscode-model-picker__trigger')
-    ||triggers[0].closest('.composer-bar')!==composer)return fail('legacy_model_trigger_ambiguous');
-  const trigger=triggers[0],keys=Object.keys(trigger).filter(key=>key.startsWith('__reactFiber$'));
-  if(keys.length!==1)return fail('legacy_model_tree_unconfirmed');
-  const levels=[],visited=new Set();
-  let root=null,currentRoot=null;
-  for(let fiber=trigger[keys[0]];fiber;fiber=fiber.return){
-    if(levels.length>=256||visited.has(fiber))return fail('legacy_model_tree_unconfirmed');
-    const alternate=fiber.alternate||null;
-    if(alternate&&(alternate===fiber||alternate.alternate!==fiber||visited.has(alternate)))return fail('legacy_model_tree_unconfirmed');
-    visited.add(fiber);if(alternate)visited.add(alternate);
-    const pair=alternate?[fiber,alternate]:[fiber];
+function readCommittedModelTriggerConfig(trigger, composer, legacy, owner) {
+  const source = legacy ? 'legacy_composer_model_trigger' : 'agents_composer_model_trigger';
+  const fail = state => ({ found: false, state: (legacy ? 'legacy_model_' : 'model_trigger_') + state, source });
+  const keys = Object.keys(trigger).filter(key => key.startsWith('__reactFiber$'));
+  if (keys.length !== 1) return fail('tree_unconfirmed');
+  const levels = [], visited = new Set();
+  let root = null, currentRoot = null;
+  for (let fiber = trigger[keys[0]]; fiber; fiber = fiber.return) {
+    if (levels.length >= 256 || visited.has(fiber)) return fail('tree_unconfirmed');
+    const alternate = fiber.alternate || null;
+    if (alternate && (alternate === fiber || alternate.alternate !== fiber || visited.has(alternate))) return fail('tree_unconfirmed');
+    visited.add(fiber); if (alternate) visited.add(alternate);
+    const pair = alternate ? [fiber, alternate] : [fiber];
     levels.push(pair);
-    const state=fiber.stateNode;
-    if(state&&state.current){
-      if(fiber.tag!==3||fiber.return||!pair.includes(state.current)||alternate&&(alternate.tag!==3||alternate.stateNode!==state))return fail('legacy_model_tree_unconfirmed');
-      root=state;currentRoot=state.current;break;
+    const state = fiber.stateNode;
+    if (state && state.current) {
+      if (fiber.tag !== 3 || fiber.return || !pair.includes(state.current)
+        || alternate && (alternate.tag !== 3 || alternate.stateNode !== state)) return fail('tree_unconfirmed');
+      root = state; currentRoot = state.current; break;
     }
   }
-  if(!root)return fail('legacy_model_tree_unconfirmed');
-  // DOM expandos may retain an old fiber or a borrowed return chain. Each
-  // edge must belong to the committed parent's actual child/sibling list.
-  const currentPath=[currentRoot],currentVisited=new Set(currentPath);
-  let parent=currentRoot,nodeBudget=2048;
-  for(let depth=levels.length-2;depth>=0;depth--){
-    const candidates=[],siblings=new Set();
-    for(let child=parent.child;child;child=child.sibling){
-      if(--nodeBudget<0||siblings.has(child))return fail('legacy_model_tree_unconfirmed');
+  if (!root) return fail('tree_unconfirmed');
+  const currentPath = [currentRoot], currentVisited = new Set(currentPath);
+  let parent = currentRoot, nodeBudget = 2048;
+  for (let depth = levels.length - 2; depth >= 0; depth--) {
+    const candidates = [], siblings = new Set();
+    for (let child = parent.child; child; child = child.sibling) {
+      if (--nodeBudget < 0 || siblings.has(child)) return fail('tree_unconfirmed');
       siblings.add(child);
-      if(levels[depth].includes(child))candidates.push(child);
+      if (levels[depth].includes(child)) candidates.push(child);
     }
-    if(candidates.length!==1||currentVisited.has(candidates[0]))return fail('legacy_model_tree_unconfirmed');
-    parent=candidates[0];currentVisited.add(parent);currentPath.push(parent);
+    if (candidates.length !== 1 || currentVisited.has(candidates[0])) return fail('tree_unconfirmed');
+    parent = candidates[0]; currentVisited.add(parent); currentPath.push(parent);
   }
-  if(parent.stateNode!==trigger)return fail('legacy_model_tree_unconfirmed');
-  const snapshots=new Set();
-  for(const fiber of currentPath){
-    const props=fiber.memoizedProps;
-    if(!props||!Object.prototype.hasOwnProperty.call(props,'initialSelections')
-      &&!Object.prototype.hasOwnProperty.call(props,'initialAutoMode'))continue;
-    if(!Object.prototype.hasOwnProperty.call(props,'initialSelections')||!Object.prototype.hasOwnProperty.call(props,'initialAutoMode')
-      ||!Array.isArray(props.initialSelections)||typeof props.initialAutoMode!=='boolean')return fail('legacy_model_schema_unconfirmed');
-    // Auto is never evidence for a named model, even if stale selections remain.
-    if(props.initialAutoMode)return fail('legacy_model_auto');
-    if(props.initialSelections.length!==1)return fail('legacy_model_selection_ambiguous');
-    const selected=props.initialSelections[0];
-    if(!selected||typeof selected.modelId!=='string'||!selected.modelId.trim()
-      ||selected.modelId!==selected.modelId.trim()||selected.count!==1||!Array.isArray(selected.parameters))return fail('legacy_model_schema_unconfirmed');
-    if(selected.modelId.toLowerCase()==='default')return fail('legacy_model_auto');
-    const parameters=[];
-    for(const parameter of selected.parameters){
-      if(!parameter||typeof parameter.id!=='string'||!parameter.id.trim()||parameter.id!==parameter.id.trim()
-        ||typeof parameter.value!=='string'||!parameter.value.length||parameters.some(entry=>entry[0]===parameter.id))return fail('legacy_model_schema_unconfirmed');
-      parameters.push([parameter.id,parameter.value]);
+  if (parent.stateNode !== trigger || !legacy && !currentPath.some(node => node.stateNode === composer)) return fail('tree_unconfirmed');
+  const snapshots = new Set(), agentIds = new Set();
+  const addAgentId = value => {
+    const id = value && typeof value === 'object' && 'value' in value ? value.value : value;
+    if (typeof id === 'string' && id.trim()) agentIds.add(id.trim().replace(/^local:/, ''));
+  };
+  for (const fiber of currentPath) {
+    const props = fiber.memoizedProps;
+    if (!props || typeof props !== 'object') continue;
+    addAgentId(props.selectedAgent && props.selectedAgent.reference && props.selectedAgent.reference.header && props.selectedAgent.reference.header.id);
+    if (!Object.prototype.hasOwnProperty.call(props, 'initialSelections')
+      && !Object.prototype.hasOwnProperty.call(props, 'initialAutoMode')) continue;
+    if (!Object.prototype.hasOwnProperty.call(props, 'initialSelections') || !Object.prototype.hasOwnProperty.call(props, 'initialAutoMode')
+      || !Array.isArray(props.initialSelections) || typeof props.initialAutoMode !== 'boolean') return fail('schema_unconfirmed');
+    if (props.initialAutoMode) return fail('auto');
+    if (props.initialSelections.length !== 1) return fail('selection_ambiguous');
+    const selected = props.initialSelections[0];
+    if (!selected || typeof selected.modelId !== 'string' || !selected.modelId.trim()
+      || selected.modelId !== selected.modelId.trim() || selected.count !== 1 || !Array.isArray(selected.parameters)) return fail('schema_unconfirmed');
+    if (['auto', 'default'].includes(selected.modelId.toLowerCase())) return fail('auto');
+    const parameters = [];
+    for (const parameter of selected.parameters) {
+      if (!parameter || typeof parameter.id !== 'string' || !parameter.id.trim() || parameter.id !== parameter.id.trim()
+        || typeof parameter.value !== 'string' || !parameter.value.length || parameters.some(entry => entry[0] === parameter.id)) return fail('schema_unconfirmed');
+      parameters.push([parameter.id, parameter.value]);
     }
-    parameters.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
-    snapshots.add(JSON.stringify({modelName:selected.modelId,selectedModels:[{modelId:selected.modelId,parameters:Object.fromEntries(parameters)}]}));
+    parameters.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    snapshots.add(JSON.stringify({ modelName: selected.modelId, selectedModels: [{ modelId: selected.modelId, parameters: Object.fromEntries(parameters) }] }));
   }
-  if(!snapshots.size)return fail('legacy_model_schema_unconfirmed');
-  if(snapshots.size!==1)return fail('legacy_model_config_ambiguous');
-  const snapshot=JSON.parse([...snapshots][0]);
-  if(root.current!==currentRoot)return fail('legacy_model_tree_unconfirmed');
-  return JSON.stringify({found:true,...snapshot,source});
+  if (!snapshots.size) return fail('schema_unconfirmed');
+  if (snapshots.size !== 1) return fail('config_ambiguous');
+  if (agentIds.size > 1 || !legacy && agentIds.size !== 1) return fail('agent_ambiguous');
+  const ownerAgentId = owner && typeof owner.agentId === 'string' ? owner.agentId.replace(/^local:/, '') : null;
+  if (ownerAgentId && agentIds.size && !agentIds.has(ownerAgentId)) return fail('agent_ambiguous');
+  const snapshot = JSON.parse([...snapshots][0]);
+  if (root.current !== currentRoot) return fail('tree_unconfirmed');
+  return { found: true, verified: true, ...snapshot, source, agentId: [...agentIds][0] || ownerAgentId || null, owner };
+}
+
+const EXPR_SELECTED_AGENT_MODEL_CONFIG = `(function(){
+  ${MODEL_PICKER_VISIBLE_BODY}
+  if(inputs.length!==1)return JSON.stringify({found:false,state:'input_ambiguous',inputCount:inputs.length});
+  const input=inputs[0],legacyComposer=input.closest('.composer-bar[data-composer-id]');
+  let scope=composer,selectedTrigger=trigger,selectedOwner=owner;
+  if(legacyComposer){
+    scope=legacyComposer;
+    const fail=state=>JSON.stringify({found:false,state,source:'legacy_composer_model_trigger'});
+    if(input.closest('.composer-bar')!==scope||scope.parentElement&&scope.parentElement.closest('.composer-bar')
+      ||scope.querySelectorAll('.composer-bar').length)return fail('legacy_composer_ambiguous');
+    const id=scope.getAttribute('data-composer-id');
+    const owners=[...document.querySelectorAll('.composer-bar[data-composer-id]')].filter(node=>node.getAttribute('data-composer-id')===id);
+    if(typeof id!=='string'||!id.trim()||owners.length!==1||owners[0]!==scope)return fail('legacy_composer_ambiguous');
+    const choices=[...scope.querySelectorAll('.vscode-model-picker__trigger')];
+    if(choices.length!==1||!choices[0].classList.contains('vscode-model-picker__trigger')
+      ||choices[0].closest('.composer-bar')!==scope)return fail('legacy_model_trigger_ambiguous');
+    selectedTrigger=choices[0];
+    selectedOwner={triggerId:selectedTrigger.getAttribute('id'),composerId:id,agentId:scope.getAttribute('data-agent-id')};
+  }else if(!scope||!selectedTrigger){
+    return JSON.stringify({found:false,state:!scope?'composer_missing':'model_trigger_ambiguous'});
+  }
+  ${readCommittedModelTriggerConfig.toString()}
+  return JSON.stringify(readCommittedModelTriggerConfig(selectedTrigger,scope,!!legacyComposer,selectedOwner));
 })()`;
 
 function normalizeModelPickerText(value) {
@@ -1036,19 +1055,39 @@ function exprCreateAgentForWorkspace(projectPath) {
 function matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort) {
   if (!snapshot || snapshot.found !== true) return null;
   const requested = normalizeModelPickerModelText(requestedModel);
-  const entries = Array.isArray(snapshot.selectedModels) && snapshot.selectedModels.length
-    ? snapshot.selectedModels
-    : [{ modelId: snapshot.modelName, parameters: {} }];
-  const matches = entries.filter((entry) => {
-    const candidate = normalizeModelPickerModelText(entry && entry.modelId);
-    return candidate && candidate === requested;
-  });
-  if (matches.length !== 1) return null;
-  const match = matches[0];
+  if (!requested || ['auto', 'default'].includes(requested) || snapshot.autoMode !== undefined && snapshot.autoMode !== false) return null;
+  const entries = snapshot.selectedModels;
+  if (!Array.isArray(entries) || entries.length !== 1) return null;
+  const match = entries[0];
+  if (!match || typeof match.modelId !== 'string' || match.count !== undefined && match.count !== 1) return null;
+  const candidate = normalizeModelPickerModelText(match.modelId);
+  const named = normalizeModelPickerModelText(snapshot.modelName);
+  if (candidate !== requested || named && named !== candidate) return null;
   const parameters = match.parameters || {};
-  const effort = normalizeCursorModelEffort(parameters.reasoning_effort ?? parameters.effort, '');
+  if (typeof parameters !== 'object' || Array.isArray(parameters)) return null;
+  const reasoning = normalizeCursorModelEffort(parameters.reasoning_effort, '');
+  const legacy = normalizeCursorModelEffort(parameters.effort, '');
+  if (parameters.reasoning_effort !== undefined && !reasoning || parameters.effort !== undefined && !legacy
+    || reasoning && legacy && reasoning !== legacy) return null;
+  const effort = reasoning || legacy;
   if (requestedEffort && effort !== requestedEffort) return null;
   return { modelId: match.modelId, effort: effort || null };
+}
+
+function modelConfigMatchesJob(snapshot, job) {
+  const rawId = value => typeof value === 'string' ? value.replace(/^local:/, '') : null;
+  const expectedIds = new Set([job && job.agentId, job && job.provisionalAgentId,
+    job && job.workspaceBinding && job.workspaceBinding.agentId,
+    job && job.workspaceBindingChecks && job.workspaceBindingChecks.after_create && job.workspaceBindingChecks.after_create.agentId]
+    .map(rawId).filter(Boolean));
+  if (expectedIds.size > 1) return false;
+  const expected = [...expectedIds][0] || null;
+  const observed = rawId(snapshot.agentId || snapshot.owner && snapshot.owner.agentId);
+  const composerId = rawId(snapshot.owner && snapshot.owner.composerId);
+  if (expected && observed !== expected
+    && !(snapshot.source === 'legacy_composer_model_trigger' && composerId === expected)) return false;
+  if (job && job.composerId && composerId !== rawId(job.composerId)) return false;
+  return true;
 }
 
 // Cursor 3.21 groups multiple local workspaces for the same repository under
@@ -3205,8 +3244,10 @@ class CursorBridge {
       options.targetId = page.id;
       options.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || options.targetUiFlavor || null;
       const c = makeClient(page.webSocketDebuggerUrl);
-      await c.ready;
+      let releaseRenderer;
       try {
+        await c.ready;
+        releaseRenderer = await activateCursorRenderer(c);
         this._throwIfCancelledBeforeSend(options);
         await this._ensureChatPanel(c);
         const historyBefore = this._canBindFifoHistory(options)
@@ -3247,6 +3288,7 @@ class CursorBridge {
         options.responseBaseline = baseline;
         const providerErrorBaseline = providerErrorSignature(await this._readProviderError(c));
         await this._verifyAgentsWorkspace(c, options, 'before_send');
+        await this._verifyModelPreferenceBeforeSend(c, options, 'before_send');
         options.sendState = 'dispatching';
         try {
           await chord(c, 0, 'Enter', 'Enter', 13);
@@ -3270,7 +3312,9 @@ class CursorBridge {
           error.sent = true;
           throw error;
         }
-      } finally { c.close(); }
+      } finally {
+        try { await releaseRenderer?.(); } finally { c.close(); }
+      }
     }
   }
 
@@ -3387,13 +3431,15 @@ class CursorBridge {
           const state = trigger.state || (interactive ? 'ready' : 'trigger_missing');
           if (!attempts.includes(state)) attempts.push(state);
         }
-        if (interactive && Date.now() - stableSince >= stableMs) {
+        if (interactive && trigger.expanded !== 'true' && Date.now() - stableSince >= stableMs) {
           this._throwIfCancelledBeforeSend(job);
           await this._clickModelPickerPoint(c, trigger);
           clicked = true;
           clickedAt = Date.now();
           clickedOwner = modelPickerOwnerKey(trigger);
           attempts.push('click_once', 'wait_menu');
+        } else if (interactive && trigger.expanded === 'true' && !attempts.includes('already_expanded_wait_links')) {
+          attempts.push('already_expanded_wait_links');
         }
       } else if (!recoveryAttempted && !snapshot.open && sameOwner
         && clickedOwner === modelPickerOwnerKey(trigger)
@@ -3450,12 +3496,47 @@ class CursorBridge {
 
   async _findModelPickerModel(c, snapshot, requestedModel, job = null) {
     this._throwIfCancelledBeforeSend(job);
+    snapshot = await this._disableModelPickerAuto(c, snapshot, job);
     let modelRow = selectModelPickerRow(snapshot && snapshot.rows, requestedModel, 'model');
     if (modelRow) return { snapshot, modelRow };
     const expanded = await this._openModelPickerControl(c, snapshot, 'model_control', job);
     this._throwIfCancelledBeforeSend(job);
     modelRow = selectModelPickerRow(expanded && expanded.rows, requestedModel, 'model');
     return { snapshot: expanded, modelRow };
+  }
+
+  async _disableModelPickerAuto(c, snapshot, job = null) {
+    const controls = (snapshot?.rows || []).filter(row => row.kind === 'auto_control');
+    if (!controls.length) return snapshot;
+    const reject = (state, current = snapshot) => {
+      throw createModelSelectionError('Cursor Auto mode could not be safely disabled', `auto_${state}`, true, {
+        menu: { open: current?.open === true, owner: current?.owner || null,
+          rows: (current?.rows || []).slice(0, 20) },
+      });
+    };
+    const expectedOwner = modelPickerOwnerKey(snapshot.owner);
+    if (!snapshot.open || !snapshot.owner?.triggerId || !expectedOwner) reject('owner_unconfirmed');
+    if (controls.length !== 1) reject('control_ambiguous');
+    const control = controls[0];
+    if (!control.menuId) reject('owner_unconfirmed');
+    if (control.autoMode === false && control.selected !== true) return snapshot;
+    if (control.autoMode !== true || control.selected !== true) reject('state_unconfirmed');
+    if (control.disabled === true || control.pointerEvents === 'none') reject('control_unavailable');
+    this._throwIfCancelledBeforeSend(job);
+    await this._clickModelPickerPoint(c, control);
+    const deadline = Date.now() + 1000;
+    do {
+      this._throwIfCancelledBeforeSend(job);
+      const next = await this._readModelPickerRows(c, { timeoutMs: Math.max(1, deadline - Date.now()) });
+      this._throwIfCancelledBeforeSend(job);
+      if (modelPickerOwnerKey(next.owner) !== expectedOwner) reject('owner_changed', next);
+      const remaining = (next.rows || []).filter(row => row.kind === 'auto_control');
+      if (remaining.length > 1) reject('control_ambiguous', next);
+      if (remaining.length === 1 && remaining[0].menuId !== control.menuId) reject('owner_changed', next);
+      if (next.open && remaining.length === 1 && remaining[0].autoMode === false && remaining[0].selected !== true) return next;
+      if (Date.now() >= deadline) reject('did_not_disable', next);
+      await sleep(Math.min(100, Math.max(0, deadline - Date.now())));
+    } while (true);
   }
 
   _inspectModelPickerRows(snapshot, requested, kind) {
@@ -3614,21 +3695,22 @@ class CursorBridge {
     let modelRow = null;
     let effectiveEffort = null;
     let primaryError = null;
+    let pickerTouched = false;
+    let configurationCheck = null;
     const selectionStartedAt = Date.now();
-    let stage = 'open_picker';
+    let stage = 'verify_model_config';
     try {
-      if (this.runtimeMode === 'minimal') {
-        stage = 'verify_hidden_model_config';
-        const snapshot = await this._readSelectedAgentModelConfig(c);
-        const verified = matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort);
-        if (!verified) {
-          throw createModelSelectionError(
-            `Cursor minimal runtime could not confirm ${requestedModel}${requestedEffort ? ` / ${requestedEffort}` : ''}; switch Cursor runtime to normal and retry`,
-            'hidden_model_not_confirmed',
-            true,
-            { available: (snapshot.selectedModels || []).map((entry) => entry.modelId).filter(Boolean) },
-          );
-        }
+      this._throwIfCancelledBeforeSend(job);
+      const snapshot = await this._readSelectedAgentModelConfig(c);
+      this._throwIfCancelledBeforeSend(job);
+      const verified = snapshot.verified === true && matchSelectedAgentModelConfig(snapshot, requestedModel, requestedEffort);
+      const identityMatches = modelConfigMatchesJob(snapshot, job);
+      configurationCheck = { found: snapshot.found === true, verified: snapshot.verified === true,
+        state: snapshot.state || null, source: snapshot.source || null, matches: !!verified, identityMatches };
+      if (snapshot.verified === true && !identityMatches) {
+        throw createModelSelectionError('Cursor model configuration belongs to another Agent', 'owner_changed', true);
+      }
+      if (verified && identityMatches) {
         const result = {
           configured: true,
           applied: true,
@@ -3637,12 +3719,26 @@ class CursorBridge {
           effectiveModel: verified.modelId,
           effectiveEffort: verified.effort,
           pickerDetail: null,
-          verificationSource: 'selected_agent_model_config',
+          verificationSource: this.runtimeMode === 'minimal' ? 'selected_agent_model_config' : 'committed_composer_model_config',
+          configurationSource: snapshot.source || null,
+          requiresConfigRecheck: true,
+          verifiedAgentId: snapshot.agentId || null,
+          verifiedComposerId: snapshot.owner && snapshot.owner.composerId || null,
           verifiedAt: new Date().toISOString(),
         };
         if (job) job.modelSelection = result;
         return result;
       }
+      if (this.runtimeMode === 'minimal') {
+        stage = 'verify_hidden_model_config';
+        throw createModelSelectionError(
+          `Cursor minimal runtime could not confirm ${requestedModel}${requestedEffort ? ` / ${requestedEffort}` : ''}; switch Cursor runtime to normal and retry`,
+          'hidden_model_not_confirmed', true,
+          { available: (snapshot.selectedModels || []).map((entry) => entry.modelId).filter(Boolean) },
+        );
+      }
+      stage = 'open_picker';
+      pickerTouched = true;
       const opened = await this._openModelPicker(c, job);
       stage = 'locate_model';
       let located = await this._findModelPickerModel(c, opened, requestedModel, job);
@@ -3816,6 +3912,7 @@ class CursorBridge {
         attempts: failure.attempts || [],
         trigger: failure.trigger || null,
         lastPollError: failure.lastPollError || null,
+        configurationCheck,
         menu: failure.menu || null,
         runtimeMode: this.runtimeMode,
         lastError: primaryError.message,
@@ -3825,7 +3922,7 @@ class CursorBridge {
       if (job) job.modelSelection = diagnostic;
       throw primaryError;
     } finally {
-      try {
+      if (pickerTouched) try {
         await this._closeModelPicker(c);
       } catch (cleanupError) {
         const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
@@ -3877,6 +3974,48 @@ class CursorBridge {
     };
     if (job) job.modelSelection = result;
     return result;
+  }
+
+  async _verifyModelPreferenceBeforeSend(c, job, stage = 'before_send') {
+    const selection = job && job.modelSelection;
+    if (!selection || selection.requiresConfigRecheck !== true) return;
+    let snapshot;
+    try {
+      this._throwIfCancelledBeforeSend(job);
+      snapshot = await this._readSelectedAgentModelConfig(c);
+      this._throwIfCancelledBeforeSend(job);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      const diagnostic = { ...selection, applied: false, stage,
+        failureClass: error.cancelled ? 'cancelled_before_send' : 'picker_read_failed',
+        pickerRead: error.pickerRead || null, errorCode: error.code || null,
+        lastError: error.message, failedAt: new Date().toISOString() };
+      job.modelSelection = diagnostic;
+      error.modelSelection = diagnostic;
+      error.sent = ['dispatching', 'sent'].includes(job.sendState);
+      error.confirmedNotSent = !error.sent;
+      throw error;
+    }
+    const preference = job.modelPreference || { model: selection.requestedModel, effort: selection.requestedEffort };
+    const verified = snapshot.verified === true && matchSelectedAgentModelConfig(snapshot, preference.model, preference.effort);
+    const rawId = value => typeof value === 'string' ? value.replace(/^local:/, '') : null;
+    const frozenIdentityMatches = (!selection.verifiedAgentId || rawId(snapshot.agentId) === rawId(selection.verifiedAgentId))
+      && (!selection.verifiedComposerId || rawId(snapshot.owner && snapshot.owner.composerId) === rawId(selection.verifiedComposerId));
+    if (verified && frozenIdentityMatches && modelConfigMatchesJob(snapshot, job)) {
+      selection.lastVerifiedAt = new Date().toISOString();
+      return;
+    }
+    const error = createModelSelectionError('Cursor model configuration changed before submission', 'configuration_changed', true);
+    const diagnostic = { ...selection, applied: false, stage, failureClass: 'configuration_changed',
+      retryable: true, errorCode: error.code, lastError: error.message, failedAt: new Date().toISOString(),
+      configurationCheck: { found: snapshot.found === true, verified: snapshot.verified === true,
+        state: snapshot.state || null, source: snapshot.source || null, matches: !!verified,
+        identityMatches: frozenIdentityMatches && modelConfigMatchesJob(snapshot, job) } };
+    error.modelSelection = diagnostic;
+    error.sent = ['dispatching', 'sent'].includes(job.sendState);
+    error.confirmedNotSent = !error.sent;
+    job.modelSelection = diagnostic;
+    throw error;
   }
 
   async _readChatPanelDiagnostic(c) {
@@ -4128,6 +4267,7 @@ class CursorBridge {
     }
     try {
       await this._verifyAgentsWorkspace(c, job, 'before_send_fallback');
+      await this._verifyModelPreferenceBeforeSend(c, job, 'before_send_fallback');
     } catch (error) {
       // Enter was already dispatched. A changed target prevents another click,
       // but cannot prove that the first submission was never accepted.
@@ -4183,9 +4323,11 @@ class CursorBridge {
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
-    await c.ready;
+    let releaseRenderer;
     let sent = false;
     try {
+      await c.ready;
+      releaseRenderer = await activateCursorRenderer(c);
       this._throwIfCancelledBeforeSend(job);
       await this._ensureChatPanel(c);
       let before;
@@ -4234,6 +4376,7 @@ class CursorBridge {
       let baseline = { messageCount: 0 };
       try { baseline = JSON.parse(await evalJS(c, EXPR_SNAP)); } catch {}
       await this._verifyAgentsWorkspace(c, job, 'before_send');
+      await this._verifyModelPreferenceBeforeSend(c, job, 'before_send');
       job.sendState = 'dispatching';
       await chord(c, 0, 'Enter', 'Enter', 13);
       await this._confirmSubmission(c, baseline.messageCount || 0, providerErrorBaseline, job);
@@ -4282,8 +4425,10 @@ class CursorBridge {
       if (sent) e.sent = true;
       throw e;
     } finally {
-      await this._closeHistory(c);
-      c.close();
+      try { await this._closeHistory(c); }
+      finally {
+        try { await releaseRenderer?.(); } finally { c.close(); }
+      }
     }
   }
 
@@ -4329,9 +4474,11 @@ class CursorBridge {
     job.targetId = page.id;
     job.targetUiFlavor = page.capabilities && page.capabilities.uiFlavor || null;
     const c = makeClient(page.webSocketDebuggerUrl);
-    await c.ready;
+    let releaseRenderer;
     let sent = false;
     try {
+      await c.ready;
+      releaseRenderer = await activateCursorRenderer(c);
       this._throwIfCancelledBeforeSend(job);
       await this._ensureChatPanel(c);
       const entries = await this._readAgentEntries(c, true);
@@ -4363,6 +4510,7 @@ class CursorBridge {
       await sleep(350);
       this._throwIfCancelledBeforeSend(job);
       await this._verifyAgentsWorkspace(c, job, 'before_send');
+      await this._verifyModelPreferenceBeforeSend(c, job, 'before_send');
       job.sendState = 'dispatching';
       await chord(c, 0, 'Enter', 'Enter', 13);
       await this._confirmSubmission(c, job.responseBaseline.messageCount, providerErrorBaseline, job);
@@ -4377,8 +4525,10 @@ class CursorBridge {
       if (sent) error.sent = true;
       throw error;
     } finally {
-      await this._closeHistory(c);
-      c.close();
+      try { await this._closeHistory(c); }
+      finally {
+        try { await releaseRenderer?.(); } finally { c.close(); }
+      }
     }
   }
 
@@ -5315,6 +5465,10 @@ class CursorBridge {
       requestedEffort: full.modelSelection.requestedEffort ?? full.modelSelection.effort ?? full.modelPreference?.effort,
       effectiveModel: full.modelSelection.effectiveModel,
       effectiveEffort: full.modelSelection.effectiveEffort,
+      verificationSource: full.modelSelection.verificationSource,
+      configurationSource: full.modelSelection.configurationSource,
+      requiresConfigRecheck: full.modelSelection.requiresConfigRecheck,
+      lastVerifiedAt: full.modelSelection.lastVerifiedAt,
       failureClass: full.modelSelection.failureClass,
       stage: full.modelSelection.stage,
       elapsedMs: full.modelSelection.elapsedMs,
@@ -5324,6 +5478,7 @@ class CursorBridge {
       attempts: full.modelSelection.attempts,
       menu: full.modelSelection.menu,
       cleanupError: full.modelSelection.cleanupError,
+      configurationCheck: full.modelSelection.configurationCheck,
       retryable: full.modelSelection.retryable,
       errorCode: full.modelSelection.errorCode,
       lastError: full.modelSelection.lastError,
@@ -6006,6 +6161,7 @@ main().catch((e) => { console.error('❌ Fatal error:', e); process.exit(1); });
 }
 export {
   CursorBridge,
+  activateCursorRenderer,
   bridge,
   normalizeAllowedPath,
   normalizeDelegationMode,

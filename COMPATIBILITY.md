@@ -9,7 +9,7 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 ## Latest release and last completed baseline
 
-Cursor Bridge **6.0.10** is the latest patch. Its focused checks cover Cursor **3.27.22** Agents Window project selection and model-parameter controls with Grok 4.7/high. Broader live acceptance remains pending. The table retains the last completed broader acceptance and does not certify the complete 3.27.22 matrix. See [6.0.10 verification](./docs/cursor-6.0.10-verification.md).
+Cursor Bridge **6.0.11** is the latest patch. Its focused checks cover Cursor **3.27.22** Agents Window configuration verification and model-menu-independent submission with Grok 4.7/high. Broader live acceptance remains pending. The table retains the last completed broader acceptance and does not certify the complete 3.27.22 matrix. See [6.0.11 verification](./docs/cursor-6.0.11-verification.md).
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|

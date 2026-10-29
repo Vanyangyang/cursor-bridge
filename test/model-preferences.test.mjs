@@ -305,6 +305,7 @@ test('native Auto/Add Models parameter chrome is not a non-retryable unsupported
   const modelRow = { kind: 'model', text: 'Claude Fable 5.1 High', selected: true, hasSubmenu: true };
   const effortControl = { kind: 'effort_control', text: 'Effort High', selected: false };
   class NativeChromeBridge extends CursorBridge {
+    async _readSelectedAgentModelConfig() { return { found: false }; }
     constructor() {
       super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
       this.closeCalls = 0;
@@ -343,6 +344,7 @@ test('native Auto/Add Models parameter chrome is not a non-retryable unsupported
 test('model selection failures clean up the picker and expose structured diagnostics', async () => {
   const modelRow = { kind: 'model', text: 'Claude Fable 5.1', selected: true, hasSubmenu: true };
   class MissingEffortBridge extends CursorBridge {
+    async _readSelectedAgentModelConfig() { return { found: false }; }
     constructor() {
       super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
       this.closeCalls = 0;
@@ -375,6 +377,7 @@ test('effort confirmation never clicks the same option a second time', async () 
   const modelRow = { kind: 'model', text: 'Claude Fable 5.1', selected: true, hasSubmenu: true };
   const effortRow = { kind: 'parameter', text: 'High', selected: false };
   class UnconfirmedEffortBridge extends CursorBridge {
+    async _readSelectedAgentModelConfig() { return { found: false }; }
     constructor() {
       super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
       this.selectionClicks = 0;
@@ -403,6 +406,7 @@ test('effort confirmation never clicks the same option a second time', async () 
 test('minimal runtime verifies exact selected Agent model configuration without opening a hidden picker', async () => {
   const snapshot = {
     found: true,
+    verified: true,
     modelName: 'grok-4.7',
     selectedModels: [{ modelId: 'grok-4.7', parameters: { reasoning_effort: 'high', fast: 'false' } }],
   };
@@ -419,7 +423,7 @@ test('minimal runtime verifies exact selected Agent model configuration without 
   const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, runtimeMode: 'minimal' });
   bridge._readSelectedAgentModelConfig = async () => snapshot;
   bridge._openModelPicker = async () => assert.fail('minimal verification must not open the picker');
-  bridge._closeModelPicker = async () => {};
+  bridge._closeModelPicker = async () => assert.fail('minimal verification must not close a picker');
   const result = await bridge._applyModelPreference(null, { model: 'Cursor Grok 4.7', effort: 'high' });
   assert.equal(result.applied, true);
   assert.equal(result.verificationSource, 'selected_agent_model_config');
@@ -427,6 +431,7 @@ test('minimal runtime verifies exact selected Agent model configuration without 
 
 test('Cursor 3.21 separate root effort control is applied when model rows have no submenu', async () => {
   class SeparateRootEffortBridge extends CursorBridge {
+    async _readSelectedAgentModelConfig() { return { found: false }; }
     constructor(modelSelected) {
       super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
       this.modelRow = {
@@ -477,6 +482,7 @@ test('Cursor 3.18.25 reports the verified model row when the trigger shows only 
     hasSubmenu: false,
   };
   class Cursor31825Bridge extends CursorBridge {
+    async _readSelectedAgentModelConfig() { return { found: false }; }
     constructor() {
       super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null });
     }

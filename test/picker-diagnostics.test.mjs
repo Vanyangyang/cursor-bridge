@@ -102,6 +102,7 @@ for (const hasSubmenu of [false, true]) {
   test(`selection diagnostics identify ${hasSubmenu ? 'nested' : 'root'} effort failure before cleanup`, async () => {
     const b = bridge();
     const row = { text: 'Pinned High', kind: 'model', selected: true, hasSubmenu };
+    b._readSelectedAgentModelConfig = async () => ({ found: false });
     b._openModelPicker = async () => ({ open: true, rows: [row] });
     b._findModelPickerModel = async (_c, snapshot) => ({ snapshot, modelRow: row });
     b._readModelPickerTrigger = async () => ({ found: true, text: 'Pinned High' });

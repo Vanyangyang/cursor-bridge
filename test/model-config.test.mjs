@@ -14,8 +14,12 @@ function element(classes = [], attributes = {}) {
     classList: { contains: name => names.has(name) },
     getAttribute: name => attributes[name] ?? null,
     matches(selector) {
-      const match = /^\.([\w-]+)(?:\[([\w-]+)\])?$/.exec(selector);
-      return !!match && names.has(match[1]) && (!match[2] || attributes[match[2]] !== undefined);
+      return selector.split(',').some(part => {
+        const classes = [...part.matchAll(/\.([\w-]+)/g)].map(match => match[1]);
+        const attrs = [...part.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)];
+        return (classes.length || attrs.length) && classes.every(name => names.has(name))
+          && attrs.every(([, key, value]) => value === undefined ? attributes[key] !== undefined : attributes[key] === value);
+      });
     },
     closest(selector) {
       for (let current = this; current; current = current.parentElement) if (current.matches(selector)) return current;
@@ -49,11 +53,13 @@ function pickerProps(modelId = 'grok-4.7', effort = 'high', initialAutoMode = fa
   };
 }
 
-function legacyFixture() {
+function legacyFixture({ agents = false } = {}) {
   const body = element();
-  const composer = body.append(element(['composer-bar', 'editor'], { 'data-composer-id': 'composer-323' }));
-  const input = composer.append(element(['aislash-editor-input'], { contenteditable: 'true' }));
-  const trigger = composer.append(element(['vscode-model-picker__trigger']));
+  const shell = agents ? body.append(element([], { 'data-agent-panel-conversation-shell': 'true', 'data-glass-agent-id': 'agent-323' })) : body;
+  const composer = shell.append(element(agents ? ['ui-prompt-input'] : ['composer-bar', 'editor'], agents ? {} : { 'data-composer-id': 'composer-323' }));
+  const inputClass = agents ? 'ui-prompt-input-editor__input' : 'aislash-editor-input';
+  const input = composer.append(element([inputClass], { contenteditable: 'true' }));
+  const trigger = composer.append(element(['vscode-model-picker__trigger'], { id: 'trigger-323' }));
   const rootState = {};
   const oldRoot = { tag: 3, stateNode: rootState, return: null };
   const currentRoot = { tag: 3, stateNode: rootState, return: null };
@@ -71,12 +77,21 @@ function legacyFixture() {
   currentPicker.child = currentHost;
   rootState.current = currentRoot;
   trigger.__reactFiber$fixture = oldHost;
+  let oldComposer, currentComposer;
+  if (agents) {
+    const props = () => ({ selectedAgent: { reference: { header: { id: 'agent-323' } } } });
+    oldComposer = { tag: 5, stateNode: composer, memoizedProps: props(), return: oldRoot, child: oldPicker };
+    currentComposer = { tag: 5, stateNode: composer, memoizedProps: props(), return: currentRoot, child: currentPicker };
+    oldComposer.alternate = currentComposer; currentComposer.alternate = oldComposer;
+    oldRoot.child = oldComposer; currentRoot.child = currentComposer;
+    oldPicker.return = oldComposer; currentPicker.return = currentComposer;
+  }
   const document = {
     querySelectorAll(selector) {
-      return body.querySelectorAll(selector.includes('.aislash-editor-input') ? '.aislash-editor-input' : selector);
+      return body.querySelectorAll(selector.includes('.aislash-editor-input') ? `.${inputClass}` : selector);
     },
   };
-  return { body, composer, input, trigger, rootState, oldRoot, currentRoot, oldPicker, currentPicker, oldHost, currentHost, document };
+  return { body, shell, composer, input, trigger, rootState, oldRoot, currentRoot, oldPicker, currentPicker, oldHost, currentHost, oldComposer, currentComposer, document };
 }
 
 function assertRejected(fixture, state) {
@@ -93,6 +108,9 @@ test('legacy IDE verification reads committed model and effort while the DOM ret
   const snapshot = readModelConfig(fixture.document);
   assert.deepEqual(snapshot, {
     found: true,
+    verified: true,
+    agentId: null,
+    owner: { triggerId: 'trigger-323', composerId: 'composer-323', agentId: null },
     modelName: 'grok-4.7',
     selectedModels: [{ modelId: 'grok-4.7', parameters: { reasoning_effort: 'high' } }],
     source: 'legacy_composer_model_trigger',
@@ -147,10 +165,10 @@ test('legacy IDE reader rejects unrelated trigger class families and missing com
   const fixture = legacyFixture();
   fixture.composer.children.splice(fixture.composer.children.indexOf(fixture.trigger), 1);
   fixture.composer.append(element(['ui-model-picker__trigger']));
-  assertRejected(fixture, 'legacy_model_trigger_ambiguous');
+  assertRejected(fixture);
   const unidentified = legacyFixture();
   unidentified.composer.getAttribute = () => null;
-  assertRejected(unidentified, 'legacy_composer_ambiguous');
+  assertRejected(unidentified);
 });
 
 test('legacy IDE reader rejects unknown schemas and conflicting current selections', () => {
@@ -240,22 +258,63 @@ test('legacy IDE reader bounds ancestor and sibling proof work', () => {
   assertRejected(wide, 'legacy_model_tree_unconfirmed');
 });
 
-test('existing Agents config takes precedence and retains its snapshot shape', () => {
+test('unproven Agent caches cannot override a committed legacy trigger configuration', () => {
   const fixture = legacyFixture();
   fixture.input.__reactFiber$agents = {
     memoizedProps: { selectedAgent: { reference: { _composerDataHandle: { _cachedData: {
       modelConfig: { modelName: 'agents-model', selectedModels: [{ modelId: 'agents-model', parameters: [{ id: 'effort', value: 'high' }] }] },
     } } } } },
   };
-  assert.deepEqual(readModelConfig(fixture.document), {
-    found: true,
-    modelName: 'agents-model',
-    selectedModels: [{ modelId: 'agents-model', parameters: { effort: 'high' } }],
-  });
+  assert.equal(readModelConfig(fixture.document).modelName, 'grok-4.7');
   fixture.input.__reactFiber$agents.return = {
     memoizedProps: { selectedAgent: { reference: { composerDataHandle: { data: {
       modelConfig: { modelName: 'different-agent' },
     } } } } },
   };
-  assertRejected(fixture, 'model_config_ambiguous');
+  const snapshot = readModelConfig(fixture.document);
+  assert.equal(snapshot.verified, true);
+  assert.equal(snapshot.source, 'legacy_composer_model_trigger');
+  assert.equal(snapshot.modelName, 'grok-4.7');
+});
+
+test('Agents reader proves the current trigger, composer and unique Agent through committed edges', () => {
+  const fixture = legacyFixture({ agents: true });
+  const snapshot = readModelConfig(fixture.document);
+  assert.equal(snapshot.found, true);
+  assert.equal(snapshot.verified, true);
+  assert.equal(snapshot.source, 'agents_composer_model_trigger');
+  assert.equal(snapshot.agentId, 'agent-323');
+  assert.deepEqual(snapshot.owner, { triggerId: 'trigger-323', composerId: null, agentId: 'agent-323' });
+  assert.deepEqual(matchSelectedAgentModelConfig(snapshot, 'grok-4.7', 'high'), { modelId: 'grok-4.7', effort: 'high' });
+  assert.equal(matchSelectedAgentModelConfig(snapshot, 'other-model', 'low'), null);
+});
+
+test('Agents reader rejects stale-only metadata, unproved composer and wrong or conflicting Agent identities', () => {
+  for (const mutate of [
+    f => { f.currentPicker.memoizedProps = {}; },
+    f => { f.currentComposer.stateNode = element(); },
+    f => { f.currentComposer.memoizedProps = {}; },
+    f => { f.currentComposer.memoizedProps.selectedAgent.reference.header.id = 'wrong-agent'; },
+    f => { f.currentPicker.memoizedProps.selectedAgent = { reference: { header: { id: 'conflicting-agent' } } }; },
+    f => { f.currentComposer.child = null; },
+  ]) {
+    const fixture = legacyFixture({ agents: true });
+    mutate(fixture);
+    assertRejected(fixture);
+  }
+});
+
+test('configuration matcher rejects Auto, conflicting names, multiple models and conflicting efforts', () => {
+  const base = { found: true, verified: true, modelName: 'grok-4.7', selectedModels: [{ modelId: 'grok-4.7', parameters: { reasoning_effort: 'high' } }] };
+  for (const mutate of [
+    s => { s.modelName = 'default'; },
+    s => { s.modelName = 'Auto'; },
+    s => { s.modelName = 'other-model'; },
+    s => { s.selectedModels.push(structuredClone(s.selectedModels[0])); },
+    s => { s.selectedModels[0].count = 2; },
+    s => { s.selectedModels[0].parameters.effort = 'low'; },
+  ]) {
+    const snapshot = structuredClone(base); mutate(snapshot);
+    assert.equal(matchSelectedAgentModelConfig(snapshot, 'grok-4.7', 'high'), null);
+  }
 });

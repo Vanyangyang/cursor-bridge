@@ -4,6 +4,23 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [6.0.11] - 2026-10-29
+
+### Fixed
+
+- Read a strict committed model configuration from the exact writable composer's model trigger in normal and minimal modes. Already-matching model/effort selections no longer require opening or cleaning up the model menu.
+- Prove the current React branch, single non-Auto selection, unique parameters, and Agent ownership before accepting configuration evidence. Unproved Agent caches, multiple models, and conflicting effort fields cannot authorize the shortcut.
+- Freeze the verified Agent/composer identity and recheck the actual configuration before FIFO, parallel, continued-session, and fallback sends. Configuration changes stop submission; rechecks after Enter preserve possible-send uncertainty.
+- Wait for ownership links when a picker is already expanded instead of clicking its trigger and closing it.
+- Keep the task's renderer active through a scoped CDP override so hidden Cursor pages finish closing project popups and release their blocking backdrops. Restore the override in `finally` and close the session without moving the native window.
+- Recognize the current Auto toggle and disable it once before locating a named model. Require the same composer, menu identity, and explicit off state; ambiguous or unavailable controls cannot authorize submission.
+
+### Validation and distribution
+
+- Three fresh live Agents passed configuration verification and pre-send checks while every model-menu operation was forced to fail; no prompt was submitted by that check. Automated and rebuilt-bundle evidence is recorded in the [verification scope](./docs/cursor-6.0.11-verification.md).
+- Final repository regression passed 509/509 and the unchanged Supervisor passed 147/147. Rebuilt MCP CCE and read-only FIFO completed with Grok 4.7/high even when all model-menu operations were deliberately unavailable.
+- `pi-cursor-bridge` 0.2.11 and `vanyangyang-cursor-bridge` 0.1.9 embed Cursor Bridge 6.0.11. Grok Build Supervisor remains 0.4.3.
+
 ## [6.0.10] - 2026-10-28
 
 ### Fixed

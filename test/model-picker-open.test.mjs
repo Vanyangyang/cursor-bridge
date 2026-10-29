@@ -87,6 +87,28 @@ test('production trigger expression resolves the writable input owner and accept
   assert.deepEqual([result.x, result.y], [80, 35]);
 });
 
+test('production menu reader identifies the owned Auto toggle and its explicit state independently of its label', () => {
+  const f = pickerFixture();
+  const owned = f.menu('menu-owned');
+  const toggle = f.row(owned, 'Auto Balanced quality and speed', {
+    role: 'menuitemcheckbox', 'data-testid': 'auto-mode-toggle', 'aria-checked': 'true',
+  });
+  const foreign = f.menu('menu-foreign');
+  f.row(foreign, 'Auto', { role: 'menuitemcheckbox', 'data-testid': 'auto-mode-toggle', 'aria-checked': 'false' });
+  let rows = f.evaluate(EXPR_MODEL_PICKER_ROWS).rows;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, 'auto_control');
+  assert.equal(rows[0].menuId, 'menu-owned');
+  assert.equal(rows[0].autoMode, true);
+  assert.equal(rows[0].selected, true);
+  toggle.attrs['aria-checked'] = 'false';
+  rows = f.evaluate(EXPR_MODEL_PICKER_ROWS).rows;
+  assert.equal(rows[0].autoMode, false);
+  assert.equal(rows[0].selected, false);
+  delete toggle.attrs['aria-checked'];
+  assert.equal(f.evaluate(EXPR_MODEL_PICKER_ROWS).rows[0].autoMode, null);
+});
+
 test('production trigger expression rejects ambiguous or foreign ownership', async t => {
   for (const [name, mutate] of [
     ['multiple writable inputs', f => f.composer.append(new NodeFixture({ classes: ['ui-prompt-input-editor__input'], attrs: { contenteditable: 'true' } }))],
@@ -349,6 +371,7 @@ test('opening polls beyond 450ms for a delayed menu without toggling the trigger
 
 test('a never opening picker reports bounded diagnostics and leaves the job unsent', async () => {
   const b = createBridge();
+  b._readSelectedAgentModelConfig = async () => ({ found: false });
   const openPicker = b._openModelPicker.bind(b);
   let clicks = 0;
   b._readModelPickerTrigger = async () => readyTrigger();
@@ -416,6 +439,7 @@ test('opening cannot adopt another owner after clicking the original trigger', a
 
 test('cancellation during picker reads rejects selection before any Model control click', async () => {
   const b = createBridge();
+  b._readSelectedAgentModelConfig = async () => ({ found: false });
   const job = { id: 'cancelled-read-task', targetId: 'fixture-target', cancelRequested: false, sendState: 'not_sent' };
   let clicks = 0;
   b._readModelPickerRows = async () => {
@@ -521,6 +545,19 @@ test('an expanded trigger waits for delayed menu rendering without DOM reactivat
   assert.ok(Date.now() - clickedAt >= 60);
 });
 
+test('an initially expanded picker waits for its ownership links instead of toggling closed', async () => {
+  const b = createBridge();
+  const trigger = { ...readyTrigger(), expanded: 'true' };
+  let reads = 0;
+  b._readModelPickerTrigger = async () => trigger;
+  b._readModelPickerRows = async () => ({ open: ++reads >= 3, rows: [], owner: pickerOwner(trigger) });
+  b._clickModelPickerPoint = async () => assert.fail('already expanded picker must not be toggled');
+  b._activateClosedModelPicker = async () => assert.fail('expanded picker is not a closed-state recovery');
+  const result = await b._openModelPicker(null, null, { timeoutMs: 250, pollMs: 10, stableMs: 0 });
+  assert.equal(result.open, true);
+  assert.ok(reads >= 3);
+});
+
 test('the final polling budget does not manufacture a one-millisecond CDP read', async t => {
   const b = createBridge();
   let now = 0;
@@ -558,6 +595,7 @@ test('a real polling timeout at the deadline retains the last observations and t
   b._readModelPickerTrigger = async () => trigger;
   b._clickModelPickerPoint = async () => {};
   b._closeModelPicker = async () => {};
+  b._readSelectedAgentModelConfig = async () => ({ found: false });
   b._openModelPicker = (c, job) => openPicker(c, job, { timeoutMs: 100, pollMs: 10, stableMs: 0 });
   const job = { id: 'timeout-task', targetId: 'fixture-target', sendState: 'not_sent' };
   await assert.rejects(b._applyModelPreference(null, { model: 'grok-4.7', effort: 'high' }, job), error => {

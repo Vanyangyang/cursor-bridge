@@ -221,20 +221,20 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '6.0.10');
+  assert.equal(rootPackage.version, '6.0.11');
   assert.equal(rootPackage.name, 'cursor-bridge-workspace');
   assert.equal(rootPackage.private, true);
   assert.match(rootPackage.scripts.prepublishOnly, /repository root is private/);
-  assert.match(codexCursorManifest.version, /^6\.0\.10(?:\+codex\.)?/);
-  assert.equal(claudeCursorManifest.version, '6.0.10');
-  assert.match(serverSource, /const PLUGIN_VERSION = '6\.0\.10';/);
+  assert.match(codexCursorManifest.version, /^6\.0\.11(?:\+codex\.)?/);
+  assert.equal(claudeCursorManifest.version, '6.0.11');
+  assert.match(serverSource, /const PLUGIN_VERSION = '6\.0\.11';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '6.0.10');
+  assert.equal(claudeCursor?.version, '6.0.11');
   assert.match(claudeCursor?.description || '', /Cursor 3\.23\.12/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.4.3');
@@ -621,7 +621,7 @@ test('compatibility history preserves 6.0.8 as the last full acceptance for Curs
   assert.match(chinese, /只维护 Cursor 最新版本/);
   assert.match(english, /Latest release and last completed baseline[\s\S]*3\.23\.12[\s\S]*6\.0\.8[\s\S]*Grok 4\.7\/high/);
   assert.match(chinese, /最新发布与上次完整验收基线[\s\S]*3\.23\.12[\s\S]*6\.0\.8[\s\S]*Grok 4\.7\/high/);
-  assert.equal(data.latestRelease.cursorBridgeVersion, '6.0.10');
+  assert.equal(data.latestRelease.cursorBridgeVersion, '6.0.11');
   assert.equal(data.latestRelease.status, 'regression-verified-live-partial');
   assert.equal(data.latestRelease.pendingLiveCursorVersion, '3.27.22');
   assert.doesNotMatch(english, /Install the current version/);

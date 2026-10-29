@@ -179,9 +179,9 @@
     }
   ],
   "latestRelease": {
-    "cursorBridgeVersion": "6.0.10",
+    "cursorBridgeVersion": "6.0.11",
     "status": "regression-verified-live-partial",
-    "verification": "docs/cursor-6.0.10-verification.md",
+    "verification": "docs/cursor-6.0.11-verification.md",
     "focusedLiveCursorVersion": "3.27.22",
     "pendingLiveCursorVersion": "3.27.22"
   }
