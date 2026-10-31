@@ -1,6 +1,6 @@
 {
   "name": "pi-cursor-bridge",
-  "version": "0.2.11",
+  "version": "0.3.0",
   "description": "Windows only. Use Cursor Context Engine and bounded, explicitly continuous Cursor Agent execution from the Pi coding agent.",
   "type": "module",
   "license": "MIT",
@@ -31,13 +31,18 @@
     ],
     "skills": [
       "./skills/cce-routing",
-      "./skills/cursor-delegate"
+      "./skills/cursor-delegate",
+      "./skills/cce"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "files": [
     "extensions/",
     "dist/",
     "skills/",
+    "prompts/",
     ".codex-plugin/",
     "README.md",
     "LICENSE"
@@ -47,6 +52,6 @@
   },
   "piPackage": {
     "embeddedProduct": "Cursor Bridge",
-    "embeddedProductVersion": "6.0.11"
+    "embeddedProductVersion": "6.1.0"
   }
 }

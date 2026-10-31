@@ -9,7 +9,7 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 ## Latest release and last completed baseline
 
-Cursor Bridge **6.0.11** is the latest patch. Its focused checks cover Cursor **3.27.22** Agents Window configuration verification and model-menu-independent submission with Grok 4.7/high. Broader live acceptance remains pending. The table retains the last completed broader acceptance and does not certify the complete 3.27.22 matrix. See [6.0.11 verification](./docs/cursor-6.0.11-verification.md).
+Cursor Bridge **6.1.0** adds persistent CCE CLI/IDE source selection. Focused CLI evidence uses Cursor Agent **2026.10.22-27dcf5f** with Grok 4.7/high; see [6.1.0 verification](./docs/cce-cli-6.1.0-verification.md). IDE/Agents behavior inherits the scoped [6.0.11 checks](./docs/cursor-6.0.11-verification.md). The table retains the last completed broader IDE acceptance and does not certify a new full IDE or cross-platform CLI matrix.
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|

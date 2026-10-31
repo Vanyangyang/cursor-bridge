@@ -7,6 +7,8 @@ description: "Use Cursor Bridge's read-only cursor_context_engine for unfamiliar
 
 `cursor_context_engine` automatically inherits the persistent CCE model and reasoning-effort default configured through `cursor_model`. Do not change or reset that default unless the user explicitly asks; if selection cannot be confirmed, report the pre-send failure instead of retrying with Auto.
 
+CCE also inherits the local `cursor_cce` source choice: `ide` uses Cursor IDE/Agents, and `cli` uses the local Cursor Agent CLI in Ask mode. `/cce cli` and `/cce ide` explicitly persist that choice through the `cce` skill. Both sources retain the same intent and evidence contract. A source failure is not permission to switch sources or models.
+
 Route project-understanding questions to the cheapest evidence surface that can answer them without guessing.
 
 ## Choose CCE for project semantics

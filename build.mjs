@@ -15,6 +15,9 @@ if (!grokOnly) {
     bundle: true,
     platform: 'node',
     format: 'esm',
+    // jsonc-parser's UMD loader leaves relative dynamic requires unbundled.
+    // Its published ESM entry keeps the installed runtime dependency-free.
+    alias: { 'jsonc-parser': 'jsonc-parser/lib/esm/main.js' },
     outfile: 'dist/cursor-bridge.mjs',
     external,
     banner,

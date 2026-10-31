@@ -35,6 +35,8 @@ copyRequired(
 );
 copyRequired(join(repositoryRoot, "skills", "cce-routing"), join(cursor, "skills", "cce-routing"));
 copyRequired(join(repositoryRoot, "skills", "cursor-delegate"), join(cursor, "skills", "cursor-delegate"));
+copyRequired(join(repositoryRoot, "skills", "cce"), join(cursor, "skills", "cce"));
+copyRequired(join(repositoryRoot, "commands", "cce.md"), join(cursor, "prompts", "cce.md"));
 
 const grok = copyPackageSource("vanyangyang-grok-build-supervisor");
 copyRequired(

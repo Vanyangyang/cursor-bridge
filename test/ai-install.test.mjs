@@ -24,9 +24,10 @@ test('AI install manifest matches committed bundles, skills, and commands', () =
   assert.equal(grok.required, false);
   assert.deepEqual(cursor.npm, {
     package: 'vanyangyang-cursor-bridge',
-    version: '0.1.9',
+    version: '0.2.0',
     bundle: 'dist/cursor-bridge.mjs',
     skillsRoot: 'skills',
+    commandsRoot: 'prompts',
     bin: 'cursor-bridge-mcp',
   });
   assert.deepEqual(grok.npm, {
@@ -44,11 +45,19 @@ test('AI install manifest matches committed bundles, skills, and commands', () =
     'cursor_context_engine',
     'cursor_status',
     'cursor_model',
+    'cursor_cce',
   ]);
+  assert.deepEqual(cursor.skills, [
+    { name: 'cce-routing', path: 'skills/cce-routing' },
+    { name: 'cursor-delegate', path: 'skills/cursor-delegate' },
+    { name: 'cce', path: 'skills/cce' },
+  ]);
+  assert.deepEqual(cursor.commands, [{ name: 'cce', path: 'commands/cce.md' }]);
 
   for (const relativePath of [
     cursor.mcp.bundle,
     ...cursor.skills.map((skill) => join(skill.path, 'SKILL.md')),
+    ...cursor.commands.map((command) => command.path),
     join('skills', 'cursor-delegate', 'references', 'delegation-contract.md'),
     grok.mcp.bundle,
     ...grok.skills.map((skill) => join(skill.path, 'SKILL.md')),
@@ -73,9 +82,9 @@ test('bilingual AI install playbooks share the same completion standard', () => 
     assert.match(content, /ai-install\.manifest\.json/);
     assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\checkout/);
     assert.match(content, /%LOCALAPPDATA%\\cursor-bridge\\npm/);
-    assert.match(content, /vanyangyang-cursor-bridge@0\.1\.9/);
+    assert.match(content, /vanyangyang-cursor-bridge@0\.2\.0/);
     assert.match(content, /vanyangyang-grok-build-supervisor@0\.1\.0/);
-    assert.match(content, /source: npm:vanyangyang-cursor-bridge@0\.1\.9 \| git-checkout \| repo-workspace/);
+    assert.match(content, /source: npm:vanyangyang-cursor-bridge@0\.2\.0 \| git-checkout \| repo-workspace/);
     assert.match(content, /Windows only|只支持 Windows/);
     assert.match(content, /first-class marketplace \| generic-ai-install/);
     assert.match(content, /result: PASS \| FAIL/);
@@ -88,6 +97,9 @@ test('bilingual AI install playbooks share the same completion standard', () => 
     assert.doesNotMatch(content, /print-generic-mcp/);
     assert.match(content, /pi-cursor-bridge/);
     assert.match(content, /cursor-bridge-mcp/);
+    assert.match(content, /\/cce cli/);
+    assert.match(content, /\/cce ide/);
+    assert.match(content, /prompts\/cce\.md/);
     for (const tool of manifest.products['cursor-bridge'].requiredTools) {
       assert.match(content, new RegExp(tool));
     }

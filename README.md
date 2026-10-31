@@ -68,7 +68,7 @@ This is the plugin I use when I want Codex, Claude Code, Grok Build, or Pi to go
 
 CCE and `cursor_do` accept optional `request_context`, for example `{"sender":"model","source":"mixed"}`. `sender` declares who directly sends the request (`user/model/unknown`); `source` distinguishes user requirements from model additions (`user/model/mixed/unknown`). Separate both in mixed prompt text. Omitted values remain unknown, are not inferred from the selected model, and never grant extra permission. Task status reports the declaration for that turn.
 >
-> **Latest patch: Cursor Bridge 6.0.11.** Verifies the current composer's committed model configuration before opening a picker. An exact match uses no model-menu input and is checked again before submission. Scoped renderer activity releases hidden popup backdrops; expanded pickers and the current Auto toggle are handled without blind toggling. See the [verification scope](./docs/cursor-6.0.11-verification.md) for focused Cursor 3.27.22 Agents Window checks with Grok 4.7/high. Broader live acceptance remains pending; the completed baseline below is retained as historical evidence.
+> **Latest release: Cursor Bridge 6.1.0.** CCE can use Cursor CLI or IDE/Agents. `/cce cli` and `/cce ide` persist the local source while preserving the same query, model preferences, workspace guards and evidence format. See the [verification scope](./docs/cce-cli-6.1.0-verification.md). The completed IDE acceptance baseline below remains historical evidence.
 
 > **Live-tested environment:** Windows 11 + Cursor **3.23.12**, verified from the CLI and embedded package metadata. Cursor Bridge 6.0.8 fixes premature model-menu failure with a unique composer, linked menus, a stable hit-tested point, bounded waiting, and one verified recovery when the trigger stays closed. See the [patch verification scope](./docs/cursor-6.0.8-model-picker-verification.md) for Grok 4.7/high tests and host-loading boundaries. The [6.0.7 acceptance](./docs/cursor-3.23.12-verification.md) covers exact project selection, collapsed History, IDE and Agents Window, scoped cancellation, parallel Agents, session recovery, workspace registration, and single-window restoration. Hidden mode verifies the current model and effort; change them in normal mode first. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
 
@@ -185,6 +185,18 @@ Supported AI clients are Codex, Claude Code, Grok Build, and Pi. Those are the o
 
 Model choice sticks if you say it out loud: “Use GPT-5.6 Terra with max effort for CCE” or “Use GPT-5.6 Sol with high effort for cursor_do.” `cursor_model` stores separate defaults for CCE and `cursor_do` across AI client tasks and restarts until you change or reset them. Before every prompt, Bridge applies the selection and checks it. If that check fails, it stops instead of silently falling back to Auto.
 
+## Choose the CCE source
+
+| Command | Source |
+|---|---|
+| `/cce cli` | Local Cursor Agent CLI, fresh read-only Ask-mode request. |
+| `/cce ide` | Cursor IDE/Agents through CDP; the default. |
+| `/cce` | Show the saved source and configuration file. |
+
+Hosts may namespace the plugin command, for example `/cursor-bridge:cce cli`; the packaged `cce` skill supports the same request. `cursor_cce(action="set", source="cli"|"ide")` is the direct MCP equivalent. The user-config `cursor-bridge/cce-source.json` survives restarts and plugin updates. Each query freezes its source, workspace and model preference; switching affects later queries.
+
+Both sources use `cursor_context_engine`, the same CCE prompt and `CCE_SEARCH_RESULT` contract, and the same FIFO admission and result collection. Each uses the retrieval capabilities available in that Cursor surface. CLI requires an installed, logged-in Cursor Agent CLI and an explicitly configured model and effort that its model catalogue can verify. It runs with `--mode ask`, an exact `--model`, and an asserted workspace; directory and multi-root `.code-workspace` targets are supported. Each invocation uses a private copy of native settings and permissions so CLI model writeback does not change your standalone CLI defaults. CLI initialization and queries work without launching the IDE. Source or model failures report their cause and never silently switch transports or models. `cursor_do` keeps its existing IDE/Agents execution path.
+
 ## MCP tools
 
 | Tool | What it does |
@@ -193,6 +205,7 @@ Model choice sticks if you say it out loud: “Use GPT-5.6 Terra with max effort
 | `cursor_context_engine` | Read-only project understanding from one natural-language `query`; it can assert an intended workspace before sending. |
 | `cursor_do` | Submits a clear, bounded subtask to Cursor Agent for execution. Background submissions return a compact receipt; synchronous `background=false` returns the full result. It can assert an intended workspace before sending. |
 | `cursor_model` | Shows, sets, or resets persistent model and reasoning-effort defaults for CCE, `cursor_do`, or both. |
+| `cursor_cce` | Shows or persistently selects the CCE source, `cli` or `ide`. |
 | `cursor_status` | Reads connection, queue, runtime, persistent model defaults, and configured/effective task state. Task views are compact by default; `cursor_status(task_id, detail="result")` returns the plain complete reply and records receipt. `detail="full"` retains diagnostic task detail plus the reply. |
 | `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
 | `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery and returns an action/state summary; retrieve the reply separately with `cursor_status(task_id, detail="result")`. |

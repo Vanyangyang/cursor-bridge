@@ -20,7 +20,8 @@
         "cursor_init",
         "cursor_context_engine",
         "cursor_status",
-        "cursor_model"
+        "cursor_model",
+        "cursor_cce"
       ],
       "optionalTools": [
         "cursor_do",
@@ -36,13 +37,24 @@
         {
           "name": "cursor-delegate",
           "path": "skills/cursor-delegate"
+        },
+        {
+          "name": "cce",
+          "path": "skills/cce"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cce",
+          "path": "commands/cce.md"
         }
       ],
       "npm": {
         "package": "vanyangyang-cursor-bridge",
-        "version": "0.1.9",
+        "version": "0.2.0",
         "bundle": "dist/cursor-bridge.mjs",
         "skillsRoot": "skills",
+        "commandsRoot": "prompts",
         "bin": "cursor-bridge-mcp"
       },
       "claudeCodeOnly": {

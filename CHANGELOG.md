@@ -4,6 +4,21 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [6.1.0] - 2026-10-31
+
+### Added
+
+- Persist CCE source selection through `cursor_cce` and the packaged `/cce cli`, `/cce ide`, and `/cce` skill/command. The user-config preference survives restarts and plugin replacement; each queued query keeps its admitted source and model snapshot.
+- Run the same CCE prompt, workspace/provenance admission, FIFO queue and result contract through a fresh local Cursor Agent CLI Ask process. CLI initialization and retrieval do not require the IDE. Directory and complete multi-root JSONC `.code-workspace` targets are supported.
+- Verify Cursor CLI branding, advertised model/effort, initialization workspace and session, and a complete successful terminal result followed by process exit. Prompts use stdin with no shell interpolation. CLI cancellation and host disconnect stop the owned execution; uncertain termination retains a reservation and never falls back to IDE or another model.
+- Isolate native CLI preference writeback in a private per-invocation configuration, preserving the original settings and permissions. Add private recursion guards for Bridge tools, and keep native authentication, project rules and other MCP configuration in their native locations.
+
+### Validation and distribution
+
+- Focused acceptance and its limits are recorded in [6.1.0 verification](./docs/cce-cli-6.1.0-verification.md).
+- Repository regression passed 548/548, the unchanged Supervisor passed 147/147, and rebuilt MCP CLI retrieval completed with Grok 4.7/high while IDE CDP was unavailable. Both source selections persisted across server restarts; native CLI settings and permissions remained unchanged in the private-profile acceptance.
+- `pi-cursor-bridge` 0.3.0 and `vanyangyang-cursor-bridge` 0.2.0 embed Cursor Bridge 6.1.0 and its source-switch skill/prompt. Grok Build Supervisor remains 0.4.3.
+
 ## [6.0.11] - 2026-10-29
 
 ### Fixed

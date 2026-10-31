@@ -42,7 +42,7 @@ Rules:
 
 ```powershell
 $prefix = "$env:LOCALAPPDATA\cursor-bridge\npm"
-npm install --prefix $prefix vanyangyang-cursor-bridge@0.1.9
+npm install --prefix $prefix vanyangyang-cursor-bridge@0.2.0
 ```
 
 If the user asked for Grok Build Supervisor:
@@ -51,7 +51,7 @@ If the user asked for Grok Build Supervisor:
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-build-supervisor@0.1.0
 ```
 
-Record `source: npm:vanyangyang-cursor-bridge@0.1.9`.
+Record `source: npm:vanyangyang-cursor-bridge@0.2.0`.
 
 If `npm install` returns `E404` or another registry failure, clone `%LOCALAPPDATA%\cursor-bridge\checkout` as a fallback, record the npm error in `blockers`, and set `source: git-checkout`.
 
@@ -65,8 +65,10 @@ Cursor Bridge is here:
 - Skills root: `%LOCALAPPDATA%\cursor-bridge\npm\node_modules\vanyangyang-cursor-bridge\skills`
 - `skills/cce-routing`
 - `skills/cursor-delegate`
+- `skills/cce`
+- `prompts/cce.md` (npm) / `commands/cce.md` (git-checkout, repo-workspace)
 
-For `source: git-checkout`, the same relative paths live at the checkout root: `dist/cursor-bridge.mjs` and `skills/`. For `source: repo-workspace`, use those two locations in the current repository.
+For `source: git-checkout`, use `dist/cursor-bridge.mjs`, `skills/`, and `commands/cce.md` at the checkout root. For `source: repo-workspace`, use those locations in the current repository. Register the command or prompt using this AI client’s own convention when supported.
 
 MCP must use `"node"` plus the **absolute** bundle path above. Relative bundle paths fail the install. Do not delete unrelated servers already in the AI client.
 
@@ -92,6 +94,8 @@ After registration, restart the current AI client so MCP and skills load. An alr
 
 If `cursor_init` returns `close_cursor_and_retry`, tell the user to save work, close Cursor normally once, and retry. That is an incomplete install, not a success.
 
+Use `/cce cli` or `/cce ide` to persist the CCE source across restarts. Where slash commands are unavailable, call `cursor_cce(action="set", source="cli")` or `cursor_cce(action="set", source="ide")`; `cursor_cce(action="show")` reads the selection. This changes only the source, not the model or the shared CCE request/result contract. The default is `ide`. CLI execution requires an installed, authenticated Cursor CLI. Source selection alone does not verify a live CLI request.
+
 ## Completion standard
 
 Fill every field. Use `PASS` only when every required item is true.
@@ -100,13 +104,13 @@ Fill every field. Use `PASS` only when every required item is true.
 ## Cursor Bridge install report
 - host: <AI client name>
 - path: first-class marketplace | generic-ai-install
-- source: npm:vanyangyang-cursor-bridge@0.1.9 | git-checkout | repo-workspace
+- source: npm:vanyangyang-cursor-bridge@0.2.0 | git-checkout | repo-workspace
 - checkout: <absolute npm prefix, git checkout, or repo path>
 - mcpConfig: <absolute config file>
 - mcpBundle: <absolute dist/cursor-bridge.mjs>
 - mcpTools: <comma-separated visible tool names>
 - skillsRoot: <absolute path> | skills_unsupported
-- skills: cce-routing=<ok|missing|unsupported> cursor-delegate=<ok|missing|unsupported>
+- skills: cce-routing=<ok|missing|unsupported> cursor-delegate=<ok|missing|unsupported> cce=<ok|missing|unsupported>
 - init: ready | failed | close_cursor_and_retry | skipped-first-class
 - workspace: <absolute path or none>
 - grok: skipped | installed | failed
@@ -122,7 +126,7 @@ Fill every field. Use `PASS` only when every required item is true.
 - `source` is `npm:vanyangyang-cursor-bridge@<manifest version>`, or a recorded npm failure plus `git-checkout` / `repo-workspace`.
 - The install contains the Cursor Bridge bundle from that source.
 - MCP config uses `node` plus an absolute `dist/cursor-bridge.mjs` path.
-- After this AI client restarts, `cursor_init`, `cursor_context_engine`, `cursor_status`, and `cursor_model` are visible.
+- After this AI client restarts, `cursor_init`, `cursor_context_engine`, `cursor_status`, `cursor_model`, and `cursor_cce` are visible.
 - Skills are registered from the directories above using this AI client's own placement, and were not rewritten; or `skills_unsupported` is reported with the reason.
 - `cursor_init` is `ready` for the intended workspace, or the report records `close_cursor_and_retry` and `result` is `FAIL`.
 - No npm publish, no ACL change, no mass-stop of Node or PowerShell, and no Pi package or extra product name was used.

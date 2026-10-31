@@ -9,7 +9,7 @@
 
 ## 最新发布与上次完整验收基线
 
-Cursor Bridge **6.0.11** 是最新补丁。定向检查覆盖 Cursor **3.27.22** Agents Window 的配置核验及不依赖模型菜单的发送流程，使用 Grok 4.7/high。更完整的实机验收仍待完成。下表保留上次完成的较完整验收记录，不代表 3.27.22 的完整矩阵已通过。详见 [6.0.11 验收范围](./docs/cursor-6.0.11-verification.md)。
+Cursor Bridge **6.1.0** 新增持久 CCE CLI/IDE 来源切换。CLI 定向证据使用 Cursor Agent **2026.10.22-27dcf5f** 与 Grok 4.7/high，见 [6.1.0 验收范围](./docs/cce-cli-6.1.0-verification.md)。IDE/Agents 行为沿用 [6.0.11 定向检查](./docs/cursor-6.0.11-verification.md)。下表保留上次较完整的 IDE 验收记录，不代表新的完整 IDE 或跨平台 CLI 矩阵已通过。
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|

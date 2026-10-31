@@ -10,7 +10,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const requiredTools = [
   'cursor_init', 'cursor_context_engine', 'cursor_do', 'cursor_task_control',
-  'cursor_session_control', 'cursor_runtime', 'cursor_model', 'cursor_status',
+  'cursor_session_control', 'cursor_runtime', 'cursor_model', 'cursor_status', 'cursor_cce',
 ];
 
 function payload(result) {
@@ -44,6 +44,7 @@ async function smoke() {
     CURSOR_BRIDGE_RUNTIME_FILE: join(scratch, 'runtime.json'),
     CURSOR_BRIDGE_MODEL_PREFERENCES_FILE: join(scratch, 'models.json'),
     CURSOR_BRIDGE_SESSION_FILE: join(scratch, 'sessions.json'),
+    CURSOR_BRIDGE_CCE_SOURCE_FILE: join(scratch, 'cce-source.json'),
   };
   let client;
   // Reserve a private port and reject its probes, so status never contacts a real Cursor.
@@ -55,6 +56,7 @@ async function smoke() {
       { version: 1, mode: 'normal' },
       { version: 1, targets: { cce: null, cursor_do: null }, updatedAt: null },
       { version: 1, sessions: {}, updatedAt: null },
+      { version: 1, source: 'ide', updatedAt: null },
     ];
     const snapshots = Object.values(files).map((file, index) => {
       const text = `${JSON.stringify(configs[index])}\n`;
@@ -126,6 +128,9 @@ async function smoke() {
     const model = await call('cursor_model', { action: 'show' });
     assert.notEqual(model.isError, true, 'Read-only model inspection must succeed');
     assert.deepEqual(payload(model).modelPreferences, before.modelPreferences);
+    const source = await call('cursor_cce', { action: 'show' });
+    assert.notEqual(source.isError, true);
+    assert.equal(payload(source).cceSource, 'ide');
     // Empty arguments are the read-only runtime view; action=show can alter presentation.
     const runtimeSchema = definitions.get('cursor_runtime').inputSchema;
     let runtimeShow = 'skipped-schema-requires-arguments';

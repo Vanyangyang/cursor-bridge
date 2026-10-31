@@ -68,7 +68,7 @@ Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
-> **最新补丁：Cursor Bridge 6.0.11。** 打开选择器前先核对当前输入区的已提交模型配置；精确匹配时不操作模型菜单，并在发送前再次复核。任务期间保持页面渲染，释放隐藏弹窗的残留遮罩；已展开菜单和新版 Auto 开关均先核实状态再操作。详见[验收范围](./docs/cursor-6.0.11-verification.md)，其中记录 Cursor 3.27.22 Agents Window 与 Grok 4.7/high 的定向检查。更完整的实机验收仍待完成，下方保留已完成的历史验证依据。
+> **最新版本：Cursor Bridge 6.1.0。** CCE 可选择 Cursor CLI 或 IDE/Agents。`/cce cli`、`/cce ide` 持久保存本地来源，查询、模型偏好、工作区校验和证据格式保持一致。详见[验收范围](./docs/cce-cli-6.1.0-verification.md)。下方保留已完成的历史 IDE 验收依据。
 
 > **实机验证环境：** Windows 11 + Cursor **3.23.12**；版本由 CLI 与内置包元数据共同确认。Cursor Bridge 6.0.8 修复模型菜单提前报错：限定唯一输入区及关联菜单，确认点击位置稳定且可命中，有界等待；按钮明确保持关闭时允许一次核验后的恢复。Grok 4.7/high 测试和宿主加载边界见[补丁验收范围](./docs/cursor-6.0.8-model-picker-verification.md)。[6.0.7 验收](./docs/cursor-3.23.12-verification.md)覆盖精确项目选择、折叠 History、IDE 与 Agents Window、精确取消、并行 Agent、持续会话恢复、工作区注册及单窗口恢复。隐藏模式核验当前模型与 effort，切换选择请先使用普通模式。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
 
@@ -185,6 +185,18 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 模型可以口头指定，比如“CCE 默认使用 GPT-5.6 Terra，思考程度 max”，或“`cursor_do` 默认使用 GPT-5.6 Sol，思考程度 high”。`cursor_model` 会把 CCE 和 `cursor_do` 的默认值分开存，跨任务、跨重启都还在，除非你改或重置。Bridge 每次发送前都会套上选择并回读；对不上就停，不会悄悄退回 Auto。
 
+## 切换 CCE 来源
+
+| 指令 | 来源 |
+|---|---|
+| `/cce cli` | 本机 Cursor Agent CLI，每次使用新的只读 Ask 请求。 |
+| `/cce ide` | 通过 CDP 使用 Cursor IDE/Agents；默认来源。 |
+| `/cce` | 查看已保存的来源与配置文件。 |
+
+部分宿主会显示插件命名空间，例如 `/cursor-bridge:cce cli`；打包的 `cce` skill 支持同样的指令。对应 MCP 调用为 `cursor_cce(action="set", source="cli"|"ide")`。选择保存在用户配置目录的 `cursor-bridge/cce-source.json`，重启和升级后继续生效。每次查询固定自己的来源、项目和模型偏好，切换作用于后续查询。
+
+两种来源共用 `cursor_context_engine`、CCE 提示词、`CCE_SEARCH_RESULT` 格式、FIFO 准入与结果收取，各自使用该 Cursor 界面提供的检索能力。CLI 需要已安装并登录 Cursor Agent CLI，并配置能够从 CLI 模型目录明确核验的模型和思考程度；执行时显式传入 `--mode ask`、精确 `--model` 与项目路径，支持目录和多根 `.code-workspace`。每次调用使用原生设置与权限的私有副本，避免 CLI 的模型写回改变独立使用 CLI 时的默认值。CLI 初始化与查询无需启动 IDE。来源或模型不可用会返回原因，不会静默改换来源或模型。`cursor_do` 继续使用现有 IDE/Agents 执行路径。
+
 ## MCP 工具
 
 | 工具 | 作用 |
@@ -193,6 +205,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 | `cursor_context_engine` | 使用一个自然语言 `query` 进行只读项目理解；发送前可断言目标工作区。 |
 | `cursor_do` | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果；发送前可断言目标工作区。 |
 | `cursor_model` | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
+| `cursor_cce` | 查看或持久切换 CCE 来源：`cli` 或 `ide`。 |
 | `cursor_status` | 查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。任务视图默认精简；`cursor_status(task_id, detail="result")` 返回纯完整回复并记录收取，`detail="full"` 保留诊断任务详情和回复。 |
 | `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
 | `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`，并返回动作/状态摘要；正文需另用 `cursor_status(task_id, detail="result")` 取得。 |

@@ -479,9 +479,9 @@ var require_codegen = __commonJS({
       }
     };
     var Throw = class extends Node {
-      constructor(error2) {
+      constructor(error3) {
         super();
-        this.error = error2;
+        this.error = error3;
       }
       render({ _n }) {
         return `throw ${this.error};` + _n;
@@ -718,9 +718,9 @@ var require_codegen = __commonJS({
       }
     };
     var Catch = class extends BlockNode {
-      constructor(error2) {
+      constructor(error3) {
         super();
-        this.error = error2;
+        this.error = error3;
       }
       render(opts) {
         return `catch(${this.error})` + super.render(opts);
@@ -911,9 +911,9 @@ var require_codegen = __commonJS({
         this._blockNode(node2);
         this.code(tryBody);
         if (catchCode) {
-          const error2 = this.name("e");
-          this._currNode = node2.catch = new Catch(error2);
-          catchCode(error2);
+          const error3 = this.name("e");
+          this._currNode = node2.catch = new Catch(error3);
+          catchCode(error3);
         }
         if (finallyCode) {
           this._currNode = node2.finally = new Finally();
@@ -922,8 +922,8 @@ var require_codegen = __commonJS({
         return this._endBlockNode(Catch, Finally);
       }
       // `throw` statement
-      throw(error2) {
-        return this._leafNode(new Throw(error2));
+      throw(error3) {
+        return this._leafNode(new Throw(error3));
       }
       // start self-balancing block
       block(body, nodeCount) {
@@ -1279,10 +1279,10 @@ var require_errors = __commonJS({
     exports.keyword$DataError = {
       message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
     };
-    function reportError(cxt, error2 = exports.keywordError, errorPaths, overrideAllErrors) {
+    function reportError(cxt, error3 = exports.keywordError, errorPaths, overrideAllErrors) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error2, errorPaths);
+      const errObj = errorObjectCode(cxt, error3, errorPaths);
       if (overrideAllErrors !== null && overrideAllErrors !== void 0 ? overrideAllErrors : compositeRule || allErrors) {
         addError(gen, errObj);
       } else {
@@ -1290,10 +1290,10 @@ var require_errors = __commonJS({
       }
     }
     exports.reportError = reportError;
-    function reportExtraError(cxt, error2 = exports.keywordError, errorPaths) {
+    function reportExtraError(cxt, error3 = exports.keywordError, errorPaths) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
-      const errObj = errorObjectCode(cxt, error2, errorPaths);
+      const errObj = errorObjectCode(cxt, error3, errorPaths);
       addError(gen, errObj);
       if (!(compositeRule || allErrors)) {
         returnErrors(it, names_1.default.vErrors);
@@ -1344,19 +1344,19 @@ var require_errors = __commonJS({
       schema: new codegen_1.Name("schema"),
       parentSchema: new codegen_1.Name("parentSchema")
     };
-    function errorObjectCode(cxt, error2, errorPaths) {
+    function errorObjectCode(cxt, error3, errorPaths) {
       const { createErrors } = cxt.it;
       if (createErrors === false)
         return (0, codegen_1._)`{}`;
-      return errorObject(cxt, error2, errorPaths);
+      return errorObject(cxt, error3, errorPaths);
     }
-    function errorObject(cxt, error2, errorPaths = {}) {
+    function errorObject(cxt, error3, errorPaths = {}) {
       const { gen, it } = cxt;
       const keyValues = [
         errorInstancePath(it, errorPaths),
         errorSchemaPath(cxt, errorPaths)
       ];
-      extraErrorProps(cxt, error2, keyValues);
+      extraErrorProps(cxt, error3, keyValues);
       return gen.object(...keyValues);
     }
     function errorInstancePath({ errorPath }, { instancePath }) {
@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve9.call(this, root, ref);
+      let _sch = resolve12.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve9(root, ref) {
+    function resolve12(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3267,8 +3267,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path) {
-      let input = path;
+    function removeDotSegments(path2) {
+      let input = path2;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3673,8 +3673,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path && path !== "/" ? path : void 0;
+        const path2 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -3838,11 +3838,11 @@ var require_fast_uri = __commonJS({
         normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
-        parse3(serialize(uri, options), options);
+        parse5(serialize(uri, options), options);
       }
       return uri;
     }
-    function resolve9(baseURI, relativeURI, options) {
+    function resolve12(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -3878,8 +3878,8 @@ var require_fast_uri = __commonJS({
     function resolveComponent(base, relative, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
-        base = parse3(serialize(base, options), options);
-        relative = parse3(serialize(relative, options), options);
+        base = parse5(serialize(base, options), options);
+        relative = parse5(serialize(relative, options), options);
       }
       options = options || {};
       if (!options.tolerant && relative.scheme) {
@@ -4171,7 +4171,7 @@ var require_fast_uri = __commonJS({
       }
       return { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme };
     }
-    function parse3(uri, opts) {
+    function parse5(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
     }
     function normalizeString(uri, opts) {
@@ -4204,11 +4204,11 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve9,
+      resolve: resolve12,
       resolveComponent,
       equal,
       serialize,
-      parse: parse3
+      parse: parse5
     };
     module.exports = fastUri;
     module.exports.default = fastUri;
@@ -4610,10 +4610,10 @@ var require_core = __commonJS({
         return this;
       }
       // Add format
-      addFormat(name, format) {
-        if (typeof format == "string")
-          format = new RegExp(format);
-        this.formats[name] = format;
+      addFormat(name, format2) {
+        if (typeof format2 == "string")
+          format2 = new RegExp(format2);
+        this.formats[name] = format2;
         return this;
       }
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
@@ -4731,9 +4731,9 @@ var require_core = __commonJS({
     }
     function addInitialFormats() {
       for (const name in this.opts.formats) {
-        const format = this.opts.formats[name];
-        if (format)
-          this.addFormat(name, format);
+        const format2 = this.opts.formats[name];
+        if (format2)
+          this.addFormat(name, format2);
       }
     }
     function addInitialKeywords(defs) {
@@ -5009,7 +5009,7 @@ var require_limitNumber = __commonJS({
       exclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
       exclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
     };
-    var error2 = {
+    var error3 = {
       message: ({ keyword, schemaCode }) => (0, codegen_1.str)`must be ${KWDs[keyword].okStr} ${schemaCode}`,
       params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
     };
@@ -5018,7 +5018,7 @@ var require_limitNumber = __commonJS({
       type: "number",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
@@ -5034,7 +5034,7 @@ var require_multipleOf = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
       params: ({ schemaCode }) => (0, codegen_1._)`{multipleOf: ${schemaCode}}`
     };
@@ -5043,13 +5043,13 @@ var require_multipleOf = __commonJS({
       type: "number",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
         const res = gen.let("res");
-        const invalid = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
+        const invalid2 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid2}))`);
       }
     };
     exports.default = def;
@@ -5090,7 +5090,7 @@ var require_limitLength = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var ucs2length_1 = require_ucs2length();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxLength" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} characters`;
@@ -5102,7 +5102,7 @@ var require_limitLength = __commonJS({
       type: "string",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode, it } = cxt;
         const op = keyword === "maxLength" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -5122,7 +5122,7 @@ var require_pattern = __commonJS({
     var code_1 = require_code2();
     var util_1 = require_util();
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match pattern "${schemaCode}"`,
       params: ({ schemaCode }) => (0, codegen_1._)`{pattern: ${schemaCode}}`
     };
@@ -5131,7 +5131,7 @@ var require_pattern = __commonJS({
       type: "string",
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         const u = it.opts.unicodeRegExp ? "u" : "";
@@ -5157,7 +5157,7 @@ var require_limitProperties = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxProperties" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} properties`;
@@ -5169,7 +5169,7 @@ var require_limitProperties = __commonJS({
       type: "object",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         const op = keyword === "maxProperties" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -5188,7 +5188,7 @@ var require_required = __commonJS({
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: ({ params: { missingProperty } }) => (0, codegen_1.str)`must have required property '${missingProperty}'`,
       params: ({ params: { missingProperty } }) => (0, codegen_1._)`{missingProperty: ${missingProperty}}`
     };
@@ -5197,7 +5197,7 @@ var require_required = __commonJS({
       type: "object",
       schemaType: "array",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, schemaCode, data, $data, it } = cxt;
         const { opts } = it;
@@ -5268,7 +5268,7 @@ var require_limitItems = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message({ keyword, schemaCode }) {
         const comp = keyword === "maxItems" ? "more" : "fewer";
         return (0, codegen_1.str)`must NOT have ${comp} than ${schemaCode} items`;
@@ -5280,7 +5280,7 @@ var require_limitItems = __commonJS({
       type: "array",
       schemaType: "number",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { keyword, data, schemaCode } = cxt;
         const op = keyword === "maxItems" ? codegen_1.operators.GT : codegen_1.operators.LT;
@@ -5311,7 +5311,7 @@ var require_uniqueItems = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
-    var error2 = {
+    var error3 = {
       message: ({ params: { i, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i} are identical)`,
       params: ({ params: { i, j } }) => (0, codegen_1._)`{i: ${i}, j: ${j}}`
     };
@@ -5320,7 +5320,7 @@ var require_uniqueItems = __commonJS({
       type: "array",
       schemaType: "boolean",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, parentSchema, schemaCode, it } = cxt;
         if (!$data && !schema)
@@ -5377,14 +5377,14 @@ var require_const = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
-    var error2 = {
+    var error3 = {
       message: "must be equal to constant",
       params: ({ schemaCode }) => (0, codegen_1._)`{allowedValue: ${schemaCode}}`
     };
     var def = {
       keyword: "const",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schemaCode, schema } = cxt;
         if ($data || schema && typeof schema == "object") {
@@ -5406,7 +5406,7 @@ var require_enum = __commonJS({
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
-    var error2 = {
+    var error3 = {
       message: "must be equal to one of the allowed values",
       params: ({ schemaCode }) => (0, codegen_1._)`{allowedValues: ${schemaCode}}`
     };
@@ -5414,7 +5414,7 @@ var require_enum = __commonJS({
       keyword: "enum",
       schemaType: "array",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         if (!$data && schema.length === 0)
@@ -5493,7 +5493,7 @@ var require_additionalItems = __commonJS({
     exports.validateAdditionalItems = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
       params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
     };
@@ -5502,7 +5502,7 @@ var require_additionalItems = __commonJS({
       type: "array",
       schemaType: ["boolean", "object"],
       before: "uniqueItems",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { parentSchema, it } = cxt;
         const { items } = parentSchema;
@@ -5621,7 +5621,7 @@ var require_items2020 = __commonJS({
     var util_1 = require_util();
     var code_1 = require_code2();
     var additionalItems_1 = require_additionalItems();
-    var error2 = {
+    var error3 = {
       message: ({ params: { len } }) => (0, codegen_1.str)`must NOT have more than ${len} items`,
       params: ({ params: { len } }) => (0, codegen_1._)`{limit: ${len}}`
     };
@@ -5630,7 +5630,7 @@ var require_items2020 = __commonJS({
       type: "array",
       schemaType: ["object", "boolean"],
       before: "uniqueItems",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { schema, parentSchema, it } = cxt;
         const { prefixItems } = parentSchema;
@@ -5654,7 +5654,7 @@ var require_contains = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1.str)`must contain at least ${min} valid item(s)` : (0, codegen_1.str)`must contain at least ${min} and no more than ${max} valid item(s)`,
       params: ({ params: { min, max } }) => max === void 0 ? (0, codegen_1._)`{minContains: ${min}}` : (0, codegen_1._)`{minContains: ${min}, maxContains: ${max}}`
     };
@@ -5664,7 +5664,7 @@ var require_contains = __commonJS({
       schemaType: ["object", "boolean"],
       before: "uniqueItems",
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, data, it } = cxt;
         let min;
@@ -5842,7 +5842,7 @@ var require_propertyNames = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: "property name must be valid",
       params: ({ params }) => (0, codegen_1._)`{propertyName: ${params.propertyName}}`
     };
@@ -5850,7 +5850,7 @@ var require_propertyNames = __commonJS({
       keyword: "propertyNames",
       type: "object",
       schemaType: ["object", "boolean"],
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, data, it } = cxt;
         if ((0, util_1.alwaysValidSchema)(it, schema))
@@ -5887,7 +5887,7 @@ var require_additionalProperties = __commonJS({
     var codegen_1 = require_codegen();
     var names_1 = require_names();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: "must NOT have additional properties",
       params: ({ params }) => (0, codegen_1._)`{additionalProperty: ${params.additionalProperty}}`
     };
@@ -5897,7 +5897,7 @@ var require_additionalProperties = __commonJS({
       schemaType: ["boolean", "object"],
       allowUndefined: true,
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, data, errsCount, it } = cxt;
         if (!errsCount)
@@ -6171,7 +6171,7 @@ var require_oneOf = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: "must match exactly one schema in oneOf",
       params: ({ params }) => (0, codegen_1._)`{passingSchemas: ${params.passing}}`
     };
@@ -6179,7 +6179,7 @@ var require_oneOf = __commonJS({
       keyword: "oneOf",
       schemaType: "array",
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, schema, parentSchema, it } = cxt;
         if (!Array.isArray(schema))
@@ -6256,7 +6256,7 @@ var require_if = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: ({ params }) => (0, codegen_1.str)`must match "${params.ifClause}" schema`,
       params: ({ params }) => (0, codegen_1._)`{failingKeyword: ${params.ifClause}}`
     };
@@ -6264,7 +6264,7 @@ var require_if = __commonJS({
       keyword: "if",
       schemaType: ["object", "boolean"],
       trackErrors: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, parentSchema, it } = cxt;
         if (parentSchema.then === void 0 && parentSchema.else === void 0) {
@@ -6390,7 +6390,7 @@ var require_format = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var error2 = {
+    var error3 = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
       params: ({ schemaCode }) => (0, codegen_1._)`{format: ${schemaCode}}`
     };
@@ -6399,7 +6399,7 @@ var require_format = __commonJS({
       type: ["number", "string"],
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt, ruleType) {
         const { gen, data, $data, schema, schemaCode, it } = cxt;
         const { opts, errSchemaPath, schemaEnv, self } = it;
@@ -6416,18 +6416,18 @@ var require_format = __commonJS({
           });
           const fDef = gen.const("fDef", (0, codegen_1._)`${fmts}[${schemaCode}]`);
           const fType = gen.let("fType");
-          const format = gen.let("format");
-          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format, fDef));
+          const format2 = gen.let("format");
+          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format2, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format2, fDef));
           cxt.fail$data((0, codegen_1.or)(unknownFmt(), invalidFmt()));
           function unknownFmt() {
             if (opts.strictSchema === false)
               return codegen_1.nil;
-            return (0, codegen_1._)`${schemaCode} && !${format}`;
+            return (0, codegen_1._)`${schemaCode} && !${format2}`;
           }
           function invalidFmt() {
-            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format}(${data}) : ${format}(${data}))` : (0, codegen_1._)`${format}(${data})`;
-            const validData = (0, codegen_1._)`(typeof ${format} == "function" ? ${callFormat} : ${format}.test(${data}))`;
-            return (0, codegen_1._)`${format} && ${format} !== true && ${fType} === ${ruleType} && !${validData}`;
+            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format2}(${data}) : ${format2}(${data}))` : (0, codegen_1._)`${format2}(${data})`;
+            const validData = (0, codegen_1._)`(typeof ${format2} == "function" ? ${callFormat} : ${format2}.test(${data}))`;
+            return (0, codegen_1._)`${format2} && ${format2} !== true && ${fType} === ${ruleType} && !${validData}`;
           }
         }
         function validateFormat() {
@@ -6438,7 +6438,7 @@ var require_format = __commonJS({
           }
           if (formatDef === true)
             return;
-          const [fmtType, format, fmtRef] = getFormat(formatDef);
+          const [fmtType, format2, fmtRef] = getFormat(formatDef);
           if (fmtType === ruleType)
             cxt.pass(validCondition());
           function unknownFormat() {
@@ -6465,7 +6465,7 @@ var require_format = __commonJS({
                 throw new Error("async format in sync schema");
               return (0, codegen_1._)`await ${fmtRef}(${data})`;
             }
-            return typeof format == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
+            return typeof format2 == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
           }
         }
       }
@@ -6480,8 +6480,8 @@ var require_format2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var format_1 = require_format();
-    var format = [format_1.default];
-    exports.default = format;
+    var format2 = [format_1.default];
+    exports.default = format2;
   }
 });
 
@@ -6554,7 +6554,7 @@ var require_discriminator = __commonJS({
     var compile_1 = require_compile();
     var ref_error_1 = require_ref_error();
     var util_1 = require_util();
-    var error2 = {
+    var error3 = {
       message: ({ params: { discrError, tagName } }) => discrError === types_1.DiscrError.Tag ? `tag "${tagName}" must be string` : `value of tag "${tagName}" must be in oneOf`,
       params: ({ params: { discrError, tag, tagName } }) => (0, codegen_1._)`{error: ${discrError}, tag: ${tagName}, tagValue: ${tag}}`
     };
@@ -6562,7 +6562,7 @@ var require_discriminator = __commonJS({
       keyword: "discriminator",
       type: "object",
       schemaType: "object",
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schema, parentSchema, it } = cxt;
         const { oneOf } = parentSchema;
@@ -7094,7 +7094,7 @@ var require_limit = __commonJS({
       formatExclusiveMaximum: { okStr: "<", ok: ops.LT, fail: ops.GTE },
       formatExclusiveMinimum: { okStr: ">", ok: ops.GT, fail: ops.LTE }
     };
-    var error2 = {
+    var error3 = {
       message: ({ keyword, schemaCode }) => (0, codegen_1.str)`should be ${KWDs[keyword].okStr} ${schemaCode}`,
       params: ({ keyword, schemaCode }) => (0, codegen_1._)`{comparison: ${KWDs[keyword].okStr}, limit: ${schemaCode}}`
     };
@@ -7103,7 +7103,7 @@ var require_limit = __commonJS({
       type: "string",
       schemaType: "string",
       $data: true,
-      error: error2,
+      error: error3,
       code(cxt) {
         const { gen, data, schemaCode, keyword, it } = cxt;
         const { opts, self } = it;
@@ -7123,17 +7123,17 @@ var require_limit = __commonJS({
           cxt.fail$data((0, codegen_1.or)((0, codegen_1._)`typeof ${fmt} != "object"`, (0, codegen_1._)`${fmt} instanceof RegExp`, (0, codegen_1._)`typeof ${fmt}.compare != "function"`, compareCode(fmt)));
         }
         function validateFormat() {
-          const format = fCxt.schema;
-          const fmtDef = self.formats[format];
+          const format2 = fCxt.schema;
+          const fmtDef = self.formats[format2];
           if (!fmtDef || fmtDef === true)
             return;
           if (typeof fmtDef != "object" || fmtDef instanceof RegExp || typeof fmtDef.compare != "function") {
-            throw new Error(`"${keyword}": format "${format}" does not define "compare" function`);
+            throw new Error(`"${keyword}": format "${format2}" does not define "compare" function`);
           }
           const fmt = gen.scopeValue("formats", {
-            key: format,
+            key: format2,
             ref: fmtDef,
-            code: opts.code.formats ? (0, codegen_1._)`${opts.code.formats}${(0, codegen_1.getProperty)(format)}` : void 0
+            code: opts.code.formats ? (0, codegen_1._)`${opts.code.formats}${(0, codegen_1.getProperty)(format2)}` : void 0
           });
           cxt.fail$data(compareCode(fmt));
         }
@@ -8105,26 +8105,26 @@ var require_receiver = __commonJS({
         }
         const buf = this.consume(2);
         if ((buf[0] & 48) !== 0) {
-          const error2 = this.createError(
+          const error3 = this.createError(
             RangeError,
             "RSV2 and RSV3 must be clear",
             true,
             1002,
             "WS_ERR_UNEXPECTED_RSV_2_3"
           );
-          cb(error2);
+          cb(error3);
           return;
         }
         const compressed = (buf[0] & 64) === 64;
         if (compressed && !this._extensions[PerMessageDeflate2.extensionName]) {
-          const error2 = this.createError(
+          const error3 = this.createError(
             RangeError,
             "RSV1 must be clear",
             true,
             1002,
             "WS_ERR_UNEXPECTED_RSV_1"
           );
-          cb(error2);
+          cb(error3);
           return;
         }
         this._fin = (buf[0] & 128) === 128;
@@ -8132,109 +8132,109 @@ var require_receiver = __commonJS({
         this._payloadLength = buf[1] & 127;
         if (this._opcode === 0) {
           if (compressed) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               "RSV1 must be clear",
               true,
               1002,
               "WS_ERR_UNEXPECTED_RSV_1"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
           if (!this._fragmented) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               "invalid opcode 0",
               true,
               1002,
               "WS_ERR_INVALID_OPCODE"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
           this._opcode = this._fragmented;
         } else if (this._opcode === 1 || this._opcode === 2) {
           if (this._fragmented) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               `invalid opcode ${this._opcode}`,
               true,
               1002,
               "WS_ERR_INVALID_OPCODE"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
           this._compressed = compressed;
         } else if (this._opcode > 7 && this._opcode < 11) {
           if (!this._fin) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               "FIN must be set",
               true,
               1002,
               "WS_ERR_EXPECTED_FIN"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
           if (compressed) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               "RSV1 must be clear",
               true,
               1002,
               "WS_ERR_UNEXPECTED_RSV_1"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
           if (this._payloadLength > 125 || this._opcode === 8 && this._payloadLength === 1) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               `invalid payload length ${this._payloadLength}`,
               true,
               1002,
               "WS_ERR_INVALID_CONTROL_PAYLOAD_LENGTH"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
         } else {
-          const error2 = this.createError(
+          const error3 = this.createError(
             RangeError,
             `invalid opcode ${this._opcode}`,
             true,
             1002,
             "WS_ERR_INVALID_OPCODE"
           );
-          cb(error2);
+          cb(error3);
           return;
         }
         if (!this._fin && !this._fragmented) this._fragmented = this._opcode;
         this._masked = (buf[1] & 128) === 128;
         if (this._isServer) {
           if (!this._masked) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               "MASK must be set",
               true,
               1002,
               "WS_ERR_EXPECTED_MASK"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
         } else if (this._masked) {
-          const error2 = this.createError(
+          const error3 = this.createError(
             RangeError,
             "MASK must be clear",
             true,
             1002,
             "WS_ERR_UNEXPECTED_MASK"
           );
-          cb(error2);
+          cb(error3);
           return;
         }
         if (this._payloadLength === 126) this._state = GET_PAYLOAD_LENGTH_16;
@@ -8269,14 +8269,14 @@ var require_receiver = __commonJS({
         const buf = this.consume(8);
         const num = buf.readUInt32BE(0);
         if (num > Math.pow(2, 53 - 32) - 1) {
-          const error2 = this.createError(
+          const error3 = this.createError(
             RangeError,
             "Unsupported WebSocket frame: payload length > 2^53 - 1",
             false,
             1009,
             "WS_ERR_UNSUPPORTED_DATA_PAYLOAD_LENGTH"
           );
-          cb(error2);
+          cb(error3);
           return;
         }
         this._payloadLength = num * Math.pow(2, 32) + buf.readUInt32BE(4);
@@ -8292,14 +8292,14 @@ var require_receiver = __commonJS({
         if (this._payloadLength && this._opcode < 8) {
           this._totalPayloadLength += this._payloadLength;
           if (this._totalPayloadLength > this._maxPayload && this._maxPayload > 0) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               RangeError,
               "Max payload size exceeded",
               false,
               1009,
               "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
         }
@@ -8342,14 +8342,14 @@ var require_receiver = __commonJS({
           return;
         }
         if (this._maxFragments > 0 && ++this._numFragments > this._maxFragments) {
-          const error2 = this.createError(
+          const error3 = this.createError(
             RangeError,
             "Too many message fragments",
             false,
             1008,
             "WS_ERR_TOO_MANY_BUFFERED_PARTS"
           );
-          cb(error2);
+          cb(error3);
           return;
         }
         if (this._compressed) {
@@ -8377,14 +8377,14 @@ var require_receiver = __commonJS({
           if (buf.length) {
             this._messageLength += buf.length;
             if (this._messageLength > this._maxPayload && this._maxPayload > 0) {
-              const error2 = this.createError(
+              const error3 = this.createError(
                 RangeError,
                 "Max payload size exceeded",
                 false,
                 1009,
                 "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
               );
-              cb(error2);
+              cb(error3);
               return;
             }
             this._fragments.push(buf);
@@ -8436,14 +8436,14 @@ var require_receiver = __commonJS({
         } else {
           const buf = concat(fragments, messageLength);
           if (!this._skipUTF8Validation && !isValidUTF8(buf)) {
-            const error2 = this.createError(
+            const error3 = this.createError(
               Error,
               "invalid UTF-8 sequence",
               true,
               1007,
               "WS_ERR_INVALID_UTF8"
             );
-            cb(error2);
+            cb(error3);
             return;
           }
           if (this._state === INFLATING || this._allowSynchronousEvents) {
@@ -8475,14 +8475,14 @@ var require_receiver = __commonJS({
           } else {
             const code = data.readUInt16BE(0);
             if (!isValidStatusCode(code)) {
-              const error2 = this.createError(
+              const error3 = this.createError(
                 RangeError,
                 `invalid status code ${code}`,
                 true,
                 1002,
                 "WS_ERR_INVALID_CLOSE_CODE"
               );
-              cb(error2);
+              cb(error3);
               return;
             }
             const buf = new FastBuffer(
@@ -8491,14 +8491,14 @@ var require_receiver = __commonJS({
               data.length - 2
             );
             if (!this._skipUTF8Validation && !isValidUTF8(buf)) {
-              const error2 = this.createError(
+              const error3 = this.createError(
                 Error,
                 "invalid UTF-8 sequence",
                 true,
                 1007,
                 "WS_ERR_INVALID_UTF8"
               );
-              cb(error2);
+              cb(error3);
               return;
             }
             this._loop = false;
@@ -9212,10 +9212,10 @@ var require_event_target = __commonJS({
             callListener(handler, this, event);
           };
         } else if (type === "error") {
-          wrapper = function onError(error2) {
+          wrapper = function onError(error3) {
             const event = new ErrorEvent("error", {
-              error: error2,
-              message: error2.message
+              error: error3,
+              message: error3.message
             });
             event[kTarget] = this;
             callListener(handler, this, event);
@@ -9279,7 +9279,7 @@ var require_extension = __commonJS({
       if (dest[name] === void 0) dest[name] = [elem];
       else dest[name].push(elem);
     }
-    function parse3(header) {
+    function parse5(header) {
       const offers = /* @__PURE__ */ Object.create(null);
       let params = /* @__PURE__ */ Object.create(null);
       let mustUnescape = false;
@@ -9404,7 +9404,7 @@ var require_extension = __commonJS({
       }
       return offers;
     }
-    function format(extensions) {
+    function format2(extensions) {
       return Object.keys(extensions).map((extension2) => {
         let configurations = extensions[extension2];
         if (!Array.isArray(configurations)) configurations = [configurations];
@@ -9419,7 +9419,7 @@ var require_extension = __commonJS({
         }).join(", ");
       }).join(", ");
     }
-    module.exports = { format, parse: parse3 };
+    module.exports = { format: format2, parse: parse5 };
   }
 });
 
@@ -9453,7 +9453,7 @@ var require_websocket = __commonJS({
     var {
       EventTarget: { addEventListener, removeEventListener }
     } = require_event_target();
-    var { format, parse: parse3 } = require_extension();
+    var { format: format2, parse: parse5 } = require_extension();
     var { toBuffer } = require_buffer_util();
     var kAborted = Symbol("kAborted");
     var protocolVersions = [8, 13];
@@ -9993,7 +9993,7 @@ var require_websocket = __commonJS({
           isServer: false,
           maxPayload: opts.maxPayload
         });
-        opts.headers["Sec-WebSocket-Extensions"] = format({
+        opts.headers["Sec-WebSocket-Extensions"] = format2({
           [PerMessageDeflate2.extensionName]: perMessageDeflate.offer()
         });
       }
@@ -10130,7 +10130,7 @@ var require_websocket = __commonJS({
           }
           let extensions;
           try {
-            extensions = parse3(secWebSocketExtensions);
+            extensions = parse5(secWebSocketExtensions);
           } catch (err) {
             const message = "Invalid Sec-WebSocket-Extensions header";
             abortHandshake(websocket, socket, message);
@@ -10353,7 +10353,7 @@ var require_stream = __commonJS({
         const data = !isBinary && duplex._readableState.objectMode ? msg.toString() : msg;
         if (!duplex.push(data)) ws.pause();
       });
-      ws.once("error", function error2(err) {
+      ws.once("error", function error3(err) {
         if (duplex.destroyed) return;
         terminateOnDestroy = false;
         duplex.destroy(err);
@@ -10369,7 +10369,7 @@ var require_stream = __commonJS({
           return;
         }
         let called = false;
-        ws.once("error", function error2(err2) {
+        ws.once("error", function error3(err2) {
           called = true;
           callback(err2);
         });
@@ -10422,7 +10422,7 @@ var require_subprotocol = __commonJS({
   "node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation2();
-    function parse3(header) {
+    function parse5(header) {
       const protocols = /* @__PURE__ */ new Set();
       let start = -1;
       let end = -1;
@@ -10458,7 +10458,7 @@ var require_subprotocol = __commonJS({
       protocols.add(protocol);
       return protocols;
     }
-    module.exports = { parse: parse3 };
+    module.exports = { parse: parse5 };
   }
 });
 
@@ -10892,9 +10892,9 @@ function readPersistedCursorRuntimeMode(filePath) {
     const candidate = typeof parsed === "string" ? parsed : parsed && parsed.mode;
     const normalized = normalizeCursorRuntimeMode(candidate, "");
     return CURSOR_RUNTIME_MODES.includes(normalized) ? normalized : null;
-  } catch (error2) {
-    if (error2 && error2.code === "ENOENT") return null;
-    console.error(`[cursor-bridge] ignoring unreadable runtime file ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+  } catch (error3) {
+    if (error3 && error3.code === "ENOENT") return null;
+    console.error(`[cursor-bridge] ignoring unreadable runtime file ${filePath}: ${error3 instanceof Error ? error3.message : String(error3)}`);
     return null;
   }
 }
@@ -10912,9 +10912,9 @@ function writePersistedCursorRuntimeMode(filePath, mode) {
       mode: 384
     });
     renameSync(temporary, target);
-  } catch (error2) {
+  } catch (error3) {
     rmSync(temporary, { force: true });
-    throw new Error(`failed to persist cursor_runtime at ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    throw new Error(`failed to persist cursor_runtime at ${target}: ${error3 instanceof Error ? error3.message : String(error3)}`);
   }
   return target;
 }
@@ -11010,14 +11010,14 @@ function setCursorWindowPresentation(options = {}) {
         rmSync(showFlagPath, { force: true });
       }
     }
-  } catch (error2) {
+  } catch (error3) {
     return {
       supported: true,
       applied: false,
       action,
       port,
       pid,
-      reason: `failed to update minimal-window override: ${error2 instanceof Error ? error2.message : String(error2)}`
+      reason: `failed to update minimal-window override: ${error3 instanceof Error ? error3.message : String(error3)}`
     };
   }
   const run = options.execFileSyncImpl || execFileSync;
@@ -11048,7 +11048,7 @@ function setCursorWindowPresentation(options = {}) {
       changedWindows,
       ...scope === "process" ? { showFlagPath } : {}
     };
-  } catch (error2) {
+  } catch (error3) {
     if (action === "show" && scope === "process") rmSync(showFlagPath, { force: true });
     return {
       supported: true,
@@ -11056,7 +11056,7 @@ function setCursorWindowPresentation(options = {}) {
       action,
       port,
       pid,
-      reason: error2 instanceof Error ? error2.message : String(error2)
+      reason: error3 instanceof Error ? error3.message : String(error3)
     };
   }
 }
@@ -11101,8 +11101,8 @@ function startMinimalWindowGuard(pid, options = {}) {
       intervalMs,
       showFlagPath
     };
-  } catch (error2) {
-    return { started: false, targetPid, reason: error2 instanceof Error ? error2.message : String(error2) };
+  } catch (error3) {
+    return { started: false, targetPid, reason: error3 instanceof Error ? error3.message : String(error3) };
   }
 }
 var CURSOR_RUNTIME_MODES, WINDOW_CONTROL_TYPE;
@@ -11364,9 +11364,9 @@ function writeWorkspaceBinding(filePath, bindingKey, projectPath, options = {}) 
   try {
     writeFileSync3(temporary, JSON.stringify(state, null, 2) + "\n", "utf8");
     renameSync3(temporary, filePath);
-  } catch (error2) {
+  } catch (error3) {
     rmSync3(temporary, { force: true });
-    throw new Error(`failed to persist cursor_init at ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    throw new Error(`failed to persist cursor_init at ${filePath}: ${error3 instanceof Error ? error3.message : String(error3)}`);
   }
   return { projectPath: normalized, updatedAt };
 }
@@ -11643,18 +11643,18 @@ function findCursorExe(options = {}) {
   return findCursorExeDetails(options)?.path || null;
 }
 function cdpUp(timeoutMs = 1500) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve12) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/version" }, (res) => {
       res.resume();
-      resolve9(res.statusCode === 200);
+      resolve12(res.statusCode === 200);
     });
-    req.on("error", () => resolve9(false));
+    req.on("error", () => resolve12(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve9(false);
+      resolve12(false);
     });
   });
 }
@@ -11664,25 +11664,25 @@ function cdpListIsCursor(payload) {
   return CURSOR_CDP_PATH.test(d);
 }
 function cdpIsCursor(timeoutMs = 1500) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve12) => {
     const req = http.get({ host: CDP_HOST, port: CDP_PORT, path: "/json/list" }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve9(cdpListIsCursor(d));
+          resolve12(cdpListIsCursor(d));
         } catch {
-          resolve9(false);
+          resolve12(false);
         }
       });
     });
-    req.on("error", () => resolve9(false));
+    req.on("error", () => resolve12(false));
     req.setTimeout(timeoutMs, () => {
       try {
         req.destroy();
       } catch {
       }
-      resolve9(false);
+      resolve12(false);
     });
   });
 }
@@ -11718,12 +11718,12 @@ async function spawnDetachedSafely(spawnImpl, file, args, spawnOptions) {
   let child;
   try {
     child = spawnImpl(file, args, spawnOptions);
-  } catch (error2) {
+  } catch (error3) {
     return {
       ok: false,
       child: null,
-      error: error2,
-      errorCode: error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null
+      error: error3,
+      errorCode: error3 && typeof error3 === "object" && error3.code != null ? String(error3.code) : null
     };
   }
   if (child && typeof child.once === "function") {
@@ -11737,7 +11737,7 @@ async function spawnDetachedSafely(spawnImpl, file, args, spawnOptions) {
         resolvePromise(result);
       };
       const onSpawn = () => finish({ ok: true });
-      const onError = (error2) => finish({ ok: false, error: error2 });
+      const onError = (error3) => finish({ ok: false, error: error3 });
       child.once("spawn", onSpawn);
       child.once("error", onError);
       if (Number.isInteger(child.pid) && child.pid > 0) queueMicrotask(onSpawn);
@@ -12227,15 +12227,15 @@ function whichNode() {
   }
   return process.execPath;
 }
-function wmiReturnValueFromError(error2) {
-  const message = error2 instanceof Error ? error2.message : String(error2 || "");
+function wmiReturnValueFromError(error3) {
+  const message = error3 instanceof Error ? error3.message : String(error3 || "");
   const match = message.match(/Win32_Process\.Create failed:\s*(\d+)/i);
   return match ? Number(match[1]) : null;
 }
-function classifyOutsideJobSpawnError(error2) {
-  const message = error2 instanceof Error ? error2.message : String(error2 || "");
-  const code = error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null;
-  const returnValue = wmiReturnValueFromError(error2);
+function classifyOutsideJobSpawnError(error3) {
+  const message = error3 instanceof Error ? error3.message : String(error3 || "");
+  const code = error3 && typeof error3 === "object" && error3.code != null ? String(error3.code) : null;
+  const returnValue = wmiReturnValueFromError(error3);
   const hresultEFail = /(?:HRESULT\s*)?0x80004005|\bE_FAIL\b/i.test(message);
   if (code === "EPERM" || code === "EACCES") {
     return {
@@ -12282,7 +12282,7 @@ function classifyOutsideJobSpawnError(error2) {
       canAttachFallback: false
     };
   }
-  if (code === "ETIMEDOUT" || error2 && typeof error2 === "object" && error2.killed === true) {
+  if (code === "ETIMEDOUT" || error3 && typeof error3 === "object" && error3.killed === true) {
     return {
       errorKind: "timeout",
       degradedReason: "spawn-timeout",
@@ -12396,17 +12396,17 @@ import net from "node:net";
 import { createHash as createHash3 } from "node:crypto";
 import {
   existsSync as existsSync4,
-  mkdirSync as mkdirSync7,
-  readFileSync as readFileSync6,
-  realpathSync,
+  mkdirSync as mkdirSync8,
+  readFileSync as readFileSync8,
+  realpathSync as realpathSync2,
   readdirSync,
-  renameSync as renameSync6,
-  rmSync as rmSync6,
+  renameSync as renameSync7,
+  rmSync as rmSync7,
   unlinkSync,
-  writeFileSync as writeFileSync6
+  writeFileSync as writeFileSync7
 } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { basename as basename5, dirname as dirname6, join as join8, resolve as resolve7, win32 as win32Path } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { basename as basename7, dirname as dirname9, join as join10, resolve as resolve10, win32 as win32Path } from "node:path";
 function resolveSupervisorSpawnCwd({
   requestedCwd = null,
   runtimeRoot = null,
@@ -12421,9 +12421,9 @@ function resolveSupervisorSpawnCwd({
   return runtimeRoot;
 }
 function resolvePluginLocalLifecycleDir(sourceScript) {
-  const scriptDir = dirname6(resolve7(sourceScript));
-  const pluginRoot = basename5(scriptDir).toLowerCase() === "dist" ? dirname6(scriptDir) : scriptDir;
-  return join8(pluginRoot, ".cursor-bridge-lifecycle");
+  const scriptDir = dirname9(resolve10(sourceScript));
+  const pluginRoot = basename7(scriptDir).toLowerCase() === "dist" ? dirname9(scriptDir) : scriptDir;
+  return join10(pluginRoot, ".cursor-bridge-lifecycle");
 }
 function inspectWindowsAppContainerPath(target, options = {}) {
   const platform = options.platform || process.platform;
@@ -12432,7 +12432,7 @@ function inspectWindowsAppContainerPath(target, options = {}) {
     return { redirected: false, requested, physical: null };
   }
   try {
-    const realpathImpl = options.realpathImpl || realpathSync.native || realpathSync;
+    const realpathImpl = options.realpathImpl || realpathSync2.native || realpathSync2;
     const physical = win32Path.normalize(win32Path.resolve(String(realpathImpl(target))));
     const physicalLower = physical.toLowerCase();
     const redirected = requested.toLowerCase() !== physicalLower && physicalLower.includes("\\appdata\\local\\packages\\") && physicalLower.includes("\\localcache\\local\\");
@@ -12466,59 +12466,59 @@ function sleep(ms) {
 }
 function resolveSupervisorScript() {
   if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
-    return resolve7(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
+    return resolve10(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
-  const here = dirname6(fileURLToPath(import.meta.url));
+  const here = dirname9(fileURLToPath2(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
-    const entryDir = dirname6(resolve7(process.argv[1]));
-    candidates.push(join8(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
-    candidates.push(join8(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    const entryDir = dirname9(resolve10(process.argv[1]));
+    candidates.push(join10(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
+    candidates.push(join10(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join8(here, "dist", "cursor-lifecycle-supervisor.mjs"),
-    join8(here, "cursor-lifecycle-supervisor.mjs")
+    join10(here, "dist", "cursor-lifecycle-supervisor.mjs"),
+    join10(here, "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
     if (existsSync4(c)) return c;
   }
-  return join8(here, "cursor-lifecycle-supervisor.mjs");
+  return join10(here, "cursor-lifecycle-supervisor.mjs");
 }
 function writeRuntimeFile(target, content) {
-  if (existsSync4(target) && readFileSync6(target).equals(content)) return;
+  if (existsSync4(target) && readFileSync8(target).equals(content)) return;
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync6(temporary, content);
+  writeFileSync7(temporary, content);
   try {
-    renameSync6(temporary, target);
-  } catch (error2) {
+    renameSync7(temporary, target);
+  } catch (error3) {
     if (!existsSync4(target)) {
-      rmSync6(temporary, { force: true });
-      throw error2;
+      rmSync7(temporary, { force: true });
+      throw error3;
     }
-    if (readFileSync6(target).equals(content)) {
-      rmSync6(temporary, { force: true });
+    if (readFileSync8(target).equals(content)) {
+      rmSync7(temporary, { force: true });
       return;
     }
-    rmSync6(target, { force: true });
-    renameSync6(temporary, target);
+    rmSync7(target, { force: true });
+    renameSync7(temporary, target);
   }
 }
 function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
   const described = describeLifecycleSupervisorRuntime({ sourceScript, dir });
   const { sourceScript: source, content, fingerprint } = described;
-  const runtimeRoot = join8(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  mkdirSync7(runtimeRoot, { recursive: true });
-  const script = join8(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join10(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  mkdirSync8(runtimeRoot, { recursive: true });
+  const script = join10(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
 }
 function describeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
-  const source = resolve7(sourceScript || resolveSupervisorScript());
+  const source = resolve10(sourceScript || resolveSupervisorScript());
   if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
-  const content = readFileSync6(source);
+  const content = readFileSync8(source);
   const fingerprint = createHash3("sha256").update(content).digest("hex");
-  const runtimeRoot = join8(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  const script = join8(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join10(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  const script = join10(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   return { sourceScript: source, script, runtimeRoot, fingerprint, content };
 }
 function isProcessAlive(pid) {
@@ -12532,7 +12532,7 @@ function isProcessAlive(pid) {
 }
 function readPidFile(pidPath) {
   try {
-    const n = Number(String(readFileSync6(pidPath, "utf8")).trim());
+    const n = Number(String(readFileSync8(pidPath, "utf8")).trim());
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
@@ -12557,11 +12557,11 @@ function connectSupervisor(sock, timeoutMs = 8e3) {
       clearTimeout(timer);
       resolvePromise(socket);
     });
-    socket.once("error", (error2) => {
+    socket.once("error", (error3) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(error2);
+      reject(error3);
     });
   });
 }
@@ -12601,7 +12601,7 @@ function request(socket, payload, timeoutMs = 12e4) {
         return;
       }
     };
-    const onError = (error2) => finish(reject, error2);
+    const onError = (error3) => finish(reject, error3);
     const onClose = () => finish(reject, new Error("supervisor socket closed before response"));
     const timer = setTimeout(() => finish(reject, new Error(`supervisor request timeout id=${id}`)), timeoutMs);
     socket.on("data", onData);
@@ -12621,17 +12621,17 @@ async function tryConnect(sock) {
 async function tryConnectDetailed(sock, connectImpl = connectSupervisor) {
   try {
     return { socket: await connectImpl(sock, 1500), error: null };
-  } catch (error2) {
-    return { socket: null, error: error2 };
+  } catch (error3) {
+    return { socket: null, error: error3 };
   }
 }
 function lifecycleClientError(message, details = {}, cause = null) {
-  const error2 = new Error(message, cause ? { cause } : void 0);
-  Object.assign(error2, details);
-  return error2;
+  const error3 = new Error(message, cause ? { cause } : void 0);
+  Object.assign(error3, details);
+  return error3;
 }
-function filesystemFallbackDetails(error2) {
-  const code = error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null;
+function filesystemFallbackDetails(error3) {
+  const code = error3 && typeof error3 === "object" && error3.code != null ? String(error3.code) : null;
   const blocked = code === "EPERM" || code === "EACCES" || code === "EROFS";
   return {
     errorKind: blocked ? "policy-blocked" : "configuration",
@@ -12640,14 +12640,14 @@ function filesystemFallbackDetails(error2) {
     canAttachFallback: blocked
   };
 }
-function tryUnlink(path) {
+function tryUnlink(path2) {
   try {
-    if (path && existsSync4(path)) unlinkSync(path);
+    if (path2 && existsSync4(path2)) unlinkSync(path2);
   } catch {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join8(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join10(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -12658,7 +12658,7 @@ function writeBootEnv(dir, extra = {}) {
   for (const [k, v] of Object.entries(payload)) {
     if (v != null && v !== "") cleaned[k] = String(v);
   }
-  writeFileSync6(bootPath, `${JSON.stringify(cleaned, null, 2)}
+  writeFileSync7(bootPath, `${JSON.stringify(cleaned, null, 2)}
 `, { encoding: "utf8" });
   return bootPath;
 }
@@ -12678,24 +12678,24 @@ async function ensureSupervisorConnected(options = {}) {
     let current = null;
     try {
       current = await request(socket, { type: "ping" }, 5e3);
-    } catch (error2) {
+    } catch (error3) {
       try {
         socket.destroy();
       } catch {
       }
-      throw lifecycleClientError(`lifecycle supervisor is reachable but unresponsive: ${error2 instanceof Error ? error2.message : String(error2)}`, {
+      throw lifecycleClientError(`lifecycle supervisor is reachable but unresponsive: ${error3 instanceof Error ? error3.message : String(error3)}`, {
         errorKind: "supervisor-unresponsive",
         degradedReason: "supervisor-unresponsive",
-        errorCode: error2 && typeof error2 === "object" && error2.code != null ? String(error2.code) : null,
+        errorCode: error3 && typeof error3 === "object" && error3.code != null ? String(error3.code) : null,
         canAttachFallback: true
-      }, error2);
+      }, error3);
     }
     let targetRuntime = null;
     try {
       targetRuntime = options.persistSupervisorRuntime === false ? {
-        sourceScript: resolve7(sourceScript),
-        script: resolve7(sourceScript),
-        runtimeRoot: dirname6(resolve7(sourceScript)),
+        sourceScript: resolve10(sourceScript),
+        script: resolve10(sourceScript),
+        runtimeRoot: dirname9(resolve10(sourceScript)),
         fingerprint: null
       } : describeLifecycleSupervisorRuntime({ sourceScript, dir });
     } catch {
@@ -12779,13 +12779,13 @@ async function ensureSupervisorConnected(options = {}) {
   try {
     ensureLifecycleDir(dir);
     runtime = options.persistSupervisorRuntime === false ? {
-      sourceScript: resolve7(sourceScript),
-      script: resolve7(sourceScript),
-      runtimeRoot: dirname6(resolve7(sourceScript)),
+      sourceScript: resolve10(sourceScript),
+      script: resolve10(sourceScript),
+      runtimeRoot: dirname9(resolve10(sourceScript)),
       fingerprint: null
     } : (options.materializeRuntimeImpl || materializeLifecycleSupervisorRuntime)({ sourceScript, dir });
-  } catch (error2) {
-    throw lifecycleClientError(`failed to prepare lifecycle supervisor runtime: ${error2 instanceof Error ? error2.message : String(error2)}`, filesystemFallbackDetails(error2), error2);
+  } catch (error3) {
+    throw lifecycleClientError(`failed to prepare lifecycle supervisor runtime: ${error3 instanceof Error ? error3.message : String(error3)}`, filesystemFallbackDetails(error3), error3);
   }
   const runtimePath = inspectWindowsAppContainerPath(runtime.script, {
     platform,
@@ -13049,8 +13049,8 @@ async function ensureCursorRunning(options = {}) {
     return withLifecycle(supervised, "supervised", {
       runtimeUpgradeDeferred: supervised.runtimeUpgradeDeferred === true
     });
-  } catch (error2) {
-    if (error2?.canAttachFallback !== true) throw error2;
+  } catch (error3) {
+    if (error3?.canAttachFallback !== true) throw error3;
     const local = await ensureCursorRunningLocal({
       ...ensureOptions,
       allowSpawn: false,
@@ -13064,15 +13064,15 @@ async function ensureCursorRunning(options = {}) {
       createdSupervisor: false,
       spawnMethod: null,
       launchReason: local.ok ? "attached-after-supervisor-blocked" : `attached-${local.status}`,
-      supervisorError: error2 instanceof Error ? error2.message : String(error2),
-      supervisorStderr: error2.stderr || null
+      supervisorError: error3 instanceof Error ? error3.message : String(error3),
+      supervisorStderr: error3.stderr || null
     }, "attached", {
-      degradedReason: error2.degradedReason || "supervisor-unavailable",
-      spawnErrorCode: error2.errorCode ?? error2.returnValue ?? null,
-      supervisorErrorKind: error2.errorKind || null,
-      supervisorCommandLine: error2.commandLine || null,
-      supervisorSpawnCwd: error2.spawnCwd || null,
-      spawnAttempts: error2.attempts ?? null,
+      degradedReason: error3.degradedReason || "supervisor-unavailable",
+      spawnErrorCode: error3.errorCode ?? error3.returnValue ?? null,
+      supervisorErrorKind: error3.errorKind || null,
+      supervisorCommandLine: error3.commandLine || null,
+      supervisorSpawnCwd: error3.spawnCwd || null,
+      spawnAttempts: error3.attempts ?? null,
       runtimeUpgradeDeferred: false
     });
   }
@@ -13277,10 +13277,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path) {
-  if (!path)
+function getElementAtPath(obj, path2) {
+  if (!path2)
     return obj;
-  return path.reduce((acc, key) => acc?.[key], obj);
+  return path2.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -13692,11 +13692,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path, issues) {
+function prefixIssues(path2, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path);
+    iss.path.unshift(path2);
     return iss;
   });
 }
@@ -14111,10 +14111,10 @@ function node(obj, key, make) {
   }
   return obj[key];
 }
-function flattenError(error2, mapper = (issue2) => issue2.message) {
+function flattenError(error3, mapper = (issue2) => issue2.message) {
   const fieldErrors = {};
   const formErrors = [];
-  for (const sub of error2.issues) {
+  for (const sub of error3.issues) {
     if (sub.path.length > 0) {
       node(fieldErrors, sub.path[0], () => []).push(mapper(sub));
     } else {
@@ -14123,18 +14123,18 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
   }
   return { formErrors, fieldErrors };
 }
-function formatError(error2, mapper = (issue2) => issue2.message) {
+function formatError(error3, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path = []) => {
-    for (const issue2 of error3.issues) {
+  const processError = (error4, path2 = []) => {
+    for (const issue2 of error4.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path2, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
       } else {
-        const fullpath = [...path, ...issue2.path];
+        const fullpath = [...path2, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -14168,7 +14168,7 @@ function formatError(error2, mapper = (issue2) => issue2.message) {
       }
     }
   };
-  processError(error2);
+  processError(error3);
   return fieldErrors;
 }
 
@@ -14231,17 +14231,17 @@ var _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
 };
 var safeParseAsync = /* @__PURE__ */ _safeParseAsync($ZodRealError);
 var _encode = (_Err) => {
-  const parse3 = _parse(_Err);
+  const parse5 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
     const ctx = _ctx ? { ..._ctx, direction: "backward" } : { direction: "backward" };
-    return parse3(schema, value, ctx, finalizeParams(fn, _params));
+    return parse5(schema, value, ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
 var _decode = (_Err) => {
-  const parse3 = _parse(_Err);
+  const parse5 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
-    return parse3(schema, value, _ctx, finalizeParams(fn, _params));
+    return parse5(schema, value, _ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
@@ -17761,16 +17761,16 @@ var formatMap = {
 var stringProcessor = (schema, ctx, _json, _params) => {
   const json = _json;
   json.type = "string";
-  const { minimum, maximum, format, patterns, contentEncoding, laxFormat } = schema._zod.bag;
+  const { minimum, maximum, format: format2, patterns, contentEncoding, laxFormat } = schema._zod.bag;
   if (typeof minimum === "number")
     json.minLength = minimum;
   if (typeof maximum === "number")
     json.maxLength = maximum;
-  if (format) {
-    json.format = formatMap[format] ?? format;
+  if (format2) {
+    json.format = formatMap[format2] ?? format2;
     if (json.format === "")
       delete json.format;
-    if (format === "time" || laxFormat) {
+    if (format2 === "time" || laxFormat) {
       delete json.format;
     }
   }
@@ -17792,8 +17792,8 @@ var stringProcessor = (schema, ctx, _json, _params) => {
 };
 var numberProcessor = (schema, ctx, _json, params) => {
   const json = _json;
-  const { minimum, maximum, format, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
-  if (typeof format === "string" && format.includes("int"))
+  const { minimum, maximum, format: format2, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
+  if (typeof format2 === "string" && format2.includes("int"))
     json.type = "integer";
   else
     json.type = "number";
@@ -20795,8 +20795,8 @@ var Protocol = class {
                     resolver(message);
                   } else {
                     const errorMessage = message;
-                    const error2 = new McpError(errorMessage.error.code, errorMessage.error.message, errorMessage.error.data);
-                    resolver(error2);
+                    const error3 = new McpError(errorMessage.error.code, errorMessage.error.message, errorMessage.error.data);
+                    resolver(error3);
                   }
                 } else {
                   const messageType = queuedMessage.type === "response" ? "Response" : "Error";
@@ -20840,8 +20840,8 @@ var Protocol = class {
             nextCursor,
             _meta: {}
           };
-        } catch (error2) {
-          throw new McpError(ErrorCode.InvalidParams, `Failed to list tasks: ${error2 instanceof Error ? error2.message : String(error2)}`);
+        } catch (error3) {
+          throw new McpError(ErrorCode.InvalidParams, `Failed to list tasks: ${error3 instanceof Error ? error3.message : String(error3)}`);
         }
       });
       this.setRequestHandler(CancelTaskRequestSchema, async (request2, extra) => {
@@ -20863,11 +20863,11 @@ var Protocol = class {
             _meta: {},
             ...cancelledTask
           };
-        } catch (error2) {
-          if (error2 instanceof McpError) {
-            throw error2;
+        } catch (error3) {
+          if (error3 instanceof McpError) {
+            throw error3;
           }
-          throw new McpError(ErrorCode.InvalidRequest, `Failed to cancel task: ${error2 instanceof Error ? error2.message : String(error2)}`);
+          throw new McpError(ErrorCode.InvalidRequest, `Failed to cancel task: ${error3 instanceof Error ? error3.message : String(error3)}`);
         }
       });
     }
@@ -20928,9 +20928,9 @@ var Protocol = class {
       this._onclose();
     };
     const _onerror = this.transport?.onerror;
-    this._transport.onerror = (error2) => {
-      _onerror?.(error2);
-      this._onerror(error2);
+    this._transport.onerror = (error3) => {
+      _onerror?.(error3);
+      this._onerror(error3);
     };
     const _onmessage = this._transport?.onmessage;
     this._transport.onmessage = (message, extra) => {
@@ -20961,22 +20961,22 @@ var Protocol = class {
       controller.abort();
     }
     this._requestHandlerAbortControllers.clear();
-    const error2 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
+    const error3 = McpError.fromError(ErrorCode.ConnectionClosed, "Connection closed");
     this._transport = void 0;
     this.onclose?.();
     for (const handler of responseHandlers.values()) {
-      handler(error2);
+      handler(error3);
     }
   }
-  _onerror(error2) {
-    this.onerror?.(error2);
+  _onerror(error3) {
+    this.onerror?.(error3);
   }
   _onnotification(notification) {
     const handler = this._notificationHandlers.get(notification.method) ?? this.fallbackNotificationHandler;
     if (handler === void 0) {
       return;
     }
-    Promise.resolve().then(() => handler(notification)).catch((error2) => this._onerror(new Error(`Uncaught error in notification handler: ${error2}`)));
+    Promise.resolve().then(() => handler(notification)).catch((error3) => this._onerror(new Error(`Uncaught error in notification handler: ${error3}`)));
   }
   _onrequest(request2, extra) {
     const handler = this._requestHandlers.get(request2.method) ?? this.fallbackRequestHandler;
@@ -20996,9 +20996,9 @@ var Protocol = class {
           type: "error",
           message: errorResponse,
           timestamp: Date.now()
-        }, capturedTransport?.sessionId).catch((error2) => this._onerror(new Error(`Failed to enqueue error response: ${error2}`)));
+        }, capturedTransport?.sessionId).catch((error3) => this._onerror(new Error(`Failed to enqueue error response: ${error3}`)));
       } else {
-        capturedTransport?.send(errorResponse).catch((error2) => this._onerror(new Error(`Failed to send an error response: ${error2}`)));
+        capturedTransport?.send(errorResponse).catch((error3) => this._onerror(new Error(`Failed to send an error response: ${error3}`)));
       }
       return;
     }
@@ -21064,7 +21064,7 @@ var Protocol = class {
       } else {
         await capturedTransport?.send(response);
       }
-    }, async (error2) => {
+    }, async (error3) => {
       if (abortController.signal.aborted) {
         return;
       }
@@ -21072,9 +21072,9 @@ var Protocol = class {
         jsonrpc: "2.0",
         id: request2.id,
         error: {
-          code: Number.isSafeInteger(error2["code"]) ? error2["code"] : ErrorCode.InternalError,
-          message: error2.message ?? "Internal error",
-          ...error2["data"] !== void 0 && { data: error2["data"] }
+          code: Number.isSafeInteger(error3["code"]) ? error3["code"] : ErrorCode.InternalError,
+          message: error3.message ?? "Internal error",
+          ...error3["data"] !== void 0 && { data: error3["data"] }
         }
       };
       if (relatedTaskId && this._taskMessageQueue) {
@@ -21086,7 +21086,7 @@ var Protocol = class {
       } else {
         await capturedTransport?.send(errorResponse);
       }
-    }).catch((error2) => this._onerror(new Error(`Failed to send response: ${error2}`))).finally(() => {
+    }).catch((error3) => this._onerror(new Error(`Failed to send response: ${error3}`))).finally(() => {
       if (this._requestHandlerAbortControllers.get(request2.id) === abortController) {
         this._requestHandlerAbortControllers.delete(request2.id);
       }
@@ -21105,11 +21105,11 @@ var Protocol = class {
     if (timeoutInfo && responseHandler && timeoutInfo.resetTimeoutOnProgress) {
       try {
         this._resetTimeout(messageId);
-      } catch (error2) {
+      } catch (error3) {
         this._responseHandlers.delete(messageId);
         this._progressHandlers.delete(messageId);
         this._cleanupTimeout(messageId);
-        responseHandler(error2);
+        responseHandler(error3);
         return;
       }
     }
@@ -21123,8 +21123,8 @@ var Protocol = class {
       if (isJSONRPCResultResponse(response)) {
         resolver(response);
       } else {
-        const error2 = new McpError(response.error.code, response.error.message, response.error.data);
-        resolver(error2);
+        const error3 = new McpError(response.error.code, response.error.message, response.error.data);
+        resolver(error3);
       }
       return;
     }
@@ -21152,8 +21152,8 @@ var Protocol = class {
     if (isJSONRPCResultResponse(response)) {
       handler(response);
     } else {
-      const error2 = McpError.fromError(response.error.code, response.error.message, response.error.data);
-      handler(error2);
+      const error3 = McpError.fromError(response.error.code, response.error.message, response.error.data);
+      handler(error3);
     }
   }
   get transport() {
@@ -21198,10 +21198,10 @@ var Protocol = class {
       try {
         const result = await this.request(request2, resultSchema, options);
         yield { type: "result", result };
-      } catch (error2) {
+      } catch (error3) {
         yield {
           type: "error",
-          error: error2 instanceof McpError ? error2 : new McpError(ErrorCode.InternalError, String(error2))
+          error: error3 instanceof McpError ? error3 : new McpError(ErrorCode.InternalError, String(error3))
         };
       }
       return;
@@ -21241,13 +21241,13 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve9) => setTimeout(resolve9, pollInterval));
+        await new Promise((resolve12) => setTimeout(resolve12, pollInterval));
         options?.signal?.throwIfAborted();
       }
-    } catch (error2) {
+    } catch (error3) {
       yield {
         type: "error",
-        error: error2 instanceof McpError ? error2 : new McpError(ErrorCode.InternalError, String(error2))
+        error: error3 instanceof McpError ? error3 : new McpError(ErrorCode.InternalError, String(error3))
       };
     }
   }
@@ -21258,9 +21258,9 @@ var Protocol = class {
    */
   request(request2, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve9, reject) => {
-      const earlyReject = (error2) => {
-        reject(error2);
+    return new Promise((resolve12, reject) => {
+      const earlyReject = (error3) => {
+        reject(error3);
       };
       if (!this._transport) {
         earlyReject(new Error("Not connected"));
@@ -21320,9 +21320,9 @@ var Protocol = class {
             requestId: messageId,
             reason: String(reason)
           }
-        }, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error3) => this._onerror(new Error(`Failed to send cancellation: ${error3}`)));
-        const error2 = reason instanceof McpError ? reason : new McpError(ErrorCode.RequestTimeout, String(reason));
-        reject(error2);
+        }, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error4) => this._onerror(new Error(`Failed to send cancellation: ${error4}`)));
+        const error3 = reason instanceof McpError ? reason : new McpError(ErrorCode.RequestTimeout, String(reason));
+        reject(error3);
       };
       this._responseHandlers.set(messageId, (response) => {
         if (options?.signal?.aborted) {
@@ -21336,10 +21336,10 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve9(parseResult.data);
+            resolve12(parseResult.data);
           }
-        } catch (error2) {
-          reject(error2);
+        } catch (error3) {
+          reject(error3);
         }
       });
       options?.signal?.addEventListener("abort", () => {
@@ -21363,14 +21363,14 @@ var Protocol = class {
           type: "request",
           message: jsonrpcRequest,
           timestamp: Date.now()
-        }).catch((error2) => {
+        }).catch((error3) => {
           this._cleanupTimeout(messageId);
-          reject(error2);
+          reject(error3);
         });
       } else {
-        this._transport.send(jsonrpcRequest, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error2) => {
+        this._transport.send(jsonrpcRequest, { relatedRequestId, resumptionToken, onresumptiontoken }).catch((error3) => {
           this._cleanupTimeout(messageId);
-          reject(error2);
+          reject(error3);
         });
       }
     });
@@ -21463,7 +21463,7 @@ var Protocol = class {
             }
           };
         }
-        this._transport?.send(jsonrpcNotification2, options).catch((error2) => this._onerror(error2));
+        this._transport?.send(jsonrpcNotification2, options).catch((error3) => this._onerror(error3));
       });
       return;
     }
@@ -21597,12 +21597,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve12, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve9, interval);
+      const timeoutId = setTimeout(resolve12, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -22316,11 +22316,11 @@ var Server = class extends Protocol {
             if (!validationResult.valid) {
               throw new McpError(ErrorCode.InvalidParams, `Elicitation response content does not match requested schema: ${validationResult.errorMessage}`);
             }
-          } catch (error2) {
-            if (error2 instanceof McpError) {
-              throw error2;
+          } catch (error3) {
+            if (error3 instanceof McpError) {
+              throw error3;
             }
-            throw new McpError(ErrorCode.InternalError, `Error validating elicitation response: ${error2 instanceof Error ? error2.message : String(error2)}`);
+            throw new McpError(ErrorCode.InternalError, `Error validating elicitation response: ${error3 instanceof Error ? error3.message : String(error3)}`);
           }
         }
         return result;
@@ -22432,14 +22432,14 @@ var StdioServerTransport = class {
       try {
         this._readBuffer.append(chunk);
         this.processReadBuffer();
-      } catch (error2) {
-        this.onerror?.(error2);
+      } catch (error3) {
+        this.onerror?.(error3);
         this.close().catch(() => {
         });
       }
     };
-    this._onerror = (error2) => {
-      this.onerror?.(error2);
+    this._onerror = (error3) => {
+      this.onerror?.(error3);
     };
     this._readBuffer = new ReadBuffer({ maxBufferSize: options?.maxBufferSize });
   }
@@ -22462,8 +22462,8 @@ var StdioServerTransport = class {
           break;
         }
         this.onmessage?.(message);
-      } catch (error2) {
-        this.onerror?.(error2);
+      } catch (error3) {
+        this.onerror?.(error3);
       }
     }
   }
@@ -22478,20 +22478,20 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve9) => {
+    return new Promise((resolve12) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve9();
+        resolve12();
       } else {
-        this._stdout.once("drain", resolve9);
+        this._stdout.once("drain", resolve12);
       }
     });
   }
 };
 
 // server.mjs
-import { basename as basename6, dirname as dirname7, join as join9, resolve as resolve8 } from "node:path";
-import { statSync as statSync3 } from "node:fs";
+import { basename as basename8, dirname as dirname10, join as join11, resolve as resolve11 } from "node:path";
+import { statSync as statSync4 } from "node:fs";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -22508,26 +22508,26 @@ var ERROR_JSON_LIMIT = 2048;
 function positiveTimeout(name, value, fallback) {
   const timeout = value === void 0 ? fallback : Number(value);
   if (!Number.isFinite(timeout) || timeout <= 0) {
-    const error2 = new TypeError(`${name} must be a positive finite number`);
-    error2.code = "CDP_INVALID_TIMEOUT";
-    error2.stage = "configuration";
-    error2.cdp = { stage: "configuration", elapsedMs: 0 };
-    throw error2;
+    const error3 = new TypeError(`${name} must be a positive finite number`);
+    error3.code = "CDP_INVALID_TIMEOUT";
+    error3.stage = "configuration";
+    error3.cdp = { stage: "configuration", elapsedMs: 0 };
+    throw error3;
   }
   return timeout;
 }
 function clientError(message, { code, stage, method, cause, elapsedMs = 0 } = {}) {
-  const error2 = new Error(message, cause ? { cause } : void 0);
-  error2.name = "CdpClientError";
-  error2.code = code || cause?.code || "CDP_CLIENT_ERROR";
-  error2.stage = stage || "unknown";
-  if (method) error2.method = method;
-  error2.cdp = {
-    stage: error2.stage,
+  const error3 = new Error(message, cause ? { cause } : void 0);
+  error3.name = "CdpClientError";
+  error3.code = code || cause?.code || "CDP_CLIENT_ERROR";
+  error3.stage = stage || "unknown";
+  if (method) error3.method = method;
+  error3.cdp = {
+    stage: error3.stage,
     ...method ? { method } : {},
     elapsedMs: Math.max(0, Number(elapsedMs) || 0)
   };
-  return error2;
+  return error3;
 }
 function boundedJson(value) {
   let text;
@@ -22553,8 +22553,8 @@ function makeClient(wsUrl, options = {}) {
   let readyResolve;
   let readyReject;
   const pending = /* @__PURE__ */ new Map();
-  const ready = new Promise((resolve9, reject) => {
-    readyResolve = resolve9;
+  const ready = new Promise((resolve12, reject) => {
+    readyResolve = resolve12;
     readyReject = reject;
   });
   void ready.catch(() => {
@@ -22567,31 +22567,31 @@ function makeClient(wsUrl, options = {}) {
     } catch {
     }
   };
-  const rejectPending = (error2) => {
+  const rejectPending = (error3) => {
     for (const entry of pending.values()) {
       clearTimeout(entry.timer);
-      entry.reject(typeof error2 === "function" ? error2(entry) : error2);
+      entry.reject(typeof error3 === "function" ? error3(entry) : error3);
     }
     pending.clear();
   };
-  const rejectReady = (error2) => {
+  const rejectReady = (error3) => {
     if (state !== "connecting") return;
     state = "failed";
     clearTimeout(connectTimer);
-    readyReject(error2);
+    readyReject(error3);
   };
   const failConnection = (cause) => {
-    const error2 = clientError(`CDP WebSocket connection failed: ${cause?.message || cause}`, {
+    const error3 = clientError(`CDP WebSocket connection failed: ${cause?.message || cause}`, {
       stage: "connect",
       cause,
       elapsedMs: Date.now() - createdAt
     });
-    rejectReady(error2);
+    rejectReady(error3);
     terminate();
-    return error2;
+    return error3;
   };
   const failSocket = (cause) => {
-    const error2 = clientError(`CDP WebSocket failed: ${cause?.message || cause}`, {
+    const error3 = clientError(`CDP WebSocket failed: ${cause?.message || cause}`, {
       stage: "socket",
       cause,
       elapsedMs: Date.now() - createdAt
@@ -22605,7 +22605,7 @@ function makeClient(wsUrl, options = {}) {
       elapsedMs: Date.now() - entry.startedAt
     }));
     terminate();
-    return error2;
+    return error3;
   };
   try {
     ws = new WebSocketImpl(wsUrl, websocketOptions);
@@ -22614,12 +22614,12 @@ function makeClient(wsUrl, options = {}) {
   }
   if (ws) {
     connectTimer = setTimeout(() => {
-      const error2 = clientError(`CDP WebSocket connection timed out (${connectTimeoutMs}ms)`, {
+      const error3 = clientError(`CDP WebSocket connection timed out (${connectTimeoutMs}ms)`, {
         code: "CDP_CONNECT_TIMEOUT",
         stage: "connect",
         elapsedMs: Date.now() - createdAt
       });
-      rejectReady(error2);
+      rejectReady(error3);
       terminate();
     }, connectTimeoutMs);
     ws.on("open", () => {
@@ -22661,12 +22661,12 @@ function makeClient(wsUrl, options = {}) {
     ws.on("close", (code, reason) => {
       if (state === "closed" || state === "failed") return;
       const suffix = code ? ` (code=${code}${reason?.length ? ` reason=${String(reason).slice(0, 256)}` : ""})` : "";
-      const error2 = clientError(`CDP WebSocket closed${suffix}`, {
+      const error3 = clientError(`CDP WebSocket closed${suffix}`, {
         code: "CDP_SOCKET_CLOSED",
         stage: state === "connecting" ? "connect" : "socket",
         elapsedMs: Date.now() - createdAt
       });
-      if (state === "connecting") rejectReady(error2);
+      if (state === "connecting") rejectReady(error3);
       else {
         state = "closed";
         rejectPending((entry) => clientError(`CDP WebSocket closed during ${entry.method}${suffix}`, {
@@ -22690,8 +22690,8 @@ function makeClient(wsUrl, options = {}) {
     let timeoutMs;
     try {
       timeoutMs = sendOptions.timeoutMs === void 0 ? commandTimeoutMs : Math.min(commandTimeoutMs, positiveTimeout("timeoutMs", sendOptions.timeoutMs));
-    } catch (error2) {
-      return Promise.reject(error2);
+    } catch (error3) {
+      return Promise.reject(error3);
     }
     const id = ++nextId;
     let payload;
@@ -22705,7 +22705,7 @@ function makeClient(wsUrl, options = {}) {
         elapsedMs: 0
       }));
     }
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve12, reject) => {
       const startedAt = Date.now();
       const timer = setTimeout(() => {
         if (!pending.delete(id)) return;
@@ -22716,7 +22716,7 @@ function makeClient(wsUrl, options = {}) {
           elapsedMs: Date.now() - startedAt
         }));
       }, timeoutMs);
-      pending.set(id, { method, resolve: resolve9, reject, timer, startedAt });
+      pending.set(id, { method, resolve: resolve12, reject, timer, startedAt });
       try {
         ws.send(payload, (cause) => {
           if (!cause || !pending.has(id)) return;
@@ -22747,12 +22747,12 @@ function makeClient(wsUrl, options = {}) {
     const wasConnecting = state === "connecting";
     state = "closed";
     clearTimeout(connectTimer);
-    const error2 = clientError("CDP client closed", {
+    const error3 = clientError("CDP client closed", {
       code: "CDP_CLIENT_CLOSED",
       stage: wasConnecting ? "connect" : "socket",
       elapsedMs: Date.now() - createdAt
     });
-    if (wasConnecting) readyReject(error2);
+    if (wasConnecting) readyReject(error3);
     rejectPending((entry) => clientError(`CDP client closed during ${entry.method}`, {
       code: "CDP_CLIENT_CLOSED",
       stage: "socket",
@@ -22833,9 +22833,9 @@ function readCursorModelPreferences(filePath) {
       },
       updatedAt: parsed && parsed.updatedAt ? String(parsed.updatedAt) : null
     };
-  } catch (error2) {
-    if (error2 && error2.code === "ENOENT") return empty;
-    console.error(`[cursor-bridge] ignoring unreadable model preferences file ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+  } catch (error3) {
+    if (error3 && error3.code === "ENOENT") return empty;
+    console.error(`[cursor-bridge] ignoring unreadable model preferences file ${filePath}: ${error3 instanceof Error ? error3.message : String(error3)}`);
     return empty;
   }
 }
@@ -22856,9 +22856,9 @@ function writeCursorModelPreferences(filePath, preferences) {
     writeFileSync2(temporary, `${JSON.stringify(normalized, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     renameSync2(temporary, target);
-  } catch (error2) {
+  } catch (error3) {
     rmSync2(temporary, { force: true });
-    throw new Error(`failed to persist cursor_model at ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`);
+    throw new Error(`failed to persist cursor_model at ${target}: ${error3 instanceof Error ? error3.message : String(error3)}`);
   }
   return normalized;
 }
@@ -22899,10 +22899,10 @@ import { basename as basename3, dirname as dirname4, join as join5, resolve as r
 var CURSOR_SESSION_REGISTRY_VERSION = 1;
 var CURSOR_SESSION_MODES = Object.freeze(["isolated", "create", "continue"]);
 function sessionRegistryError(code, message, cause) {
-  const error2 = new Error(`${code}: ${message}`);
-  error2.code = code;
-  if (cause) error2.cause = cause;
-  return error2;
+  const error3 = new Error(`${code}: ${message}`);
+  error3.code = code;
+  if (cause) error3.cause = cause;
+  return error3;
 }
 function normalizeCursorSessionMode(value, fallback = "isolated") {
   const normalized = String(value || fallback).trim().toLowerCase().replace(/-/g, "_");
@@ -22939,13 +22939,13 @@ function readCursorSessionRegistry(filePath) {
       sessions: { ...parsed.sessions },
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null
     };
-  } catch (error2) {
-    if (error2 && error2.code === "ENOENT") return emptyCursorSessionRegistry();
-    if (error2 && /^SESSION_/.test(String(error2.code || ""))) throw error2;
+  } catch (error3) {
+    if (error3 && error3.code === "ENOENT") return emptyCursorSessionRegistry();
+    if (error3 && /^SESSION_/.test(String(error3.code || ""))) throw error3;
     throw sessionRegistryError(
       "SESSION_REGISTRY_INVALID",
-      `failed to read ${filePath}: ${error2 instanceof Error ? error2.message : String(error2)}`,
-      error2
+      `failed to read ${filePath}: ${error3 instanceof Error ? error3.message : String(error3)}`,
+      error3
     );
   }
 }
@@ -22963,12 +22963,12 @@ function writeCursorSessionRegistry(filePath, state, now = (/* @__PURE__ */ new 
     writeFileSync4(temporary, `${JSON.stringify(normalized, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     renameSync4(temporary, target);
-  } catch (error2) {
+  } catch (error3) {
     rmSync4(temporary, { force: true });
     throw sessionRegistryError(
       "SESSION_REGISTRY_WRITE_FAILED",
-      `failed to persist ${target}: ${error2 instanceof Error ? error2.message : String(error2)}`,
-      error2
+      `failed to persist ${target}: ${error3 instanceof Error ? error3.message : String(error3)}`,
+      error3
     );
   }
   return normalized;
@@ -22984,9 +22984,9 @@ function acquireRegistryLock(filePath, options = {}) {
       const handle = openSync(lockPath, "wx", 384);
       closeSync(handle);
       return () => rmSync4(lockPath, { force: true });
-    } catch (error2) {
-      if (!error2 || error2.code !== "EEXIST") {
-        throw sessionRegistryError("SESSION_REGISTRY_LOCK_FAILED", error2 instanceof Error ? error2.message : String(error2), error2);
+    } catch (error3) {
+      if (!error3 || error3.code !== "EEXIST") {
+        throw sessionRegistryError("SESSION_REGISTRY_LOCK_FAILED", error3 instanceof Error ? error3.message : String(error3), error3);
       }
       try {
         if (Date.now() - statSync2(lockPath).mtimeMs > staleMs) {
@@ -23017,8 +23017,1378 @@ function updateCursorSessionRegistry(filePath, mutator, options = {}) {
 
 // server.mjs
 init_cursor_ensure_core();
+
+// cursor-cce-preferences.mjs
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { mkdirSync as mkdirSync7, readFileSync as readFileSync6, renameSync as renameSync6, rmSync as rmSync6, writeFileSync as writeFileSync6 } from "node:fs";
+import { homedir as homedir8 } from "node:os";
+import { basename as basename5, dirname as dirname6, join as join8, resolve as resolve7 } from "node:path";
+var CURSOR_CCE_SOURCES = Object.freeze(["ide", "cli"]);
+function normalizeCceSource(value, fallback = "") {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return CURSOR_CCE_SOURCES.includes(normalized) ? normalized : fallback;
+}
+function resolveCceSourceFile(value = process.env.CURSOR_BRIDGE_CCE_SOURCE_FILE) {
+  const configured = String(value || "").trim();
+  if (configured) return resolve7(configured);
+  const configRoot = process.platform === "win32" && process.env.APPDATA ? process.env.APPDATA : process.env.XDG_CONFIG_HOME || join8(homedir8(), ".config");
+  return join8(configRoot, "cursor-bridge", "cce-source.json");
+}
+function invalidConfig(message, cause) {
+  const error3 = new Error(message, cause ? { cause } : void 0);
+  error3.code = "CURSOR_CCE_SOURCE_CONFIG_INVALID";
+  return error3;
+}
+function readCcePreferences(filePath) {
+  const defaults = { version: 1, source: "ide", updatedAt: null };
+  if (!filePath) return defaults;
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync6(filePath, "utf8"));
+  } catch (error3) {
+    if (error3?.code === "ENOENT") return defaults;
+    throw invalidConfig(`Cannot read CCE source configuration at ${filePath}: ${error3.message}`, error3);
+  }
+  const source = normalizeCceSource(parsed?.source);
+  if (!parsed || Array.isArray(parsed) || parsed.version !== 1 || !source || parsed.updatedAt != null && typeof parsed.updatedAt !== "string") {
+    throw invalidConfig(`Invalid CCE source configuration at ${filePath}; expected version 1 and source ide or cli`);
+  }
+  return { version: 1, source, updatedAt: parsed.updatedAt ?? null };
+}
+function writeCcePreferences(filePath, preferences) {
+  if (!filePath) throw new Error("persistent CCE source storage is disabled for this server");
+  const source = normalizeCceSource(preferences?.source);
+  if (!source) throw invalidConfig("CCE source must be ide or cli");
+  const target = resolve7(filePath);
+  const normalized = { version: 1, source, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  mkdirSync7(dirname6(target), { recursive: true });
+  const temporary = join8(dirname6(target), `.${basename5(target)}.${process.pid}.${randomUUID2()}.tmp`);
+  try {
+    writeFileSync6(temporary, `${JSON.stringify(normalized, null, 2)}
+`, { encoding: "utf8", mode: 384, flag: "wx" });
+    renameSync6(temporary, target);
+  } catch (error3) {
+    rmSync6(temporary, { force: true });
+    throw error3;
+  }
+  return normalized;
+}
+function updateCcePreferences(filePath, { action = "show", source } = {}) {
+  const normalizedAction = typeof action === "string" ? action.trim().toLowerCase() : "";
+  if (normalizedAction === "show") return readCcePreferences(filePath);
+  if (normalizedAction === "set") return writeCcePreferences(filePath, { source });
+  throw new Error(`unsupported CCE source action: ${action}; expected show or set`);
+}
+
+// cursor-cli.mjs
+import { spawn as nodeSpawn, execFile } from "node:child_process";
+import { access, readFile as readFile2, readdir, realpath } from "node:fs/promises";
+import path from "node:path";
+
+// cursor-cli-workspace.mjs
+import { readFileSync as readFileSync7, realpathSync, statSync as statSync3 } from "node:fs";
+import { dirname as dirname7, extname as extname3, isAbsolute as isAbsolute2, resolve as resolve8 } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// node_modules/jsonc-parser/lib/esm/impl/scanner.js
+function createScanner(text, ignoreTrivia = false) {
+  const len = text.length;
+  let pos = 0, value = "", tokenOffset = 0, token = 16, lineNumber = 0, lineStartOffset = 0, tokenLineStartOffset = 0, prevTokenLineStartOffset = 0, scanError = 0;
+  function scanHexDigits(count, exact) {
+    let digits = 0;
+    let value2 = 0;
+    while (digits < count || !exact) {
+      let ch = text.charCodeAt(pos);
+      if (ch >= 48 && ch <= 57) {
+        value2 = value2 * 16 + ch - 48;
+      } else if (ch >= 65 && ch <= 70) {
+        value2 = value2 * 16 + ch - 65 + 10;
+      } else if (ch >= 97 && ch <= 102) {
+        value2 = value2 * 16 + ch - 97 + 10;
+      } else {
+        break;
+      }
+      pos++;
+      digits++;
+    }
+    if (digits < count) {
+      value2 = -1;
+    }
+    return value2;
+  }
+  function setPosition(newPosition) {
+    pos = newPosition;
+    value = "";
+    tokenOffset = 0;
+    token = 16;
+    scanError = 0;
+  }
+  function scanNumber() {
+    let start = pos;
+    if (text.charCodeAt(pos) === 48) {
+      pos++;
+    } else {
+      pos++;
+      while (pos < text.length && isDigit(text.charCodeAt(pos))) {
+        pos++;
+      }
+    }
+    if (pos < text.length && text.charCodeAt(pos) === 46) {
+      pos++;
+      if (pos < text.length && isDigit(text.charCodeAt(pos))) {
+        pos++;
+        while (pos < text.length && isDigit(text.charCodeAt(pos))) {
+          pos++;
+        }
+      } else {
+        scanError = 3;
+        return text.substring(start, pos);
+      }
+    }
+    let end = pos;
+    if (pos < text.length && (text.charCodeAt(pos) === 69 || text.charCodeAt(pos) === 101)) {
+      pos++;
+      if (pos < text.length && text.charCodeAt(pos) === 43 || text.charCodeAt(pos) === 45) {
+        pos++;
+      }
+      if (pos < text.length && isDigit(text.charCodeAt(pos))) {
+        pos++;
+        while (pos < text.length && isDigit(text.charCodeAt(pos))) {
+          pos++;
+        }
+        end = pos;
+      } else {
+        scanError = 3;
+      }
+    }
+    return text.substring(start, end);
+  }
+  function scanString() {
+    let result = "", start = pos;
+    while (true) {
+      if (pos >= len) {
+        result += text.substring(start, pos);
+        scanError = 2;
+        break;
+      }
+      const ch = text.charCodeAt(pos);
+      if (ch === 34) {
+        result += text.substring(start, pos);
+        pos++;
+        break;
+      }
+      if (ch === 92) {
+        result += text.substring(start, pos);
+        pos++;
+        if (pos >= len) {
+          scanError = 2;
+          break;
+        }
+        const ch2 = text.charCodeAt(pos++);
+        switch (ch2) {
+          case 34:
+            result += '"';
+            break;
+          case 92:
+            result += "\\";
+            break;
+          case 47:
+            result += "/";
+            break;
+          case 98:
+            result += "\b";
+            break;
+          case 102:
+            result += "\f";
+            break;
+          case 110:
+            result += "\n";
+            break;
+          case 114:
+            result += "\r";
+            break;
+          case 116:
+            result += "	";
+            break;
+          case 117:
+            const ch3 = scanHexDigits(4, true);
+            if (ch3 >= 0) {
+              result += String.fromCharCode(ch3);
+            } else {
+              scanError = 4;
+            }
+            break;
+          default:
+            scanError = 5;
+        }
+        start = pos;
+        continue;
+      }
+      if (ch >= 0 && ch <= 31) {
+        if (isLineBreak(ch)) {
+          result += text.substring(start, pos);
+          scanError = 2;
+          break;
+        } else {
+          scanError = 6;
+        }
+      }
+      pos++;
+    }
+    return result;
+  }
+  function scanNext() {
+    value = "";
+    scanError = 0;
+    tokenOffset = pos;
+    lineStartOffset = lineNumber;
+    prevTokenLineStartOffset = tokenLineStartOffset;
+    if (pos >= len) {
+      tokenOffset = len;
+      return token = 17;
+    }
+    let code = text.charCodeAt(pos);
+    if (isWhiteSpace(code)) {
+      do {
+        pos++;
+        value += String.fromCharCode(code);
+        code = text.charCodeAt(pos);
+      } while (isWhiteSpace(code));
+      return token = 15;
+    }
+    if (isLineBreak(code)) {
+      pos++;
+      value += String.fromCharCode(code);
+      if (code === 13 && text.charCodeAt(pos) === 10) {
+        pos++;
+        value += "\n";
+      }
+      lineNumber++;
+      tokenLineStartOffset = pos;
+      return token = 14;
+    }
+    switch (code) {
+      // tokens: []{}:,
+      case 123:
+        pos++;
+        return token = 1;
+      case 125:
+        pos++;
+        return token = 2;
+      case 91:
+        pos++;
+        return token = 3;
+      case 93:
+        pos++;
+        return token = 4;
+      case 58:
+        pos++;
+        return token = 6;
+      case 44:
+        pos++;
+        return token = 5;
+      // strings
+      case 34:
+        pos++;
+        value = scanString();
+        return token = 10;
+      // comments
+      case 47:
+        const start = pos - 1;
+        if (text.charCodeAt(pos + 1) === 47) {
+          pos += 2;
+          while (pos < len) {
+            if (isLineBreak(text.charCodeAt(pos))) {
+              break;
+            }
+            pos++;
+          }
+          value = text.substring(start, pos);
+          return token = 12;
+        }
+        if (text.charCodeAt(pos + 1) === 42) {
+          pos += 2;
+          const safeLength = len - 1;
+          let commentClosed = false;
+          while (pos < safeLength) {
+            const ch = text.charCodeAt(pos);
+            if (ch === 42 && text.charCodeAt(pos + 1) === 47) {
+              pos += 2;
+              commentClosed = true;
+              break;
+            }
+            pos++;
+            if (isLineBreak(ch)) {
+              if (ch === 13 && text.charCodeAt(pos) === 10) {
+                pos++;
+              }
+              lineNumber++;
+              tokenLineStartOffset = pos;
+            }
+          }
+          if (!commentClosed) {
+            pos++;
+            scanError = 1;
+          }
+          value = text.substring(start, pos);
+          return token = 13;
+        }
+        value += String.fromCharCode(code);
+        pos++;
+        return token = 16;
+      // numbers
+      case 45:
+        value += String.fromCharCode(code);
+        pos++;
+        if (pos === len || !isDigit(text.charCodeAt(pos))) {
+          return token = 16;
+        }
+      // found a minus, followed by a number so
+      // we fall through to proceed with scanning
+      // numbers
+      case 48:
+      case 49:
+      case 50:
+      case 51:
+      case 52:
+      case 53:
+      case 54:
+      case 55:
+      case 56:
+      case 57:
+        value += scanNumber();
+        return token = 11;
+      // literals and unknown symbols
+      default:
+        while (pos < len && isUnknownContentCharacter(code)) {
+          pos++;
+          code = text.charCodeAt(pos);
+        }
+        if (tokenOffset !== pos) {
+          value = text.substring(tokenOffset, pos);
+          switch (value) {
+            case "true":
+              return token = 8;
+            case "false":
+              return token = 9;
+            case "null":
+              return token = 7;
+          }
+          return token = 16;
+        }
+        value += String.fromCharCode(code);
+        pos++;
+        return token = 16;
+    }
+  }
+  function isUnknownContentCharacter(code) {
+    if (isWhiteSpace(code) || isLineBreak(code)) {
+      return false;
+    }
+    switch (code) {
+      case 125:
+      case 93:
+      case 123:
+      case 91:
+      case 34:
+      case 58:
+      case 44:
+      case 47:
+        return false;
+    }
+    return true;
+  }
+  function scanNextNonTrivia() {
+    let result;
+    do {
+      result = scanNext();
+    } while (result >= 12 && result <= 15);
+    return result;
+  }
+  return {
+    setPosition,
+    getPosition: () => pos,
+    scan: ignoreTrivia ? scanNextNonTrivia : scanNext,
+    getToken: () => token,
+    getTokenValue: () => value,
+    getTokenOffset: () => tokenOffset,
+    getTokenLength: () => pos - tokenOffset,
+    getTokenStartLine: () => lineStartOffset,
+    getTokenStartCharacter: () => tokenOffset - prevTokenLineStartOffset,
+    getTokenError: () => scanError
+  };
+}
+function isWhiteSpace(ch) {
+  return ch === 32 || ch === 9;
+}
+function isLineBreak(ch) {
+  return ch === 10 || ch === 13;
+}
+function isDigit(ch) {
+  return ch >= 48 && ch <= 57;
+}
+var CharacterCodes;
+(function(CharacterCodes2) {
+  CharacterCodes2[CharacterCodes2["lineFeed"] = 10] = "lineFeed";
+  CharacterCodes2[CharacterCodes2["carriageReturn"] = 13] = "carriageReturn";
+  CharacterCodes2[CharacterCodes2["space"] = 32] = "space";
+  CharacterCodes2[CharacterCodes2["_0"] = 48] = "_0";
+  CharacterCodes2[CharacterCodes2["_1"] = 49] = "_1";
+  CharacterCodes2[CharacterCodes2["_2"] = 50] = "_2";
+  CharacterCodes2[CharacterCodes2["_3"] = 51] = "_3";
+  CharacterCodes2[CharacterCodes2["_4"] = 52] = "_4";
+  CharacterCodes2[CharacterCodes2["_5"] = 53] = "_5";
+  CharacterCodes2[CharacterCodes2["_6"] = 54] = "_6";
+  CharacterCodes2[CharacterCodes2["_7"] = 55] = "_7";
+  CharacterCodes2[CharacterCodes2["_8"] = 56] = "_8";
+  CharacterCodes2[CharacterCodes2["_9"] = 57] = "_9";
+  CharacterCodes2[CharacterCodes2["a"] = 97] = "a";
+  CharacterCodes2[CharacterCodes2["b"] = 98] = "b";
+  CharacterCodes2[CharacterCodes2["c"] = 99] = "c";
+  CharacterCodes2[CharacterCodes2["d"] = 100] = "d";
+  CharacterCodes2[CharacterCodes2["e"] = 101] = "e";
+  CharacterCodes2[CharacterCodes2["f"] = 102] = "f";
+  CharacterCodes2[CharacterCodes2["g"] = 103] = "g";
+  CharacterCodes2[CharacterCodes2["h"] = 104] = "h";
+  CharacterCodes2[CharacterCodes2["i"] = 105] = "i";
+  CharacterCodes2[CharacterCodes2["j"] = 106] = "j";
+  CharacterCodes2[CharacterCodes2["k"] = 107] = "k";
+  CharacterCodes2[CharacterCodes2["l"] = 108] = "l";
+  CharacterCodes2[CharacterCodes2["m"] = 109] = "m";
+  CharacterCodes2[CharacterCodes2["n"] = 110] = "n";
+  CharacterCodes2[CharacterCodes2["o"] = 111] = "o";
+  CharacterCodes2[CharacterCodes2["p"] = 112] = "p";
+  CharacterCodes2[CharacterCodes2["q"] = 113] = "q";
+  CharacterCodes2[CharacterCodes2["r"] = 114] = "r";
+  CharacterCodes2[CharacterCodes2["s"] = 115] = "s";
+  CharacterCodes2[CharacterCodes2["t"] = 116] = "t";
+  CharacterCodes2[CharacterCodes2["u"] = 117] = "u";
+  CharacterCodes2[CharacterCodes2["v"] = 118] = "v";
+  CharacterCodes2[CharacterCodes2["w"] = 119] = "w";
+  CharacterCodes2[CharacterCodes2["x"] = 120] = "x";
+  CharacterCodes2[CharacterCodes2["y"] = 121] = "y";
+  CharacterCodes2[CharacterCodes2["z"] = 122] = "z";
+  CharacterCodes2[CharacterCodes2["A"] = 65] = "A";
+  CharacterCodes2[CharacterCodes2["B"] = 66] = "B";
+  CharacterCodes2[CharacterCodes2["C"] = 67] = "C";
+  CharacterCodes2[CharacterCodes2["D"] = 68] = "D";
+  CharacterCodes2[CharacterCodes2["E"] = 69] = "E";
+  CharacterCodes2[CharacterCodes2["F"] = 70] = "F";
+  CharacterCodes2[CharacterCodes2["G"] = 71] = "G";
+  CharacterCodes2[CharacterCodes2["H"] = 72] = "H";
+  CharacterCodes2[CharacterCodes2["I"] = 73] = "I";
+  CharacterCodes2[CharacterCodes2["J"] = 74] = "J";
+  CharacterCodes2[CharacterCodes2["K"] = 75] = "K";
+  CharacterCodes2[CharacterCodes2["L"] = 76] = "L";
+  CharacterCodes2[CharacterCodes2["M"] = 77] = "M";
+  CharacterCodes2[CharacterCodes2["N"] = 78] = "N";
+  CharacterCodes2[CharacterCodes2["O"] = 79] = "O";
+  CharacterCodes2[CharacterCodes2["P"] = 80] = "P";
+  CharacterCodes2[CharacterCodes2["Q"] = 81] = "Q";
+  CharacterCodes2[CharacterCodes2["R"] = 82] = "R";
+  CharacterCodes2[CharacterCodes2["S"] = 83] = "S";
+  CharacterCodes2[CharacterCodes2["T"] = 84] = "T";
+  CharacterCodes2[CharacterCodes2["U"] = 85] = "U";
+  CharacterCodes2[CharacterCodes2["V"] = 86] = "V";
+  CharacterCodes2[CharacterCodes2["W"] = 87] = "W";
+  CharacterCodes2[CharacterCodes2["X"] = 88] = "X";
+  CharacterCodes2[CharacterCodes2["Y"] = 89] = "Y";
+  CharacterCodes2[CharacterCodes2["Z"] = 90] = "Z";
+  CharacterCodes2[CharacterCodes2["asterisk"] = 42] = "asterisk";
+  CharacterCodes2[CharacterCodes2["backslash"] = 92] = "backslash";
+  CharacterCodes2[CharacterCodes2["closeBrace"] = 125] = "closeBrace";
+  CharacterCodes2[CharacterCodes2["closeBracket"] = 93] = "closeBracket";
+  CharacterCodes2[CharacterCodes2["colon"] = 58] = "colon";
+  CharacterCodes2[CharacterCodes2["comma"] = 44] = "comma";
+  CharacterCodes2[CharacterCodes2["dot"] = 46] = "dot";
+  CharacterCodes2[CharacterCodes2["doubleQuote"] = 34] = "doubleQuote";
+  CharacterCodes2[CharacterCodes2["minus"] = 45] = "minus";
+  CharacterCodes2[CharacterCodes2["openBrace"] = 123] = "openBrace";
+  CharacterCodes2[CharacterCodes2["openBracket"] = 91] = "openBracket";
+  CharacterCodes2[CharacterCodes2["plus"] = 43] = "plus";
+  CharacterCodes2[CharacterCodes2["slash"] = 47] = "slash";
+  CharacterCodes2[CharacterCodes2["formFeed"] = 12] = "formFeed";
+  CharacterCodes2[CharacterCodes2["tab"] = 9] = "tab";
+})(CharacterCodes || (CharacterCodes = {}));
+
+// node_modules/jsonc-parser/lib/esm/impl/string-intern.js
+var cachedSpaces = new Array(20).fill(0).map((_, index) => {
+  return " ".repeat(index);
+});
+var maxCachedValues = 200;
+var cachedBreakLinesWithSpaces = {
+  " ": {
+    "\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\n" + " ".repeat(index);
+    }),
+    "\r": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\r" + " ".repeat(index);
+    }),
+    "\r\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\r\n" + " ".repeat(index);
+    })
+  },
+  "	": {
+    "\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\n" + "	".repeat(index);
+    }),
+    "\r": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\r" + "	".repeat(index);
+    }),
+    "\r\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\r\n" + "	".repeat(index);
+    })
+  }
+};
+
+// node_modules/jsonc-parser/lib/esm/impl/parser.js
+var ParseOptions;
+(function(ParseOptions2) {
+  ParseOptions2.DEFAULT = {
+    allowTrailingComma: false
+  };
+})(ParseOptions || (ParseOptions = {}));
+function parse3(text, errors = [], options = ParseOptions.DEFAULT) {
+  let currentProperty = null;
+  let currentParent = [];
+  const previousParents = [];
+  function onValue(value) {
+    if (Array.isArray(currentParent)) {
+      currentParent.push(value);
+    } else if (currentProperty !== null) {
+      currentParent[currentProperty] = value;
+    }
+  }
+  const visitor = {
+    onObjectBegin: () => {
+      const object3 = {};
+      onValue(object3);
+      previousParents.push(currentParent);
+      currentParent = object3;
+      currentProperty = null;
+    },
+    onObjectProperty: (name) => {
+      currentProperty = name;
+    },
+    onObjectEnd: () => {
+      currentParent = previousParents.pop();
+    },
+    onArrayBegin: () => {
+      const array2 = [];
+      onValue(array2);
+      previousParents.push(currentParent);
+      currentParent = array2;
+      currentProperty = null;
+    },
+    onArrayEnd: () => {
+      currentParent = previousParents.pop();
+    },
+    onLiteralValue: onValue,
+    onError: (error3, offset, length) => {
+      errors.push({ error: error3, offset, length });
+    }
+  };
+  visit(text, visitor, options);
+  return currentParent[0];
+}
+function visit(text, visitor, options = ParseOptions.DEFAULT) {
+  const _scanner = createScanner(text, false);
+  const _jsonPath = [];
+  let suppressedCallbacks = 0;
+  function toNoArgVisit(visitFunction) {
+    return visitFunction ? () => suppressedCallbacks === 0 && visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter()) : () => true;
+  }
+  function toOneArgVisit(visitFunction) {
+    return visitFunction ? (arg) => suppressedCallbacks === 0 && visitFunction(arg, _scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter()) : () => true;
+  }
+  function toOneArgVisitWithPath(visitFunction) {
+    return visitFunction ? (arg) => suppressedCallbacks === 0 && visitFunction(arg, _scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter(), () => _jsonPath.slice()) : () => true;
+  }
+  function toBeginVisit(visitFunction) {
+    return visitFunction ? () => {
+      if (suppressedCallbacks > 0) {
+        suppressedCallbacks++;
+      } else {
+        let cbReturn = visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter(), () => _jsonPath.slice());
+        if (cbReturn === false) {
+          suppressedCallbacks = 1;
+        }
+      }
+    } : () => true;
+  }
+  function toEndVisit(visitFunction) {
+    return visitFunction ? () => {
+      if (suppressedCallbacks > 0) {
+        suppressedCallbacks--;
+      }
+      if (suppressedCallbacks === 0) {
+        visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter());
+      }
+    } : () => true;
+  }
+  const onObjectBegin = toBeginVisit(visitor.onObjectBegin), onObjectProperty = toOneArgVisitWithPath(visitor.onObjectProperty), onObjectEnd = toEndVisit(visitor.onObjectEnd), onArrayBegin = toBeginVisit(visitor.onArrayBegin), onArrayEnd = toEndVisit(visitor.onArrayEnd), onLiteralValue = toOneArgVisitWithPath(visitor.onLiteralValue), onSeparator = toOneArgVisit(visitor.onSeparator), onComment = toNoArgVisit(visitor.onComment), onError = toOneArgVisit(visitor.onError);
+  const disallowComments = options && options.disallowComments;
+  const allowTrailingComma = options && options.allowTrailingComma;
+  function scanNext() {
+    while (true) {
+      const token = _scanner.scan();
+      switch (_scanner.getTokenError()) {
+        case 4:
+          handleError(
+            14
+            /* ParseErrorCode.InvalidUnicode */
+          );
+          break;
+        case 5:
+          handleError(
+            15
+            /* ParseErrorCode.InvalidEscapeCharacter */
+          );
+          break;
+        case 3:
+          handleError(
+            13
+            /* ParseErrorCode.UnexpectedEndOfNumber */
+          );
+          break;
+        case 1:
+          if (!disallowComments) {
+            handleError(
+              11
+              /* ParseErrorCode.UnexpectedEndOfComment */
+            );
+          }
+          break;
+        case 2:
+          handleError(
+            12
+            /* ParseErrorCode.UnexpectedEndOfString */
+          );
+          break;
+        case 6:
+          handleError(
+            16
+            /* ParseErrorCode.InvalidCharacter */
+          );
+          break;
+      }
+      switch (token) {
+        case 12:
+        case 13:
+          if (disallowComments) {
+            handleError(
+              10
+              /* ParseErrorCode.InvalidCommentToken */
+            );
+          } else {
+            onComment();
+          }
+          break;
+        case 16:
+          handleError(
+            1
+            /* ParseErrorCode.InvalidSymbol */
+          );
+          break;
+        case 15:
+        case 14:
+          break;
+        default:
+          return token;
+      }
+    }
+  }
+  function handleError(error3, skipUntilAfter = [], skipUntil = []) {
+    onError(error3);
+    if (skipUntilAfter.length + skipUntil.length > 0) {
+      let token = _scanner.getToken();
+      while (token !== 17) {
+        if (skipUntilAfter.indexOf(token) !== -1) {
+          scanNext();
+          break;
+        } else if (skipUntil.indexOf(token) !== -1) {
+          break;
+        }
+        token = scanNext();
+      }
+    }
+  }
+  function parseString(isValue) {
+    const value = _scanner.getTokenValue();
+    if (isValue) {
+      onLiteralValue(value);
+    } else {
+      onObjectProperty(value);
+      _jsonPath.push(value);
+    }
+    scanNext();
+    return true;
+  }
+  function parseLiteral() {
+    switch (_scanner.getToken()) {
+      case 11:
+        const tokenValue = _scanner.getTokenValue();
+        let value = Number(tokenValue);
+        if (isNaN(value)) {
+          handleError(
+            2
+            /* ParseErrorCode.InvalidNumberFormat */
+          );
+          value = 0;
+        }
+        onLiteralValue(value);
+        break;
+      case 7:
+        onLiteralValue(null);
+        break;
+      case 8:
+        onLiteralValue(true);
+        break;
+      case 9:
+        onLiteralValue(false);
+        break;
+      default:
+        return false;
+    }
+    scanNext();
+    return true;
+  }
+  function parseProperty() {
+    if (_scanner.getToken() !== 10) {
+      handleError(3, [], [
+        2,
+        5
+        /* SyntaxKind.CommaToken */
+      ]);
+      return false;
+    }
+    parseString(false);
+    if (_scanner.getToken() === 6) {
+      onSeparator(":");
+      scanNext();
+      if (!parseValue()) {
+        handleError(4, [], [
+          2,
+          5
+          /* SyntaxKind.CommaToken */
+        ]);
+      }
+    } else {
+      handleError(5, [], [
+        2,
+        5
+        /* SyntaxKind.CommaToken */
+      ]);
+    }
+    _jsonPath.pop();
+    return true;
+  }
+  function parseObject() {
+    onObjectBegin();
+    scanNext();
+    let needsComma = false;
+    while (_scanner.getToken() !== 2 && _scanner.getToken() !== 17) {
+      if (_scanner.getToken() === 5) {
+        if (!needsComma) {
+          handleError(4, [], []);
+        }
+        onSeparator(",");
+        scanNext();
+        if (_scanner.getToken() === 2 && allowTrailingComma) {
+          break;
+        }
+      } else if (needsComma) {
+        handleError(6, [], []);
+      }
+      if (!parseProperty()) {
+        handleError(4, [], [
+          2,
+          5
+          /* SyntaxKind.CommaToken */
+        ]);
+      }
+      needsComma = true;
+    }
+    onObjectEnd();
+    if (_scanner.getToken() !== 2) {
+      handleError(7, [
+        2
+        /* SyntaxKind.CloseBraceToken */
+      ], []);
+    } else {
+      scanNext();
+    }
+    return true;
+  }
+  function parseArray() {
+    onArrayBegin();
+    scanNext();
+    let isFirstElement = true;
+    let needsComma = false;
+    while (_scanner.getToken() !== 4 && _scanner.getToken() !== 17) {
+      if (_scanner.getToken() === 5) {
+        if (!needsComma) {
+          handleError(4, [], []);
+        }
+        onSeparator(",");
+        scanNext();
+        if (_scanner.getToken() === 4 && allowTrailingComma) {
+          break;
+        }
+      } else if (needsComma) {
+        handleError(6, [], []);
+      }
+      if (isFirstElement) {
+        _jsonPath.push(0);
+        isFirstElement = false;
+      } else {
+        _jsonPath[_jsonPath.length - 1]++;
+      }
+      if (!parseValue()) {
+        handleError(4, [], [
+          4,
+          5
+          /* SyntaxKind.CommaToken */
+        ]);
+      }
+      needsComma = true;
+    }
+    onArrayEnd();
+    if (!isFirstElement) {
+      _jsonPath.pop();
+    }
+    if (_scanner.getToken() !== 4) {
+      handleError(8, [
+        4
+        /* SyntaxKind.CloseBracketToken */
+      ], []);
+    } else {
+      scanNext();
+    }
+    return true;
+  }
+  function parseValue() {
+    switch (_scanner.getToken()) {
+      case 3:
+        return parseArray();
+      case 1:
+        return parseObject();
+      case 10:
+        return parseString(true);
+      default:
+        return parseLiteral();
+    }
+  }
+  scanNext();
+  if (_scanner.getToken() === 17) {
+    if (options.allowEmptyContent) {
+      return true;
+    }
+    handleError(4, [], []);
+    return false;
+  }
+  if (!parseValue()) {
+    handleError(4, [], []);
+    return false;
+  }
+  if (_scanner.getToken() !== 17) {
+    handleError(9, [], []);
+  }
+  return true;
+}
+
+// node_modules/jsonc-parser/lib/esm/main.js
+var ScanError;
+(function(ScanError2) {
+  ScanError2[ScanError2["None"] = 0] = "None";
+  ScanError2[ScanError2["UnexpectedEndOfComment"] = 1] = "UnexpectedEndOfComment";
+  ScanError2[ScanError2["UnexpectedEndOfString"] = 2] = "UnexpectedEndOfString";
+  ScanError2[ScanError2["UnexpectedEndOfNumber"] = 3] = "UnexpectedEndOfNumber";
+  ScanError2[ScanError2["InvalidUnicode"] = 4] = "InvalidUnicode";
+  ScanError2[ScanError2["InvalidEscapeCharacter"] = 5] = "InvalidEscapeCharacter";
+  ScanError2[ScanError2["InvalidCharacter"] = 6] = "InvalidCharacter";
+})(ScanError || (ScanError = {}));
+var SyntaxKind;
+(function(SyntaxKind2) {
+  SyntaxKind2[SyntaxKind2["OpenBraceToken"] = 1] = "OpenBraceToken";
+  SyntaxKind2[SyntaxKind2["CloseBraceToken"] = 2] = "CloseBraceToken";
+  SyntaxKind2[SyntaxKind2["OpenBracketToken"] = 3] = "OpenBracketToken";
+  SyntaxKind2[SyntaxKind2["CloseBracketToken"] = 4] = "CloseBracketToken";
+  SyntaxKind2[SyntaxKind2["CommaToken"] = 5] = "CommaToken";
+  SyntaxKind2[SyntaxKind2["ColonToken"] = 6] = "ColonToken";
+  SyntaxKind2[SyntaxKind2["NullKeyword"] = 7] = "NullKeyword";
+  SyntaxKind2[SyntaxKind2["TrueKeyword"] = 8] = "TrueKeyword";
+  SyntaxKind2[SyntaxKind2["FalseKeyword"] = 9] = "FalseKeyword";
+  SyntaxKind2[SyntaxKind2["StringLiteral"] = 10] = "StringLiteral";
+  SyntaxKind2[SyntaxKind2["NumericLiteral"] = 11] = "NumericLiteral";
+  SyntaxKind2[SyntaxKind2["LineCommentTrivia"] = 12] = "LineCommentTrivia";
+  SyntaxKind2[SyntaxKind2["BlockCommentTrivia"] = 13] = "BlockCommentTrivia";
+  SyntaxKind2[SyntaxKind2["LineBreakTrivia"] = 14] = "LineBreakTrivia";
+  SyntaxKind2[SyntaxKind2["Trivia"] = 15] = "Trivia";
+  SyntaxKind2[SyntaxKind2["Unknown"] = 16] = "Unknown";
+  SyntaxKind2[SyntaxKind2["EOF"] = 17] = "EOF";
+})(SyntaxKind || (SyntaxKind = {}));
+var parse4 = parse3;
+var ParseErrorCode;
+(function(ParseErrorCode2) {
+  ParseErrorCode2[ParseErrorCode2["InvalidSymbol"] = 1] = "InvalidSymbol";
+  ParseErrorCode2[ParseErrorCode2["InvalidNumberFormat"] = 2] = "InvalidNumberFormat";
+  ParseErrorCode2[ParseErrorCode2["PropertyNameExpected"] = 3] = "PropertyNameExpected";
+  ParseErrorCode2[ParseErrorCode2["ValueExpected"] = 4] = "ValueExpected";
+  ParseErrorCode2[ParseErrorCode2["ColonExpected"] = 5] = "ColonExpected";
+  ParseErrorCode2[ParseErrorCode2["CommaExpected"] = 6] = "CommaExpected";
+  ParseErrorCode2[ParseErrorCode2["CloseBraceExpected"] = 7] = "CloseBraceExpected";
+  ParseErrorCode2[ParseErrorCode2["CloseBracketExpected"] = 8] = "CloseBracketExpected";
+  ParseErrorCode2[ParseErrorCode2["EndOfFileExpected"] = 9] = "EndOfFileExpected";
+  ParseErrorCode2[ParseErrorCode2["InvalidCommentToken"] = 10] = "InvalidCommentToken";
+  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfComment"] = 11] = "UnexpectedEndOfComment";
+  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfString"] = 12] = "UnexpectedEndOfString";
+  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfNumber"] = 13] = "UnexpectedEndOfNumber";
+  ParseErrorCode2[ParseErrorCode2["InvalidUnicode"] = 14] = "InvalidUnicode";
+  ParseErrorCode2[ParseErrorCode2["InvalidEscapeCharacter"] = 15] = "InvalidEscapeCharacter";
+  ParseErrorCode2[ParseErrorCode2["InvalidCharacter"] = 16] = "InvalidCharacter";
+})(ParseErrorCode || (ParseErrorCode = {}));
+
+// cursor-cli-workspace.mjs
+function invalid(message, cause) {
+  const error3 = new Error(message, cause ? { cause } : void 0);
+  error3.code = "CURSOR_CLI_WORKSPACE_INVALID";
+  error3.confirmedNotSent = true;
+  return error3;
+}
+function localDirectory(path2) {
+  try {
+    if (!statSync3(path2).isDirectory()) throw new Error("not a directory");
+    return realpathSync(path2);
+  } catch (error3) {
+    throw invalid(`CCE CLI workspace directory is unavailable: ${path2}`, error3);
+  }
+}
+function resolveCliWorkspace(projectPath) {
+  if (typeof projectPath !== "string" || !isAbsolute2(projectPath)) throw invalid("CCE CLI requires an absolute workspace path");
+  const workspacePath = resolve8(projectPath);
+  let info;
+  try {
+    info = statSync3(workspacePath);
+  } catch (error3) {
+    throw invalid(`CCE CLI workspace is unavailable: ${workspacePath}`, error3);
+  }
+  if (info.isDirectory()) return { workspacePath, cwd: localDirectory(workspacePath), additionalRoots: [] };
+  if (!info.isFile() || extname3(workspacePath).toLowerCase() !== ".code-workspace") throw invalid("CCE CLI requires a directory or .code-workspace file");
+  if (info.size > 1024 * 1024) throw invalid("CCE workspace configuration exceeds 1 MiB");
+  const errors = [];
+  const document = parse4(readFileSync7(workspacePath, "utf8").replace(/^\uFEFF/, ""), errors, { allowTrailingComma: true });
+  if (errors.length || !Array.isArray(document?.folders) || !document.folders.length) throw invalid("CCE workspace configuration must contain valid local folders");
+  const roots = [];
+  for (const folder of document.folders) {
+    if (!folder || typeof folder !== "object" || Array.isArray(folder)) throw invalid("CCE workspace folder is invalid");
+    const hasPath = typeof folder.path === "string" && folder.path.trim().length > 0;
+    const hasUri = typeof folder.uri === "string" && folder.uri.trim().length > 0;
+    if (hasPath === hasUri) throw invalid("CCE workspace folder must have exactly one local path or file URI");
+    let path2;
+    if (hasPath) {
+      if (/^[a-z][a-z\d+.-]*:/i.test(folder.path) && !/^[a-z]:[\\/]/i.test(folder.path)) throw invalid("CCE CLI supports local workspace folders only");
+      path2 = resolve8(dirname7(workspacePath), folder.path);
+    } else {
+      try {
+        const uri = new URL(folder.uri);
+        if (uri.protocol !== "file:" || uri.search || uri.hash) throw new Error("not a local file URI");
+        path2 = fileURLToPath(uri);
+      } catch (error3) {
+        throw invalid("CCE CLI supports local file-URI workspace folders only", error3);
+      }
+    }
+    const root = localDirectory(path2);
+    const key = (value) => process.platform === "win32" ? value.toLowerCase() : value;
+    if (!roots.some((existing) => key(existing) === key(root))) roots.push(root);
+  }
+  return { workspacePath, cwd: roots[0], additionalRoots: roots.slice(1) };
+}
+
+// cursor-cli-config.mjs
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { homedir as homedir9, tmpdir } from "node:os";
+import { basename as basename6, dirname as dirname8, isAbsolute as isAbsolute3, join as join9, resolve as resolve9 } from "node:path";
+var bridgeTools = [
+  "cursor_context_engine",
+  "cursor_search",
+  "cursor_search_deep",
+  "cursor_do",
+  "cursor_init",
+  "cursor_launch",
+  "cursor_cce",
+  "cursor_model",
+  "cursor_runtime",
+  "cursor_status",
+  "cursor_task_control",
+  "cursor_session_control"
+];
+async function createCliConfigScope(env = process.env) {
+  const configured = env.CURSOR_CONFIG_DIR;
+  const userHome = (process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir9();
+  const source = configured?.trim() ? configured : env.XDG_CONFIG_HOME?.trim() ? join9(env.XDG_CONFIG_HOME, "cursor") : join9(userHome, ".cursor");
+  if (!isAbsolute3(source)) throw Object.assign(new Error("Cursor CLI configuration directory must be absolute"), { code: "CURSOR_CLI_CONFIG_INVALID", confirmedNotSent: true });
+  const parent = resolve9(tmpdir()), prefix = "cursor-bridge-cce-config-";
+  const directory = await mkdtemp(join9(parent, prefix));
+  let released = false;
+  const cleanup = async () => {
+    if (released) return;
+    if (dirname8(resolve9(directory)) !== parent || !basename6(directory).startsWith(prefix)) throw new Error("Refusing to remove an unexpected CLI configuration directory");
+    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    released = true;
+  };
+  try {
+    let settings = { version: 1, editor: { vimMode: false }, permissions: { allow: [], deny: [] } };
+    for (const name of ["cli-config.json", "permissions.json"]) {
+      let contents;
+      try {
+        contents = await readFile(join9(source, name));
+      } catch (error3) {
+        if (error3.code === "ENOENT") continue;
+        throw error3;
+      }
+      if (contents.length > 4 * 1024 * 1024) throw new Error("Cursor CLI configuration file exceeds 4 MiB");
+      if (name === "cli-config.json") settings = JSON.parse(contents.toString("utf8"));
+      else await writeFile(join9(directory, name), contents, { flag: "wx", mode: 384 });
+    }
+    if (!settings || typeof settings !== "object" || Array.isArray(settings) || settings.permissions != null && (typeof settings.permissions !== "object" || Array.isArray(settings.permissions)) || settings.permissions?.deny != null && !Array.isArray(settings.permissions.deny)) throw new Error("Invalid native CLI permissions configuration");
+    settings.permissions = {
+      ...settings.permissions,
+      // An owned CCE turn must use native retrieval rather than recursively
+      // submitting another Bridge turn or mutating the host's Bridge settings.
+      deny: [.../* @__PURE__ */ new Set([...settings.permissions?.deny || [], ...bridgeTools.map((tool) => `Mcp(*:${tool})`)])]
+    };
+    await writeFile(join9(directory, "cli-config.json"), JSON.stringify(settings, null, 2) + "\n", { flag: "wx", mode: 384 });
+    return { directory, env: { ...env, CURSOR_CONFIG_DIR: directory }, cleanup };
+  } catch (cause) {
+    await cleanup().catch(() => {
+    });
+    throw Object.assign(new Error("Cannot prepare the private Cursor CLI configuration", { cause }), { code: "CURSOR_CLI_CONFIG_INVALID", confirmedNotSent: true });
+  }
+}
+
+// cursor-cli.mjs
+var VERSION = /^\d{4}\.\d{1,2}\.\d{1,2}(?:-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$/;
+var error2 = (code, message) => Object.assign(new Error(message), { code });
+var clean = (value) => String(value || "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\u200b-\u200d\ufeff]/g, "");
+var displayText = (value) => clean(value).toLowerCase().replace(/\b\d+(?:\.\d+)?\s*[km](?:\s*(?:tokens?|context))?\b/g, "").trim();
+var display = (value) => displayText(value).replace(/extra[\s_-]*high/g, "xhigh").replace(/[^a-z0-9.]+/g, "");
+var effortName = (value) => String(value || "").trim().toLowerCase().replace(/extra[\s_-]*high/g, "xhigh");
+var advertisedEffort = (value) => effortName(/(?:^|[\s_-])(extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i.exec(displayText(value))?.[1]);
+var safeDetail = (value) => clean(value).replace(/(["']?(?:authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|(?:bearer|basic)\s+\S+|\S+)/gi, "$1[redacted]").replace(/\b(?:bearer|basic)\s+\S+/gi, "[redacted]").replace(/\b(?:sk|key|token)-[a-z0-9_-]{12,}/gi, "[redacted]").replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]").slice(0, 800);
+var stderrSummary = (value) => {
+  const text = clean(value);
+  const network = /\b(ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN)\b/.exec(text);
+  if (network) return network[1];
+  if (/not authenticated|authentication|unauthorized|sign.?in|log.?in|api.?key/i.test(text)) return "authentication failed; check Cursor CLI login";
+  if (/workspace.*trust|untrusted/i.test(text)) return "workspace trust was not confirmed";
+  return text.trim() ? "CLI reported an error on stderr (content withheld)" : "";
+};
+var exists = async (file) => {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+};
+async function resolveLauncher(options) {
+  if (options.launcher) return options.launcher;
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const explicit = env.CURSOR_BRIDGE_CLI_PATH;
+  if (explicit && !path.isAbsolute(explicit)) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "CURSOR_BRIDGE_CLI_PATH must be absolute");
+  const candidates = explicit ? [explicit] : [];
+  if (!explicit && platform === "win32" && env.LOCALAPPDATA) candidates.push(path.join(env.LOCALAPPDATA, "cursor-agent", "cursor-agent.ps1"));
+  if (!explicit) for (const directory of (env.PATH || "").split(platform === "win32" ? ";" : ":").filter(Boolean)) {
+    for (const name of platform === "win32" ? ["cursor-agent.ps1", "cursor-agent.cmd", "cursor-agent.exe"] : ["cursor-agent", "agent"]) candidates.push(path.join(directory, name));
+  }
+  for (const candidate of candidates) {
+    if (!await exists(candidate)) continue;
+    const absolute = await realpath(candidate);
+    if (platform !== "win32" || /\.exe$/i.test(absolute)) return { command: absolute, args: [], wrapper: absolute };
+    if (!/\.(?:ps1|cmd)$/i.test(absolute)) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Unsupported Windows Cursor launcher");
+    const content = await readFile2(absolute, "utf8");
+    if (!/node\.exe/i.test(content) || !/index\.js/i.test(content)) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Cursor wrapper does not expose the supported Node layout");
+    const directory = path.dirname(absolute);
+    const roots = [directory];
+    try {
+      const entries = (await readdir(path.join(directory, "versions"), { withFileTypes: true })).filter((entry) => entry.isDirectory() && VERSION.test(entry.name));
+      entries.sort((a, b) => b.name.localeCompare(a.name, void 0, { numeric: true }));
+      roots.push(...entries.map((entry) => path.join(directory, "versions", entry.name)));
+    } catch (cause) {
+      if (cause.code !== "ENOENT") throw cause;
+    }
+    for (const root of roots) if (await exists(path.join(root, "node.exe")) && await exists(path.join(root, "index.js"))) {
+      return { command: await realpath(path.join(root, "node.exe")), args: [await realpath(path.join(root, "index.js"))], wrapper: absolute };
+    }
+    throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Cursor wrapper has no supported installed Node entrypoint");
+  }
+  throw error2("CURSOR_CLI_UNAVAILABLE", "Cursor CLI launcher was not found");
+}
+async function stopTree(child, options) {
+  if (!child.pid) return true;
+  if (child.exitCode != null || child.signalCode != null) return false;
+  if (options.killTree) return options.killTree(child);
+  if (process.platform === "win32") {
+    const taskkill = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "taskkill.exe");
+    await new Promise((resolve12, reject) => execFile(taskkill, ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 5e3 }, (cause) => cause ? reject(cause) : resolve12()));
+    return true;
+  }
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch (cause) {
+    if (cause.code !== "ESRCH") throw cause;
+  }
+  return true;
+}
+async function execute(launcher, args, options = {}) {
+  const spawn4 = options.spawn || nodeSpawn;
+  const env = {
+    ...options.env || process.env,
+    CURSOR_BRIDGE_CCE_CLI_CHILD: "1",
+    CURSOR_BRIDGE_NO_AUTOLAUNCH: "1",
+    CURSOR_BRIDGE_DELEGATION: "off"
+  };
+  if (options.signal?.aborted) throw Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true, stopConfirmed: true, confirmedTerminal: true, confirmedNotSent: true, sent: false });
+  return new Promise((resolve12, reject) => {
+    let child, stdout = "", stderr = "", pending = "", bytes = 0, failure, closed = false, dispatched = false, stopPromise;
+    let closeTimer;
+    const timeoutMs = Math.max(1, options.timeoutMs ?? 15e3);
+    const maxBytes = options.maxOutputBytes ?? 8 * 1024 * 1024;
+    const finishError = (cause, terminal) => {
+      if (child?.pid) cause.cliProcessId = child.pid;
+      cause.sent = dispatched;
+      cause.confirmedNotSent = !dispatched;
+      cause.confirmedTerminal = terminal;
+      if (!terminal && dispatched) cause.sent = true;
+      if (cause.cancelled) cause.stopConfirmed = terminal;
+      reject(cause);
+    };
+    const fail = (cause) => {
+      if (failure) return;
+      failure = cause;
+      stopPromise = Promise.resolve().then(() => stopTree(child, options)).then((value) => value !== false, () => false);
+      closeTimer = setTimeout(async () => {
+        cleanup();
+        finishError(failure, false);
+      }, options.closeTimeoutMs ?? 6e3);
+    };
+    const abort = () => fail(Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true }));
+    const cleanup = () => {
+      clearTimeout(timer);
+      clearTimeout(closeTimer);
+      options.signal?.removeEventListener("abort", abort);
+    };
+    let timer;
+    try {
+      child = spawn4(launcher.command, [...launcher.args || [], ...args], {
+        cwd: options.cwd,
+        env,
+        shell: false,
+        windowsHide: true,
+        detached: process.platform !== "win32",
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+    } catch (cause) {
+      finishError(cause, true);
+      return;
+    }
+    timer = setTimeout(() => fail(error2("CURSOR_CLI_TIMEOUT", "Cursor CLI request timed out")), timeoutMs);
+    options.signal?.addEventListener("abort", abort, { once: true });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      if (failure) return;
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > maxBytes) return fail(error2("CURSOR_CLI_OUTPUT_LIMIT", "Cursor CLI output exceeded the limit"));
+      if (!options.onLine) {
+        stdout += chunk;
+        return;
+      }
+      pending += chunk;
+      let boundary;
+      while ((boundary = pending.indexOf("\n")) >= 0 && !failure) {
+        const line = pending.slice(0, boundary).replace(/\r$/, "");
+        pending = pending.slice(boundary + 1);
+        if (!line.trim()) continue;
+        try {
+          options.onLine(line);
+        } catch (cause) {
+          fail(cause);
+        }
+      }
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = (stderr + chunk).slice(-4096);
+    });
+    child.stdin.on("error", (cause) => {
+      if (!closed) fail(cause);
+    });
+    child.on("error", (cause) => {
+      failure ||= cause;
+    });
+    child.on("close", async (code, signal) => {
+      if (closed) return;
+      closed = true;
+      cleanup();
+      const stopped = stopPromise ? await stopPromise : true;
+      if (failure) return finishError(failure, stopped);
+      let completionError;
+      const detail = stderrSummary(stderr);
+      if (code !== 0) completionError = Object.assign(error2("CURSOR_CLI_EXIT_ERROR", `Cursor CLI exited unsuccessfully${detail ? ": " + detail : ""}`), { exitCode: code, signal });
+      else if (options.onLine && pending.trim()) completionError = error2("CURSOR_CLI_PROTOCOL_ERROR", "Cursor CLI stream ended without a newline");
+      else try {
+        options.onEnd?.();
+      } catch (cause) {
+        completionError = cause;
+      }
+      if (completionError) {
+        return finishError(completionError, !dispatched);
+      }
+      resolve12({ stdout, stderr: safeDetail(stderr), code });
+    });
+    child.once("spawn", () => {
+      if (failure) return;
+      try {
+        if (options.input !== void 0) {
+          options.onDispatch?.();
+          if (failure || options.signal?.aborted) return;
+          dispatched = true;
+          child.stdin.end(options.input, "utf8");
+        } else child.stdin.end();
+      } catch (cause) {
+        fail(cause);
+      }
+    });
+    if (options.signal?.aborted) abort();
+  });
+}
+async function withCliConfig(options, action) {
+  const config2 = await createCliConfigScope(options.env || process.env);
+  let retain = false;
+  try {
+    return await action(config2.env);
+  } catch (cause) {
+    if (cause.confirmedTerminal === false) {
+      retain = true;
+      cause.cliConfigDirectory = config2.directory;
+    }
+    throw cause;
+  } finally {
+    if (!retain) await config2.cleanup().catch((error3) => console.error(`[cursor-bridge] CLI configuration-copy cleanup failed: ${error3.code || "unknown"}`));
+  }
+}
+async function inspectCursorCli(options = {}) {
+  const launcher = await resolveLauncher(options);
+  if (!launcher?.command || !path.isAbsolute(launcher.command) || !Array.isArray(launcher.args || [])) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Cursor launcher must use an absolute executable and argument array");
+  return withCliConfig(options, async (env) => {
+    const metadataOptions = { ...options, env, input: void 0, onLine: void 0, onDispatch: void 0, timeoutMs: options.timeoutMs ?? 15e3, maxOutputBytes: 1024 * 1024 };
+    const help = await execute(launcher, ["--help"], metadataOptions);
+    if (!/\bStart the Cursor Agent\b/i.test(clean(help.stdout)) || !/--workspace\b/.test(help.stdout) || !/stream-json/.test(help.stdout)) throw error2("CURSOR_CLI_WRONG_BRAND", "Launcher is not a supported Cursor CLI");
+    const listing = await execute(launcher, ["models"], metadataOptions);
+    const models = [];
+    for (const line of clean(listing.stdout).split(/\r?\n/)) {
+      const match = /^\s*([a-z0-9][a-z0-9._[\]=,:+-]*)\s+-\s+(.+?)\s*$/i.exec(line);
+      if (match) models.push({ id: match[1], name: match[2].replace(/\s+\((?:current|default|current, default|default, current)\)$/, "") });
+    }
+    if (!models.length) throw error2("CURSOR_CLI_MODELS_UNAVAILABLE", "Cursor CLI did not advertise usable model variants");
+    return { brand: "Cursor", launcher, models };
+  });
+}
+function selectVariant(cli, preference) {
+  const base = String(preference?.model || "").trim();
+  const effort = effortName(preference?.effort);
+  if (!base || /^(?:auto|default)$/i.test(base) || !effort || !/^(?:minimal|low|medium|high|xhigh|max)$/.test(effort)) throw error2("CURSOR_CLI_MODEL_REQUIRED", "An explicit named model and effort are required");
+  const ids = /* @__PURE__ */ new Set([`${base}-${effort}`.toLowerCase(), ...effort === "xhigh" ? [`${base}-extra-high`.toLowerCase()] : []]);
+  const candidates = cli.models.filter((model) => ids.has(model.id.toLowerCase()) || model.id.toLowerCase() === base.toLowerCase() && advertisedEffort(model.name) === effort);
+  if (candidates.length !== 1) throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The exact requested CLI model and effort variant is unavailable or ambiguous");
+  const selected = candidates[0];
+  if (advertisedEffort(selected.name) !== effort) throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The advertised model does not confirm the requested effort");
+  const identity = (value) => displayText(value).replace(/(?:[\s_-]+)(?:extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i, "").replace(/(\d)[_-](?=\d)/g, "$1.").replace(/[^a-z0-9.]+/g, "");
+  if (identity(selected.name) !== identity(base)) throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The advertised model name conflicts with the requested model identity");
+  return { selected, base, effort };
+}
+async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli }, options = {}) {
+  if (typeof prompt !== "string" || !prompt.trim()) throw error2("CURSOR_CLI_PROMPT_REQUIRED", "A nonempty prompt is required");
+  if (signal?.aborted) throw Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true, stopConfirmed: true, confirmedTerminal: true, confirmedNotSent: true, sent: false });
+  const workspace = await resolveCliWorkspace(projectPath);
+  const cwd = workspace.cwd;
+  cli ||= await inspectCursorCli({ ...options, signal });
+  if (cli.brand !== "Cursor" || !cli.launcher?.command || !Array.isArray(cli.models)) throw error2("CURSOR_CLI_UNVERIFIED", "A verified Cursor CLI inspection is required");
+  const { selected, base, effort } = selectVariant(cli, modelPreference);
+  let init, terminal, modelSelection;
+  const canonical = (value) => {
+    const normalized = path.normalize(value).replace(/[\\/]+$/, "");
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  };
+  const protocolError = (message) => error2("CURSOR_CLI_PROTOCOL_ERROR", message);
+  return withCliConfig(options, async (env) => {
+    await execute(cli.launcher, [
+      "--mode",
+      "ask",
+      "--print",
+      "--output-format",
+      "stream-json",
+      "--model",
+      selected.id,
+      "--workspace",
+      cwd,
+      ...workspace.additionalRoots.flatMap((root) => ["--add-dir", root]),
+      "--trust"
+    ], {
+      ...options,
+      env,
+      cwd,
+      input: prompt,
+      timeoutMs: timeoutMs ?? 12e4,
+      signal,
+      onDispatch,
+      onEnd() {
+        if (!init || !terminal) throw protocolError("Cursor CLI closed without a confirmed init and terminal result");
+      },
+      onLine(line) {
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          throw protocolError("Cursor CLI emitted invalid JSON");
+        }
+        if (!event || typeof event !== "object" || Array.isArray(event) || typeof event.type !== "string") throw protocolError("Cursor CLI emitted an invalid event");
+        if (terminal) throw protocolError("Cursor CLI emitted an event after its terminal result");
+        if (event.type === "system" && event.subtype === "init") {
+          if (init || typeof event.session_id !== "string" || !event.session_id) throw protocolError("Cursor CLI init is missing identity or duplicated");
+          if (typeof event.cwd !== "string" || !path.isAbsolute(event.cwd) || canonical(event.cwd) !== canonical(cwd)) throw protocolError("Cursor CLI init workspace does not match the request");
+          if (display(event.model) !== display(selected.name)) throw error2("CURSOR_CLI_MODEL_MISMATCH", "Cursor CLI initialized a different model or effort");
+          init = event;
+          modelSelection = {
+            configured: true,
+            applied: true,
+            requestedModel: base,
+            requestedEffort: modelPreference.effort,
+            effectiveModel: base,
+            effectiveEffort: effort,
+            verificationSource: "cursor_cli_init",
+            cliModel: selected.id,
+            verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+          onInit?.({ sessionId: init.session_id, modelSelection });
+          return;
+        }
+        if (!init || event.session_id !== init.session_id) throw protocolError("Cursor CLI event session identity is missing or inconsistent");
+        if (event.type === "result") {
+          if (event.subtype !== "success" || event.is_error !== false || typeof event.result !== "string" || !event.result.trim()) throw protocolError("Cursor CLI terminal result did not confirm success");
+          terminal = event;
+        }
+      }
+    });
+    return { result: terminal.result, sessionId: init.session_id, modelSelection };
+  });
+}
+
+// server.mjs
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.0.11";
+var PLUGIN_VERSION = "6.1.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -23027,9 +24397,9 @@ function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
 }
 var DELEGATION_MODE = normalizeDelegationMode();
 function cursorSessionError(code, message) {
-  const error2 = new Error(`${code}: ${message}`);
-  error2.code = code;
-  return error2;
+  const error3 = new Error(`${code}: ${message}`);
+  error3.code = code;
+  return error3;
 }
 function normalizeSessionRequestId(value) {
   const id = String(value || "").trim();
@@ -23042,8 +24412,8 @@ function sessionPathContains(parent, child) {
   return candidate === base || candidate.startsWith(`${base}/`);
 }
 function sameSessionProject(left, right) {
-  const a = resolve8(String(left || ""));
-  const b = resolve8(String(right || ""));
+  const a = resolve11(String(left || ""));
+  const b = resolve11(String(right || ""));
   return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 function searchResultContract() {
@@ -23088,6 +24458,7 @@ function buildContextEnginePrompt(query, requestContext = normalizeRequestContex
     "Choose the best Cursor capabilities available, including indexed semantic retrieval, exact text search, symbol/reference tracing, targeted source reading, and Explore or subagents when they materially help. The caller defines the read-only, evidence, and stopping boundaries; it does not prescribe Cursor's internal harness.",
     "Support every claimed relationship with actual search, references, or source reading. Semantic similarity is not a proven call edge. Stop at minimum sufficient context and avoid unrelated repository-wide exploration.",
     "Do not modify, create, or delete files, and do not run commands that change workspace state. Read only the context needed to verify the location.",
+    "Use your native retrieval tools for this delegated CCE turn. Do not invoke Cursor Bridge CCE, cursor_do, or their MCP aliases recursively.",
     "When evidence is missing, write NOT_FOUND and list the terms, symbols, references, or scopes actually searched under gaps. Never answer without searching.",
     "The search scope is the complete workspace currently open and indexed by Cursor. Treat any module or path named in the intent as a clue, not a hard boundary.",
     "Write narrative output in the language of the user query unless the query explicitly requests another language. Never translate paths, symbols, identifiers, keys, enum values, or evidence-source markers.",
@@ -23123,14 +24494,14 @@ function shouldScheduleParallelOriginRestore(job) {
 var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. Before finishing, inspect the actual changes and run verification proportional to risk. The final reply must list completed work, changed files, verification results, and remaining risks or blockers.";
 var DO_LANGUAGE_CONTRACT = "\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.";
 var CDP_HOST2 = "127.0.0.1";
-function httpJson(path) {
-  return new Promise((resolve9, reject) => {
-    const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path }, (res) => {
+function httpJson(path2) {
+  return new Promise((resolve12, reject) => {
+    const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path: path2 }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
         try {
-          resolve9(JSON.parse(d));
+          resolve12(JSON.parse(d));
         } catch {
           reject(new Error("CDP returned a non-JSON response"));
         }
@@ -23205,8 +24576,8 @@ async function inspectPageTarget(page) {
     await c.ready;
     const raw = await evalJS(c, EXPR_PAGE_CAPABILITIES, { timeoutMs: probeMs });
     return { ...page, capabilities: JSON.parse(raw || "{}") };
-  } catch (error2) {
-    return { ...page, capabilities: null, probeError: error2.message };
+  } catch (error3) {
+    return { ...page, capabilities: null, probeError: error3.message };
   } finally {
     c.close();
   }
@@ -23231,15 +24602,15 @@ function selectPageForUiPreference(inspected, options = {}) {
     options
   ) || pages[0] || null;
 }
-function isAgentsWorkspaceBindError(error2) {
-  return !!(error2 && /Cursor Agents workspace binding failed/.test(String(error2.message || "")));
+function isAgentsWorkspaceBindError(error3) {
+  return !!(error3 && /Cursor Agents workspace binding failed/.test(String(error3.message || "")));
 }
 function createWorkspaceBindingError(diagnostic) {
-  const error2 = new Error(`Cursor Agents workspace binding failed: ${diagnostic.state || "unknown"}; wanted=${diagnostic.wanted || diagnostic.workspace || "unknown"}. ${diagnostic.nextStep || "Re-run cursor_init for the exact local workspace."}`);
-  error2.code = "CURSOR_WORKSPACE_BINDING_FAILED";
-  error2.workspaceBindingFailure = diagnostic;
-  error2.confirmedNotSent = true;
-  return error2;
+  const error3 = new Error(`Cursor Agents workspace binding failed: ${diagnostic.state || "unknown"}; wanted=${diagnostic.wanted || diagnostic.workspace || "unknown"}. ${diagnostic.nextStep || "Re-run cursor_init for the exact local workspace."}`);
+  error3.code = "CURSOR_WORKSPACE_BINDING_FAILED";
+  error3.workspaceBindingFailure = diagnostic;
+  error3.confirmedNotSent = true;
+  return error3;
 }
 async function findPage(options = {}) {
   const list = await httpJson("/json/list");
@@ -23262,10 +24633,10 @@ function makeClient2(wsUrl, options = {}) {
 async function activateCursorRenderer(c) {
   try {
     await c.send("Emulation.setFocusEmulationEnabled", { enabled: true });
-  } catch (error2) {
-    if (error2.code === -32601) return async () => {
+  } catch (error3) {
+    if (error3.code === -32601) return async () => {
     };
-    throw error2;
+    throw error3;
   }
   let released = false;
   return async () => {
@@ -23281,9 +24652,9 @@ var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function evalJS(c, expr, options) {
   const r = await c.send("Runtime.evaluate", { expression: expr, returnByValue: true, includeCommandLineAPI: true, awaitPromise: true }, options);
   if (r.exceptionDetails) {
-    const error2 = new Error("Page exception: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
-    error2.code = "CDP_EVALUATE_FAILED";
-    throw error2;
+    const error3 = new Error("Page exception: " + (r.exceptionDetails.exception && r.exceptionDetails.exception.description || r.exceptionDetails.text));
+    error3.code = "CDP_EVALUATE_FAILED";
+    throw error3;
   }
   return r.result && r.result.value;
 }
@@ -23361,10 +24732,10 @@ function classifyChatPanelDiagnostic(snapshot = {}) {
 }
 function createChatPanelUnavailableError(snapshot) {
   const uiDiagnostic = classifyChatPanelDiagnostic(snapshot);
-  const error2 = new Error(`${uiDiagnostic.code}: ${uiDiagnostic.message} ${uiDiagnostic.nextStep}`);
-  error2.code = uiDiagnostic.code;
-  error2.uiDiagnostic = uiDiagnostic;
-  return error2;
+  const error3 = new Error(`${uiDiagnostic.code}: ${uiDiagnostic.message} ${uiDiagnostic.nextStep}`);
+  error3.code = uiDiagnostic.code;
+  error3.uiDiagnostic = uiDiagnostic;
+  return error3;
 }
 var EXPR_PREPARE_INPUT = `(function(){${INPUT_PICKER_BODY}const inp=pickInput();if(!inp)return 'NO_INPUT';inp.focus();try{const s=getSelection();const r=document.createRange();r.selectNodeContents(inp);s.removeAllRanges();s.addRange(r);}catch(e){}return 'READY';})()`;
 var SEND_PICKER_BODY = `
@@ -23801,10 +25172,10 @@ function selectModelPickerRow(rows, requested, kind = "model") {
   return candidates[0].row;
 }
 function createModelSelectionError(message, failureClass, retryable, diagnostic = {}) {
-  const error2 = new Error(message);
-  error2.code = `CURSOR_MODEL_${String(failureClass || "PROBE_ERROR").toUpperCase()}`;
-  error2.modelSelectionFailure = { failureClass, retryable, ...diagnostic };
-  return error2;
+  const error3 = new Error(message);
+  error3.code = `CURSOR_MODEL_${String(failureClass || "PROBE_ERROR").toUpperCase()}`;
+  error3.modelSelectionFailure = { failureClass, retryable, ...diagnostic };
+  return error3;
 }
 var WORKSPACE_SECTION_BODY = String.raw`
   const workspaceScalar=value=>value&&typeof value==='object'&&'value' in value?value.value:value;
@@ -24556,8 +25927,8 @@ function selectPromotedParallelEntry(beforeEntries, provisionalAgentId, afterEnt
   }
   return null;
 }
-function uncertainSubmissionReservationScope(job, error2) {
-  if (error2 && error2.requiresGlobalReservation) return "global";
+function uncertainSubmissionReservationScope(job, error3) {
+  if (error3 && error3.requiresGlobalReservation) return "global";
   return job && job.readOnly ? "agent" : "paths";
 }
 function providerErrorSignature(info) {
@@ -24574,12 +25945,12 @@ function createProviderError(info) {
     signature: providerErrorSignature(info)
   };
   const detail = providerError.message || (providerError.requestId ? `Request ID: ${providerError.requestId}` : "");
-  const error2 = new Error([providerError.title, detail].filter(Boolean).join(": "));
-  error2.sent = true;
-  error2.confirmedTerminal = true;
-  error2.terminalEvidence = `provider_error_tray:${providerError.requestId || providerError.signature || "visible"}`;
-  error2.providerError = providerError;
-  return error2;
+  const error3 = new Error([providerError.title, detail].filter(Boolean).join(": "));
+  error3.sent = true;
+  error3.confirmedTerminal = true;
+  error3.terminalEvidence = `provider_error_tray:${providerError.requestId || providerError.signature || "visible"}`;
+  error3.providerError = providerError;
+  return error3;
 }
 function promoteAgentsWorkspaceLifecycle(lifecycle, agentsWorkspace) {
   return {
@@ -24649,16 +26020,16 @@ function lifecycleFailureSummary(lifecycle, fallback) {
   return [lifecycle.message || fallback, `[${diagnostic}]`, original].filter(Boolean).join(" ");
 }
 function releaseAdapterWorkingDirectory({ targetDir = null, chdir = process.chdir } = {}) {
-  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname7(process.execPath);
+  const target = targetDir ? ensureLifecycleDir(targetDir) : dirname10(process.execPath);
   chdir(target);
   return target;
 }
 var CursorBridge = class {
   constructor(options = {}) {
-    this.adapterStartCwd = resolve8(options.adapterStartCwd || process.cwd());
+    this.adapterStartCwd = resolve11(options.adapterStartCwd || process.cwd());
     this.environmentDelegationMode = normalizeDelegationMode(options.delegationMode || DELEGATION_MODE);
     this._syncDelegationState();
-    this.runtimeFile = options.runtimeFile === null ? null : resolve8(options.runtimeFile || resolveCursorRuntimeFile());
+    this.runtimeFile = options.runtimeFile === null ? null : resolve11(options.runtimeFile || resolveCursorRuntimeFile());
     this.runtimeModeDefault = normalizeCursorRuntimeMode(
       options.runtimeModeDefault || process.env.CURSOR_BRIDGE_RUNTIME_MODE,
       "normal"
@@ -24669,16 +26040,22 @@ var CursorBridge = class {
     this.runtimeMode = normalizeCursorRuntimeMode(requestedRuntimeMode);
     this.runtimeModeSource = options.runtimeMode !== void 0 ? "constructor" : persistedRuntimeMode ? "persistent" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
     this.runtimeModeScope = persistedRuntimeMode ? "persistent" : options.runtimeMode !== void 0 ? "constructor" : process.env.CURSOR_BRIDGE_RUNTIME_MODE ? "environment" : "default";
-    this.workspaceFile = options.workspaceFile === null ? null : resolve8(options.workspaceFile || resolveWorkspaceBindingFile());
+    this.workspaceFile = options.workspaceFile === null ? null : resolve11(options.workspaceFile || resolveWorkspaceBindingFile());
     this.workspaceKey = options.workspaceKey || resolveWorkspaceBindingKey(process.env, { cwd: this.adapterStartCwd });
     const persistedWorkspace = options.projectPath === void 0 ? readWorkspaceBinding(this.workspaceFile, this.workspaceKey) : null;
-    this.projectPath = options.projectPath !== void 0 ? resolve8(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
+    this.projectPath = options.projectPath !== void 0 ? resolve11(String(options.projectPath)) : persistedWorkspace && persistedWorkspace.projectPath || null;
     this.workspaceSource = options.projectPath !== void 0 ? "constructor" : persistedWorkspace ? "persistent_init" : "auto_detect";
     this.workspaceUpdatedAt = persistedWorkspace && persistedWorkspace.updatedAt || null;
     this.workspaceConfirmationRequired = this.workspaceKey === "default" && options.projectPath === void 0;
-    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve8(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
+    this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve11(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
     this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
-    this.sessionFile = options.sessionFile === null ? null : resolve8(options.sessionFile || resolveCursorSessionRegistryFile());
+    this.cceSourceFile = options.cceSourceFile === null ? null : resolve11(options.cceSourceFile || resolveCceSourceFile());
+    this.cliInspector = options.cliInspector || inspectCursorCli;
+    this.cliRunner = options.cliRunner || runCursorCli;
+    this.cliInspections = /* @__PURE__ */ new Set();
+    this.cliClosing = false;
+    this.cliMetadata = null;
+    this.sessionFile = options.sessionFile === null ? null : resolve11(options.sessionFile || resolveCursorSessionRegistryFile());
     this.sessionInstanceId = String(
       options.sessionInstanceId || `cursor-adapter-${createCursorSessionId().slice("cursor-session-".length)}`
     );
@@ -24928,9 +26305,9 @@ var CursorBridge = class {
   _safeSettleSessionJob(job, outcome, options = {}) {
     try {
       this._settleSessionJob(job, outcome, options);
-    } catch (error2) {
+    } catch (error3) {
       job.sessionState = "needs_attention";
-      job.sessionError = error2 instanceof Error ? error2.message : String(error2);
+      job.sessionError = error3 instanceof Error ? error3.message : String(error3);
     }
   }
   _markTaskResultCollected(job) {
@@ -25004,9 +26381,9 @@ var CursorBridge = class {
       }
       try {
         collectedReply = await this._withUiLock(() => this._collectParallelAgent(probe));
-      } catch (error2) {
-        if (probe.uiDiagnostic && error2 && typeof error2 === "object") error2.uiDiagnostic = probe.uiDiagnostic;
-        throw error2;
+      } catch (error3) {
+        if (probe.uiDiagnostic && error3 && typeof error3 === "object") error3.uiDiagnostic = probe.uiDiagnostic;
+        throw error3;
       }
       if (!String(collectedReply || "").trim()) throw cursorSessionError("SESSION_RESULT_UNAVAILABLE", "no final reply was collected");
     }
@@ -25141,11 +26518,11 @@ var CursorBridge = class {
     });
     return result;
   }
-  async initializeWorkspace(projectPath) {
-    const result = await this._withWorkspaceAdmission(() => this._initializeWorkspace(projectPath));
+  async initializeWorkspace(projectPath, options = {}) {
+    const result = await this._withWorkspaceAdmission(() => this._initializeWorkspace(projectPath, options));
     return { ...result, workspaceBusy: this._workspacePending > 0 };
   }
-  async _initializeWorkspace(projectPath) {
+  async _initializeWorkspace(projectPath, options = {}) {
     if (this._healing) await this._healing.catch(() => {
     });
     if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
@@ -25159,9 +26536,33 @@ var CursorBridge = class {
     this.workspaceUpdatedAt = saved.updatedAt;
     this._lastLifecycle = null;
     this._lastWorkspaceBinding = null;
+    if (this.ccePreferencesView().cceSource === "cli") {
+      const workspace = resolveCliWorkspace(saved.projectPath);
+      await this._inspectCli(options.signal);
+      this._lastWorkspaceBinding = {
+        ok: true,
+        state: "workspace_ready",
+        workspace: saved.projectPath,
+        environment: "local",
+        identitySource: "cursor_cli_workspace",
+        roots: [workspace.cwd, ...workspace.additionalRoots],
+        checkedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      return {
+        previousProjectPath,
+        ...this.workspaceView(),
+        ...this.ccePreferencesView(),
+        bindingPersisted: true,
+        ready: true,
+        status: "ready",
+        message: `CCE CLI is ready to use workspace ${saved.projectPath}.`,
+        nextStep: "You can now use cursor_context_engine directly.",
+        lifecycle: null
+      };
+    }
     try {
       await this._ensureCursor({ registerWorkspace: true });
-    } catch (error2) {
+    } catch (error3) {
       const lifecycle = this._lastLifecycle;
       const recoverableStatuses = /* @__PURE__ */ new Set([
         "running-no-debug",
@@ -25172,7 +26573,7 @@ var CursorBridge = class {
         "external-launch-required",
         "spawn-blocked"
       ]);
-      if (!lifecycle || !recoverableStatuses.has(lifecycle.status)) throw error2;
+      if (!lifecycle || !recoverableStatuses.has(lifecycle.status)) throw error3;
       return {
         previousProjectPath,
         ...this.workspaceView(),
@@ -25215,7 +26616,7 @@ var CursorBridge = class {
           if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
             return { ok: false, state: "workspace_registration_busy", error: "Cursor tasks became queued or running before registration" };
           }
-          return JSON.parse(await evalJS(c, exprRegisterAgentsWorkspace(projectPath, statSync3(projectPath).isFile())) || "{}");
+          return JSON.parse(await evalJS(c, exprRegisterAgentsWorkspace(projectPath, statSync4(projectPath).isFile())) || "{}");
         });
         repository = registration;
         if (registration.state === "workspace_registration_requested") {
@@ -25234,8 +26635,8 @@ var CursorBridge = class {
         targetUiFlavor: "agents_v2",
         workspace: repository.workspace
       };
-    } catch (error2) {
-      this._lastWorkspaceBinding = { ok: false, state: "workspace_probe_failed", wanted: projectPath, error: String(error2.message || error2) };
+    } catch (error3) {
+      this._lastWorkspaceBinding = { ok: false, state: "workspace_probe_failed", wanted: projectPath, error: String(error3.message || error3) };
       return null;
     } finally {
       c.close();
@@ -25276,6 +26677,62 @@ var CursorBridge = class {
   configureModelPreferences(options = {}) {
     this.modelPreferences = updateCursorModelPreferences(this.modelPreferencesFile, options);
     return this.modelPreferencesView();
+  }
+  ccePreferencesView() {
+    const preferences = readCcePreferences(this.cceSourceFile);
+    return {
+      cceSource: preferences.source,
+      cceSourceFile: this.cceSourceFile,
+      cceSourcePersistAcrossRestart: !!this.cceSourceFile,
+      cceSourceUpdatedAt: preferences.updatedAt
+    };
+  }
+  configureCcePreferences(options = {}) {
+    updateCcePreferences(this.cceSourceFile, options);
+    return this.ccePreferencesView();
+  }
+  shouldPrewarmIde() {
+    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === "1") return false;
+    try {
+      return this.ccePreferencesView().cceSource === "ide";
+    } catch (error3) {
+      console.error(`[cursor-bridge] CCE source configuration needs repair: ${error3.message}`);
+      return false;
+    }
+  }
+  async _inspectCli(signal) {
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    if (this.cliClosing || signal?.aborted) cancel();
+    else signal?.addEventListener("abort", cancel, { once: true });
+    const inspection = { controller, promise: null };
+    inspection.promise = Promise.resolve().then(() => {
+      if (controller.signal.aborted) throw Object.assign(new Error("CCE CLI inspection cancelled"), {
+        code: "CURSOR_CLI_CANCELLED",
+        cancelled: true,
+        confirmedNotSent: true,
+        confirmedTerminal: true
+      });
+      return this.cliInspector({ signal: controller.signal });
+    });
+    this.cliInspections.add(inspection);
+    try {
+      const metadata = await inspection.promise;
+      if (this.cliClosing || controller.signal.aborted) throw Object.assign(new Error("CCE CLI inspection cancelled before submission"), {
+        code: "CURSOR_CLI_CANCELLED",
+        cancelled: true,
+        confirmedNotSent: true,
+        confirmedTerminal: true
+      });
+      this.cliMetadata = { available: true, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
+      return metadata;
+    } catch (error3) {
+      if (!controller.signal.aborted && !this.cliClosing) this.cliMetadata = { available: false, checkedAt: (/* @__PURE__ */ new Date()).toISOString(), errorCode: error3.code || "CURSOR_CLI_ERROR" };
+      throw error3;
+    } finally {
+      this.cliInspections.delete(inspection);
+      signal?.removeEventListener("abort", cancel);
+    }
   }
   _modelPreferenceFor(target) {
     this._refreshModelPreferences();
@@ -25367,6 +26824,9 @@ var CursorBridge = class {
     };
   }
   async contextEngine(query, options = {}) {
+    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === "1") {
+      throw cursorSessionError("CURSOR_CCE_RECURSION", "A CCE CLI child must use its own retrieval tools instead of calling CCE again");
+    }
     const text = String(query || "").trim();
     if (!text) throw new Error("query must not be empty");
     if (text.length > 2e4) throw new Error("query exceeds the 20,000-character limit");
@@ -25376,8 +26836,26 @@ var CursorBridge = class {
       if (this._hasGlobalReservation()) {
         throw new Error("A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first");
       }
-      await this._ensureCursor();
+      const source = this.ccePreferencesView().cceSource;
+      const modelPreference = this._modelPreferenceFor("cce");
+      let cli;
+      if (source === "ide") await this._ensureCursor();
+      else {
+        const projectPath = this.projectPath || this._lastLifecycle?.projectPath;
+        if (!projectPath) throw this._workspaceRecoveryError("WORKSPACE_INITIALIZATION_REQUIRED", "Run cursor_init with the intended project before submitting CCE CLI work.", options.workspacePath);
+        resolveCliWorkspace(projectPath);
+        cli = await this._inspectCli(options.signal);
+      }
       this._assertWorkspaceConfirmed(options.workspacePath);
+      if (source === "cli" && (this.cliClosing || options.signal?.aborted)) {
+        throw Object.assign(new Error("CCE CLI request cancelled before submission"), {
+          code: "CURSOR_CLI_CANCELLED",
+          cancelled: true,
+          stopConfirmed: true,
+          confirmedTerminal: true,
+          confirmedNotSent: true
+        });
+      }
       return this._enqueue("context_engine", buildContextEnginePrompt(text, requestContext), {
         requestContext,
         timeoutMs: QUERY_TIMEOUT,
@@ -25385,13 +26863,28 @@ var CursorBridge = class {
         execution: "fifo",
         readOnly: true,
         allowedPaths: [],
-        modelPreference: this._modelPreferenceFor("cce"),
-        projectPath: this._lastLifecycle?.projectPath || this.projectPath || null
+        modelPreference,
+        projectPath: source === "cli" ? this.projectPath || this._lastLifecycle?.projectPath : this._lastLifecycle?.projectPath || this.projectPath || null,
+        cceSource: source,
+        cli
       });
     });
-    const result = normalizeCceSearchResult(await job.promise);
-    this._markTaskResultCollected(job);
-    return result;
+    const cancel = () => {
+      if (job.cceSource !== "cli" || isTerminalTask(job)) return;
+      job.cancelRequested = true;
+      job.cancelReason = "CCE CLI request cancelled";
+      if (job.status === "queued") this._cancelJob(job, job.cancelReason, { underlyingStopConfirmed: true });
+      else job.cliAbortController?.abort();
+    };
+    if (options.signal?.aborted) cancel();
+    else options.signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      const result = normalizeCceSearchResult(await job.promise);
+      this._markTaskResultCollected(job);
+      return result;
+    } finally {
+      options.signal?.removeEventListener("abort", cancel);
+    }
   }
   // Unlisted compatibility aliases for clients that cached the pre-3.0 tool surface.
   async search(query) {
@@ -25409,6 +26902,9 @@ var CursorBridge = class {
     return this._collectedTaskView(job);
   }
   async _prepareTask(prompt, options = {}) {
+    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === "1") {
+      throw cursorSessionError("CURSOR_CCE_RECURSION", "A CCE CLI child cannot delegate another Bridge task");
+    }
     if (!this.delegationEnabled) {
       throw new Error("cursor_do is disabled by CURSOR_BRIDGE_DELEGATION=off; restart the MCP server without that setting to enable delegation");
     }
@@ -25560,8 +27056,8 @@ var CursorBridge = class {
     const id = options.taskId || this._nextTaskId();
     let resolvePromise;
     let rejectPromise;
-    const promise = new Promise((resolve9, reject) => {
-      resolvePromise = resolve9;
+    const promise = new Promise((resolve12, reject) => {
+      resolvePromise = resolve12;
       rejectPromise = reject;
     });
     promise.catch(() => {
@@ -25581,6 +27077,9 @@ var CursorBridge = class {
       allowedPaths: options.allowedPaths || [],
       modelPreference: options.modelPreference ? { ...options.modelPreference } : null,
       modelSelection: options.modelPreference ? { configured: true, applied: false, ...options.modelPreference } : null,
+      cceSource: options.cceSource || null,
+      cli: options.cli || null,
+      cliSessionId: null,
       projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath || null,
       sessionMode: options.sessionMode || "isolated",
       sessionId: options.sessionId || null,
@@ -25647,9 +27146,9 @@ var CursorBridge = class {
       job.resolve(result);
     }
   }
-  _failJob(job, error2) {
+  _failJob(job, error3) {
     if (isTerminalTask(job)) return;
-    const e = error2 instanceof Error ? error2 : new Error(String(error2));
+    const e = error3 instanceof Error ? error3 : new Error(String(error3));
     job.error = e.message;
     if (e.workspaceBindingFailure) job.workspaceBinding = e.workspaceBindingFailure;
     if (e.providerError) job.providerError = e.providerError;
@@ -25688,15 +27187,26 @@ var CursorBridge = class {
     });
     if (!job.settled) {
       job.settled = true;
-      job.reject(new Error(message));
+      const error3 = new Error(message);
+      if (job.cceSource === "cli") Object.assign(error3, {
+        code: "CURSOR_CLI_CANCELLED",
+        taskId: job.id,
+        cancelled: true,
+        confirmedTerminal: job.underlyingStopConfirmed,
+        stopConfirmed: job.underlyingStopConfirmed,
+        confirmedNotSent: job.sendState === "not_sent"
+      });
+      job.reject(error3);
     }
-    this._drain();
-    this._maybeRestoreParallelOrigin();
+    if (options.wake !== false) {
+      this._drain();
+      this._maybeRestoreParallelOrigin();
+    }
     return this._taskView(job, true);
   }
-  _orphanParallelJob(job, error2) {
+  _orphanParallelJob(job, error3) {
     if (isTerminalTask(job)) return;
-    const e = error2 instanceof Error ? error2 : new Error(String(error2));
+    const e = error3 instanceof Error ? error3 : new Error(String(error3));
     job.error = e.message;
     job.status = "needs_attention";
     job.phase = "orphaned";
@@ -25855,9 +27365,9 @@ var CursorBridge = class {
               job.agentLabel = submitted.agent.label || null;
               try {
                 this._bindSessionAgent(job);
-              } catch (error2) {
-                if (job.sendState === "sent" || job.sentAt) error2.sent = true;
-                throw error2;
+              } catch (error3) {
+                if (job.sendState === "sent" || job.sentAt) error3.sent = true;
+                throw error3;
               }
               job.sentAt = job.sentAt || (/* @__PURE__ */ new Date()).toISOString();
               job.phase = "running";
@@ -25874,8 +27384,8 @@ var CursorBridge = class {
                 let stopped;
                 try {
                   stopped = await this._stopParallelAgent(job);
-                } catch (error2) {
-                  stopped = { confirmed: false, state: "stop_error", error: error2.message };
+                } catch (error3) {
+                  stopped = { confirmed: false, state: "stop_error", error: error3.message };
                 }
                 if (stopped.confirmed) {
                   job.terminalEvidence = `targeted_stop:${job.agentId}`;
@@ -25891,36 +27401,37 @@ var CursorBridge = class {
             }
           } else {
             job.phase = "running";
-            const result = await this._withUiLock(() => this._run(job.prompt, job));
+            const result = job.kind === "context_engine" && job.cceSource === "cli" ? await this._runCceCli(job) : await this._withUiLock(() => this._run(job.prompt, job));
             this._finishJob(job, result);
           }
-        } catch (error2) {
-          if (error2 && error2.cancelled || job.cancelRequested) {
-            if (error2 && error2.stopConfirmed) {
-              this._cancelJob(job, job.cancelReason || error2.message || "Task cancelled", {
+        } catch (error3) {
+          if (error3 && error3.cancelled || job.cancelRequested) {
+            if (error3 && error3.stopConfirmed) {
+              this._cancelJob(job, job.cancelReason || error3.message || "Task cancelled", {
                 underlyingStopConfirmed: true
               });
             } else {
               job.cancelRequested = false;
-              this._orphanParallelJob(job, new Error("Cancellation was requested, but Cursor could not be confirmed stopped; the reservation remains held"));
+              const cause = job.cceSource === "cli" && error3 instanceof Error ? error3 : new Error("Cancellation was requested, but Cursor could not be confirmed stopped; the reservation remains held");
+              this._orphanParallelJob(job, cause);
               job.recoveryState = "cancel_unconfirmed";
             }
-          } else if (error2 && error2.confirmedTerminal) {
+          } else if (error3 && error3.confirmedTerminal) {
             this.activeParallel.delete(job.id);
-            this._failJob(job, error2);
-          } else if (error2 && error2.sent) {
-            job.firstWaitError ||= error2.message;
-            job.error = `Submission state is uncertain; monitoring continues by agentId: ${error2.message}`;
+            this._failJob(job, error3);
+          } else if (error3 && error3.sent) {
+            job.firstWaitError ||= error3.message;
+            job.error = `Submission state is uncertain; monitoring continues by agentId: ${error3.message}`;
             if (job.agentId) {
               job.phase = "running";
               job.reservationScope = job.effectiveExecution === "fifo" ? "global" : job.readOnly ? "agent" : "paths";
               this.activeParallel.set(job.id, job);
               this._startParallelMonitor(job);
             } else {
-              this._orphanParallelJob(job, error2);
+              this._orphanParallelJob(job, error3);
             }
           } else {
-            this._failJob(job, error2);
+            this._failJob(job, error3);
           }
         }
       });
@@ -25930,6 +27441,63 @@ var CursorBridge = class {
       this._drain();
       this._maybeRestoreParallelOrigin();
     }
+  }
+  async _runCceCli(job) {
+    if (this.cliClosing) {
+      job.cancelRequested = true;
+      job.cancelReason = "CCE CLI host disconnected before execution";
+    }
+    this._throwIfCancelledBeforeSend(job);
+    const controller = new AbortController();
+    job.cliAbortController = controller;
+    try {
+      const outcome = await this.cliRunner({
+        projectPath: job.projectPath,
+        prompt: job.prompt,
+        modelPreference: job.modelPreference,
+        timeoutMs: job.timeoutMs,
+        signal: controller.signal,
+        cli: job.cli,
+        onDispatch: () => {
+          job.sendState = "dispatching";
+        },
+        onInit: ({ sessionId, modelSelection }) => {
+          job.cliSessionId = sessionId;
+          job.modelSelection = modelSelection;
+          job.sendState = "sent";
+          job.sentAt ||= (/* @__PURE__ */ new Date()).toISOString();
+        }
+      });
+      job.cliSessionId = outcome.sessionId;
+      job.modelSelection = outcome.modelSelection;
+      job.terminalEvidence = `cursor_cli_result:${outcome.sessionId}`;
+      return outcome.result;
+    } catch (error3) {
+      error3.taskId = job.id;
+      job.cliError = {
+        code: error3.code || "CURSOR_CLI_ERROR",
+        confirmedTerminal: error3.confirmedTerminal === true,
+        ...error3.cliProcessId ? { processId: error3.cliProcessId } : {},
+        ...error3.cliConfigDirectory ? { configDirectory: error3.cliConfigDirectory } : {}
+      };
+      throw error3;
+    } finally {
+      job.cliAbortController = null;
+      job.cli = null;
+    }
+  }
+  async shutdownCli() {
+    this.cliClosing = true;
+    const inspections = [...this.cliInspections];
+    for (const inspection of inspections) inspection.controller.abort();
+    const jobs = [...this.tasks.values()].filter((job) => job.cceSource === "cli" && !isTerminalTask(job));
+    for (const job of jobs) {
+      job.cancelRequested = true;
+      job.cancelReason = "CCE CLI host disconnected";
+      if (job.status === "queued") this._cancelJob(job, job.cancelReason, { underlyingStopConfirmed: true, wake: false });
+      else job.cliAbortController?.abort();
+    }
+    await Promise.allSettled([...jobs.map((job) => job.promise), ...inspections.map((inspection) => inspection.promise)]);
   }
   async _run(prompt, options = {}) {
     let page = await findPage({
@@ -25957,8 +27525,8 @@ var CursorBridge = class {
               projectPath: options.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || this.projectPath,
               job: options
             });
-          } catch (error2) {
-            if (attempt === 0 && options.targetUiFlavor === "agents_v2" && isAgentsWorkspaceBindError(error2) && !error2.workspaceBindingFailure) {
+          } catch (error3) {
+            if (attempt === 0 && options.targetUiFlavor === "agents_v2" && isAgentsWorkspaceBindError(error3) && !error3.workspaceBindingFailure) {
               const fallback = await findPage({ purpose: "fifo", preferLegacy: true });
               if (fallback && fallback.id !== page.id) {
                 options.fallbackReason = "agents_window_unbound_use_workbench";
@@ -25966,7 +27534,7 @@ var CursorBridge = class {
                 continue;
               }
             }
-            throw error2;
+            throw error3;
           }
         }
         await this._bindFifoAgentAfterComposerReady(c, options, historyBefore);
@@ -26003,13 +27571,13 @@ var CursorBridge = class {
             options,
             providerErrorBaseline
           );
-        } catch (error2) {
-          if (error2 && error2.confirmedNotSent) {
+        } catch (error3) {
+          if (error3 && error3.confirmedNotSent) {
             options.sendState = "not_sent";
-            throw error2;
+            throw error3;
           }
-          error2.sent = true;
-          throw error2;
+          error3.sent = true;
+          throw error3;
         }
       } finally {
         try {
@@ -26022,27 +27590,27 @@ var CursorBridge = class {
   }
   _throwIfCancelledBeforeSend(job) {
     if (!job || !job.cancelRequested || job.sendState === "dispatching" || job.sendState === "sent") return;
-    const error2 = new Error(job.cancelReason || "Task cancelled");
-    error2.cancelled = true;
-    error2.stopConfirmed = true;
-    error2.preSend = true;
-    throw error2;
+    const error3 = new Error(job.cancelReason || "Task cancelled");
+    error3.cancelled = true;
+    error3.stopConfirmed = true;
+    error3.preSend = true;
+    throw error3;
   }
   async _readModelPickerValue(c, expression, kind, { timeoutMs = 3e3 } = {}) {
     const startedAt = Date.now();
     try {
       const value = JSON.parse(await evalJS(c, expression, { timeoutMs }));
       if (!value || typeof value !== "object" || Array.isArray(value)) {
-        const error2 = new Error("Cursor picker returned an invalid snapshot");
-        error2.code = "CURSOR_PICKER_RESPONSE_INVALID";
-        throw error2;
+        const error3 = new Error("Cursor picker returned an invalid snapshot");
+        error3.code = "CURSOR_PICKER_RESPONSE_INVALID";
+        throw error3;
       }
       return value;
     } catch (cause) {
-      const error2 = cause instanceof Error ? cause : new Error(String(cause));
-      if (error2 instanceof SyntaxError) error2.code = "CURSOR_PICKER_PARSE_FAILED";
-      error2.pickerRead = { kind, elapsedMs: Date.now() - startedAt, code: error2.code || "CDP_READ_FAILED", message: error2.message };
-      throw error2;
+      const error3 = cause instanceof Error ? cause : new Error(String(cause));
+      if (error3 instanceof SyntaxError) error3.code = "CURSOR_PICKER_PARSE_FAILED";
+      error3.pickerRead = { kind, elapsedMs: Date.now() - startedAt, code: error3.code || "CDP_READ_FAILED", message: error3.message };
+      throw error3;
     }
   }
   async _readModelPickerTrigger(c, options) {
@@ -26089,9 +27657,9 @@ var CursorBridge = class {
         snapshot = await this._readModelPickerRows(c, { timeoutMs: deadline - Date.now() });
         if (deadline - Date.now() < 10) break;
         trigger = await this._readModelPickerTrigger(c, { timeoutMs: deadline - Date.now() });
-      } catch (error2) {
-        if (error2.code !== "CDP_COMMAND_TIMEOUT" || Date.now() < deadline) throw error2;
-        lastPollError = error2.pickerRead || { code: error2.code, message: error2.message };
+      } catch (error3) {
+        if (error3.code !== "CDP_COMMAND_TIMEOUT" || Date.now() < deadline) throw error3;
+        lastPollError = error3.pickerRead || { code: error3.code, message: error3.message };
         break;
       }
       this._throwIfCancelledBeforeSend(job);
@@ -26554,8 +28122,8 @@ var CursorBridge = class {
         }
         effectiveEffort = requestedEffort;
       }
-    } catch (error2) {
-      primaryError = error2 instanceof Error ? error2 : new Error(String(error2));
+    } catch (error3) {
+      primaryError = error3 instanceof Error ? error3 : new Error(String(error3));
       let failure = primaryError.modelSelectionFailure;
       if (!failure) {
         const pickerUnavailable = /model picker (?:is unavailable|did not open)/i.test(primaryError.message);
@@ -26597,7 +28165,7 @@ var CursorBridge = class {
       } catch (cleanupError) {
         const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
         if (!primaryError) {
-          const error2 = createModelSelectionError(message, "picker_cleanup_failed", true);
+          const error3 = createModelSelectionError(message, "picker_cleanup_failed", true);
           const diagnostic = {
             configured: true,
             applied: false,
@@ -26605,16 +28173,16 @@ var CursorBridge = class {
             requestedEffort,
             failureClass: "picker_cleanup_failed",
             retryable: true,
-            errorCode: error2.code,
+            errorCode: error3.code,
             available: [],
             attempts: [],
             runtimeMode: this.runtimeMode,
             lastError: message,
             failedAt: (/* @__PURE__ */ new Date()).toISOString()
           };
-          error2.modelSelection = diagnostic;
+          error3.modelSelection = diagnostic;
           if (job) job.modelSelection = diagnostic;
-          throw error2;
+          throw error3;
         }
         if (primaryError.modelSelection) primaryError.modelSelection.cleanupError = message;
         if (job && job.modelSelection) job.modelSelection.cleanupError = message;
@@ -26623,8 +28191,8 @@ var CursorBridge = class {
     let trigger;
     try {
       trigger = await this._readModelPickerTrigger(c);
-    } catch (error2) {
-      error2.modelSelection = {
+    } catch (error3) {
+      error3.modelSelection = {
         configured: true,
         applied: false,
         requestedModel,
@@ -26634,14 +28202,14 @@ var CursorBridge = class {
         stage: "final_trigger",
         failureClass: "picker_read_failed",
         retryable: true,
-        errorCode: error2.code || "CDP_READ_FAILED",
-        pickerRead: error2.pickerRead || null,
-        cdp: error2.cdp || null,
+        errorCode: error3.code || "CDP_READ_FAILED",
+        pickerRead: error3.pickerRead || null,
+        cdp: error3.cdp || null,
         elapsedMs: Date.now() - selectionStartedAt,
-        lastError: error2.message
+        lastError: error3.message
       };
-      if (job) job.modelSelection = error2.modelSelection;
-      throw error2;
+      if (job) job.modelSelection = error3.modelSelection;
+      throw error3;
     }
     const result = {
       configured: true,
@@ -26665,22 +28233,22 @@ var CursorBridge = class {
       snapshot = await this._readSelectedAgentModelConfig(c);
       this._throwIfCancelledBeforeSend(job);
     } catch (cause) {
-      const error3 = cause instanceof Error ? cause : new Error(String(cause));
+      const error4 = cause instanceof Error ? cause : new Error(String(cause));
       const diagnostic2 = {
         ...selection,
         applied: false,
         stage,
-        failureClass: error3.cancelled ? "cancelled_before_send" : "picker_read_failed",
-        pickerRead: error3.pickerRead || null,
-        errorCode: error3.code || null,
-        lastError: error3.message,
+        failureClass: error4.cancelled ? "cancelled_before_send" : "picker_read_failed",
+        pickerRead: error4.pickerRead || null,
+        errorCode: error4.code || null,
+        lastError: error4.message,
         failedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       job.modelSelection = diagnostic2;
-      error3.modelSelection = diagnostic2;
-      error3.sent = ["dispatching", "sent"].includes(job.sendState);
-      error3.confirmedNotSent = !error3.sent;
-      throw error3;
+      error4.modelSelection = diagnostic2;
+      error4.sent = ["dispatching", "sent"].includes(job.sendState);
+      error4.confirmedNotSent = !error4.sent;
+      throw error4;
     }
     const preference = job.modelPreference || { model: selection.requestedModel, effort: selection.requestedEffort };
     const verified = snapshot.verified === true && matchSelectedAgentModelConfig(snapshot, preference.model, preference.effort);
@@ -26690,15 +28258,15 @@ var CursorBridge = class {
       selection.lastVerifiedAt = (/* @__PURE__ */ new Date()).toISOString();
       return;
     }
-    const error2 = createModelSelectionError("Cursor model configuration changed before submission", "configuration_changed", true);
+    const error3 = createModelSelectionError("Cursor model configuration changed before submission", "configuration_changed", true);
     const diagnostic = {
       ...selection,
       applied: false,
       stage,
       failureClass: "configuration_changed",
       retryable: true,
-      errorCode: error2.code,
-      lastError: error2.message,
+      errorCode: error3.code,
+      lastError: error3.message,
       failedAt: (/* @__PURE__ */ new Date()).toISOString(),
       configurationCheck: {
         found: snapshot.found === true,
@@ -26709,17 +28277,17 @@ var CursorBridge = class {
         identityMatches: frozenIdentityMatches && modelConfigMatchesJob(snapshot, job)
       }
     };
-    error2.modelSelection = diagnostic;
-    error2.sent = ["dispatching", "sent"].includes(job.sendState);
-    error2.confirmedNotSent = !error2.sent;
+    error3.modelSelection = diagnostic;
+    error3.sent = ["dispatching", "sent"].includes(job.sendState);
+    error3.confirmedNotSent = !error3.sent;
     job.modelSelection = diagnostic;
-    throw error2;
+    throw error3;
   }
   async _readChatPanelDiagnostic(c) {
     try {
       return JSON.parse(await evalJS(c, EXPR_PAGE_CAPABILITIES) || "{}");
-    } catch (error2) {
-      return { probeError: error2 instanceof Error ? error2.message : String(error2) };
+    } catch (error3) {
+      return { probeError: error3 instanceof Error ? error3.message : String(error3) };
     }
   }
   async _ensureChatPanel(c) {
@@ -26917,15 +28485,15 @@ var CursorBridge = class {
       if (Date.now() >= deadline) break;
       await sleep2(Math.min(100, Math.max(0, deadline - Date.now())));
     } while (Date.now() <= deadline);
-    const error2 = new Error("Cursor composer did not become send-ready after trusted input");
-    error2.code = "CURSOR_COMPOSER_NOT_SEND_READY";
-    error2.confirmedNotSent = true;
-    error2.composerDiagnostic = {
+    const error3 = new Error("Cursor composer did not become send-ready after trusted input");
+    error3.code = "CURSOR_COMPOSER_NOT_SEND_READY";
+    error3.confirmedNotSent = true;
+    error3.composerDiagnostic = {
       inputTextLength: Number(snapshot.inputTextLength || 0),
       sendReady: snapshot.sendReady === true,
       runtimeMode: this.runtimeMode
     };
-    throw error2;
+    throw error3;
   }
   async _verifyAgentsWorkspace(c, job, stage = "before_fill") {
     if (!job || job.targetUiFlavor !== "agents_v2") return;
@@ -26958,10 +28526,10 @@ var CursorBridge = class {
     try {
       await this._verifyAgentsWorkspace(c, job, "before_send_fallback");
       await this._verifyModelPreferenceBeforeSend(c, job, "before_send_fallback");
-    } catch (error3) {
-      error3.confirmedNotSent = false;
-      error3.sent = true;
-      throw error3;
+    } catch (error4) {
+      error4.confirmedNotSent = false;
+      error4.sent = true;
+      throw error4;
     }
     const clicked = await evalJS(c, EXPR_CLICK_SEND);
     if (clicked === "CLICKED" || clicked === "NO_SEND") {
@@ -26970,17 +28538,17 @@ var CursorBridge = class {
         if (await accepted()) return clicked === "CLICKED" ? "button" : "enter";
       }
     }
-    const error2 = new Error(`Cursor submission could not be confirmed (submission_uncertain: ${clicked || "unknown"}); Enter was dispatched, so inspect the bound Agent before retrying`);
-    error2.confirmedNotSent = false;
-    error2.sent = true;
-    error2.composerDiagnostic = {
+    const error3 = new Error(`Cursor submission could not be confirmed (submission_uncertain: ${clicked || "unknown"}); Enter was dispatched, so inspect the bound Agent before retrying`);
+    error3.confirmedNotSent = false;
+    error3.sent = true;
+    error3.composerDiagnostic = {
       inputTextLength: Number.isFinite(Number(lastSnapshot.inputTextLength)) ? Number(lastSnapshot.inputTextLength) : null,
       sendReady: lastSnapshot.sendReady === true,
       stop: Number(lastSnapshot.stop || 0),
       messageCount: Number(lastSnapshot.messageCount || 0),
       fallbackResult: clicked || "unknown"
     };
-    throw error2;
+    throw error3;
   }
   async _readProviderError(c) {
     const raw = await evalJS(c, EXPR_PROVIDER_ERROR);
@@ -27024,11 +28592,11 @@ var CursorBridge = class {
       let createdForWorkspace = false;
       try {
         createdForWorkspace = job.targetUiFlavor === "agents_v2" && job.projectPath ? await this._newChat(c, { uiFlavor: job.targetUiFlavor, projectPath: job.projectPath, job }) : await this._clickNewAgent(c, false);
-      } catch (error2) {
-        if (isAgentsWorkspaceBindError(error2) && !error2.workspaceBindingFailure) {
+      } catch (error3) {
+        if (isAgentsWorkspaceBindError(error3) && !error3.workspaceBindingFailure) {
           return { fallbackReason: "Agents Window could not bind the current repository; downgraded to FIFO/workbench before submission" };
         }
-        throw error2;
+        throw error3;
       }
       if (!createdForWorkspace) {
         return { fallbackReason: "Cursor New Agent button was not found; downgraded to FIFO before submission" };
@@ -27198,9 +28766,9 @@ var CursorBridge = class {
         agent: { id: job.agentId, label: target.label || job.agentLabel || null },
         previousSelectedId
       };
-    } catch (error2) {
-      if (sent) error2.sent = true;
-      throw error2;
+    } catch (error3) {
+      if (sent) error3.sent = true;
+      throw error3;
     } finally {
       try {
         await this._closeHistory(c);
@@ -27249,9 +28817,9 @@ var CursorBridge = class {
     job.monitorGeneration = generation;
     job.monitorAttached = true;
     let monitorPromise;
-    monitorPromise = this._monitorParallelAgent(job, generation).catch((error2) => this._withJobLock(job, async () => {
+    monitorPromise = this._monitorParallelAgent(job, generation).catch((error3) => this._withJobLock(job, async () => {
       if (!this._monitorOwns(job, generation)) return;
-      this._failParallelJob(job, error2);
+      this._failParallelJob(job, error3);
     })).finally(() => {
       if (job.monitorPromise === monitorPromise) {
         job.monitorPromise = null;
@@ -27326,9 +28894,9 @@ var CursorBridge = class {
             });
             return;
           }
-          const error2 = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${entry.icon}`);
-          error2.confirmedTerminal = true;
-          throw error2;
+          const error3 = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${entry.icon}`);
+          error3.confirmedTerminal = true;
+          throw error3;
         }
         continue;
       }
@@ -27351,11 +28919,11 @@ var CursorBridge = class {
               this._drain();
               this._maybeRestoreParallelOrigin();
               return "completed";
-            } catch (error2) {
+            } catch (error3) {
               if (!this._monitorOwns(job, generation)) return "stale";
               collectionAttempts++;
-              lastCollectionError = error2.message;
-              job.error = `Result collection attempt ${collectionAttempts} did not complete; retrying: ${error2.message}`;
+              lastCollectionError = error3.message;
+              job.error = `Result collection attempt ${collectionAttempts} did not complete; retrying: ${error3.message}`;
               job.phase = "running";
               return "retry";
             }
@@ -27413,8 +28981,8 @@ var CursorBridge = class {
           const opened = await this._requestExactAgentSelection(c, previousSelectedId);
           if (opened !== "OPENED") throw new Error(`Unable to restore ${previousSelectedId}: ${opened}`);
           await this._waitForSelectedAgent(c, previousSelectedId);
-        } catch (error2) {
-          job.uiDiagnostic = { ...job.uiDiagnostic, selectionRestore: { state: "failed", agentId: previousSelectedId, detail: String(error2.message).slice(0, 500) } };
+        } catch (error3) {
+          job.uiDiagnostic = { ...job.uiDiagnostic, selectionRestore: { state: "failed", agentId: previousSelectedId, detail: String(error3.message).slice(0, 500) } };
         }
       }
     }
@@ -27461,9 +29029,9 @@ var CursorBridge = class {
       }
     }
   }
-  _reapWithoutResult(job, error2, evidence) {
+  _reapWithoutResult(job, error3, evidence) {
     if (isTerminalTask(job)) return;
-    const message = error2 instanceof Error ? error2.message : String(error2 || "The Cursor Agent terminated, but its final reply could not be collected");
+    const message = error3 instanceof Error ? error3.message : String(error3 || "The Cursor Agent terminated, but its final reply could not be collected");
     job.status = "needs_attention";
     job.phase = "orphaned";
     job.finishedAt = null;
@@ -27472,7 +29040,7 @@ var CursorBridge = class {
     job.resultUnavailable = true;
     job.terminalEvidence = evidence || "stable_completed_history_icon";
     job.recoveryState = "terminal_result_uncollected";
-    job.reservationScope = job.effectiveExecution === "fifo" ? "global" : uncertainSubmissionReservationScope(job, error2);
+    job.reservationScope = job.effectiveExecution === "fifo" ? "global" : uncertainSubmissionReservationScope(job, error3);
     this._safeSettleSessionJob(job, "terminal_result_uncollected", { needsAttention: true });
   }
   _abandonJob(job, reason) {
@@ -27509,11 +29077,11 @@ var CursorBridge = class {
       first = await this._readParallelEntry(job);
       await sleep2(300);
       second = await this._readParallelEntry(job);
-    } catch (error2) {
+    } catch (error3) {
       job.lastRecoveryAt = (/* @__PURE__ */ new Date()).toISOString();
       job.recoveryState = "history_unavailable";
-      job.error = `Failed to recheck Agent History: ${error2.message}`;
-      return { stable: false, error: error2.message, entry: null };
+      job.error = `Failed to recheck Agent History: ${error3.message}`;
+      return { stable: false, error: error3.message, entry: null };
     }
     job.lastRecoveryAt = (/* @__PURE__ */ new Date()).toISOString();
     if (!first || !second) {
@@ -27560,10 +29128,10 @@ var CursorBridge = class {
       return { changed: true, state: "cancelled", task };
     }
     if (terminalClass === "failed") {
-      const error2 = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${icon}`);
+      const error3 = new Error(`Cursor Agent ${job.agentId} reached stable failure state ${icon}`);
       job.terminalEvidence = `stable_history_icon:${icon}`;
       this.activeParallel.delete(job.id);
-      this._failJob(job, error2);
+      this._failJob(job, error3);
       this._drain();
       this._maybeRestoreParallelOrigin();
       return { changed: true, state: "failed", task: this._taskView(job, true) };
@@ -27579,12 +29147,12 @@ var CursorBridge = class {
         this._drain();
         this._maybeRestoreParallelOrigin();
         return { changed: true, state: "completed", task: this._taskView(job, true) };
-      } catch (error2) {
-        this._reapWithoutResult(job, error2, `stable_history_icon:${icon}`);
+      } catch (error3) {
+        this._reapWithoutResult(job, error3, `stable_history_icon:${icon}`);
         return {
           changed: false,
           state: "terminal_uncollected",
-          error: error2.message,
+          error: error3.message,
           next: "The underlying Agent is stably complete, but its final reply has not been collected. Retry with reap, or explicitly abandon only if a missing reply is acceptable.",
           task: this._taskView(job, true)
         };
@@ -27606,8 +29174,8 @@ var CursorBridge = class {
     let clickResult;
     try {
       clickResult = JSON.parse(await evalJS(c, exprClickBoundComposerStop(job.agentId)));
-    } catch (error2) {
-      clickResult = { clicked: false, state: "stop_evaluate_failed", error: error2.message };
+    } catch (error3) {
+      clickResult = { clicked: false, state: "stop_evaluate_failed", error: error3.message };
     }
     if (!clickResult.clicked) {
       const snap = await this._readVisibleComposer(c);
@@ -27678,8 +29246,8 @@ var CursorBridge = class {
       let clickResult;
       try {
         clickResult = JSON.parse(await evalJS(c, exprClickSelectedAgentStop(job.agentId)));
-      } catch (error2) {
-        clickResult = { clicked: false, state: "stop_evaluate_failed", error: error2.message };
+      } catch (error3) {
+        clickResult = { clicked: false, state: "stop_evaluate_failed", error: error3.message };
       }
       await this._closeHistory(c);
       if (!clickResult.clicked) return { confirmed: false, ...clickResult };
@@ -27732,8 +29300,8 @@ var CursorBridge = class {
     let historyResult;
     try {
       historyResult = await this._stopBoundAgentViaHistory(c, job, options);
-    } catch (error2) {
-      historyResult = { confirmed: false, state: "history_unavailable", error: error2.message };
+    } catch (error3) {
+      historyResult = { confirmed: false, state: "history_unavailable", error: error3.message };
     }
     if (historyResult.confirmed || !["adapter_unavailable", "agent_missing", "history_unavailable", "unbound_agent"].includes(historyResult.state) && !/适配器不可用|REACT_ADAPTER|Agent History/.test(String(historyResult.error || ""))) {
       return historyResult;
@@ -27774,6 +29342,7 @@ var CursorBridge = class {
       job.cancelRequested = true;
       job.cancelReason = reason || (job.execution === "parallel_agent" ? "User requested Cursor Agent cancellation" : "User requested FIFO task cancellation");
       job.cancelRequestSeq = Number(job.cancelRequestSeq || 0) + 1;
+      if (job.cceSource === "cli") job.cliAbortController?.abort();
     }
     const result = await this._withJobLock(job, () => this._taskControlLocked(job, action, {
       ...options,
@@ -27785,6 +29354,16 @@ var CursorBridge = class {
   }
   async _taskControlLocked(job, action, options) {
     if (action === "reap") {
+      if (job.cceSource === "cli") {
+        return {
+          found: true,
+          action,
+          changed: false,
+          state: job.status,
+          task: this._taskView(job, true),
+          ...job.phase === "orphaned" ? { next: "Inspect the owned CLI process before explicitly abandoning an unconfirmed task; CLI tasks are never recovered through Agent History." } : {}
+        };
+      }
       const result = await this._reapParallelJobLocked(job, { reattach: true });
       if (result.state === "not_parallel_reservation" && job.phase === "orphaned") {
         result.next = job.agentId ? "The bound task has no recoverable reservation. Inspect its current state before cancelling." : "The FIFO orphan has no agentId that can be safely rebound. Confirm that it stopped in the Cursor UI before explicitly abandoning it.";
@@ -27858,8 +29437,8 @@ var CursorBridge = class {
       let stopped;
       try {
         stopped = await this._stopParallelAgent(job);
-      } catch (error2) {
-        stopped = { confirmed: false, state: "stop_error", error: error2.message };
+      } catch (error3) {
+        stopped = { confirmed: false, state: "stop_error", error: error3.message };
       }
       if (isTerminalTask(job)) {
         return {
@@ -27920,16 +29499,16 @@ var CursorBridge = class {
       task: this._taskView(job, true)
     };
   }
-  _failParallelJob(job, error2) {
+  _failParallelJob(job, error3) {
     if (isTerminalTask(job)) return;
-    if (error2 && error2.confirmedTerminal) {
+    if (error3 && error3.confirmedTerminal) {
       this.activeParallel.delete(job.id);
-      this._failJob(job, error2);
+      this._failJob(job, error3);
       this._drain();
       this._maybeRestoreParallelOrigin();
       return;
     }
-    this._orphanParallelJob(job, error2);
+    this._orphanParallelJob(job, error3);
   }
   _maybeRestoreParallelOrigin() {
     if (!this.parallelRestoreAgentId || this.busy || this.activeParallel.size > 0 || this.queue.some((job) => job.execution === "parallel_agent")) return;
@@ -27965,8 +29544,8 @@ var CursorBridge = class {
           let stopped;
           try {
             stopped = await this._stopBoundAgentOnClient(c, job, { restorePrevious: false });
-          } catch (error2) {
-            stopped = { confirmed: false, state: "stop_error", error: error2.message };
+          } catch (error3) {
+            stopped = { confirmed: false, state: "stop_error", error: error3.message };
           }
           const e2 = new Error(job.cancelReason || "Task cancelled");
           e2.cancelled = true;
@@ -28039,6 +29618,8 @@ var CursorBridge = class {
       allowedPaths: job.allowedPaths,
       modelPreference: job.modelPreference,
       modelSelection: job.modelSelection,
+      ...job.cceSource ? { cceSource: job.cceSource, cliSessionId: job.cliSessionId } : {},
+      ...job.cliError ? { cliError: job.cliError } : {},
       requestContext: job.requestContext || normalizeRequestContext(),
       workspaceBinding: job.workspaceBinding || null,
       workspaceBindingChecks: job.workspaceBindingChecks || null,
@@ -28087,6 +29668,7 @@ var CursorBridge = class {
       } else {
         view.attention = job.agentId ? job.execution === "parallel_agent" ? "Use cursor_task_control(action=reap) to recheck the original agentId. Use cancel when a stop is needed, and abandon only after manual confirmation while accepting residual write risk." : "FIFO is bound to an agentId. Use reap to collect or resume monitoring; use cancel with the exact expected_agent_id to stop running work." : "This orphan has no agentId that can be safely rebound and globally blocks new delegation. Confirm that it stopped in the Cursor UI, then explicitly release it with cursor_task_control(action=abandon).";
       }
+      if (job.cceSource === "cli") view.attention = "CLI process-tree termination could not be confirmed. Inspect the owned CLI process before an explicit abandon; this task is never recovered or stopped through IDE Agent History.";
     }
     return view;
   }
@@ -28106,6 +29688,7 @@ var CursorBridge = class {
       effectiveModel: full.modelSelection.effectiveModel,
       effectiveEffort: full.modelSelection.effectiveEffort,
       verificationSource: full.modelSelection.verificationSource,
+      cliModel: full.modelSelection.cliModel,
       configurationSource: full.modelSelection.configurationSource,
       requiresConfigRecheck: full.modelSelection.requiresConfigRecheck,
       lastVerifiedAt: full.modelSelection.lastVerifiedAt,
@@ -28135,6 +29718,8 @@ var CursorBridge = class {
       projectPath: full.projectPath,
       sessionId: full.sessionId,
       agentId: full.agentId,
+      ...full.cceSource ? { cceSource: full.cceSource, cliSessionId: full.cliSessionId } : {},
+      ...full.cliError ? { cliError: full.cliError } : {},
       sendState: full.sendState,
       modelSelection: selection,
       reservationHeld: full.reservationHeld,
@@ -28171,6 +29756,7 @@ var CursorBridge = class {
         status: view.status,
         phase: view.phase,
         agentId: view.agentId,
+        ...view.cceSource ? { cceSource: view.cceSource, cliSessionId: view.cliSessionId } : {},
         sessionId: view.sessionId,
         resultAvailable: view.resultAvailable,
         resultLength: view.resultLength,
@@ -28235,6 +29821,7 @@ var CursorBridge = class {
       minimalModeWarning: runtime.minimalModeWarning,
       modelPreferences: models.modelPreferences,
       modelPreferencesUpdatedAt: models.modelPreferencesUpdatedAt,
+      cceSource: this.ccePreferencesView().cceSource,
       sessionStoragePersistent: !!this.sessionFile
     };
   }
@@ -28257,9 +29844,9 @@ var CursorBridge = class {
     };
   }
   _workspaceRecoveryError(code, message, expectedProjectPath = null) {
-    const error2 = new Error(`${code}: ${message}`);
-    error2.code = code;
-    error2.workspaceRecovery = {
+    const error3 = new Error(`${code}: ${message}`);
+    error3.code = code;
+    error3.workspaceRecovery = {
       workspaceKey: this.workspaceKey,
       currentProjectPath: this._lastLifecycle?.projectPath || this.projectPath || null,
       expectedProjectPath,
@@ -28270,7 +29857,7 @@ var CursorBridge = class {
       submissionStarted: false,
       nextStep: "Read cursor_status. When idle with no blocking tasks, run cursor_init with the caller's intended absolute project path, verify ready and the exact path, then retry this unsent request once. Never infer the target from a saved default binding or repository name."
     };
-    return error2;
+    return error3;
   }
   _assertWorkspaceConfirmed(workspacePath) {
     let expected = null;
@@ -28288,8 +29875,8 @@ var CursorBridge = class {
       if (!current) {
         throw this._workspaceRecoveryError("WORKSPACE_INITIALIZATION_REQUIRED", "Run cursor_init with workspace_path before submitting work.", expected);
       }
-      const canonical = (path) => {
-        const normalized = normalizeWorkspacePath(path);
+      const canonical = (path2) => {
+        const normalized = normalizeWorkspacePath(path2);
         return process.platform === "win32" ? normalized.toLowerCase() : normalized;
       };
       if (canonical(current) !== canonical(expected)) {
@@ -28332,7 +29919,8 @@ var CursorBridge = class {
       return { found: !!job, ...this._compactStatusCommon(), ...job ? this._compactTaskView(job) : { taskId: String(taskId) } };
     }
     const parallelRunning = this.activeParallel.size;
-    const uiBusy = this.busy;
+    const fifoBusy = this.busy;
+    const uiBusy = fifoBusy && this.currentJob?.cceSource !== "cli";
     const globalBlocked = this._hasGlobalReservation();
     const common = normalizedDetail === "full" ? {
       pluginVersion: PLUGIN_VERSION,
@@ -28341,11 +29929,12 @@ var CursorBridge = class {
       ...this.delegationView(),
       ...this.runtimeModeView(),
       ...this.modelPreferencesView(),
+      ...this.ccePreferencesView(),
       ...this.sessionRegistryView(),
-      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
+      busy: fifoBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
       parallelRunning,
-      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
+      idle: !fifoBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
@@ -28374,10 +29963,10 @@ var CursorBridge = class {
       }
     } : {
       ...this._compactStatusCommon(),
-      busy: uiBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
+      busy: fifoBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
       parallelRunning,
-      idle: !uiBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
+      idle: !fifoBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
@@ -28388,6 +29977,14 @@ var CursorBridge = class {
       taskRetentionLimit: 50,
       lifecycle: this._compactLifecycleView()
     };
+    if (common.cceSource === "cli") {
+      return {
+        connected: this.cliMetadata?.available === true,
+        ...common,
+        statusPath: "cli-metadata",
+        cli: this.cliMetadata || { available: null, checkedAt: null }
+      };
+    }
     try {
       const ver = await httpJson("/json/version");
       const list = await httpJson("/json/list");
@@ -28443,7 +30040,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_context_engine",
-      description: "Use this evidence-driven, read-only Cursor Context Engine (CCE) when understanding an indexed project requires discovering an unknown implementation location or tracing behavior, symbols, callers/callees, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Skip it when a known exact file or symbol can answer the question through direct reading or exact search, the needed code is already in context, or the task is only editing, tests, logs, builds, Git work, or external documentation. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies one natural-language intent, not a harness recipe. It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. Search is serialized through Cursor UI automation and can take several minutes on large or cold workspaces. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.",
+      description: "Use this evidence-driven, read-only Cursor Context Engine (CCE) when understanding an indexed project requires discovering an unknown implementation location or tracing behavior, symbols, callers/callees, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Skip it when a known exact file or symbol can answer the question through direct reading or exact search, the needed code is already in context, or the task is only editing, tests, logs, builds, Git work, or external documentation. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies one natural-language intent, not a harness recipe. It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. Search uses the shared serialized CCE queue through the persistent ide or cli source chosen with cursor_cce. Both sources use the same evidence contract and model preferences; CLI uses Cursor Ask mode with explicit model selection. Large or cold workspaces can take several minutes. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.",
       inputSchema: buildSearchInputSchema()
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
@@ -28497,6 +30094,19 @@ function buildToolDefinitions(bridgeInstance) {
           acknowledge_may_still_write: { type: "boolean", default: false, description: "Required for abandon; acknowledges that the underlying Cursor Agent may still run or write." }
         },
         required: ["session_id", "action"]
+      }
+    },
+    {
+      name: "cursor_cce",
+      description: "Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses the local Cursor Agent CLI in read-only Ask mode. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives host and plugin restarts and is snapshotted per request. An unavailable source fails explicitly; it never silently falls back. Use set only when the user asks to switch sources, including /cce cli or /cce ide.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          action: { type: "string", enum: ["show", "set"], description: "show reads the current source; set saves the user-selected source locally." },
+          source: { type: "string", enum: [...CURSOR_CCE_SOURCES], description: "Required for set: cli or ide." }
+        },
+        required: ["action"]
       }
     },
     {
@@ -28565,16 +30175,21 @@ async function ensureBridgeCursor(targetBridge, reason) {
     return r;
   });
 }
-function toolErrorResult(error2) {
-  const message = error2 instanceof Error ? error2.message : String(error2);
-  if (error2 && (error2.uiDiagnostic || error2.modelSelection || error2.pickerRead || error2.cdp || error2.workspaceRecovery)) {
+function toolErrorResult(error3) {
+  const message = error3 instanceof Error ? error3.message : String(error3);
+  if (error3 && (error3.uiDiagnostic || error3.modelSelection || error3.pickerRead || error3.cdp || error3.workspaceRecovery || /^(?:CURSOR_CLI_|CURSOR_CCE_)/.test(error3.code || ""))) {
     const payload = {
-      error: { code: error2.code || error2.uiDiagnostic?.code || "CURSOR_BRIDGE_ERROR", message },
-      ...error2.uiDiagnostic ? { uiDiagnostic: error2.uiDiagnostic } : {},
-      ...error2.modelSelection ? { modelSelection: error2.modelSelection } : {},
-      ...error2.pickerRead ? { pickerRead: error2.pickerRead } : {},
-      ...error2.cdp ? { cdp: error2.cdp } : {},
-      ...error2.workspaceRecovery ? { workspaceRecovery: error2.workspaceRecovery } : {}
+      error: { code: error3.code || error3.uiDiagnostic?.code || "CURSOR_BRIDGE_ERROR", message },
+      ...error3.uiDiagnostic ? { uiDiagnostic: error3.uiDiagnostic } : {},
+      ...error3.modelSelection ? { modelSelection: error3.modelSelection } : {},
+      ...error3.pickerRead ? { pickerRead: error3.pickerRead } : {},
+      ...error3.cdp ? { cdp: error3.cdp } : {},
+      ...error3.workspaceRecovery ? { workspaceRecovery: error3.workspaceRecovery } : {},
+      ...error3.taskId ? { taskId: error3.taskId } : {},
+      ...error3.cliProcessId ? { cliProcessId: error3.cliProcessId } : {},
+      ...error3.cliConfigDirectory ? { cliConfigDirectory: error3.cliConfigDirectory } : {},
+      ...error3.confirmedNotSent !== void 0 ? { confirmedNotSent: error3.confirmedNotSent } : {},
+      ...error3.confirmedTerminal !== void 0 ? { confirmedTerminal: error3.confirmedTerminal } : {}
     };
     return {
       content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
@@ -28587,15 +30202,18 @@ function toolErrorResult(error2) {
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: buildToolDefinitions(bridge)
 }));
-server.setRequestHandler(CallToolRequestSchema, async (request2) => {
+server.onclose = () => {
+  void bridge.shutdownCli();
+};
+server.setRequestHandler(CallToolRequestSchema, async (request2, extra) => {
   const { name, arguments: args } = request2.params;
   try {
     if (name === "cursor_init") {
-      const result = await bridge.initializeWorkspace(String(args && args.path || ""));
+      const result = await bridge.initializeWorkspace(String(args && args.path || ""), { signal: extra?.signal });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_context_engine" || name === "cursor_search" || name === "cursor_search_deep") {
-      const result = await bridge.contextEngine(String(args && args.query || ""), { requestContext: args && args.request_context, workspacePath: args && args.workspace_path });
+      const result = await bridge.contextEngine(String(args && args.query || ""), { requestContext: args && args.request_context, workspacePath: args && args.workspace_path, signal: extra?.signal });
       return { content: [{ type: "text", text: String(result) }] };
     }
     if (name === "cursor_do") {
@@ -28647,6 +30265,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
+    if (name === "cursor_cce") {
+      const result = bridge.configureCcePreferences({ action: args?.action, source: args?.source });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
     if (name === "cursor_model") {
       const result = bridge.configureModelPreferences({
         action: args && args.action,
@@ -28672,12 +30294,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
           args && args.session_id ? Promise.resolve(bridge.sessionStatus(args.session_id)) : bridge.status(args && args.task_id, { detail }),
           new Promise((_, reject) => setTimeout(() => reject(new Error(`cursor_status_timeout_${statusMs}`)), statusMs))
         ]);
-      } catch (error2) {
+      } catch (error3) {
         result = detail === "full" ? {
           connected: false,
           pluginVersion: PLUGIN_VERSION,
           statusPath: "json-list",
-          error: error2 instanceof Error ? error2.message : String(error2),
+          error: error3 instanceof Error ? error3.message : String(error3),
           ...bridge.workspaceView(),
           ...bridge.delegationView(),
           ...bridge.runtimeModeView(),
@@ -28688,7 +30310,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
           ...bridge._compactStatusCommon(),
           ...args && args.task_id ? { found: false, taskId: String(args.task_id) } : {},
           ...args && args.session_id ? { found: false, sessionId: String(args.session_id) } : {},
-          error: error2 instanceof Error ? error2.message : String(error2)
+          error: error3 instanceof Error ? error3.message : String(error3)
         };
       }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
@@ -28698,21 +30320,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request2) => {
       return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], isError: !r.ok };
     }
     throw new Error(`Unknown tool: ${name}`);
-  } catch (error2) {
-    return toolErrorResult(error2);
+  } catch (error3) {
+    return toolErrorResult(error3);
   }
 });
 async function main() {
   console.error("\u{1F680} Starting cursor-bridge (direct CDP on port " + CDP_PORT2 + ")...");
   const releasedCwd = releaseAdapterWorkingDirectory();
   console.error(`\u{1F513} MCP working directory released from the plugin cache: ${releasedCwd}`);
-  const startupEnsure = shouldAutoLaunchCursor() ? ensureBridgeCursor(bridge, "adapter-startup").then((r) => {
+  const startupEnsure = shouldAutoLaunchCursor() && bridge.shouldPrewarmIde() ? ensureBridgeCursor(bridge, "adapter-startup").then((r) => {
     console.error(
       "\u{1FA9F} Startup Cursor check: " + (r.message || r.status) + " | adapterPid=" + bridge._lastLifecycle.adapterPid + " supervisorPid=" + bridge._lastLifecycle.supervisorPid + " reused=" + bridge._lastLifecycle.reusedSupervisor + " reason=" + bridge._lastLifecycle.launchReason
     );
     return r;
-  }).catch((error2) => {
-    console.error("\u26A0\uFE0F Startup Cursor launch failed; continuing and retrying on demand:", error2.message);
+  }).catch((error3) => {
+    console.error("\u26A0\uFE0F Startup Cursor launch failed; continuing and retrying on demand:", error3.message);
     return null;
   }) : Promise.resolve(null);
   await server.connect(new StdioServerTransport());
@@ -28722,7 +30344,11 @@ async function main() {
 var isMain2 = import.meta.url === pathToFileURL2(process.argv[1] || "").href;
 if (isMain2) {
   process.on("unhandledRejection", (r) => console.error("unhandledRejection:", r));
-  process.on("SIGINT", () => process.exit(0));
+  const stop = () => {
+    void bridge.shutdownCli().finally(() => process.exit(0));
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
   main().catch((e) => {
     console.error("\u274C Fatal error:", e);
     process.exit(1);

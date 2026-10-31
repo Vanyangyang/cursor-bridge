@@ -30,6 +30,7 @@ jobs:
         shell: bash
         run: |
           tests=(test/cdp-client.test.mjs test/workspace-identity.test.mjs test/model-config.test.mjs test/model-picker-open.test.mjs test/ai-install.test.mjs)
+          tests+=(test/cce-preferences.test.mjs test/cce-source-routing.test.mjs test/cli-workspace.test.mjs test/cli-config-scope.test.mjs test/cursor-cli.test.mjs)
           if [[ -f test/cdp-identity.test.mjs ]]; then
             tests+=(test/cdp-identity.test.mjs)
           fi
