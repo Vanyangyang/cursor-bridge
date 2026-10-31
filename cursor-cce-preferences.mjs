@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { normalizeCliProvider } from './cursor-cli-provider-config.mjs';
 
 export const CURSOR_CCE_SOURCES = Object.freeze(['ide', 'cli']);
 
@@ -33,14 +34,15 @@ export function readCcePreferences(filePath) {
     parsed = JSON.parse(readFileSync(filePath, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') return defaults;
-    throw invalidConfig(`Cannot read CCE source configuration at ${filePath}: ${error.message}`, error);
+    throw invalidConfig(`Cannot read CCE source configuration at ${filePath}`, error);
   }
   const source = normalizeCceSource(parsed?.source);
   if (!parsed || Array.isArray(parsed) || parsed.version !== 1 || !source
     || (parsed.updatedAt != null && typeof parsed.updatedAt !== 'string')) {
     throw invalidConfig(`Invalid CCE source configuration at ${filePath}; expected version 1 and source ide or cli`);
   }
-  return { version: 1, source, updatedAt: parsed.updatedAt ?? null };
+  const cliProvider = normalizeCliProvider(parsed.cliProvider);
+  return { version: 1, source, updatedAt: parsed.updatedAt ?? null, ...(cliProvider ? { cliProvider } : {}) };
 }
 
 export function writeCcePreferences(filePath, preferences) {
@@ -48,7 +50,14 @@ export function writeCcePreferences(filePath, preferences) {
   const source = normalizeCceSource(preferences?.source);
   if (!source) throw invalidConfig('CCE source must be ide or cli');
   const target = resolve(filePath);
-  const normalized = { version: 1, source, updatedAt: new Date().toISOString() };
+  let previous;
+  try { previous = readCcePreferences(filePath); }
+  catch (error) {
+    if (error.code === 'CURSOR_CLI_PROVIDER_CONFIG_INVALID' && !Object.hasOwn(preferences, 'cliProvider')) throw error;
+    previous = {};
+  }
+  const cliProvider = normalizeCliProvider(Object.hasOwn(preferences, 'cliProvider') ? preferences.cliProvider : previous.cliProvider);
+  const normalized = { version: 1, source, updatedAt: new Date().toISOString(), ...(cliProvider ? { cliProvider } : {}) };
   mkdirSync(dirname(target), { recursive: true });
   const temporary = join(dirname(target), `.${basename(target)}.${process.pid}.${randomUUID()}.tmp`);
   try {
@@ -61,9 +70,9 @@ export function writeCcePreferences(filePath, preferences) {
   return normalized;
 }
 
-export function updateCcePreferences(filePath, { action = 'show', source } = {}) {
+export function updateCcePreferences(filePath, { action = 'show', source, ...options } = {}) {
   const normalizedAction = typeof action === 'string' ? action.trim().toLowerCase() : '';
   if (normalizedAction === 'show') return readCcePreferences(filePath);
-  if (normalizedAction === 'set') return writeCcePreferences(filePath, { source });
+  if (normalizedAction === 'set') return writeCcePreferences(filePath, { source, ...(Object.hasOwn(options, 'cliProvider') ? { cliProvider: options.cliProvider } : {}) });
   throw new Error(`unsupported CCE source action: ${action}; expected show or set`);
 }

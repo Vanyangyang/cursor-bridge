@@ -10,6 +10,8 @@ const banner = {
 const grokOnly = process.argv.includes('--grok-only');
 
 if (!grokOnly) {
+  await build({ entryPoints: ['cursor-cli-provider-preload.mjs'], bundle: true, platform: 'node', format: 'esm',
+    outfile: 'dist/cursor-cli-provider-preload.mjs', external, banner });
   await build({
     entryPoints: ['server.mjs'],
     bundle: true,
@@ -58,6 +60,7 @@ if (!grokOnly) {
 
 if (!grokOnly) {
   console.log('✅ built dist/cursor-bridge.mjs');
+  console.log('✅ built dist/cursor-cli-provider-preload.mjs');
   console.log('✅ built dist/cursor-lifecycle-supervisor.mjs');
 }
 console.log('✅ built plugins/grok-build-supervisor/dist/grok-build-supervisor.mjs');

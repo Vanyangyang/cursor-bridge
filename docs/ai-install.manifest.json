@@ -51,7 +51,7 @@
       ],
       "npm": {
         "package": "vanyangyang-cursor-bridge",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "bundle": "dist/cursor-bridge.mjs",
         "skillsRoot": "skills",
         "commandsRoot": "prompts",

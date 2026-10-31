@@ -32,6 +32,7 @@ mkdirSync(outputRoot, { recursive: true });
 
 const cursor = copyPackageSource("pi-cursor-bridge");
 copyRequired(join(repositoryRoot, "dist", "cursor-bridge.mjs"), join(cursor, "dist", "cursor-bridge.mjs"));
+copyRequired(join(repositoryRoot, "dist", "cursor-cli-provider-preload.mjs"), join(cursor, "dist", "cursor-cli-provider-preload.mjs"));
 copyRequired(
   join(repositoryRoot, "dist", "cursor-lifecycle-supervisor.mjs"),
   join(cursor, "dist", "cursor-lifecycle-supervisor.mjs"),

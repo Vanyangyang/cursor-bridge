@@ -3,6 +3,7 @@ import { access, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveCliWorkspace } from './cursor-cli-workspace.mjs';
 import { createCliConfigScope } from './cursor-cli-config.mjs';
+import { inspectLocalCliProvider, runLocalCliProvider } from './cursor-cli-provider.mjs';
 
 const VERSION = /^\d{4}\.\d{1,2}\.\d{1,2}(?:-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$/;
 const error = (code, message) => Object.assign(new Error(message), { code });
@@ -173,6 +174,7 @@ async function withCliConfig(options, action) {
 }
 
 export async function inspectCursorCli(options = {}) {
+  if (options.provider) return inspectLocalCliProvider(options, execute);
   const launcher = await resolveLauncher(options);
   if (!launcher?.command || !path.isAbsolute(launcher.command) || !Array.isArray(launcher.args || [])) throw error('CURSOR_CLI_LAUNCHER_UNSUPPORTED', 'Cursor launcher must use an absolute executable and argument array');
   return withCliConfig(options, async env => {
@@ -211,8 +213,9 @@ export async function runCursorCli({ projectPath, prompt, modelPreference, timeo
   if (signal?.aborted) throw Object.assign(error('CURSOR_CLI_CANCELLED', 'Cursor CLI request cancelled'), { cancelled: true, stopConfirmed: true, confirmedTerminal: true, confirmedNotSent: true, sent: false });
   const workspace = await resolveCliWorkspace(projectPath);
   const cwd = workspace.cwd;
-  cli ||= await inspectCursorCli({ ...options, signal });
+  cli ||= await inspectCursorCli({ ...options, signal, modelPreference });
   if (cli.brand !== 'Cursor' || !cli.launcher?.command || !Array.isArray(cli.models)) throw error('CURSOR_CLI_UNVERIFIED', 'A verified Cursor CLI inspection is required');
+  if (cli.provider) return runLocalCliProvider({ workspace, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli }, options, execute);
   const { selected, base, effort } = selectVariant(cli, modelPreference);
   let init, terminal, modelSelection;
   const canonical = value => {

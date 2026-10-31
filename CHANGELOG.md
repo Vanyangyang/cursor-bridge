@@ -4,6 +4,19 @@ All notable changes to Cursor Bridge are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [6.2.0] - 2026-11-01
+
+### Added
+
+- Configure an explicit own-key CLI provider through `cursor_cce.cli_provider`. The official `agent-local` Node build retains Cursor's Agent loop and local tools; a separate preload adapts only the OpenAI-compatible Responses wire.
+- Verify provider model availability before dispatch, enforce the frozen model and effort on every request, and require matching server responses before accepting the complete CCE result. Provider failures never fall back to account billing, IDE, Auto or another model.
+- Keep credentials in a referenced local file, outside argv, inherited environment, prompts, provider errors and result diagnostics. Native settings and permissions remain isolated per invocation. CLI/IDE source switches and server restarts preserve provider settings.
+- Ship the provider preload in native plugin, Pi and generic MCP distributions. Pi wrapper 0.4.0 and generic MCP wrapper 0.3.0 embed Cursor Bridge 6.2.0; Supervisor remains 0.4.3.
+
+### Validation
+
+- Real MCP CCE retrieval completed through the official Windows local CLI with an own-key Responses provider while IDE CDP was unavailable. Server model/effort receipts, verified source anchors, source round trips, restart persistence, disabled delegation and unchanged native settings are covered in [6.2.0 verification](./docs/cce-local-provider-6.2.0-verification.md).
+
 ## [6.1.0] - 2026-10-31
 
 ### Added

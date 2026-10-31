@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { CursorBridge, buildContextEnginePrompt, normalizeRequestContext, buildToolDefinitions, toolErrorResult } from '../server.mjs';
 import { writeCcePreferences } from '../cursor-cce-preferences.mjs';
@@ -133,8 +133,30 @@ test('the source tool is explicit and invalid source input cannot change prefere
   const { bridge } = harness(t);
   const tool = buildToolDefinitions(bridge).find(tool => tool.name === 'cursor_cce');
   assert.deepEqual(tool.inputSchema.properties.source.enum, ['ide', 'cli']);
+  assert.ok(tool.inputSchema.properties.cli_provider);
   assert.throws(() => bridge.configureCcePreferences({ action: 'set', source: 'auto' }));
   assert.equal(bridge.ccePreferencesView().cceSource, 'cli');
+});
+
+test('initialization and queued retrieval freeze the explicit provider instead of consulting account CLI', async t => {
+  const { bridge, project, cceSourceFile } = harness(t);
+  const provider = { kind: 'openai-responses', nodePath: process.execPath, entrypoint: resolve('local-cli.js'), baseUrl: 'https://provider.example/v1', apiKeyFile: resolve('local-key.txt') };
+  writeCcePreferences(cceSourceFile, { source: 'cli', cliProvider: provider });
+  const inspections = [];
+  bridge.cliInspector = async options => { inspections.push(options); return { brand: 'Cursor', provider: structuredClone(options.provider) }; };
+  await bridge.initializeWorkspace(project);
+  assert.deepEqual(inspections[0].provider, provider);
+  assert.deepEqual(inspections[0].modelPreference, preference);
+  bridge.busy = true;
+  let owned;
+  bridge.cliRunner = async options => { owned = options.cli.provider; return { result: answer, sessionId: 'provider-session', modelSelection: verified }; };
+  const pending = bridge.contextEngine('question', { workspacePath: project });
+  await until(() => bridge.queue.length === 1);
+  writeCcePreferences(cceSourceFile, { source: 'cli', cliProvider: { ...provider, baseUrl: 'https://changed.example/v1' } });
+  bridge.busy = false; void bridge._drain();
+  assert.equal(await pending, answer);
+  assert.deepEqual(owned, provider);
+  assert.equal(bridge.ccePreferencesView().cceCliProvider.baseUrl, 'https://changed.example/v1');
 });
 
 test('a cancelled queued CLI request settles even when the preceding queue cannot advance', async t => {

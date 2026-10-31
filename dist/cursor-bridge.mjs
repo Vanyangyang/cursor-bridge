@@ -2241,8 +2241,8 @@ var require_resolve = __commonJS({
       }
       return count;
     }
-    function getFullPath(resolver, id = "", normalize) {
-      if (normalize !== false)
+    function getFullPath(resolver, id = "", normalize2) {
+      if (normalize2 !== false)
         id = normalizeId(id);
       const p = resolver.parse(id);
       return _getFullPath(resolver, p);
@@ -3832,7 +3832,7 @@ var require_fast_uri = __commonJS({
       }
       return decodedScheme;
     }
-    function normalize(uri, options) {
+    function normalize2(uri, options) {
       if (typeof uri === "string") {
         uri = /** @type {T} */
         normalizeString(uri, options);
@@ -4203,7 +4203,7 @@ var require_fast_uri = __commonJS({
     }
     var fastUri = {
       SCHEMES,
-      normalize,
+      normalize: normalize2,
       resolve: resolve12,
       resolveComponent,
       equal,
@@ -12406,7 +12406,7 @@ import {
   writeFileSync as writeFileSync7
 } from "node:fs";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
-import { basename as basename7, dirname as dirname9, join as join10, resolve as resolve10, win32 as win32Path } from "node:path";
+import { basename as basename7, dirname as dirname9, join as join11, resolve as resolve10, win32 as win32Path } from "node:path";
 function resolveSupervisorSpawnCwd({
   requestedCwd = null,
   runtimeRoot = null,
@@ -12423,7 +12423,7 @@ function resolveSupervisorSpawnCwd({
 function resolvePluginLocalLifecycleDir(sourceScript) {
   const scriptDir = dirname9(resolve10(sourceScript));
   const pluginRoot = basename7(scriptDir).toLowerCase() === "dist" ? dirname9(scriptDir) : scriptDir;
-  return join10(pluginRoot, ".cursor-bridge-lifecycle");
+  return join11(pluginRoot, ".cursor-bridge-lifecycle");
 }
 function inspectWindowsAppContainerPath(target, options = {}) {
   const platform = options.platform || process.platform;
@@ -12472,17 +12472,17 @@ function resolveSupervisorScript() {
   const candidates = [];
   if (typeof process.argv[1] === "string") {
     const entryDir = dirname9(resolve10(process.argv[1]));
-    candidates.push(join10(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
-    candidates.push(join10(entryDir, "cursor-lifecycle-supervisor.mjs"));
+    candidates.push(join11(entryDir, "dist", "cursor-lifecycle-supervisor.mjs"));
+    candidates.push(join11(entryDir, "cursor-lifecycle-supervisor.mjs"));
   }
   candidates.push(
-    join10(here, "dist", "cursor-lifecycle-supervisor.mjs"),
-    join10(here, "cursor-lifecycle-supervisor.mjs")
+    join11(here, "dist", "cursor-lifecycle-supervisor.mjs"),
+    join11(here, "cursor-lifecycle-supervisor.mjs")
   );
   for (const c of candidates) {
     if (existsSync4(c)) return c;
   }
-  return join10(here, "cursor-lifecycle-supervisor.mjs");
+  return join11(here, "cursor-lifecycle-supervisor.mjs");
 }
 function writeRuntimeFile(target, content) {
   if (existsSync4(target) && readFileSync8(target).equals(content)) return;
@@ -12506,9 +12506,9 @@ function writeRuntimeFile(target, content) {
 function materializeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecycleDir() } = {}) {
   const described = describeLifecycleSupervisorRuntime({ sourceScript, dir });
   const { sourceScript: source, content, fingerprint } = described;
-  const runtimeRoot = join10(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  const runtimeRoot = join11(ensureLifecycleDir(dir), "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
   mkdirSync8(runtimeRoot, { recursive: true });
-  const script = join10(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const script = join11(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   writeRuntimeFile(script, content);
   return { sourceScript: source, script, runtimeRoot, fingerprint };
 }
@@ -12517,8 +12517,8 @@ function describeLifecycleSupervisorRuntime({ sourceScript, dir = defaultLifecyc
   if (!existsSync4(source)) throw new Error(`lifecycle supervisor script missing: ${source}`);
   const content = readFileSync8(source);
   const fingerprint = createHash3("sha256").update(content).digest("hex");
-  const runtimeRoot = join10(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
-  const script = join10(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
+  const runtimeRoot = join11(dir, "runtime", `supervisor-${fingerprint.slice(0, 20)}`);
+  const script = join11(runtimeRoot, "cursor-lifecycle-supervisor.mjs");
   return { sourceScript: source, script, runtimeRoot, fingerprint, content };
 }
 function isProcessAlive(pid) {
@@ -12647,7 +12647,7 @@ function tryUnlink(path2) {
   }
 }
 function writeBootEnv(dir, extra = {}) {
-  const bootPath = join10(dir, `boot-env-${process.pid}-${Date.now()}.json`);
+  const bootPath = join11(dir, `boot-env-${process.pid}-${Date.now()}.json`);
   const payload = { ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("CURSOR_BRIDGE_") || key === "CURSOR_PROJECT_PATH" || key === "CURSOR_EXE") {
@@ -22490,7 +22490,7 @@ var StdioServerTransport = class {
 };
 
 // server.mjs
-import { basename as basename8, dirname as dirname10, join as join11, resolve as resolve11 } from "node:path";
+import { basename as basename8, dirname as dirname10, join as join12, resolve as resolve11 } from "node:path";
 import { statSync as statSync4 } from "node:fs";
 
 // node_modules/ws/wrapper.mjs
@@ -23023,6 +23023,36 @@ import { randomUUID as randomUUID2 } from "node:crypto";
 import { mkdirSync as mkdirSync7, readFileSync as readFileSync6, renameSync as renameSync6, rmSync as rmSync6, writeFileSync as writeFileSync6 } from "node:fs";
 import { homedir as homedir8 } from "node:os";
 import { basename as basename5, dirname as dirname6, join as join8, resolve as resolve7 } from "node:path";
+
+// cursor-cli-provider-config.mjs
+import { isAbsolute as isAbsolute2 } from "node:path";
+var fields = /* @__PURE__ */ new Set(["kind", "nodePath", "entrypoint", "baseUrl", "apiKeyFile"]);
+function normalizeCliProvider(value) {
+  const invalid2 = () => Object.assign(new Error("Invalid local CLI provider; use openai-responses, absolute node/entrypoint/key-file paths and an HTTPS base URL"), { code: "CURSOR_CLI_PROVIDER_CONFIG_INVALID" });
+  if (value == null) return null;
+  if (typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !fields.has(key)) || value.kind !== "openai-responses") throw invalid2();
+  for (const key of ["nodePath", "entrypoint", "apiKeyFile"]) if (typeof value[key] !== "string" || !isAbsolute2(value[key]) || /[\r\n\0]/.test(value[key])) throw invalid2();
+  let url;
+  try {
+    url = new URL(value.baseUrl);
+  } catch {
+    throw invalid2();
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.username || url.password || url.search || url.hash || url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) throw invalid2();
+  return {
+    kind: value.kind,
+    nodePath: value.nodePath,
+    entrypoint: value.entrypoint,
+    baseUrl: url.href.replace(/\/+$/, ""),
+    apiKeyFile: value.apiKeyFile
+  };
+}
+function localProviderSummary(provider) {
+  return provider ? { kind: provider.kind, baseUrl: provider.baseUrl, protocol: "responses", credentialSource: "local-file", harness: "cursor-agent-local" } : null;
+}
+
+// cursor-cce-preferences.mjs
 var CURSOR_CCE_SOURCES = Object.freeze(["ide", "cli"]);
 function normalizeCceSource(value, fallback = "") {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -23047,20 +23077,29 @@ function readCcePreferences(filePath) {
     parsed = JSON.parse(readFileSync6(filePath, "utf8"));
   } catch (error3) {
     if (error3?.code === "ENOENT") return defaults;
-    throw invalidConfig(`Cannot read CCE source configuration at ${filePath}: ${error3.message}`, error3);
+    throw invalidConfig(`Cannot read CCE source configuration at ${filePath}`, error3);
   }
   const source = normalizeCceSource(parsed?.source);
   if (!parsed || Array.isArray(parsed) || parsed.version !== 1 || !source || parsed.updatedAt != null && typeof parsed.updatedAt !== "string") {
     throw invalidConfig(`Invalid CCE source configuration at ${filePath}; expected version 1 and source ide or cli`);
   }
-  return { version: 1, source, updatedAt: parsed.updatedAt ?? null };
+  const cliProvider = normalizeCliProvider(parsed.cliProvider);
+  return { version: 1, source, updatedAt: parsed.updatedAt ?? null, ...cliProvider ? { cliProvider } : {} };
 }
 function writeCcePreferences(filePath, preferences) {
   if (!filePath) throw new Error("persistent CCE source storage is disabled for this server");
   const source = normalizeCceSource(preferences?.source);
   if (!source) throw invalidConfig("CCE source must be ide or cli");
   const target = resolve7(filePath);
-  const normalized = { version: 1, source, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  let previous;
+  try {
+    previous = readCcePreferences(filePath);
+  } catch (error3) {
+    if (error3.code === "CURSOR_CLI_PROVIDER_CONFIG_INVALID" && !Object.hasOwn(preferences, "cliProvider")) throw error3;
+    previous = {};
+  }
+  const cliProvider = normalizeCliProvider(Object.hasOwn(preferences, "cliProvider") ? preferences.cliProvider : previous.cliProvider);
+  const normalized = { version: 1, source, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), ...cliProvider ? { cliProvider } : {} };
   mkdirSync7(dirname6(target), { recursive: true });
   const temporary = join8(dirname6(target), `.${basename5(target)}.${process.pid}.${randomUUID2()}.tmp`);
   try {
@@ -23073,21 +23112,21 @@ function writeCcePreferences(filePath, preferences) {
   }
   return normalized;
 }
-function updateCcePreferences(filePath, { action = "show", source } = {}) {
+function updateCcePreferences(filePath, { action = "show", source, ...options } = {}) {
   const normalizedAction = typeof action === "string" ? action.trim().toLowerCase() : "";
   if (normalizedAction === "show") return readCcePreferences(filePath);
-  if (normalizedAction === "set") return writeCcePreferences(filePath, { source });
+  if (normalizedAction === "set") return writeCcePreferences(filePath, { source, ...Object.hasOwn(options, "cliProvider") ? { cliProvider: options.cliProvider } : {} });
   throw new Error(`unsupported CCE source action: ${action}; expected show or set`);
 }
 
 // cursor-cli.mjs
 import { spawn as nodeSpawn, execFile } from "node:child_process";
-import { access, readFile as readFile2, readdir, realpath } from "node:fs/promises";
+import { access, readFile as readFile3, readdir, realpath as realpath2 } from "node:fs/promises";
 import path from "node:path";
 
 // cursor-cli-workspace.mjs
 import { readFileSync as readFileSync7, realpathSync, statSync as statSync3 } from "node:fs";
-import { dirname as dirname7, extname as extname3, isAbsolute as isAbsolute2, resolve as resolve8 } from "node:path";
+import { dirname as dirname7, extname as extname3, isAbsolute as isAbsolute3, resolve as resolve8 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/jsonc-parser/lib/esm/impl/scanner.js
@@ -23965,7 +24004,7 @@ function localDirectory(path2) {
   }
 }
 function resolveCliWorkspace(projectPath) {
-  if (typeof projectPath !== "string" || !isAbsolute2(projectPath)) throw invalid("CCE CLI requires an absolute workspace path");
+  if (typeof projectPath !== "string" || !isAbsolute3(projectPath)) throw invalid("CCE CLI requires an absolute workspace path");
   const workspacePath = resolve8(projectPath);
   let info;
   try {
@@ -24008,7 +24047,7 @@ function resolveCliWorkspace(projectPath) {
 // cursor-cli-config.mjs
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir as homedir9, tmpdir } from "node:os";
-import { basename as basename6, dirname as dirname8, isAbsolute as isAbsolute3, join as join9, resolve as resolve9 } from "node:path";
+import { basename as basename6, dirname as dirname8, isAbsolute as isAbsolute4, join as join9, resolve as resolve9 } from "node:path";
 var bridgeTools = [
   "cursor_context_engine",
   "cursor_search",
@@ -24027,7 +24066,7 @@ async function createCliConfigScope(env = process.env) {
   const configured = env.CURSOR_CONFIG_DIR;
   const userHome = (process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir9();
   const source = configured?.trim() ? configured : env.XDG_CONFIG_HOME?.trim() ? join9(env.XDG_CONFIG_HOME, "cursor") : join9(userHome, ".cursor");
-  if (!isAbsolute3(source)) throw Object.assign(new Error("Cursor CLI configuration directory must be absolute"), { code: "CURSOR_CLI_CONFIG_INVALID", confirmedNotSent: true });
+  if (!isAbsolute4(source)) throw Object.assign(new Error("Cursor CLI configuration directory must be absolute"), { code: "CURSOR_CLI_CONFIG_INVALID", confirmedNotSent: true });
   const parent = resolve9(tmpdir()), prefix = "cursor-bridge-cce-config-";
   const directory = await mkdtemp(join9(parent, prefix));
   let released = false;
@@ -24065,6 +24104,197 @@ async function createCliConfigScope(env = process.env) {
     });
     throw Object.assign(new Error("Cannot prepare the private Cursor CLI configuration", { cause }), { code: "CURSOR_CLI_CONFIG_INVALID", confirmedNotSent: true });
   }
+}
+
+// cursor-cli-provider.mjs
+import { readFile as readFile2, realpath, stat, writeFile as writeFile2 } from "node:fs/promises";
+import { isAbsolute as isAbsolute5, join as join10, normalize } from "node:path";
+var failure = (code, message) => Object.assign(new Error(message), { code });
+var preferenceFor = (value) => {
+  const model = typeof value?.model === "string" ? value.model.trim() : "";
+  const effort = typeof value?.effort === "string" ? value.effort.trim().toLowerCase() : "";
+  if (!model || /^(auto|default)$/i.test(model) || /[\r\n\0]/.test(model) || !["minimal", "low", "medium", "high", "xhigh", "max"].includes(effort)) {
+    throw failure("CURSOR_CLI_MODEL_REQUIRED", "A named model and explicit effort are required for the local provider");
+  }
+  return { model, effort };
+};
+var canonical = (value) => {
+  const result = normalize(value).replace(/[\\/]+$/, "");
+  return process.platform === "win32" ? result.toLowerCase() : result;
+};
+var readAudit = async (file) => {
+  try {
+    if ((await stat(file)).size > 2 * 1024 * 1024) throw new Error("limit");
+    return (await readFile2(file, "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  } catch {
+    throw failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "Local provider verification evidence is missing or invalid");
+  }
+};
+async function withProviderScope(provider, preference, options, allowInference, action) {
+  const scope = await createCliConfigScope(options.env || process.env);
+  let retain = false;
+  try {
+    const file = join10(scope.directory, "cli-config.json");
+    const settings = JSON.parse(await readFile2(file, "utf8"));
+    const parameters = [{ id: "reasoning", value: preference.effort }];
+    settings.model = { modelId: preference.model, displayModelId: preference.model, displayName: preference.model, displayNameShort: preference.model, aliases: [], maxMode: false };
+    settings.selectedModel = { modelId: preference.model, parameters };
+    settings.modelParameters = { ...settings.modelParameters, [preference.model]: parameters };
+    delete settings.authInfo;
+    await writeFile2(file, JSON.stringify(settings), { mode: 384 });
+    const auditFile = join10(scope.directory, "provider-audit.jsonl");
+    const configFile = join10(scope.directory, "provider.json");
+    await writeFile2(auditFile, "", { flag: "wx", mode: 384 });
+    await writeFile2(configFile, JSON.stringify({
+      provider,
+      ...preference,
+      allowInference,
+      auditFile,
+      requestTimeoutMs: Math.max(1e3, Math.min(options.timeoutMs ?? 12e4, 3e5))
+    }), { flag: "wx", mode: 384 });
+    const env = { ...scope.env };
+    for (const key of ["NODE_OPTIONS", "NODE_PATH", "OPENAI_API_KEY", "CURSOR_API_KEY", "CURSOR_API_ENDPOINT", "CURSOR_LOCAL_AGENT_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"]) delete env[key];
+    Object.assign(env, {
+      CURSOR_BRIDGE_CLI_PROVIDER_CONFIG: configFile,
+      CURSOR_LOCAL_AGENT_API_KEY: "cursor-bridge-local-provider",
+      NO_OPEN_BROWSER: "1",
+      NODE_DISABLE_COMPILE_CACHE: "1",
+      AGENT_CLI_CREDENTIAL_STORE: "file"
+    });
+    if (env.NODE_USE_ENV_PROXY === void 0 && (env.HTTPS_PROXY || env.HTTP_PROXY)) env.NODE_USE_ENV_PROXY = "1";
+    return await action({ env, auditFile });
+  } catch (error3) {
+    if (error3.confirmedTerminal === false) {
+      retain = true;
+      error3.cliConfigDirectory = scope.directory;
+    }
+    throw error3;
+  } finally {
+    if (!retain) await scope.cleanup().catch(() => console.error("[cursor-bridge] Local provider profile cleanup deferred"));
+  }
+}
+async function inspectLocalCliProvider(options, execute2) {
+  const provider = normalizeCliProvider(options.provider);
+  const preference = preferenceFor(options.modelPreference);
+  let launcher;
+  try {
+    launcher = { command: await realpath(provider.nodePath), args: [await realpath(provider.entrypoint)] };
+  } catch {
+    throw failure("CURSOR_CLI_PROVIDER_UNAVAILABLE", "The configured agent-local Node runtime or entrypoint is unavailable");
+  }
+  return withProviderScope(provider, preference, options, false, async ({ env, auditFile }) => {
+    const metadata = { ...options, env, input: void 0, onLine: void 0, onDispatch: void 0, timeoutMs: options.timeoutMs ?? 3e4 };
+    const help = await execute2(launcher, ["--help"], metadata);
+    if (!/Usage:\s*agent-local\b/.test(help.stdout) || !/Start the Cursor Agent/.test(help.stdout) || !/stream-json/.test(help.stdout)) {
+      throw failure("CURSOR_CLI_WRONG_BRAND", "The local provider requires the official agent-local CLI build");
+    }
+    const adapted = { command: launcher.command, args: ["--import", new URL("./cursor-cli-provider-preload.mjs", import.meta.url).href, ...launcher.args] };
+    await execute2(adapted, ["--authless", "--base-url", provider.baseUrl, "--disable-auto-update", "models"], metadata);
+    const events = await readAudit(auditFile);
+    if (events.some((event) => event.stage === "provider_error") || !events.some((event) => event.stage === "catalogue_verified" && event.model === preference.model)) {
+      throw failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "The provider did not confirm the exact configured model");
+    }
+    return {
+      brand: "Cursor",
+      launcher,
+      provider,
+      preference,
+      models: [{ id: preference.model, name: preference.model }],
+      providerVerification: { ...localProviderSummary(provider), catalogueVerified: true }
+    };
+  });
+}
+async function runLocalCliProvider({ workspace, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli }, options, execute2) {
+  const preference = preferenceFor(modelPreference);
+  const provider = normalizeCliProvider(cli.provider);
+  if (preference.model !== cli.preference?.model || preference.effort !== cli.preference?.effort || !cli.providerVerification?.catalogueVerified) {
+    throw failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "Provider inspection does not match the frozen model and effort");
+  }
+  let init, terminal;
+  let finalText = "";
+  const selection = {
+    configured: true,
+    applied: true,
+    requestedModel: preference.model,
+    requestedEffort: preference.effort,
+    effectiveModel: preference.model,
+    effectiveEffort: preference.effort,
+    cliModel: preference.model,
+    verificationSource: "cursor_cli_provider_guard",
+    providerResponseConfirmed: false,
+    provider: localProviderSummary(provider)
+  };
+  return withProviderScope(provider, preference, { ...options, timeoutMs }, true, async ({ env, auditFile }) => {
+    const launcher = { command: cli.launcher.command, args: ["--import", new URL("./cursor-cli-provider-preload.mjs", import.meta.url).href, ...cli.launcher.args] };
+    await execute2(launcher, [
+      "--authless",
+      "--base-url",
+      provider.baseUrl,
+      "--disable-auto-update",
+      "--mode",
+      "ask",
+      "--print",
+      "--output-format",
+      "stream-json",
+      "--workspace",
+      workspace.cwd,
+      ...workspace.additionalRoots.flatMap((root) => ["--add-dir", root]),
+      "--trust"
+    ], {
+      ...options,
+      env,
+      cwd: workspace.cwd,
+      input: prompt,
+      signal,
+      timeoutMs: timeoutMs ?? 3e5,
+      onDispatch,
+      onEnd() {
+        if (!init || !terminal) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local closed without a complete successful turn");
+      },
+      onLine(line) {
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local emitted invalid JSON");
+        }
+        if (!event || typeof event !== "object" || Array.isArray(event) || typeof event.type !== "string" || terminal) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "Invalid or post-terminal agent-local event");
+        if (event.type === "system" && event.subtype === "init") {
+          if (init || typeof event.session_id !== "string" || !event.session_id || typeof event.cwd !== "string" || !isAbsolute5(event.cwd) || canonical(event.cwd) !== canonical(workspace.cwd)) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local init identity or workspace does not match");
+          if (event.model !== preference.model) throw failure("CURSOR_CLI_MODEL_MISMATCH", "agent-local initialized another model");
+          init = event;
+          onInit?.({ sessionId: init.session_id, modelSelection: selection });
+          return;
+        }
+        if (!init || event.session_id !== void 0 && event.session_id !== init.session_id || ["user", "assistant", "tool_call", "result"].includes(event.type) && event.session_id !== init.session_id) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local session identity is inconsistent");
+        if (event.type === "tool_call") finalText = "";
+        if (event.type === "assistant") {
+          const text = event.message?.content?.filter((item) => item.type === "text").map((item) => item.text).join("") || "";
+          if (text.trim()) finalText = text;
+        }
+        if (event.type === "result") {
+          if (event.subtype !== "success" || event.is_error !== false) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local did not confirm a successful terminal result");
+          terminal = event;
+        }
+      }
+    });
+    const events = await readAudit(auditFile);
+    const sent = events.filter((event) => event.stage === "before_send");
+    const created = events.filter((event) => event.stage === "response.created");
+    const completed = events.filter((event) => event.stage === "response.completed");
+    if (events.some((event) => event.stage === "provider_error") || !sent.length || sent.length !== created.length || sent.length !== completed.length || [...sent, ...created, ...completed].some((event) => event.model !== preference.model || event.effort !== preference.effort)) {
+      throw Object.assign(failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "Provider responses did not confirm every model request and effort"), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
+    }
+    const result = typeof terminal.result === "string" && terminal.result.trim() ? terminal.result : finalText;
+    if (!result.trim()) throw Object.assign(failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local returned no complete reply after its tools"), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
+    return { result, sessionId: init.session_id, modelSelection: {
+      ...selection,
+      verificationSource: "cursor_cli_provider_response",
+      providerResponseConfirmed: true,
+      providerRequestCount: sent.length,
+      verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
+    } };
+  });
 }
 
 // cursor-cli.mjs
@@ -24105,10 +24335,10 @@ async function resolveLauncher(options) {
   }
   for (const candidate of candidates) {
     if (!await exists(candidate)) continue;
-    const absolute = await realpath(candidate);
+    const absolute = await realpath2(candidate);
     if (platform !== "win32" || /\.exe$/i.test(absolute)) return { command: absolute, args: [], wrapper: absolute };
     if (!/\.(?:ps1|cmd)$/i.test(absolute)) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Unsupported Windows Cursor launcher");
-    const content = await readFile2(absolute, "utf8");
+    const content = await readFile3(absolute, "utf8");
     if (!/node\.exe/i.test(content) || !/index\.js/i.test(content)) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Cursor wrapper does not expose the supported Node layout");
     const directory = path.dirname(absolute);
     const roots = [directory];
@@ -24120,7 +24350,7 @@ async function resolveLauncher(options) {
       if (cause.code !== "ENOENT") throw cause;
     }
     for (const root of roots) if (await exists(path.join(root, "node.exe")) && await exists(path.join(root, "index.js"))) {
-      return { command: await realpath(path.join(root, "node.exe")), args: [await realpath(path.join(root, "index.js"))], wrapper: absolute };
+      return { command: await realpath2(path.join(root, "node.exe")), args: [await realpath2(path.join(root, "index.js"))], wrapper: absolute };
     }
     throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Cursor wrapper has no supported installed Node entrypoint");
   }
@@ -24152,7 +24382,7 @@ async function execute(launcher, args, options = {}) {
   };
   if (options.signal?.aborted) throw Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true, stopConfirmed: true, confirmedTerminal: true, confirmedNotSent: true, sent: false });
   return new Promise((resolve12, reject) => {
-    let child, stdout = "", stderr = "", pending = "", bytes = 0, failure, closed = false, dispatched = false, stopPromise;
+    let child, stdout = "", stderr = "", pending = "", bytes = 0, failure2, closed = false, dispatched = false, stopPromise;
     let closeTimer;
     const timeoutMs = Math.max(1, options.timeoutMs ?? 15e3);
     const maxBytes = options.maxOutputBytes ?? 8 * 1024 * 1024;
@@ -24166,12 +24396,12 @@ async function execute(launcher, args, options = {}) {
       reject(cause);
     };
     const fail = (cause) => {
-      if (failure) return;
-      failure = cause;
+      if (failure2) return;
+      failure2 = cause;
       stopPromise = Promise.resolve().then(() => stopTree(child, options)).then((value) => value !== false, () => false);
       closeTimer = setTimeout(async () => {
         cleanup();
-        finishError(failure, false);
+        finishError(failure2, false);
       }, options.closeTimeoutMs ?? 6e3);
     };
     const abort = () => fail(Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true }));
@@ -24199,7 +24429,7 @@ async function execute(launcher, args, options = {}) {
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      if (failure) return;
+      if (failure2) return;
       bytes += Buffer.byteLength(chunk);
       if (bytes > maxBytes) return fail(error2("CURSOR_CLI_OUTPUT_LIMIT", "Cursor CLI output exceeded the limit"));
       if (!options.onLine) {
@@ -24208,7 +24438,7 @@ async function execute(launcher, args, options = {}) {
       }
       pending += chunk;
       let boundary;
-      while ((boundary = pending.indexOf("\n")) >= 0 && !failure) {
+      while ((boundary = pending.indexOf("\n")) >= 0 && !failure2) {
         const line = pending.slice(0, boundary).replace(/\r$/, "");
         pending = pending.slice(boundary + 1);
         if (!line.trim()) continue;
@@ -24226,14 +24456,14 @@ async function execute(launcher, args, options = {}) {
       if (!closed) fail(cause);
     });
     child.on("error", (cause) => {
-      failure ||= cause;
+      failure2 ||= cause;
     });
     child.on("close", async (code, signal) => {
       if (closed) return;
       closed = true;
       cleanup();
       const stopped = stopPromise ? await stopPromise : true;
-      if (failure) return finishError(failure, stopped);
+      if (failure2) return finishError(failure2, stopped);
       let completionError;
       const detail = stderrSummary(stderr);
       if (code !== 0) completionError = Object.assign(error2("CURSOR_CLI_EXIT_ERROR", `Cursor CLI exited unsuccessfully${detail ? ": " + detail : ""}`), { exitCode: code, signal });
@@ -24249,11 +24479,11 @@ async function execute(launcher, args, options = {}) {
       resolve12({ stdout, stderr: safeDetail(stderr), code });
     });
     child.once("spawn", () => {
-      if (failure) return;
+      if (failure2) return;
       try {
         if (options.input !== void 0) {
           options.onDispatch?.();
-          if (failure || options.signal?.aborted) return;
+          if (failure2 || options.signal?.aborted) return;
           dispatched = true;
           child.stdin.end(options.input, "utf8");
         } else child.stdin.end();
@@ -24280,6 +24510,7 @@ async function withCliConfig(options, action) {
   }
 }
 async function inspectCursorCli(options = {}) {
+  if (options.provider) return inspectLocalCliProvider(options, execute);
   const launcher = await resolveLauncher(options);
   if (!launcher?.command || !path.isAbsolute(launcher.command) || !Array.isArray(launcher.args || [])) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "Cursor launcher must use an absolute executable and argument array");
   return withCliConfig(options, async (env) => {
@@ -24314,11 +24545,12 @@ async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, s
   if (signal?.aborted) throw Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true, stopConfirmed: true, confirmedTerminal: true, confirmedNotSent: true, sent: false });
   const workspace = await resolveCliWorkspace(projectPath);
   const cwd = workspace.cwd;
-  cli ||= await inspectCursorCli({ ...options, signal });
+  cli ||= await inspectCursorCli({ ...options, signal, modelPreference });
   if (cli.brand !== "Cursor" || !cli.launcher?.command || !Array.isArray(cli.models)) throw error2("CURSOR_CLI_UNVERIFIED", "A verified Cursor CLI inspection is required");
+  if (cli.provider) return runLocalCliProvider({ workspace, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli }, options, execute);
   const { selected, base, effort } = selectVariant(cli, modelPreference);
   let init, terminal, modelSelection;
-  const canonical = (value) => {
+  const canonical2 = (value) => {
     const normalized = path.normalize(value).replace(/[\\/]+$/, "");
     return process.platform === "win32" ? normalized.toLowerCase() : normalized;
   };
@@ -24358,7 +24590,7 @@ async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, s
         if (terminal) throw protocolError("Cursor CLI emitted an event after its terminal result");
         if (event.type === "system" && event.subtype === "init") {
           if (init || typeof event.session_id !== "string" || !event.session_id) throw protocolError("Cursor CLI init is missing identity or duplicated");
-          if (typeof event.cwd !== "string" || !path.isAbsolute(event.cwd) || canonical(event.cwd) !== canonical(cwd)) throw protocolError("Cursor CLI init workspace does not match the request");
+          if (typeof event.cwd !== "string" || !path.isAbsolute(event.cwd) || canonical2(event.cwd) !== canonical2(cwd)) throw protocolError("Cursor CLI init workspace does not match the request");
           if (display(event.model) !== display(selected.name)) throw error2("CURSOR_CLI_MODEL_MISMATCH", "Cursor CLI initialized a different model or effort");
           init = event;
           modelSelection = {
@@ -24388,7 +24620,7 @@ async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, s
 
 // server.mjs
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.1.0";
+var PLUGIN_VERSION = "6.2.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
@@ -25154,11 +25386,11 @@ function modelPickerAvailableIsDecisive(kind, available) {
   return available.some((text) => isCursorEffortOptionText(text));
 }
 function selectModelPickerRow(rows, requested, kind = "model") {
-  const normalize = kind === "parameter" ? normalizeModelPickerText : normalizeModelPickerModelText;
-  const wanted = normalize(requested);
+  const normalize2 = kind === "parameter" ? normalizeModelPickerText : normalizeModelPickerModelText;
+  const wanted = normalize2(requested);
   if (!wanted) return null;
   const candidates = (Array.isArray(rows) ? rows : []).filter((row) => row && row.disabled !== true && (kind === "any" || row.kind === kind)).map((row) => {
-    const normalized = normalize(row.text);
+    const normalized = normalize2(row.text);
     let score = normalized === wanted ? 1e3 : 0;
     if (kind !== "parameter") {
       if (!score && normalized.startsWith(wanted)) score = 800;
@@ -26538,7 +26770,8 @@ var CursorBridge = class {
     this._lastWorkspaceBinding = null;
     if (this.ccePreferencesView().cceSource === "cli") {
       const workspace = resolveCliWorkspace(saved.projectPath);
-      await this._inspectCli(options.signal);
+      const preferences = readCcePreferences(this.cceSourceFile);
+      await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference: this._modelPreferenceFor("cce") });
       this._lastWorkspaceBinding = {
         ok: true,
         state: "workspace_ready",
@@ -26684,7 +26917,8 @@ var CursorBridge = class {
       cceSource: preferences.source,
       cceSourceFile: this.cceSourceFile,
       cceSourcePersistAcrossRestart: !!this.cceSourceFile,
-      cceSourceUpdatedAt: preferences.updatedAt
+      cceSourceUpdatedAt: preferences.updatedAt,
+      cceCliProvider: localProviderSummary(preferences.cliProvider)
     };
   }
   configureCcePreferences(options = {}) {
@@ -26700,7 +26934,7 @@ var CursorBridge = class {
       return false;
     }
   }
-  async _inspectCli(signal) {
+  async _inspectCli(signal, options = {}) {
     const controller = new AbortController();
     const cancel = () => controller.abort();
     if (this.cliClosing || signal?.aborted) cancel();
@@ -26713,7 +26947,7 @@ var CursorBridge = class {
         confirmedNotSent: true,
         confirmedTerminal: true
       });
-      return this.cliInspector({ signal: controller.signal });
+      return this.cliInspector({ ...options, signal: controller.signal });
     });
     this.cliInspections.add(inspection);
     try {
@@ -26836,7 +27070,8 @@ var CursorBridge = class {
       if (this._hasGlobalReservation()) {
         throw new Error("A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first");
       }
-      const source = this.ccePreferencesView().cceSource;
+      const preferences = readCcePreferences(this.cceSourceFile);
+      const source = preferences.source;
       const modelPreference = this._modelPreferenceFor("cce");
       let cli;
       if (source === "ide") await this._ensureCursor();
@@ -26844,7 +27079,7 @@ var CursorBridge = class {
         const projectPath = this.projectPath || this._lastLifecycle?.projectPath;
         if (!projectPath) throw this._workspaceRecoveryError("WORKSPACE_INITIALIZATION_REQUIRED", "Run cursor_init with the intended project before submitting CCE CLI work.", options.workspacePath);
         resolveCliWorkspace(projectPath);
-        cli = await this._inspectCli(options.signal);
+        cli = await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference });
       }
       this._assertWorkspaceConfirmed(options.workspacePath);
       if (source === "cli" && (this.cliClosing || options.signal?.aborted)) {
@@ -28124,10 +28359,10 @@ var CursorBridge = class {
       }
     } catch (error3) {
       primaryError = error3 instanceof Error ? error3 : new Error(String(error3));
-      let failure = primaryError.modelSelectionFailure;
-      if (!failure) {
+      let failure2 = primaryError.modelSelectionFailure;
+      if (!failure2) {
         const pickerUnavailable = /model picker (?:is unavailable|did not open)/i.test(primaryError.message);
-        failure = {
+        failure2 = {
           failureClass: primaryError.pickerRead ? "picker_read_failed" : pickerUnavailable ? "picker_did_not_open" : "probe_error",
           retryable: true
         };
@@ -28143,15 +28378,15 @@ var CursorBridge = class {
         cdp: primaryError.cdp || null,
         requestedModel,
         requestedEffort,
-        failureClass: failure.failureClass,
-        retryable: failure.retryable === true,
-        errorCode: primaryError.code || `CURSOR_MODEL_${String(failure.failureClass).toUpperCase()}`,
-        available: failure.available || [],
-        attempts: failure.attempts || [],
-        trigger: failure.trigger || null,
-        lastPollError: failure.lastPollError || null,
+        failureClass: failure2.failureClass,
+        retryable: failure2.retryable === true,
+        errorCode: primaryError.code || `CURSOR_MODEL_${String(failure2.failureClass).toUpperCase()}`,
+        available: failure2.available || [],
+        attempts: failure2.attempts || [],
+        trigger: failure2.trigger || null,
+        lastPollError: failure2.lastPollError || null,
         configurationCheck,
-        menu: failure.menu || null,
+        menu: failure2.menu || null,
         runtimeMode: this.runtimeMode,
         lastError: primaryError.message,
         failedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -29689,6 +29924,9 @@ var CursorBridge = class {
       effectiveEffort: full.modelSelection.effectiveEffort,
       verificationSource: full.modelSelection.verificationSource,
       cliModel: full.modelSelection.cliModel,
+      provider: full.modelSelection.provider,
+      providerResponseConfirmed: full.modelSelection.providerResponseConfirmed,
+      providerRequestCount: full.modelSelection.providerRequestCount,
       configurationSource: full.modelSelection.configurationSource,
       requiresConfigRecheck: full.modelSelection.requiresConfigRecheck,
       lastVerifiedAt: full.modelSelection.lastVerifiedAt,
@@ -29875,11 +30113,11 @@ var CursorBridge = class {
       if (!current) {
         throw this._workspaceRecoveryError("WORKSPACE_INITIALIZATION_REQUIRED", "Run cursor_init with workspace_path before submitting work.", expected);
       }
-      const canonical = (path2) => {
+      const canonical2 = (path2) => {
         const normalized = normalizeWorkspacePath(path2);
         return process.platform === "win32" ? normalized.toLowerCase() : normalized;
       };
-      if (canonical(current) !== canonical(expected)) {
+      if (canonical2(current) !== canonical2(expected)) {
         throw this._workspaceRecoveryError("WORKSPACE_MISMATCH", "workspace_path does not match the current binding. Run cursor_init with the intended project when idle; no work was submitted.", expected);
       }
     }
@@ -30098,13 +30336,28 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_cce",
-      description: "Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses the local Cursor Agent CLI in read-only Ask mode. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives host and plugin restarts and is snapshotted per request. An unavailable source fails explicitly; it never silently falls back. Use set only when the user asks to switch sources, including /cce cli or /cce ide.",
+      description: "Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses Cursor Agent CLI in read-only Ask mode, optionally the official agent-local harness with an explicit own-key Responses provider. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives restarts and is snapshotted per request. Omit cli_provider to preserve it across source switches; never clear a configured own-key route implicitly. Failures never fall back. Use set when the user requests source or provider configuration.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
         properties: {
           action: { type: "string", enum: ["show", "set"], description: "show reads the current source; set saves the user-selected source locally." },
-          source: { type: "string", enum: [...CURSOR_CCE_SOURCES], description: "Required for set: cli or ide." }
+          source: { type: "string", enum: [...CURSOR_CCE_SOURCES], description: "Required for set: cli or ide." },
+          cli_provider: {
+            description: "Optional explicit agent-local own-key route. Omit to preserve it when switching sources; null explicitly clears it. Key contents are never accepted here.",
+            anyOf: [{ type: "null" }, {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                kind: { type: "string", enum: ["openai-responses"] },
+                node_path: { type: "string", description: "Absolute path to the official agent-local bundled Node executable." },
+                entrypoint: { type: "string", description: "Absolute path to that agent-local index.js." },
+                base_url: { type: "string", description: "OpenAI-compatible Responses base URL, normally https://api.openai.com/v1." },
+                api_key_file: { type: "string", description: "Absolute local credential file path. Never supply the key itself." }
+              },
+              required: ["kind", "node_path", "entrypoint", "base_url", "api_key_file"]
+            }]
+          }
         },
         required: ["action"]
       }
@@ -30266,7 +30519,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request2, extra) => {
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_cce") {
-      const result = bridge.configureCcePreferences({ action: args?.action, source: args?.source });
+      const options = { action: args?.action, source: args?.source };
+      if (Object.hasOwn(args || {}, "cli_provider")) {
+        const names = { node_path: "nodePath", base_url: "baseUrl", api_key_file: "apiKeyFile" };
+        options.cliProvider = args.cli_provider == null ? null : Object.fromEntries(Object.entries(args.cli_provider).map(([key, value]) => [names[key] || key, value]));
+      }
+      const result = bridge.configureCcePreferences(options);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_model") {

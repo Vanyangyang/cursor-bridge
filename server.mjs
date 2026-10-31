@@ -65,10 +65,11 @@ import {
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
 import { CURSOR_CCE_SOURCES, readCcePreferences, resolveCceSourceFile, updateCcePreferences } from './cursor-cce-preferences.mjs';
 import { inspectCursorCli, runCursorCli } from './cursor-cli.mjs';
+import { localProviderSummary } from './cursor-cli-provider-config.mjs';
 import { resolveCliWorkspace } from './cursor-cli-workspace.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.1.0';
+const PLUGIN_VERSION = '6.2.0';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
@@ -2424,7 +2425,8 @@ class CursorBridge {
     this._lastWorkspaceBinding = null;
     if (this.ccePreferencesView().cceSource === 'cli') {
       const workspace = resolveCliWorkspace(saved.projectPath);
-      await this._inspectCli(options.signal);
+      const preferences = readCcePreferences(this.cceSourceFile);
+      await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference: this._modelPreferenceFor('cce') });
       this._lastWorkspaceBinding = {
         ok: true, state: 'workspace_ready', workspace: saved.projectPath,
         environment: 'local', identitySource: 'cursor_cli_workspace',
@@ -2563,7 +2565,8 @@ class CursorBridge {
   ccePreferencesView() {
     const preferences = readCcePreferences(this.cceSourceFile);
     return { cceSource: preferences.source, cceSourceFile: this.cceSourceFile,
-      cceSourcePersistAcrossRestart: !!this.cceSourceFile, cceSourceUpdatedAt: preferences.updatedAt };
+      cceSourcePersistAcrossRestart: !!this.cceSourceFile, cceSourceUpdatedAt: preferences.updatedAt,
+      cceCliProvider: localProviderSummary(preferences.cliProvider) };
   }
 
   configureCcePreferences(options = {}) {
@@ -2580,7 +2583,7 @@ class CursorBridge {
     }
   }
 
-  async _inspectCli(signal) {
+  async _inspectCli(signal, options = {}) {
     const controller = new AbortController();
     const cancel = () => controller.abort();
     if (this.cliClosing || signal?.aborted) cancel();
@@ -2590,7 +2593,7 @@ class CursorBridge {
       if (controller.signal.aborted) throw Object.assign(new Error('CCE CLI inspection cancelled'), {
         code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
       });
-      return this.cliInspector({ signal: controller.signal });
+      return this.cliInspector({ ...options, signal: controller.signal });
     });
     this.cliInspections.add(inspection);
     try {
@@ -2725,7 +2728,8 @@ class CursorBridge {
       if (this._hasGlobalReservation()) {
         throw new Error('A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first');
       }
-      const source = this.ccePreferencesView().cceSource;
+      const preferences = readCcePreferences(this.cceSourceFile);
+      const source = preferences.source;
       const modelPreference = this._modelPreferenceFor('cce');
       let cli;
       if (source === 'ide') await this._ensureCursor();
@@ -2733,7 +2737,7 @@ class CursorBridge {
         const projectPath = this.projectPath || this._lastLifecycle?.projectPath;
         if (!projectPath) throw this._workspaceRecoveryError('WORKSPACE_INITIALIZATION_REQUIRED', 'Run cursor_init with the intended project before submitting CCE CLI work.', options.workspacePath);
         resolveCliWorkspace(projectPath);
-        cli = await this._inspectCli(options.signal);
+        cli = await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference });
       }
       this._assertWorkspaceConfirmed(options.workspacePath);
       if (source === 'cli' && (this.cliClosing || options.signal?.aborted)) {
@@ -5646,6 +5650,9 @@ class CursorBridge {
       effectiveEffort: full.modelSelection.effectiveEffort,
       verificationSource: full.modelSelection.verificationSource,
       cliModel: full.modelSelection.cliModel,
+      provider: full.modelSelection.provider,
+      providerResponseConfirmed: full.modelSelection.providerResponseConfirmed,
+      providerRequestCount: full.modelSelection.providerRequestCount,
       configurationSource: full.modelSelection.configurationSource,
       requiresConfigRecheck: full.modelSelection.requiresConfigRecheck,
       lastVerifiedAt: full.modelSelection.lastVerifiedAt,
@@ -6090,12 +6097,23 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: 'cursor_cce',
-      description: 'Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses the local Cursor Agent CLI in read-only Ask mode. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives host and plugin restarts and is snapshotted per request. An unavailable source fails explicitly; it never silently falls back. Use set only when the user asks to switch sources, including /cce cli or /cce ide.',
+      description: 'Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses Cursor Agent CLI in read-only Ask mode, optionally the official agent-local harness with an explicit own-key Responses provider. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives restarts and is snapshotted per request. Omit cli_provider to preserve it across source switches; never clear a configured own-key route implicitly. Failures never fall back. Use set when the user requests source or provider configuration.',
       inputSchema: {
         type: 'object', additionalProperties: false,
         properties: {
           action: { type: 'string', enum: ['show', 'set'], description: 'show reads the current source; set saves the user-selected source locally.' },
           source: { type: 'string', enum: [...CURSOR_CCE_SOURCES], description: 'Required for set: cli or ide.' },
+          cli_provider: {
+            description: 'Optional explicit agent-local own-key route. Omit to preserve it when switching sources; null explicitly clears it. Key contents are never accepted here.',
+            anyOf: [{ type: 'null' }, { type: 'object', additionalProperties: false,
+              properties: {
+                kind: { type: 'string', enum: ['openai-responses'] },
+                node_path: { type: 'string', description: 'Absolute path to the official agent-local bundled Node executable.' },
+                entrypoint: { type: 'string', description: 'Absolute path to that agent-local index.js.' },
+                base_url: { type: 'string', description: 'OpenAI-compatible Responses base URL, normally https://api.openai.com/v1.' },
+                api_key_file: { type: 'string', description: 'Absolute local credential file path. Never supply the key itself.' },
+              }, required: ['kind', 'node_path', 'entrypoint', 'base_url', 'api_key_file'] }],
+          },
         },
         required: ['action'],
       },
@@ -6273,7 +6291,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_cce') {
-      const result = bridge.configureCcePreferences({ action: args?.action, source: args?.source });
+      const options = { action: args?.action, source: args?.source };
+      if (Object.hasOwn(args || {}, 'cli_provider')) {
+        const names = { node_path: 'nodePath', base_url: 'baseUrl', api_key_file: 'apiKeyFile' };
+        options.cliProvider = args.cli_provider == null ? null : Object.fromEntries(Object.entries(args.cli_provider).map(([key, value]) => [names[key] || key, value]));
+      }
+      const result = bridge.configureCcePreferences(options);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_model') {

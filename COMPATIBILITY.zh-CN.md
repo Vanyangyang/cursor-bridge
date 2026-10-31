@@ -9,7 +9,7 @@
 
 ## 最新发布与上次完整验收基线
 
-Cursor Bridge **6.1.0** 新增持久 CCE CLI/IDE 来源切换。CLI 定向证据使用 Cursor Agent **2026.10.22-27dcf5f** 与 Grok 4.7/high，见 [6.1.0 验收范围](./docs/cce-cli-6.1.0-verification.md)。IDE/Agents 行为沿用 [6.0.11 定向检查](./docs/cursor-6.0.11-verification.md)。下表保留上次较完整的 IDE 验收记录，不代表新的完整 IDE 或跨平台 CLI 矩阵已通过。
+Cursor Bridge **6.2.0** 新增可选的官方 agent-local 自带 Key Responses 路线，并保留持久 CCE CLI/IDE 来源切换。Windows 定向证据使用 agent-local **2026.10.22-27dcf5f**、精确模型与档位回执及原生本地检索，见 [6.2.0 验收范围](./docs/cce-local-provider-6.2.0-verification.md)。IDE/Agents 行为沿用 [6.0.11 定向检查](./docs/cursor-6.0.11-verification.md)。下表保留上次较完整的 IDE 验收记录，不代表新的完整 IDE 或跨平台 CLI 矩阵已通过。
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|

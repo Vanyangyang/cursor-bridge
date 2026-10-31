@@ -9,7 +9,7 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 ## Latest release and last completed baseline
 
-Cursor Bridge **6.1.0** adds persistent CCE CLI/IDE source selection. Focused CLI evidence uses Cursor Agent **2026.10.22-27dcf5f** with Grok 4.7/high; see [6.1.0 verification](./docs/cce-cli-6.1.0-verification.md). IDE/Agents behavior inherits the scoped [6.0.11 checks](./docs/cursor-6.0.11-verification.md). The table retains the last completed broader IDE acceptance and does not certify a new full IDE or cross-platform CLI matrix.
+Cursor Bridge **6.2.0** adds the optional official agent-local own-key Responses route while preserving CCE CLI/IDE source selection. Focused Windows evidence uses agent-local **2026.10.22-27dcf5f**, exact model/effort receipts and native local retrieval; see [6.2.0 verification](./docs/cce-local-provider-6.2.0-verification.md). IDE/Agents behavior inherits the scoped [6.0.11 checks](./docs/cursor-6.0.11-verification.md). The table retains the last completed broader IDE acceptance and does not certify a new full IDE or cross-platform CLI matrix.
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|

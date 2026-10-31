@@ -7,10 +7,10 @@ Generic stdio MCP package for AI clients that are not Codex, Claude Code, Grok B
 The unscoped name `cursor-bridge-mcp` is already taken on npm by an unrelated package. Install this package instead. Releases are published from the repository's package-specific GitHub Actions workflow through npm Trusted Publishing.
 
 ```powershell
-npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-cursor-bridge@0.2.0
+npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-cursor-bridge@0.3.0
 ```
 
-The MCP bundle and executable entry are `dist/cursor-bridge.mjs`. The skills are `skills/cce-routing`, `skills/cursor-delegate`, and `skills/cce`; the source-switch prompt is `prompts/cce.md`. The current AI client registers those paths itself, then restarts. Wrapper 0.2.0 embeds Cursor Bridge 6.1.0.
+The MCP bundle and executable entry are `dist/cursor-bridge.mjs`. The skills are `skills/cce-routing`, `skills/cursor-delegate`, and `skills/cce`; the source-switch prompt is `prompts/cce.md`. The current AI client registers those paths itself, then restarts. Wrapper 0.3.0 embeds Cursor Bridge 6.2.0.
 
 Do not publish the private repository root, and do not restore `cursor-mcp-bridge`.
 

@@ -68,7 +68,7 @@ Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
 >
-> **最新版本：Cursor Bridge 6.1.0。** CCE 可选择 Cursor CLI 或 IDE/Agents。`/cce cli`、`/cce ide` 持久保存本地来源，查询、模型偏好、工作区校验和证据格式保持一致。详见[验收范围](./docs/cce-cli-6.1.0-verification.md)。下方保留已完成的历史 IDE 验收依据。
+> **最新版本：Cursor Bridge 6.2.0。** CCE CLI 可保留 Cursor 官方 `agent-local` harness，同时使用自己的 OpenAI 兼容 Responses 服务。`/cce cli`、`/cce ide` 保留已保存的 Provider、模型偏好、工作区校验和证据格式。详见[自带 Key 配置](./docs/cce-cli-provider.md)及[验收范围](./docs/cce-local-provider-6.2.0-verification.md)。下方保留已完成的历史 IDE 验收依据。
 
 > **实机验证环境：** Windows 11 + Cursor **3.23.12**；版本由 CLI 与内置包元数据共同确认。Cursor Bridge 6.0.8 修复模型菜单提前报错：限定唯一输入区及关联菜单，确认点击位置稳定且可命中，有界等待；按钮明确保持关闭时允许一次核验后的恢复。Grok 4.7/high 测试和宿主加载边界见[补丁验收范围](./docs/cursor-6.0.8-model-picker-verification.md)。[6.0.7 验收](./docs/cursor-3.23.12-verification.md)覆盖精确项目选择、折叠 History、IDE 与 Agents Window、精确取消、并行 Agent、持续会话恢复、工作区注册及单窗口恢复。隐藏模式核验当前模型与 effort，切换选择请先使用普通模式。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
 
@@ -195,7 +195,9 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 部分宿主会显示插件命名空间，例如 `/cursor-bridge:cce cli`；打包的 `cce` skill 支持同样的指令。对应 MCP 调用为 `cursor_cce(action="set", source="cli"|"ide")`。选择保存在用户配置目录的 `cursor-bridge/cce-source.json`，重启和升级后继续生效。每次查询固定自己的来源、项目和模型偏好，切换作用于后续查询。
 
-两种来源共用 `cursor_context_engine`、CCE 提示词、`CCE_SEARCH_RESULT` 格式、FIFO 准入与结果收取，各自使用该 Cursor 界面提供的检索能力。CLI 需要已安装并登录 Cursor Agent CLI，并配置能够从 CLI 模型目录明确核验的模型和思考程度；执行时显式传入 `--mode ask`、精确 `--model` 与项目路径，支持目录和多根 `.code-workspace`。每次调用使用原生设置与权限的私有副本，避免 CLI 的模型写回改变独立使用 CLI 时的默认值。CLI 初始化与查询无需启动 IDE。来源或模型不可用会返回原因，不会静默改换来源或模型。`cursor_do` 继续使用现有 IDE/Agents 执行路径。
+两种来源共用 `cursor_context_engine`、CCE 提示词、`CCE_SEARCH_RESULT` 格式、FIFO 准入与结果收取，各自使用所选 Cursor 界面的检索能力。账号 CLI 需要已登录的 Cursor Agent CLI，以及模型目录明确提供的模型和档位。可选的自带 Key 路线使用官方 `agent-local` 构建、本地凭据文件和 Responses 服务，Agent 循环与工具调用仍由 Cursor harness 执行；Bridge 核对服务端返回的精确模型和思考程度。两种 CLI 路线都使用 Ask 模式、明确的项目路径及原生设置与权限的私有副本，支持多根 `.code-workspace`，避免影响独立使用 CLI 时的默认值。CLI 初始化与查询无需启动 IDE。失败不会静默改换模型、来源或计费路线。`cursor_do` 继续使用现有 IDE/Agents 执行路径。
+
+通过 `cursor_cce(..., cli_provider={...})` 配置一次自带 Key 路线，详见[配置与能力范围](./docs/cce-cli-provider.md)；之后 `/cce cli`、`/cce ide` 都会保留它。Authless 模式使用 Cursor 的本地检索工具，不代表能够访问 Cursor 账号服务或服务端语义索引。
 
 ## MCP 工具
 
