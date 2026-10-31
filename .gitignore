@@ -4,6 +4,7 @@ package-lock.json
 .autopilot.on
 __pycache__/
 .artifacts/
+.tmp/
 .pi-package-stage/
 .mcp-package-stage/
 .cursor-bridge-lifecycle/

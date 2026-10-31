@@ -94,7 +94,7 @@ After registration, restart the current AI client so MCP and skills load. An alr
 
 If `cursor_init` returns `close_cursor_and_retry`, tell the user to save work, close Cursor normally once, and retry. That is an incomplete install, not a success.
 
-Use `/cce cli` or `/cce ide` to persist the CCE source across restarts. Where slash commands are unavailable, call `cursor_cce(action="set", source="cli")` or `cursor_cce(action="set", source="ide")`; `cursor_cce(action="show")` reads the selection. This changes only the source, not the model or the shared CCE request/result contract. The default is `ide`. CLI execution requires an installed, authenticated Cursor CLI. Source selection alone does not verify a live CLI request.
+Use `/cce cli` or `/cce ide` to persist the CCE source across restarts. Where slash commands are unavailable, call `cursor_cce(action="set", source="cli")` or `cursor_cce(action="set", source="ide")`; `cursor_cce(action="show")` reads the selection. This changes only the source, not the model or the shared CCE request/result contract. The default is `ide`, which requires no CLI installation or CLI credential file. CLI is optional and requires an installed, authenticated Cursor CLI or an explicitly configured [agent-local provider](./cce-cli-provider.md). Source selection alone does not verify a live CLI request.
 
 ## Completion standard
 

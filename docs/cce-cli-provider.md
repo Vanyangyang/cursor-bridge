@@ -2,6 +2,8 @@
 
 Cursor Bridge can run the official `agent-local` CLI with your own OpenAI-compatible Responses provider. Cursor runs the Agent loop, prompt construction, tools and permissions. Bridge adapts provider metadata and request parameters; it does not implement a replacement harness.
 
+This route is opt-in. Fresh installations continue to use IDE/Agents, which needs no Cursor CLI or CLI credential file. Upgrades preserve an existing source selection. A missing optional CLI does not affect IDE initialization or retrieval, even when a provider configuration is saved. An explicitly selected but unavailable CLI reports an error; use `/cce ide` to return to IDE explicitly, subject to the same model and effort checks.
+
 ## Configure once
 
 Upgrade every host sharing these preferences to Cursor Bridge 6.2.0 or newer before configuring a provider; older adapters do not understand the new route.

@@ -94,7 +94,7 @@ MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径
 
 如果 `cursor_init` 返回 `close_cursor_and_retry`，请用户先保存工作、正常退出一次 Cursor，再重试。这是未完成安装，不是成功。
 
-使用 `/cce cli` 或 `/cce ide` 持久切换 CCE 来源，重启后仍保留。客户端不支持斜杠命令时，调用 `cursor_cce(action="set", source="cli")` 或 `cursor_cce(action="set", source="ide")`；`cursor_cce(action="show")` 仅查询。此操作只改变来源，不改变模型或共用的 CCE 请求与结果契约。默认来源为 `ide`。CLI 执行需要已安装并登录的 Cursor CLI。来源设置成功不代表真实 CLI 请求已验证。
+使用 `/cce cli` 或 `/cce ide` 持久切换 CCE 来源，重启后仍保留。客户端不支持斜杠命令时，调用 `cursor_cce(action="set", source="cli")` 或 `cursor_cce(action="set", source="ide")`；`cursor_cce(action="show")` 仅查询。此操作只改变来源，不改变模型或共用的 CCE 请求与结果契约。默认来源为 `ide`，不需要安装 CLI 或提供 CLI 凭据文件。CLI 为可选功能，需要已安装并登录的 Cursor CLI，或明确配置的 [agent-local 自带 Key 路线](./cce-cli-provider.md)。来源设置成功不代表真实 CLI 请求已验证。
 
 ## 完成标准
 

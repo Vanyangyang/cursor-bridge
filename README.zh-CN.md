@@ -67,8 +67,8 @@ Codex、Claude Code 或 Pi 继续做计划和验收，落地交给 Grok Build。
 > 当前配对与证据边界见[兼容与更新历史](./COMPATIBILITY.zh-CN.md)和[最新发布](https://github.com/Vanyangyang/cursor-bridge/releases)。
 
 CCE 与 `cursor_do` 支持可选的 `request_context`，例如 `{"sender":"model","source":"mixed"}`。`sender` 声明直接发送者（`user/model/unknown`），`source` 区分用户要求与模型补充（`user/model/mixed/unknown`）；混合内容在正文中分开标注。未提供时保持 unknown，不从所选模型推断，也不授予额外权限。任务状态保留本轮声明。
->
-> **最新版本：Cursor Bridge 6.2.0。** CCE CLI 可保留 Cursor 官方 `agent-local` harness，同时使用自己的 OpenAI 兼容 Responses 服务。`/cce cli`、`/cce ide` 保留已保存的 Provider、模型偏好、工作区校验和证据格式。详见[自带 Key 配置](./docs/cce-cli-provider.md)及[验收范围](./docs/cce-local-provider-6.2.0-verification.md)。下方保留已完成的历史 IDE 验收依据。
+
+> **最新版本：Cursor Bridge 6.2.0。** Cursor IDE/Agents（`ide`）仍是默认 CCE 来源——无需安装 Cursor CLI 或准备 CLI 凭据文件，即可继续通过安装正常且配置兼容的 Cursor IDE/Agents 使用 CCE；升级会保留已保存的来源，绝不自动切到 CLI。可选的 `/cce cli` 新增自带 Key（own-key）路线：使用官方独立的 `agent-local` 构建与本地凭据文件接入 OpenAI 兼容 Responses 服务，同时保持独立的模型/思考程度配置、工作区校验、队列准入与 `CCE_SEARCH_RESULT` 证据契约。详见[自带 Key 配置](./docs/cce-cli-provider.md)及 [6.2.0 验收范围](./docs/cce-local-provider-6.2.0-verification.md)。下方已完成的实机 IDE 验收基线仍作为历史证据保留。
 
 > **实机验证环境：** Windows 11 + Cursor **3.23.12**；版本由 CLI 与内置包元数据共同确认。Cursor Bridge 6.0.8 修复模型菜单提前报错：限定唯一输入区及关联菜单，确认点击位置稳定且可命中，有界等待；按钮明确保持关闭时允许一次核验后的恢复。Grok 4.7/high 测试和宿主加载边界见[补丁验收范围](./docs/cursor-6.0.8-model-picker-verification.md)。[6.0.7 验收](./docs/cursor-3.23.12-verification.md)覆盖精确项目选择、折叠 History、IDE 与 Agents Window、精确取消、并行 Agent、持续会话恢复、工作区注册及单窗口恢复。隐藏模式核验当前模型与 effort，切换选择请先使用普通模式。需要 Node.js 18+、已安装并登录的 Cursor，以及 Cursor 能打开的本地项目；macOS 尚未实机验证。
 
@@ -187,17 +187,22 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 
 ## 切换 CCE 来源
 
+全新安装且未保存来源配置时，始终默认 `ide`（**Cursor IDE/Agents**）。升级会保留用户已明确保存的来源，不会因为版本新增 CLI 功能就自动切到 `cli`。Cursor CLI 与自带 Key（own-key）provider 均为可选功能。选择 `ide` 时，即使未安装 CLI、没有 CLI 凭据文件或曾保存过 `cli_provider` 配置，仍可通过正常安装且配置兼容的 Cursor IDE/Agents 使用 CCE。
+
 | 指令 | 来源 |
 |---|---|
-| `/cce cli` | 本机 Cursor Agent CLI，每次使用新的只读 Ask 请求。 |
-| `/cce ide` | 通过 CDP 使用 Cursor IDE/Agents；默认来源。 |
-| `/cce` | 查看已保存的来源与配置文件。 |
+| `/cce ide` | 通过 CDP 使用 Cursor IDE/Agents（默认来源）。 |
+| `/cce cli` | 可选的本机 Cursor CLI，每轮发起独立的只读 Ask 请求。 |
+| `/cce` | 查看当前生效/已保存的来源与配置文件路径。 |
 
-部分宿主会显示插件命名空间，例如 `/cursor-bridge:cce cli`；打包的 `cce` skill 支持同样的指令。对应 MCP 调用为 `cursor_cce(action="set", source="cli"|"ide")`。选择保存在用户配置目录的 `cursor-bridge/cce-source.json`，重启和升级后继续生效。每次查询固定自己的来源、项目和模型偏好，切换作用于后续查询。
+部分宿主会带插件命名空间（如 `/cursor-bridge:cce cli`），内置 `cce` skill 也支持相同指令；直接 MCP 调用为 `cursor_cce(action="show")` 与 `cursor_cce(action="set", source="ide"|"cli")`。选择持久化在用户配置目录的 `cursor-bridge/cce-source.json`，跨重启与升级继续生效。模型与思考程度（`cursor_model`）是独立配置，切换来源不会清除已保存的模型、effort 或 `cli_provider`。每次查询在入队时锁定本轮来源、工作区与模型偏好，切换作用于后续查询。若显式选择了 `cli` 但本机 CLI 不可用或预检失败，Bridge 会明确报错；可通过 `/cce ide` 显式切回 IDE。任何失败都绝不静默更改来源、模型、档位（effort）或计费路线。
 
-两种来源共用 `cursor_context_engine`、CCE 提示词、`CCE_SEARCH_RESULT` 格式、FIFO 准入与结果收取，各自使用所选 Cursor 界面的检索能力。账号 CLI 需要已登录的 Cursor Agent CLI，以及模型目录明确提供的模型和档位。可选的自带 Key 路线使用官方 `agent-local` 构建、本地凭据文件和 Responses 服务，Agent 循环与工具调用仍由 Cursor harness 执行；Bridge 核对服务端返回的精确模型和思考程度。两种 CLI 路线都使用 Ask 模式、明确的项目路径及原生设置与权限的私有副本，支持多根 `.code-workspace`，避免影响独立使用 CLI 时的默认值。CLI 初始化与查询无需启动 IDE。失败不会静默改换模型、来源或计费路线。`cursor_do` 继续使用现有 IDE/Agents 执行路径。
+`ide` 与 `cli` 共用 `cursor_context_engine`、同一套 CCE 查询契约与 `CCE_SEARCH_RESULT` 证据格式、`workspace_path` 工作区校验、FIFO 队列准入和结果契约；`cursor_do` 继续使用既有 IDE/Agents 执行路径。选用 `cli` 时，两种 CLI 路线均在只读 Ask 模式、已校验工作区（含多根 `.code-workspace`）和隔离的私有原生设置/权限副本下运行，无需启动 IDE，也不会改动独立使用 CLI 时的默认配置：
 
-通过 `cursor_cce(..., cli_provider={...})` 配置一次自带 Key 路线，详见[配置与能力范围](./docs/cce-cli-provider.md)；之后 `/cce cli`、`/cce ide` 都会保留它。Authless 模式使用 Cursor 的本地检索工具，不代表能够访问 Cursor 账号服务或服务端语义索引。
+- **账号 CLI**：使用已登录的普通 Cursor Agent CLI，以及其模型目录明确提供的模型和档位。
+- **自带 Key CLI（`agent-local`）**：使用官方独立的 `agent-local` 构建（不是普通账号 CLI），接入你自己的 OpenAI 兼容 Responses 服务。Cursor 仍保留 Agent loop、工具、prompt 与权限 harness；Bridge 适配 Responses provider，并核验服务端响应中的精确模型与 effort。该无账号本地模式提供 Cursor 的本地检索工具，不承诺 Cursor 账号云端服务或服务端语义索引。
+
+通过 `cursor_cce(action="set", source="cli", cli_provider={...})` 用通用本地绝对路径配置一次自带 Key 路线即可（例如 `kind: "openai-responses"`、`node_path: "C:/Tools/CursorAgentLocal/node.exe"`、`entrypoint: "C:/Tools/CursorAgentLocal/index.js"`、`base_url: "https://api.openai.com/v1"`、`api_key_file: "C:/Private/provider-key.txt"`），详见[配置与能力范围](./docs/cce-cli-provider.md)。API 配置仅传凭据文件路径，不传 Key 内容；自有 Key 仅由子进程从你自己的本地凭据文件读取，切勿把 Key 放入聊天、提示词、MCP 参数、Git 或日志。后续执行 `/cce ide`、`/cce cli` 都会保留已保存的 `cli_provider`（显式传 `cli_provider=null` 可清除）。
 
 ## MCP 工具
 
@@ -207,7 +212,7 @@ Codex 需要重启并新建任务；Claude Code 可重启或执行 `/reload-plug
 | `cursor_context_engine` | 使用一个自然语言 `query` 进行只读项目理解；发送前可断言目标工作区。 |
 | `cursor_do` | 把明确、有边界的子任务交给 Cursor Agent 执行。异步提交只返回精简回执；同步 `background=false` 仍返回完整结果；发送前可断言目标工作区。 |
 | `cursor_model` | 查看、设置或重置 CCE、`cursor_do` 或两者的持久模型与思考程度默认值。 |
-| `cursor_cce` | 查看或持久切换 CCE 来源：`cli` 或 `ide`。 |
+| `cursor_cce` | 查看或持久切换 CCE 来源（默认 `ide`，可选 `cli`），以及保存或清除可选的本地 `cli_provider` 路径配置。 |
 | `cursor_status` | 查看连接、队列、运行时、持久模型默认值，以及任务配置值与实际生效值。任务视图默认精简；`cursor_status(task_id, detail="result")` 返回纯完整回复并记录收取，`detail="full"` 保留诊断任务详情和回复。 |
 | `cursor_runtime` | 在可见 `normal` 与经过 Windows 11 实测的 UI 抑制 `minimal` 模式之间切换。 |
 | `cursor_task_control` | 对指定任务执行 `reap`、`cancel` 或显式确认风险的 `abandon`，并返回动作/状态摘要；正文需另用 `cursor_status(task_id, detail="result")` 取得。 |

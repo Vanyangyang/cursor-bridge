@@ -56,11 +56,11 @@ async function smoke() {
       { version: 1, mode: 'normal' },
       { version: 1, targets: { cce: null, cursor_do: null }, updatedAt: null },
       { version: 1, sessions: {}, updatedAt: null },
-      { version: 1, source: 'ide', updatedAt: null },
+      null, // A fresh install has no source preference and must default to IDE.
     ];
     const snapshots = Object.values(files).map((file, index) => {
-      const text = `${JSON.stringify(configs[index])}\n`;
-      writeFileSync(file, text);
+      const text = configs[index] === null ? null : `${JSON.stringify(configs[index])}\n`;
+      if (text !== null) writeFileSync(file, text);
       return { file, text };
     });
     await new Promise((accept, reject) => {
@@ -73,12 +73,14 @@ async function smoke() {
     ]);
     const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) =>
       typeof value === 'string' && !name.toUpperCase().startsWith('CURSOR_BRIDGE_')
-      && !hostIdentity.has(name.toUpperCase())));
+      && !hostIdentity.has(name.toUpperCase()) && name.toUpperCase() !== 'PATH'));
     Object.assign(env, files, {
       CURSOR_BRIDGE_NO_AUTOLAUNCH: '1',
       CURSOR_BRIDGE_CDP_PORT: String(isolatedPort.address().port),
       CURSOR_BRIDGE_LIFECYCLE_DIR: join(scratch, 'lifecycle'),
       CURSOR_BRIDGE_WINDOW_STATE_FILE: join(scratch, 'windows.json'),
+      CURSOR_BRIDGE_CLI_PATH: join(scratch, 'not-installed', 'cursor-agent'),
+      PATH: join(scratch, 'not-installed'),
     });
     const transport = new StdioClientTransport({
       command: process.execPath, args: [bundle], cwd: adapterCwd, env, stderr: 'pipe',
@@ -108,6 +110,7 @@ async function smoke() {
       assert.equal(data.workspaceConfirmationRequired, true);
       assert.equal(data.startupBehavior, 'manual_launch_only');
       assert.equal(data.connected, false, 'Status must use the isolated port');
+      assert.equal(data.cceSource, 'ide', 'A fresh install must use IDE without a CLI');
       idle(data);
       return data;
     }
@@ -143,8 +146,11 @@ async function smoke() {
     const after = await status();
     assert.deepEqual(after.recentTasks, before.recentTasks);
     assert.deepEqual(after.modelPreferences, before.modelPreferences);
-    for (const { file, text } of snapshots) assert.equal(readFileSync(file, 'utf8'), text, 'Read-only probes must preserve temporary configuration');
-    return { result: 'PASS', bundle, version: expectedVersion, toolCount: tools.length, workspaceRejections: 2, submissionStarted: false, modelPreferencesUnchanged: true, runtimeShow };
+    for (const { file, text } of snapshots) {
+      if (text === null) assert.equal(existsSync(file), false, 'Read-only probes must not create a source preference');
+      else assert.equal(readFileSync(file, 'utf8'), text, 'Read-only probes must preserve temporary configuration');
+    }
+    return { result: 'PASS', bundle, version: expectedVersion, toolCount: tools.length, workspaceRejections: 2, submissionStarted: false, modelPreferencesUnchanged: true, defaultCceSource: 'ide', cliRequired: false, runtimeShow };
   } finally {
     try {
       await client?.close();

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
@@ -58,6 +58,48 @@ test('CLI and IDE use the identical CCE prompt, admission and normalized result 
       assert.equal(job.modelSelection.applied, true);
     }
   }
+});
+
+test('fresh installs initialize and query through IDE without inspecting or requiring CLI', async t => {
+  const { bridge, project, calls, cceSourceFile } = harness(t, 'ide');
+  rmSync(cceSourceFile);
+  bridge.cliInspector = async () => assert.fail('Default IDE must not inspect CLI');
+  bridge.cliRunner = async () => assert.fail('Default IDE must not execute CLI');
+  assert.equal(bridge.ccePreferencesView().cceSource, 'ide');
+  assert.equal(bridge.ccePreferencesView().cceCliProvider, null);
+  assert.equal(bridge.shouldPrewarmIde(), true);
+  assert.equal((await bridge.initializeWorkspace(project)).ready, true);
+  assert.equal(await bridge.contextEngine('question', { workspacePath: project }), answer);
+  assert.equal([...bridge.tasks.values()][0].cceSource, 'ide');
+  assert.deepEqual(calls.map(call => Array.isArray(call) ? call[0] : call), ['ensure-ide', 'ensure-ide', 'ide']);
+  assert.equal(existsSync(cceSourceFile), false, 'Default IDE must not write a CLI selection');
+});
+
+test('IDE remains usable when a saved optional CLI runtime and credential file are absent', async t => {
+  const { bridge, project, calls, cceSourceFile } = harness(t, 'ide');
+  const provider = { kind: 'openai-responses', nodePath: join(project, 'missing-cli', 'node.exe'),
+    entrypoint: join(project, 'missing-cli', 'index.js'), baseUrl: 'https://provider.example/v1',
+    apiKeyFile: join(project, 'missing-key.txt') };
+  writeCcePreferences(cceSourceFile, { source: 'ide', cliProvider: provider });
+  for (const path of [provider.nodePath, provider.entrypoint, provider.apiKeyFile]) assert.equal(existsSync(path), false);
+  bridge.cliInspector = async () => assert.fail('IDE must not inspect an optional CLI provider');
+  bridge.cliRunner = async () => assert.fail('IDE must not run an optional CLI provider');
+  assert.equal((await bridge.initializeWorkspace(project)).ready, true);
+  assert.equal(await bridge.contextEngine('question', { workspacePath: project }), answer);
+  assert.deepEqual(calls.map(call => Array.isArray(call) ? call[0] : call), ['ensure-ide', 'ensure-ide', 'ide']);
+});
+
+test('an explicitly selected missing CLI reports its cause and permits an explicit return to IDE', async t => {
+  const { bridge, project, calls } = harness(t);
+  const unavailable = Object.assign(new Error('CLI is not installed'), { code: 'CURSOR_CLI_UNAVAILABLE', confirmedNotSent: true });
+  bridge.cliInspector = async () => { throw unavailable; };
+  await assert.rejects(bridge.contextEngine('question', { workspacePath: project }), error => error === unavailable);
+  assert.equal(bridge.ccePreferencesView().cceSource, 'cli');
+  assert.equal(bridge.tasks.size, 0);
+  assert.deepEqual(calls, []);
+  bridge.configureCcePreferences({ action: 'set', source: 'ide' });
+  assert.equal(await bridge.contextEngine('question', { workspacePath: project }), answer);
+  assert.equal([...bridge.tasks.values()][0].cceSource, 'ide');
 });
 
 test('CLI initializes a bound workspace without launching or registering an IDE', async t => {

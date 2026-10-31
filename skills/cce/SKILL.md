@@ -5,6 +5,8 @@ description: Show or persistently switch Cursor Context Engine between local Cur
 
 # CCE source
 
+Fresh installations default to IDE/Agents; CLI is optional. Do not require a CLI installation or CLI credential file for the IDE source, or select CLI merely because its provider feature is available. Preserve an explicitly saved choice across upgrades.
+
 Use `cursor_cce` to manage the local CCE source preference:
 
 - `/cce cli`: call `cursor_cce(action="set", source="cli")`.
