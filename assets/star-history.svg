@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" role="img" aria-labelledby="title desc">
   <title id="title">cursor-bridge — Star History</title>
-  <desc id="desc">GitHub star observations from Jul 2025 through Oct 2026, latest snapshot 82 stars.</desc>
+  <desc id="desc">GitHub star observations from Jul 2025 through Oct 2026, latest snapshot 83 stars.</desc>
   <style>
     :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --grid: #d8dee4; --line: #1f883d; --dot: #2da44e; --fill: #dafbe1; }
     @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #f0f6fc; --muted: #8b949e; --grid: #30363d; --line: #3fb950; --dot: #56d364; --fill: #12261e; } }
@@ -20,7 +20,7 @@
   </defs>
   <rect width="900" height="500" rx="18" fill="var(--bg)" />
   <text x="62" y="48" font-size="27" font-weight="700">cursor-bridge — Star History</text>
-  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">82 stars</text>
+  <text x="838" y="48" text-anchor="end" font-size="17" class="muted">83 stars</text>
   <g aria-hidden="true">
     <line x1="80" y1="410.00" x2="850" y2="410.00" class="grid" />
     <text x="61" y="416.00" text-anchor="end" font-size="15" class="muted">0</text>
@@ -34,55 +34,56 @@
     <text x="465" y="440" text-anchor="middle" font-size="15" class="muted">Mar 2026</text>
     <text x="850" y="440" text-anchor="end" font-size="15" class="muted">Oct 2026</text>
   </g>
-  <path d="M80 410.00 H91.64 V406.70 H110.14 V403.40 H113.50 V400.10 H115.19 V393.50 H121.91 V390.20 H137.05 V386.90 H409.45 V383.60 H688.58 V373.70 H725.57 V370.40 H727.25 V367.10 H733.98 V360.50 H735.66 V347.30 H737.34 V344.00 H740.70 V330.80 H742.38 V324.20 H747.43 V320.90 H749.11 V317.60 H750.79 V311.00 H754.15 V307.70 H759.20 V301.10 H760.88 V294.50 H764.24 V291.20 H765.93 V274.70 H767.61 V248.30 H769.29 V221.90 H770.97 V202.10 H772.65 V192.20 H776.01 V179.00 H777.70 V175.70 H781.06 V179.00 H791.15 V175.70 H792.83 V172.40 H794.51 V165.80 H797.87 V159.20 H799.56 V155.90 H818.05 V152.60 H826.46 V149.30 H828.14 V146.00 H839.91 V142.70 H844.96 V139.40 H848.32 V136.10 H850.00 V139.40 H850 V410 H80 Z" fill="url(#area)" />
-  <path d="M80 410.00 H91.64 V406.70 H110.14 V403.40 H113.50 V400.10 H115.19 V393.50 H121.91 V390.20 H137.05 V386.90 H409.45 V383.60 H688.58 V373.70 H725.57 V370.40 H727.25 V367.10 H733.98 V360.50 H735.66 V347.30 H737.34 V344.00 H740.70 V330.80 H742.38 V324.20 H747.43 V320.90 H749.11 V317.60 H750.79 V311.00 H754.15 V307.70 H759.20 V301.10 H760.88 V294.50 H764.24 V291.20 H765.93 V274.70 H767.61 V248.30 H769.29 V221.90 H770.97 V202.10 H772.65 V192.20 H776.01 V179.00 H777.70 V175.70 H781.06 V179.00 H791.15 V175.70 H792.83 V172.40 H794.51 V165.80 H797.87 V159.20 H799.56 V155.90 H818.05 V152.60 H826.46 V149.30 H828.14 V146.00 H839.91 V142.70 H844.96 V139.40 H848.32 V136.10 H850.00 V139.40 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
+  <path d="M80 410.00 H91.32 V406.70 H109.31 V403.40 H112.58 V400.10 H114.21 V393.50 H120.75 V390.20 H135.47 V386.90 H400.35 V383.60 H671.78 V373.70 H707.75 V370.40 H709.38 V367.10 H715.92 V360.50 H717.56 V347.30 H719.19 V344.00 H722.46 V330.80 H724.10 V324.20 H729.00 V320.90 H730.64 V317.60 H732.27 V311.00 H735.54 V307.70 H740.45 V301.10 H742.08 V294.50 H745.35 V291.20 H746.99 V274.70 H748.63 V248.30 H750.26 V221.90 H751.90 V202.10 H753.53 V192.20 H756.80 V179.00 H758.44 V175.70 H761.71 V179.00 H771.52 V175.70 H773.15 V172.40 H774.79 V165.80 H778.06 V159.20 H779.69 V155.90 H797.68 V152.60 H805.85 V149.30 H807.49 V146.00 H818.93 V142.70 H823.84 V139.40 H827.11 V136.10 H828.74 V139.40 H850.00 V136.10 H850 V410 H80 Z" fill="url(#area)" />
+  <path d="M80 410.00 H91.32 V406.70 H109.31 V403.40 H112.58 V400.10 H114.21 V393.50 H120.75 V390.20 H135.47 V386.90 H400.35 V383.60 H671.78 V373.70 H707.75 V370.40 H709.38 V367.10 H715.92 V360.50 H717.56 V347.30 H719.19 V344.00 H722.46 V330.80 H724.10 V324.20 H729.00 V320.90 H730.64 V317.60 H732.27 V311.00 H735.54 V307.70 H740.45 V301.10 H742.08 V294.50 H745.35 V291.20 H746.99 V274.70 H748.63 V248.30 H750.26 V221.90 H751.90 V202.10 H753.53 V192.20 H756.80 V179.00 H758.44 V175.70 H761.71 V179.00 H771.52 V175.70 H773.15 V172.40 H774.79 V165.80 H778.06 V159.20 H779.69 V155.90 H797.68 V152.60 H805.85 V149.30 H807.49 V146.00 H818.93 V142.70 H823.84 V139.40 H827.11 V136.10 H828.74 V139.40 H850.00 V136.10 H850" fill="none" stroke="var(--line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)" />
   <g fill="var(--dot)" stroke="var(--bg)" stroke-width="2">
-    <circle cx="91.64" cy="406.70" r="5" />
-    <circle cx="110.14" cy="403.40" r="5" />
-    <circle cx="113.50" cy="400.10" r="5" />
-    <circle cx="115.19" cy="393.50" r="5" />
-    <circle cx="121.91" cy="390.20" r="5" />
-    <circle cx="137.05" cy="386.90" r="5" />
-    <circle cx="409.45" cy="383.60" r="5" />
-    <circle cx="688.58" cy="373.70" r="5" />
-    <circle cx="725.57" cy="370.40" r="5" />
-    <circle cx="727.25" cy="367.10" r="5" />
-    <circle cx="733.98" cy="360.50" r="5" />
-    <circle cx="735.66" cy="347.30" r="5" />
-    <circle cx="737.34" cy="344.00" r="5" />
-    <circle cx="740.70" cy="330.80" r="5" />
-    <circle cx="742.38" cy="324.20" r="5" />
-    <circle cx="747.43" cy="320.90" r="5" />
-    <circle cx="749.11" cy="317.60" r="5" />
-    <circle cx="750.79" cy="311.00" r="5" />
-    <circle cx="754.15" cy="307.70" r="5" />
-    <circle cx="759.20" cy="301.10" r="5" />
-    <circle cx="760.88" cy="294.50" r="5" />
-    <circle cx="764.24" cy="291.20" r="5" />
-    <circle cx="765.93" cy="274.70" r="5" />
-    <circle cx="767.61" cy="248.30" r="5" />
-    <circle cx="769.29" cy="221.90" r="5" />
-    <circle cx="770.97" cy="202.10" r="5" />
-    <circle cx="772.65" cy="192.20" r="5" />
-    <circle cx="776.01" cy="179.00" r="5" />
-    <circle cx="777.70" cy="175.70" r="5" />
-    <circle cx="781.06" cy="179.00" r="5" />
-    <circle cx="791.15" cy="175.70" r="5" />
-    <circle cx="792.83" cy="172.40" r="5" />
-    <circle cx="794.51" cy="165.80" r="5" />
-    <circle cx="797.87" cy="159.20" r="5" />
-    <circle cx="799.56" cy="155.90" r="5" />
-    <circle cx="818.05" cy="152.60" r="5" />
-    <circle cx="826.46" cy="149.30" r="5" />
-    <circle cx="828.14" cy="146.00" r="5" />
-    <circle cx="839.91" cy="142.70" r="5" />
-    <circle cx="844.96" cy="139.40" r="5" />
-    <circle cx="848.32" cy="136.10" r="5" />
-    <circle cx="850.00" cy="139.40" r="6" />
+    <circle cx="91.32" cy="406.70" r="5" />
+    <circle cx="109.31" cy="403.40" r="5" />
+    <circle cx="112.58" cy="400.10" r="5" />
+    <circle cx="114.21" cy="393.50" r="5" />
+    <circle cx="120.75" cy="390.20" r="5" />
+    <circle cx="135.47" cy="386.90" r="5" />
+    <circle cx="400.35" cy="383.60" r="5" />
+    <circle cx="671.78" cy="373.70" r="5" />
+    <circle cx="707.75" cy="370.40" r="5" />
+    <circle cx="709.38" cy="367.10" r="5" />
+    <circle cx="715.92" cy="360.50" r="5" />
+    <circle cx="717.56" cy="347.30" r="5" />
+    <circle cx="719.19" cy="344.00" r="5" />
+    <circle cx="722.46" cy="330.80" r="5" />
+    <circle cx="724.10" cy="324.20" r="5" />
+    <circle cx="729.00" cy="320.90" r="5" />
+    <circle cx="730.64" cy="317.60" r="5" />
+    <circle cx="732.27" cy="311.00" r="5" />
+    <circle cx="735.54" cy="307.70" r="5" />
+    <circle cx="740.45" cy="301.10" r="5" />
+    <circle cx="742.08" cy="294.50" r="5" />
+    <circle cx="745.35" cy="291.20" r="5" />
+    <circle cx="746.99" cy="274.70" r="5" />
+    <circle cx="748.63" cy="248.30" r="5" />
+    <circle cx="750.26" cy="221.90" r="5" />
+    <circle cx="751.90" cy="202.10" r="5" />
+    <circle cx="753.53" cy="192.20" r="5" />
+    <circle cx="756.80" cy="179.00" r="5" />
+    <circle cx="758.44" cy="175.70" r="5" />
+    <circle cx="761.71" cy="179.00" r="5" />
+    <circle cx="771.52" cy="175.70" r="5" />
+    <circle cx="773.15" cy="172.40" r="5" />
+    <circle cx="774.79" cy="165.80" r="5" />
+    <circle cx="778.06" cy="159.20" r="5" />
+    <circle cx="779.69" cy="155.90" r="5" />
+    <circle cx="797.68" cy="152.60" r="5" />
+    <circle cx="805.85" cy="149.30" r="5" />
+    <circle cx="807.49" cy="146.00" r="5" />
+    <circle cx="818.93" cy="142.70" r="5" />
+    <circle cx="823.84" cy="139.40" r="5" />
+    <circle cx="827.11" cy="136.10" r="5" />
+    <circle cx="828.74" cy="139.40" r="5" />
+    <circle cx="850.00" cy="136.10" r="6" />
   </g>
   <g transform="translate(814 91)" fill="none" stroke="var(--dot)" stroke-width="2.3" stroke-linejoin="round">
     <path d="M0 -12 L3.6 -3.7 L12 -3.7 L5.2 1.4 L7.8 10 L0 5 L-7.8 10 L-5.2 1.4 L-12 -3.7 L-3.6 -3.7 Z" />
   </g>
-  <text x="830" y="96" font-size="15" class="muted">82</text>
-  <text x="80" y="476" font-size="13" class="muted">Source: GitHub API · automatically updated 2026-10-18</text>
+  <text x="830" y="96" font-size="15" class="muted">83</text>
+  <text x="80" y="476" font-size="13" class="muted">Source: GitHub API · automatically updated 2026-10-31</text>
 </svg>
