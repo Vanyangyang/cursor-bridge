@@ -2,6 +2,8 @@
 
 Dates: 2026-10-31 to 2026-11-01 (Asia/Singapore). Scope: Windows 11, official `agent-cli-local` 2026.10.22-27dcf5f, own-key OpenAI Responses, and the new optional CCE CLI provider path. The broader historical IDE matrix is unchanged.
 
+**Status: experimental CLI, not a stable mode.** These focused checks document observed behavior; passing them does not promote either CLI route to stable support. IDE/Agents remains the default and is recommended for regular use.
+
 ## Live evidence
 
 The rebuilt stdio MCP adapter was tested with `CURSOR_BRIDGE_CDP_PORT=1`, IDE autolaunch disabled and delegation off. The source tool configured a local provider using credential-file and bundled-runtime paths; the model tool set an explicit named reasoning model and xhigh effort. No key content was sent in tool arguments or stored in the repository.

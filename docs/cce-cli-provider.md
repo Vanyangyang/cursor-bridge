@@ -1,4 +1,6 @@
-# CCE CLI with a local Responses provider
+# CCE CLI with a local Responses provider (experimental)
+
+> **Experimental, not stable:** Cursor Bridge's CLI source, including both account CLI and own-key `agent-local` routes, is experimental. IDE/Agents remains the default and is recommended for regular use. The focused verification below does not establish stable support across CLI builds, providers or platforms.
 
 Cursor Bridge can run the official `agent-local` CLI with your own OpenAI-compatible Responses provider. Cursor runs the Agent loop, prompt construction, tools and permissions. Bridge adapts provider metadata and request parameters; it does not implement a replacement harness.
 

@@ -9,6 +9,8 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 ## Latest release and last completed baseline
 
+**CCE CLI status: experimental, not stable.** This applies to both account and own-key CLI routes. IDE/Agents remains the default and is recommended for regular use; CLI requires explicit opt-in.
+
 Cursor Bridge **6.2.0** adds the optional official agent-local own-key Responses route while preserving CCE CLI/IDE source selection. Focused Windows evidence uses agent-local **2026.10.22-27dcf5f**, exact model/effort receipts and native local retrieval; see [6.2.0 verification](./docs/cce-local-provider-6.2.0-verification.md). IDE/Agents behavior inherits the scoped [6.0.11 checks](./docs/cursor-6.0.11-verification.md). The table retains the last completed broader IDE acceptance and does not certify a new full IDE or cross-platform CLI matrix.
 
 | Cursor | Cursor Bridge | Source | Status |

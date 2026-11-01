@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [6.2.0] - 2026-11-01
 
+**CLI status: experimental, not stable.** Both the account CLI source and own-key `agent-local` route are experimental opt-ins. IDE/Agents remains the default and is recommended for regular use.
+
 ### Added
 
 - Configure an explicit own-key CLI provider through `cursor_cce.cli_provider`. The official `agent-local` Node build retains Cursor's Agent loop and local tools; a separate preload adapts only the OpenAI-compatible Responses wire.
