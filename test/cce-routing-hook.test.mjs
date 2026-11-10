@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 
 import {
+  ASK_WINDOW_CHARS,
+  LONG_PROMPT_CHARS,
   MAX_CONTEXT_MODE_DENIALS,
   ROUTING_STATE_TTL_MS,
   classifyCcePrompt,
@@ -63,6 +65,66 @@ test('classifier keeps deterministic and non-project work off CCE', () => {
 test('known symbols remain valid CCE starting points for relationship tracing', () => {
   assert.equal(classifyCcePrompt('Trace every caller of FooService and the data flow into storage.').match, true);
   assert.equal(classifyCcePrompt('IInventory 的实现在哪里注册，完整调用链是什么？').match, true);
+});
+
+test('classifier ignores bare flow keywords without inquiry intent and checks ask windows on long prompts', () => {
+  assert.equal(LONG_PROMPT_CHARS, 1200);
+  assert.equal(ASK_WINDOW_CHARS, 400);
+
+  const n1Intro = '在一次会话轨迹统计中，共计记录到四百四十七步调用，其中六十次工具响应由于超出单次内联阈值而被写入临时文件。'.repeat(14);
+  const n1Middle = '改进建议：后续阅读源码通过 grep 沿调用链只读受影响的函数行段，避免把整份大文件反复塞进上下文窗口。';
+  const n1Body = '此外每次压缩都会丢失行号锚点，导致后续回合再次重复枚举和读取相同内容，累计字符数达到两百七十多万。'.repeat(16);
+  const n1Prompt = `${n1Intro}\n${n1Middle}\n${n1Body}\n这个问题你怎么看？这样完全对token很浪费吧`;
+  assert.ok(n1Prompt.length > 1500);
+  assert.equal(classifyCcePrompt(n1Prompt).match, false);
+
+  assert.equal(classifyCcePrompt('任务书里不要再写沿调用链通读整个目录了').match, false);
+
+  const n3Header = (
+    '【执行要求】请读取并修改 G:/proj/src/panel/PanelController.ts 第 48 行与 G:/proj/src/panel/PanelView.tsx 第 120 行，按给定字段重命名属性。\n' +
+    '所有目标文件路径和行号均已明确给出，只修改指定导出字段，保持其余逻辑不变。\n'
+  ).repeat(10);
+  const n3Middle = (
+    '背景说明：该面板在组件生命周期内维护局部视图缓存，早期的跨模块通知曾保留过旧对象引用，本次仅做字段对齐，不涉及结构调整。\n' +
+    '补充记录：保持原有定时器清理顺序与类型声明格式一致，确保校验脚本断言继续匹配既定快照输出。\n'
+  ).repeat(14);
+  const n3Footer = '完成后请读取核对 G:/proj/src/panel/PanelController.ts 的修改行段，不要改动其他无关文件。';
+  const n3Prompt = `${n3Header}\n${n3Middle}\n${n3Footer}`;
+  assert.ok(n3Prompt.length > 1500);
+  assert.equal(classifyCcePrompt(n3Prompt).match, false);
+
+  assert.equal(classifyCcePrompt('run the end-to-end tests and paste the summary').match, false);
+  assert.equal(classifyCcePrompt('updated the end-to-end harness and pasted the summary').match, false);
+  assert.equal(classifyCcePrompt('分析报告里提到了数据流的问题，先放着').match, false);
+  assert.equal(classifyCcePrompt('我看了调用链，没问题').match, false);
+
+  const longMidOptOut =
+    `${'梳理一下存档系统的完整保存链路。'.repeat(2)}${'普通说明文字填充。'.repeat(160)}` +
+    '注意本次不要调用 Cursor，只看手头笔记。' +
+    `${'结尾补充说明。'.repeat(80)}帮我梳理一下存档系统的完整保存链路`;
+  assert.ok(longMidOptOut.length > 1500);
+  assert.deepEqual(classifyCcePrompt(longMidOptOut), { match: false, reason: 'cursor_opt_out' });
+
+  const mustMatch = [
+    '存档数据从加载到保存的完整链路是怎样的',
+    '梳理一下技能释放的调用链',
+    '这个状态由谁持有',
+    '背包界面在哪里实现的',
+    'Where is the save flow implemented?',
+    'Find the callers of applyDamage',
+    '帮我看一下技能系统的调用链',
+    'Explain the end-to-end flow of checkout',
+    '分析一下存档的数据流',
+  ];
+  for (const prompt of mustMatch) {
+    assert.equal(classifyCcePrompt(prompt).match, true, prompt);
+  }
+
+  const longNotes =
+    '这周整理了客户端各个子系统的设计备忘，包括背包格子的展示规则、战斗数值结算顺序、离线奖励展示文案以及界面动画的过渡节奏说明。'.repeat(28) +
+    '\n帮我梳理一下存档系统的完整保存链路';
+  assert.ok(longNotes.length > 1500);
+  assert.equal(classifyCcePrompt(longNotes).match, true);
 });
 
 test('prompt state is session-scoped, CCE clears it, and stale state fails open', () => withStateRoot((stateRoot) => {

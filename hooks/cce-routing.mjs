@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 export const ROUTING_STATE_TTL_MS = 10 * 60 * 1000;
 export const MAX_CONTEXT_MODE_DENIALS = 2;
+export const LONG_PROMPT_CHARS = 1200;
+export const ASK_WINDOW_CHARS = 400;
 const ROUTING_LOCK_RETRY_MS = 5;
 const ROUTING_LOCK_CLEAR_ATTEMPTS = 50;
 
@@ -17,22 +19,41 @@ const OPERATIONAL_PATTERN = /(?:运行|执行|查看|分析|修复).{0,12}(?:测
 const DIRECT_LOCATION_PATTERN = /(?:第\s*\d+\s*行|line\s*\d+|(?:^|[\s"'`])(?:[A-Za-z]:[\\/]|\.?\.?[\\/])?[^\s"'`]+\.(?:cs|ts|tsx|js|jsx|mjs|cjs|py|java|kt|go|rs|cpp|c|h|json|ya?ml|toml|md|unity|prefab|asset|uss|uxml|shader|mat|anim|controller|asmdef)(?=$|[\s"'`,;:]))/i;
 const DIRECT_SYMBOL_PATTERN = /`[A-Za-z_$][A-Za-z0-9_$.:#-]*`|\b(?:I[A-Z][A-Za-z0-9_]*|[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9_]*)+|[A-Z][A-Za-z0-9_]*(?:Service|Manager|Controller|Repository|Factory|Provider|Handler|Store|System|Module|Component))\b/;
 const DIRECT_ACTION_PATTERN = /(?:修改|改成|替换|删除|读取|打开|查看|检查|只告诉我|edit|change|replace|delete|remove|read|open|show|view|inspect|tell me only)/i;
-const RELATIONSHIP_PATTERN = /(?:调用链|调用方|被谁调用|引用|数据流|完整链路|跨模块|上下游|call\s+chain|callers?|callees?|references?|data\s+flow|cross[- ]module|end[- ]to[- ]end)/i;
+
+const ZH_FLOW_INQUIRY_PATTERN =
+  /(?:完整|端到端|全量).{0,10}(?:链路|流程|数据流)|(?<!(?:不要|不用|无需|禁止|别|不再|已(?:经)?|曾(?:经)?)[^。？！；，,：:;!?\r\n]{0,8})(?:梳理|追踪|理清|厘清|分析(?!\s*(?:报告|结果|文档|记录|结论))|解释|排查|(?<!检|核|审)查(?:看|找|清|明|一下|一查|出)?|找(?:出|到|一下|一找)?|看看|看一下|看下|讲讲|说说|(?:请|帮我|帮忙)说明|哪(?:里|儿|个|些)|什么|怎么|如何|怎样)[^。？！；，,：:（）()【】\[\];!?\r\n]{0,20}(?:调用链|数据流|依赖链|保存链路|存档链路|生命周期|上下游|跨模块|跨文件)|(?:调用链|数据流|依赖链|保存链路|存档链路|生命周期|上下游|跨模块|跨文件)(?:[^。？！；，,：:（）()【】\[\];!?\r\n]{0,20}(?:是?(?:怎样|怎么|如何|什么)|怎么走|如何|在哪|哪里|何处|有哪些|是谁|由谁|[?？])|，\s*(?:是?(?:怎样|怎么|如何|什么)|在哪|哪里|何处|由谁))/i;
+
+const EN_FLOW_INQUIRY_PATTERN =
+  /\b(?:end[- ]to[- ]end\s+(?:flow|chain|lifecycle|path|pipeline)|full\s+(?:flow|chain|lifecycle)|producer.{0,30}consumer)\b|(?<!\b(?:do\s+not|don't|dont|never|avoid|without|stop)\s+[^.!?;,\r\n]{0,20})\b(?:where|how|which|what|who|trace|tracing|map|mapping|explain|analyze|analyse|understand|follow|find|show|list)\b[^.!?;,\r\n]{0,60}\b(?:call\s+chain|callers?|callees?|references?|data\s+flow|ownership\s+boundary|save\/?load\s+flow|cross[- ]module|cross[- ]file|end[- ]to[- ]end(?!\s+(?:tests?|testing|specs?|suites?)))\b|\b(?:call\s+chain|callers?|callees?|references?|data\s+flow|ownership\s+boundary|save\/?load\s+flow|cross[- ]module|cross[- ]file|end[- ]to[- ]end(?!\s+(?:tests?|testing|specs?|suites?)))\b[^.!?;,\r\n]{0,40}(?:\?|\b(?:how|where|which|what|who)\b)/i;
+
+const RELATIONSHIP_PATTERN = new RegExp(
+  [
+    '(?:调用方|被谁调用|完整链路)',
+    ZH_FLOW_INQUIRY_PATTERN.source,
+    EN_FLOW_INQUIRY_PATTERN.source,
+  ].join('|'),
+  'i',
+);
 
 const SEMANTIC_SIGNALS = [
   ['ownership', /(?:谁(?:来)?(?:持有|负责|管理|拥有|维护)|由谁(?:持有|负责|管理|维护)|状态.{0,12}(?:归谁|谁持有|谁负责)|所有权)/i],
-  ['flow', /(?:完整|端到端|全量).{0,10}(?:链路|流程|数据流)|(?:调用链|数据流|依赖链|保存链路|存档链路|生命周期|上下游|跨模块|跨文件)/i],
+  ['flow', ZH_FLOW_INQUIRY_PATTERN],
   ['lifecycle', /从.{0,50}(?:加载|读取|创建|注册|生产).{0,100}(?:运行时|消费|解析|使用).{0,100}(?:保存|写回|持久化|落盘)/i],
   ['registration', /(?:接口|interface).{0,40}(?:实现|注册|解析|绑定)|(?:注册|依赖注入).{0,40}(?:实现|解析|绑定)/i],
   ['location', /(?:哪里|何处|在哪(?:里)?).{0,40}(?:实现|定义|注册|处理|持有)/i],
   ['behavior', /(?:如何|怎么).{0,40}(?:流转|传递|进入|保存|加载|注册|解析|工作)/i],
   ['ownership', /\b(?:who|what)\s+(?:owns|holds|manages|maintains|is\s+responsible\s+for)\b/i],
-  ['flow', /\b(?:call\s+chain|callers?|callees?|references?|data\s+flow|ownership\s+boundary|cross[- ]module|cross[- ]file|end[- ]to[- ]end|full\s+(?:flow|chain|lifecycle)|save\/?load\s+flow|producer.{0,30}consumer)\b/i],
+  ['flow', EN_FLOW_INQUIRY_PATTERN],
   ['lifecycle', /\bload\b.{0,100}\b(?:runtime|use|consume)\b.{0,100}\b(?:save|persist|write\s+back)\b/i],
   ['registration', /\b(?:interface|implementation|registration|dependency\s+injection)\b.{0,60}\b(?:resolve|wire|register|implement|bind)/i],
   ['location', /\bwhere\s+is\b.{0,80}\b(?:implemented|defined|registered|handled|owned)\b/i],
   ['behavior', /\bhow\s+does\b.{0,80}\b(?:work|flow|propagate|persist|load|save|resolve)\b/i],
 ];
+
+function slicePromptForSemanticCheck(prompt) {
+  if (prompt.length <= LONG_PROMPT_CHARS) return prompt;
+  return `${prompt.slice(0, ASK_WINDOW_CHARS)}\n\n${prompt.slice(-ASK_WINDOW_CHARS)}`;
+}
 
 export function classifyCcePrompt(rawPrompt) {
   const prompt = String(rawPrompt || '').trim();
@@ -41,12 +62,13 @@ export function classifyCcePrompt(rawPrompt) {
   if (EXTERNAL_INFO_PATTERN.test(prompt)) return { match: false, reason: 'external_information' };
   if (OPERATIONAL_PATTERN.test(prompt)) return { match: false, reason: 'operational_task' };
 
-  const matched = SEMANTIC_SIGNALS.find(([, pattern]) => pattern.test(prompt));
+  const checkWindow = slicePromptForSemanticCheck(prompt);
+  const matched = SEMANTIC_SIGNALS.find(([, pattern]) => pattern.test(checkWindow));
   if (!matched) return { match: false, reason: 'no_semantic_signal' };
 
-  const hasDirectLocation = DIRECT_LOCATION_PATTERN.test(prompt) || DIRECT_SYMBOL_PATTERN.test(prompt);
-  const hasDirectAction = DIRECT_ACTION_PATTERN.test(prompt);
-  if (hasDirectLocation && hasDirectAction && !RELATIONSHIP_PATTERN.test(prompt)) {
+  const hasDirectLocation = DIRECT_LOCATION_PATTERN.test(checkWindow) || DIRECT_SYMBOL_PATTERN.test(checkWindow);
+  const hasDirectAction = DIRECT_ACTION_PATTERN.test(checkWindow);
+  if (hasDirectLocation && hasDirectAction && !RELATIONSHIP_PATTERN.test(checkWindow)) {
     return { match: false, reason: 'direct_known_location' };
   }
 
