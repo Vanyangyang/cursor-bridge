@@ -44,6 +44,6 @@ jobs:
           if [[ -f test/cdp-identity.test.mjs ]]; then
             tests+=(test/cdp-identity.test.mjs)
           fi
-          node scripts/test.mjs --test-reporter=spec --test-destination=stdout --test-reporter=github --test-destination=stdout "${tests[@]}"
+          node scripts/test.mjs --test-reporter=spec "${tests[@]}"
       - run: npm run smoke:mcp
       - run: npm run smoke:cli
