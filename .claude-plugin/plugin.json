@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "6.2.0",
-  "description": "Evidence-backed Cursor Context Engine search and bounded, explicitly continuous Cursor Agent execution, including a UI-suppressed minimal runtime.",
+  "version": "7.0.0",
+  "description": "Evidence-backed Cursor Context Engine (CLI-first over isolated ACP with explicit model selection) and optional IDE/Agents execution over CDP.",
   "author": {
     "name": "Vanyangyang"
   },

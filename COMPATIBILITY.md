@@ -9,9 +9,9 @@ The machine-readable source for this page is [`compatibility.json`](./compatibil
 
 ## Latest release and last completed baseline
 
-**CCE CLI status: experimental, not stable.** This applies to both account and own-key CLI routes. IDE/Agents remains the default and is recommended for regular use; CLI requires explicit opt-in.
+**Primary route:** Starting in **7.0.0**, **CCE CLI (`cli`)** is the primary maintenance route and the default on fresh installations (previously saved `cce-source.json` preferences remain preserved, while upgrades without an existing `cce-source.json` adopt `cli` and require Cursor CLI + explicit `cursor_model`; see [`README.md#migrate-to-7-0`](./README.md#migrate-to-7-0)). Cursor IDE/Agents (`ide`) stays supported as a persistent fallback via `cursor_cce(action="set", source="ide")` / `/cce ide`.
 
-Cursor Bridge **6.2.0** adds the optional official agent-local own-key Responses route while preserving CCE CLI/IDE source selection. Focused Windows evidence uses agent-local **2026.10.22-27dcf5f**, exact model/effort receipts and native local retrieval; see [6.2.0 verification](./docs/cce-local-provider-6.2.0-verification.md). IDE/Agents behavior inherits the scoped [6.0.11 checks](./docs/cursor-6.0.11-verification.md). The table retains the last completed broader IDE acceptance and does not certify a new full IDE or cross-platform CLI matrix.
+Cursor Bridge **7.0.0** promotes CCE CLI with isolated private MCP configuration, identity-keyed preflight caching, persistent single-root ACP sessions with two-step model/effort/fast/`mode="ask"` readback verification and clean `print` fallback, multi-slot concurrent CLI dispatch (`CURSOR_BRIDGE_CCE_CLI_CONCURRENCY=3`), broader launcher discovery, `cursor_cce(action="doctor")` diagnostics, recoverable `cursor_init` CLI preflight statuses, and fail-closed `CURSOR_EXE` isolation for verification workflows. See `compatibility.json` (`latestRelease`) and `CHANGELOG.md` (`## [7.0.0]`) for release details; the table below retains the last completed IDE CDP compatibility baseline (`current: 6.0.8 / Cursor 3.23.12`) alongside archived history.
 
 | Cursor | Cursor Bridge | Source | Status |
 |---|---|---|---|

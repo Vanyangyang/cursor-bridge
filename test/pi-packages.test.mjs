@@ -126,8 +126,8 @@ test("Pi package staging keeps both products independent and complete", (t) => {
   const cursor = JSON.parse(readFileSync(join(output, "pi-cursor-bridge", "package.json"), "utf8"));
   const grok = JSON.parse(readFileSync(join(output, "pi-grok-build-supervisor", "package.json"), "utf8"));
   assert.equal(cursor.name, "pi-cursor-bridge");
-  assert.equal(cursor.version, "0.4.0");
-  assert.equal(cursor.piPackage.embeddedProductVersion, "6.2.0");
+  assert.equal(cursor.version, "0.5.0");
+  assert.equal(cursor.piPackage.embeddedProductVersion, "7.0.0");
   assert.match(readFileSync(join(output, "pi-cursor-bridge", "dist", "cursor-cli-provider-preload.mjs"), "utf8"), /createProviderFetch/);
   assert.equal(grok.name, "pi-grok-build-supervisor");
   assert.equal(grok.version, "0.1.9");

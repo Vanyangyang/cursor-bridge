@@ -8,7 +8,8 @@
 
 - Cursor Bridge **只支持 Windows**。当前机器不是 Windows 时，停止并判定安装失败。
 - `PATH` 上需要 Node.js 18+。
-- 必须已经安装并登录 Cursor。
+- 必须已经安装并登录 Cursor：默认 **`cli`** 路线需已安装官方 Cursor CLI（PowerShell 运行 `irm 'https://cursor.com/install?win32=true' | iex`，重开终端并执行 `cursor-agent login` 与 `cursor-agent status`）；如显式切换 `/cce ide`，则需已安装并登录桌面端 Cursor。
+- 从 6.x 升级但本地此前未保存过 `%APPDATA%\cursor-bridge\cce-source.json` 时，7.0.0 默认使用 `cli`，升级后请确认已安装 CLI 并设置明确具名 `cursor_model`（或用 `/cce ide` 切回桌面端）。
 - 本说明只给 **不是** Codex、Claude Code、Grok Build、Pi 的 AI 客户端使用。
 - 只有用户明确要求时，才安装 Grok Build Supervisor。
 
@@ -42,16 +43,16 @@
 
 ```powershell
 $prefix = "$env:LOCALAPPDATA\cursor-bridge\npm"
-npm install --prefix $prefix vanyangyang-cursor-bridge@0.3.0
+npm install --prefix $prefix vanyangyang-cursor-bridge@0.4.0
 ```
 
-如果用户要求安装 Grok Build Supervisor：
+仅在用户明确要求安装进入低维护期（maintenance-only）的配套插件 `Grok Build Supervisor` 时执行：
 
 ```powershell
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-build-supervisor@0.1.0
 ```
 
-记录 `source: npm:vanyangyang-cursor-bridge@0.3.0`。
+记录 `source: npm:vanyangyang-cursor-bridge@0.4.0`。
 
 如果 `npm install` 返回 `E404` 或其他仓库错误，再 clone `%LOCALAPPDATA%\cursor-bridge\checkout` 作为后备，把 npm 错误记进 `blockers`，并设置 `source: git-checkout`。
 
@@ -89,14 +90,14 @@ MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径
 ## 5. 初始化并核验
 
 1. 确认 [`ai-install.manifest.json`](./ai-install.manifest.json) 里 `requiredTools` 列出的工具可见。
-2. 对用户当前项目调用 `cursor_init`，参数必须是一个 Windows 绝对路径。
-3. 调用 `cursor_status`，记下已绑定的工作区。
+2. 可先调用 `cursor_cce(action="doctor")`，以只读方式核验 Cursor Agent CLI 可用性、登录与模型配置状态。
+3. 使用 `cursor_model(action="set", target="cce", model="<model>", effort="medium")` 明确配置 CCE 模型。
+4. 对用户当前项目调用 `cursor_init`，参数必须是一个 Windows 绝对路径。
+5. 调用 `cursor_status`，记下已绑定的工作区。
 
-如果 `cursor_init` 返回 `close_cursor_and_retry`，请用户先保存工作、正常退出一次 Cursor，再重试。这是未完成安装，不是成功。
+如果（IDE 模式下）`cursor_init` 返回 `close_cursor_and_retry`，请用户先保存工作、正常退出一次 Cursor，再重试。若（CLI 模式下）返回 `cli-model-required` 或 `cli-unavailable`，按 `nextStep` 配置 `cursor_model` 或运行 `cursor_cce(action="doctor")`（也可通过 `/cce ide` 切回 IDE）。这是未完成安装，不是成功。
 
-**CCE CLI 目前为实验模式，尚非稳定功能。** 建议日常使用默认的 IDE/Agents；仅在用户明确要求试用时启用 CLI。
-
-使用 `/cce cli` 或 `/cce ide` 持久切换 CCE 来源，重启后仍保留。客户端不支持斜杠命令时，调用 `cursor_cce(action="set", source="cli")` 或 `cursor_cce(action="set", source="ide")`；`cursor_cce(action="show")` 仅查询。此操作只改变来源，不改变模型或共用的 CCE 请求与结果契约。默认来源为 `ide`，不需要安装 CLI 或提供 CLI 凭据文件。CLI 为可选功能，需要已安装并登录的 Cursor CLI，或明确配置的 [agent-local 自带 Key 路线](./cce-cli-provider.md)。来源设置成功不代表真实 CLI 请求已验证。
+全新安装默认使用 **CCE CLI (`cli`)**（隔离的持久化 ACP + 只读 Ask 模式），已有本地 `cce-source.json` 会原样保留。使用 `/cce cli`、`/cce ide` 或 `/cce doctor` 管理或诊断来源；客户端不支持斜杠命令时，调用 `cursor_cce(action="set", source="cli"|"ide")`、`action="show"` 或 `action="doctor"`。两种来源共用工作区校验、`cursor_model` 模型偏好与结果证据契约。`ide` 不要求安装 CLI；`cli` 需要已安装并登录的 Cursor CLI，或明确配置的 [agent-local 自带 Key 路线](./cce-cli-provider.md)。
 
 ## 完成标准
 
@@ -106,7 +107,7 @@ MCP 必须使用 `"node"` 加上上述 bundle 的**绝对路径**。相对路径
 ## Cursor Bridge install report
 - host: <AI 客户端名称>
 - path: first-class marketplace | generic-ai-install
-- source: npm:vanyangyang-cursor-bridge@0.3.0 | git-checkout | repo-workspace
+- source: npm:vanyangyang-cursor-bridge@0.4.0 | git-checkout | repo-workspace
 - checkout: <npm prefix、git 检出或仓库的绝对路径>
 - mcpConfig: <配置文件绝对路径>
 - mcpBundle: <dist/cursor-bridge.mjs 的绝对路径>

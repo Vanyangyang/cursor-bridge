@@ -912,7 +912,7 @@ test('Agents workspace recovery clears stale failure guidance before reporting r
 
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
-    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, runtimeMode: 'normal', ...options });
+    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, cceSource: 'ide', runtimeMode: 'normal', ...options });
   }
 
   async _ensureCursor() {}
@@ -1109,6 +1109,18 @@ test('delegation mode recognizes only explicit off and otherwise stays enabled',
 });
 
 test('normal runtime is the fresh default and minimal remains an explicit persistent opt-in', async (t) => {
+  const saved = {
+    CURSOR_BRIDGE_NO_AUTOLAUNCH: process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH,
+    CURSOR_BRIDGE_RUNTIME_MODE: process.env.CURSOR_BRIDGE_RUNTIME_MODE,
+  };
+  delete process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH;
+  delete process.env.CURSOR_BRIDGE_RUNTIME_MODE;
+  t.after(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
   const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-runtime-view-'));
   const runtimeFile = join(directory, 'runtime.json');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -1151,7 +1163,7 @@ test('cursor_init keeps a valid binding and returns child-friendly recovery when
 
   class InitRecoveryBridge extends CursorBridge {
     constructor() {
-      super({ runtimeFile: null, workspaceFile, workspaceKey: 'test-host', runtimeMode: 'normal' });
+      super({ runtimeFile: null, workspaceFile, workspaceKey: 'test-host', runtimeMode: 'normal', cceSource: 'ide' });
     }
 
     async _ensureCursor(options) {
@@ -1182,7 +1194,7 @@ test('cursor_init waits for an existing heal before changing target and requesti
   mkdirSync(project);
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const bridge = new CursorBridge({ runtimeFile: null, workspaceFile: join(directory, 'binding.json'),
-    workspaceKey: 'init-heal-test', modelPreferencesFile: null, sessionFile: null });
+    workspaceKey: 'init-heal-test', modelPreferencesFile: null, sessionFile: null, cceSource: 'ide' });
   let finish;
   bridge._healing = new Promise(resolve => { finish = resolve; });
   let calls = 0;

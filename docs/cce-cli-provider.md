@@ -1,10 +1,10 @@
 # CCE CLI with a local Responses provider (experimental)
 
-> **Experimental, not stable:** Cursor Bridge's CLI source, including both account CLI and own-key `agent-local` routes, is experimental. IDE/Agents remains the default and is recommended for regular use. The focused verification below does not establish stable support across CLI builds, providers or platforms.
+> **Experimental route (`agent-local` own-key provider):** Starting in Cursor Bridge **7.0.0**, signed-in account **CCE CLI (`cli`)** is the primary maintenance route and fresh-install default. The own-key `agent-local` Responses provider route documented below remains an **experimental opt-in** (disabled unless configured explicitly) and is not covered by broad platform stability guarantees.
 
 Cursor Bridge can run the official `agent-local` CLI with your own OpenAI-compatible Responses provider. Cursor runs the Agent loop, prompt construction, tools and permissions. Bridge adapts provider metadata and request parameters; it does not implement a replacement harness.
 
-This route is opt-in. Fresh installations continue to use IDE/Agents, which needs no Cursor CLI or CLI credential file. Upgrades preserve an existing source selection. A missing optional CLI does not affect IDE initialization or retrieval, even when a provider configuration is saved. An explicitly selected but unavailable CLI reports an error; use `/cce ide` to return to IDE explicitly, subject to the same model and effort checks.
+This provider route is opt-in. Without `cli_provider` configured, `cli` uses the signed-in official `cursor-agent` binary (or switch back to desktop IDE/Agents any time via `/cce ide`; existing `cce-source.json` selections remain preserved across upgrades). An explicitly configured but unavailable `cli_provider` fails closed without silently falling back to account billing, IDE, or another model; pass `cli_provider=null` or switch with `/cce ide` explicitly when needed.
 
 ## Configure once
 

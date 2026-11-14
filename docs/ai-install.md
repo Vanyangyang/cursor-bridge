@@ -8,7 +8,8 @@ You are installing Cursor Bridge into the AI client that is running this task â€
 
 - Cursor Bridge is **Windows only**. If this machine is not Windows, stop and fail the install.
 - Node.js 18+ must be on `PATH`.
-- Cursor must be installed and signed in.
+- Cursor must be installed and signed in: the default **`cli`** route requires the official Cursor CLI installed (`irm 'https://cursor.com/install?win32=true' | iex` in PowerShell, restart terminal/host, then `cursor-agent login` and `cursor-agent status`), while explicit `/cce ide` uses the desktop Cursor app.
+- Upgrades from 6.x without a previously saved `%APPDATA%\cursor-bridge\cce-source.json` default to `cli` in 7.0.0: install/sign in to Cursor CLI and set an explicit named `cursor_model`, or run `/cce ide` once to persist `ide`.
 - This playbook is for AI clients that are **not** Codex, Claude Code, Grok Build, or Pi.
 - Install Grok Build Supervisor only when the user asked for it.
 
@@ -42,16 +43,16 @@ Rules:
 
 ```powershell
 $prefix = "$env:LOCALAPPDATA\cursor-bridge\npm"
-npm install --prefix $prefix vanyangyang-cursor-bridge@0.3.0
+npm install --prefix $prefix vanyangyang-cursor-bridge@0.4.0
 ```
 
-If the user asked for Grok Build Supervisor:
+Only if the user explicitly asked for the maintenance-only companion `Grok Build Supervisor`:
 
 ```powershell
 npm install --prefix "$env:LOCALAPPDATA\cursor-bridge\npm" vanyangyang-grok-build-supervisor@0.1.0
 ```
 
-Record `source: npm:vanyangyang-cursor-bridge@0.3.0`.
+Record `source: npm:vanyangyang-cursor-bridge@0.4.0`.
 
 If `npm install` returns `E404` or another registry failure, clone `%LOCALAPPDATA%\cursor-bridge\checkout` as a fallback, record the npm error in `blockers`, and set `source: git-checkout`.
 
@@ -89,14 +90,14 @@ After registration, restart the current AI client so MCP and skills load. An alr
 ## 5. Initialize and verify
 
 1. Confirm the MCP tools in [`ai-install.manifest.json`](./ai-install.manifest.json) `requiredTools` are visible.
-2. Call `cursor_init` with the user's current project as one absolute Windows path.
-3. Call `cursor_status` and record the bound workspace.
+2. Optionally run `cursor_cce(action="doctor")` to verify Cursor Agent CLI availability, login, and model configuration without modifying files.
+3. Configure your explicit CCE model with `cursor_model(action="set", target="cce", model="<model>", effort="medium")`.
+4. Call `cursor_init` with the user's current project as one absolute Windows path.
+5. Call `cursor_status` and record the bound workspace.
 
-If `cursor_init` returns `close_cursor_and_retry`, tell the user to save work, close Cursor normally once, and retry. That is an incomplete install, not a success.
+If `cursor_init` returns `close_cursor_and_retry` (on IDE mode), tell the user to save work, close Cursor normally once, and retry. If `cursor_init` returns `cli-model-required` or `cli-unavailable`, configure `cursor_model` or inspect CLI readiness with `cursor_cce(action="doctor")` (or switch with `/cce ide`). That is an incomplete install, not a success.
 
-**CCE CLI is experimental and not yet stable.** IDE/Agents remains the default and is recommended for regular use; only enable CLI when the user explicitly requests an experimental trial.
-
-Use `/cce cli` or `/cce ide` to persist the CCE source across restarts. Where slash commands are unavailable, call `cursor_cce(action="set", source="cli")` or `cursor_cce(action="set", source="ide")`; `cursor_cce(action="show")` reads the selection. This changes only the source, not the model or the shared CCE request/result contract. The default is `ide`, which requires no CLI installation or CLI credential file. CLI is optional and requires an installed, authenticated Cursor CLI or an explicitly configured [agent-local provider](./cce-cli-provider.md). Source selection alone does not verify a live CLI request.
+Fresh installations default to **CCE CLI (`cli`)** (Cursor Agent CLI in read-only Ask mode over persistent isolated ACP). Existing saved `cce-source.json` preferences are preserved. Use `/cce cli`, `/cce ide`, or `/cce doctor` to manage or inspect the source; where slash commands are unavailable, call `cursor_cce(action="set", source="cli"|"ide")`, `action="show"`, or `action="doctor"`. Both sources share the same workspace check, model preference (`cursor_model`), and evidence contract. Switching to `ide` requires no CLI installation, while `cli` requires an installed, authenticated Cursor CLI or an explicitly configured [agent-local provider](./cce-cli-provider.md).
 
 ## Completion standard
 
@@ -106,7 +107,7 @@ Fill every field. Use `PASS` only when every required item is true.
 ## Cursor Bridge install report
 - host: <AI client name>
 - path: first-class marketplace | generic-ai-install
-- source: npm:vanyangyang-cursor-bridge@0.3.0 | git-checkout | repo-workspace
+- source: npm:vanyangyang-cursor-bridge@0.4.0 | git-checkout | repo-workspace
 - checkout: <absolute npm prefix, git checkout, or repo path>
 - mcpConfig: <absolute config file>
 - mcpBundle: <absolute dist/cursor-bridge.mjs>

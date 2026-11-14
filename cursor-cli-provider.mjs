@@ -1,7 +1,20 @@
-import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { access, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCliConfigScope } from './cursor-cli-config.mjs';
 import { localProviderSummary, normalizeCliProvider } from './cursor-cli-provider-config.mjs';
+
+async function resolveProviderPreloadUrl(options = {}) {
+  const url = options.preloadPath
+    ? pathToFileURL(String(options.preloadPath))
+    : new URL('./cursor-cli-provider-preload.mjs', import.meta.url);
+  try {
+    await access(fileURLToPath(url));
+  } catch {
+    throw failure('CURSOR_CLI_PROVIDER_PRELOAD_MISSING', 'The local CLI provider preload helper is missing next to cursor-cli-provider.mjs');
+  }
+  return url.href;
+}
 
 const failure = (code, message) => Object.assign(new Error(message), { code });
 const preferenceFor = value => {
@@ -24,7 +37,11 @@ const readAudit = async file => {
 };
 
 async function withProviderScope(provider, preference, options, allowInference, action) {
-  const scope = await createCliConfigScope(options.env || process.env);
+  const scope = await createCliConfigScope(options.env || process.env, {
+    cwd: options.cwd,
+    userHome: options.userHome,
+    enumerateMcpImpl: options.enumerateMcpImpl,
+  });
   let retain = false;
   try {
     const file = join(scope.directory, 'cli-config.json');
@@ -46,9 +63,13 @@ async function withProviderScope(provider, preference, options, allowInference, 
     Object.assign(env, { CURSOR_BRIDGE_CLI_PROVIDER_CONFIG: configFile, CURSOR_LOCAL_AGENT_API_KEY: 'cursor-bridge-local-provider',
       NO_OPEN_BROWSER: '1', NODE_DISABLE_COMPILE_CACHE: '1', AGENT_CLI_CREDENTIAL_STORE: 'file' });
     if (env.NODE_USE_ENV_PROXY === undefined && (env.HTTPS_PROXY || env.HTTP_PROXY)) env.NODE_USE_ENV_PROXY = '1';
-    return await action({ env, auditFile });
+    return await action({ env, auditFile, scope });
   } catch (error) {
-    if (error.confirmedTerminal === false) { retain = true; error.cliConfigDirectory = scope.directory; }
+    if (error.confirmedTerminal === false) {
+      retain = true;
+      error.cliConfigDirectory = scope.directory;
+      error.cliDataDirectory = scope.dataDirectory;
+    }
     throw error;
   } finally {
     if (!retain) await scope.cleanup().catch(() => console.error('[cursor-bridge] Local provider profile cleanup deferred'));
@@ -67,7 +88,8 @@ export async function inspectLocalCliProvider(options, execute) {
     if (!/Usage:\s*agent-local\b/.test(help.stdout) || !/Start the Cursor Agent/.test(help.stdout) || !/stream-json/.test(help.stdout)) {
       throw failure('CURSOR_CLI_WRONG_BRAND', 'The local provider requires the official agent-local CLI build');
     }
-    const adapted = { command: launcher.command, args: ['--import', new URL('./cursor-cli-provider-preload.mjs', import.meta.url).href, ...launcher.args] };
+    const preloadUrl = await resolveProviderPreloadUrl(options);
+    const adapted = { command: launcher.command, args: ['--import', preloadUrl, ...launcher.args] };
     await execute(adapted, ['--authless', '--base-url', provider.baseUrl, '--disable-auto-update', 'models'], metadata);
     const events = await readAudit(auditFile);
     if (events.some(event => event.stage === 'provider_error') || !events.some(event => event.stage === 'catalogue_verified' && event.model === preference.model)) {
@@ -84,13 +106,14 @@ export async function runLocalCliProvider({ workspace, prompt, modelPreference, 
   if (preference.model !== cli.preference?.model || preference.effort !== cli.preference?.effort || !cli.providerVerification?.catalogueVerified) {
     throw failure('CURSOR_CLI_PROVIDER_UNVERIFIED', 'Provider inspection does not match the frozen model and effort');
   }
+  const preloadUrl = await resolveProviderPreloadUrl(options);
   let init, terminal;
   let finalText = '';
   const selection = { configured: true, applied: true, requestedModel: preference.model, requestedEffort: preference.effort,
     effectiveModel: preference.model, effectiveEffort: preference.effort, cliModel: preference.model,
     verificationSource: 'cursor_cli_provider_guard', providerResponseConfirmed: false, provider: localProviderSummary(provider) };
-  return withProviderScope(provider, preference, { ...options, timeoutMs }, true, async ({ env, auditFile }) => {
-    const launcher = { command: cli.launcher.command, args: ['--import', new URL('./cursor-cli-provider-preload.mjs', import.meta.url).href, ...cli.launcher.args] };
+  return withProviderScope(provider, preference, { ...options, cwd: workspace.cwd, timeoutMs }, true, async ({ env, auditFile, scope }) => {
+    const launcher = { command: cli.launcher.command, args: ['--import', preloadUrl, ...cli.launcher.args] };
     await execute(launcher, ['--authless', '--base-url', provider.baseUrl, '--disable-auto-update', '--mode', 'ask', '--print', '--output-format', 'stream-json',
       '--workspace', workspace.cwd, ...workspace.additionalRoots.flatMap(root => ['--add-dir', root]), '--trust'], {
       ...options, env, cwd: workspace.cwd, input: prompt, signal, timeoutMs: timeoutMs ?? 300000, onDispatch,
@@ -129,7 +152,19 @@ export async function runLocalCliProvider({ workspace, prompt, modelPreference, 
     }
     const result = typeof terminal.result === 'string' && terminal.result.trim() ? terminal.result : finalText;
     if (!result.trim()) throw Object.assign(failure('CURSOR_CLI_PROTOCOL_ERROR', 'agent-local returned no complete reply after its tools'), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
-    return { result, sessionId: init.session_id, modelSelection: { ...selection, verificationSource: 'cursor_cli_provider_response',
-      providerResponseConfirmed: true, providerRequestCount: sent.length, verifiedAt: new Date().toISOString() } };
+    await scope.verifyProjectSlug();
+    return {
+      result,
+      sessionId: init.session_id,
+      modelSelection: {
+        ...selection,
+        verificationSource: 'cursor_cli_provider_response',
+        providerResponseConfirmed: true,
+        providerRequestCount: sent.length,
+        verifiedAt: new Date().toISOString(),
+      },
+      mcpIsolation: { ...scope.mcpIsolation },
+      cliTransport: 'print',
+    };
   });
 }

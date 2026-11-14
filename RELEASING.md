@@ -4,11 +4,11 @@ This repository ships two independently installable plugins, two independently v
 
 | Product | Current release target | Distribution |
 |---|---:|---|
-| Cursor Bridge | 6.2.0 | Codex, Claude Code, Grok Build |
+| Cursor Bridge | 7.0.0 | Codex, Claude Code, Grok Build |
 | Grok Build Supervisor | 0.4.3 | Codex, Claude Code |
-| Cursor Bridge for Pi | 0.4.0 | `pi-cursor-bridge` on npm |
+| Cursor Bridge for Pi | 0.5.0 | `pi-cursor-bridge` on npm |
 | Grok Build Supervisor for Pi | 0.1.9 | `pi-grok-build-supervisor` on npm |
-| Cursor Bridge generic MCP | 0.3.0 | `vanyangyang-cursor-bridge` on npm |
+| Cursor Bridge generic MCP | 0.4.0 | `vanyangyang-cursor-bridge` on npm |
 | Grok Build Supervisor generic MCP | 0.1.0 | `vanyangyang-grok-build-supervisor` on npm |
 
 The private `cursor-bridge-workspace` root exists only for development, build, and test tooling; do not publish it or the retired `cursor-mcp-bridge` package. The Pi and generic MCP versions are wrapper-package versions; their manifests must also name the exact embedded Cursor Bridge or Grok Build Supervisor version. The unscoped name `cursor-bridge-mcp` is already taken by an unrelated package; do not use it.
@@ -50,7 +50,7 @@ Installed plugins execute these bundles directly; their hosts do not install run
 
 ### Cursor Bridge
 
-Keep 6.2.0 synchronized in:
+Keep 7.0.0 synchronized in:
 
 - `package.json` (the root `package-lock.json` remains an ignored local build input)
 - `server.mjs` (`PLUGIN_VERSION`)
@@ -74,7 +74,7 @@ Keep 0.4.3 synchronized in:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `pi-cursor-bridge`: package and adapter 0.4.0, embedded Cursor Bridge 6.2.0
+- `pi-cursor-bridge`: package and adapter 0.5.0, embedded Cursor Bridge 7.0.0
 - `pi-grok-build-supervisor`: package and adapter 0.1.9, embedded Grok Build Supervisor 0.4.3
 - package READMEs and Pi staging tests
 
@@ -82,7 +82,7 @@ Keep the wrapper and embedded versions synchronized:
 
 Keep the wrapper and embedded versions synchronized:
 
-- `vanyangyang-cursor-bridge`: package 0.3.0, embedded Cursor Bridge 6.2.0
+- `vanyangyang-cursor-bridge`: package 0.4.0, embedded Cursor Bridge 7.0.0
 - `vanyangyang-grok-build-supervisor`: package 0.1.0, embedded Grok Build Supervisor 0.4.3
 - `docs/ai-install.manifest.json` npm pins, playbooks, package READMEs, and MCP staging tests
 
@@ -93,8 +93,11 @@ These wrappers are not Pi packages. Do not extend `scripts/publish-pi-packages.p
 Run the smallest relevant suite after each block, then the complete repository and Supervisor suites before publication:
 
 ```powershell
+npm run build
 npm test
 npm run smoke:mcp
+npm run smoke:cli
+npm run verify:install
 npm --prefix plugins/grok-build-supervisor test
 npm --prefix plugins/grok-build-supervisor run smoke:mcp
 npm run build:pi-packages
@@ -103,7 +106,7 @@ npm run build:mcp-packages
 
 Also validate both plugin structures with the current Claude/Codex validators, inspect staged npm package contents, and verify source, committed bundles, and staged tarballs agree. Live compatibility claims require the documented Windows 11 + current Cursor/Grok/Pi user paths; unit tests alone are not sufficient.
 
-`smoke:mcp` exercises the committed Cursor Bridge bundle through MCP stdio without launching Cursor. It verifies the bundle version, required tool schemas, workspace confirmation rejection before submission, idle task state, and unchanged isolated settings. To check a staged or unpacked wrapper, run `node test/smoke-mcp.mjs <bundle-path> <embedded-product-version>`. This protocol check does not replace live Cursor acceptance.
+`smoke:mcp` exercises the committed Cursor Bridge bundle through MCP stdio without launching Cursor. `smoke:cli` exercises the CLI-first initialization, `cursor_cce(action="doctor")`, model configuration, and ACP retrieval loop with an isolated fake CLI harness. `verify:install` verifies all five built bundles, version alignment, lifecycle supervisor runtime materialization, staged npm/Pi packages, and staged stdio MCP smoke checks. To check a staged or unpacked wrapper directly, run `node test/smoke-mcp.mjs <bundle-path> <embedded-product-version>`. This protocol check does not replace live Cursor acceptance.
 
 ## Commit, tag, and publish
 
@@ -113,14 +116,14 @@ Also validate both plugin structures with the current Claude/Codex validators, i
 4. Create annotated component tags at the verified release commit:
 
 ```powershell
-git tag -a cursor-bridge--v6.2.0 -m "Cursor Bridge 6.2.0"
-git push origin refs/tags/cursor-bridge--v6.2.0
+git tag -a cursor-bridge--v7.0.0 -m "Cursor Bridge 7.0.0"
+git push origin refs/tags/cursor-bridge--v7.0.0
 ```
 
 5. Publish one combined GitHub Release whose title always names both products and marks only changed components with `(New)`, for example:
 
 ```text
-Cursor Bridge 6.2.0 (New) + Grok Build Supervisor 0.4.3
+Cursor Bridge 7.0.0 (New) + Grok Build Supervisor 0.4.3
 ```
 
 6. Configure npm Trusted Publishing once for each existing Pi package. Both packages use the same GitHub Actions trust coordinates, but npm stores the relationship per package:

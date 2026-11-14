@@ -88,34 +88,31 @@ test('Codex starter prompts stay user-facing and within manifest limits', () => 
   }
 });
 
-test('bilingual READMEs keep the combined repository title without a rename notice', () => {
-  const english = readProjectFile('README.md').split(/\r?\n/).slice(0, 30).join('\n');
-  const chinese = readProjectFile('README.zh-CN.md').split(/\r?\n/).slice(0, 30).join('\n');
+test('bilingual READMEs center Cursor Bridge as primary without a rename notice', () => {
+  const english = readProjectFile('README.md').split(/\r?\n/).slice(0, 35).join('\n');
+  const chinese = readProjectFile('README.zh-CN.md').split(/\r?\n/).slice(0, 35).join('\n');
   for (const content of [english, chinese]) {
-    assert.match(content, /^# Cursor Bridge \+ Grok Build Supervisor$/m);
+    assert.match(content, /^# Cursor Bridge$/m);
+    assert.doesNotMatch(content, /^# Cursor Bridge \+ Grok Build Supervisor$/m);
     assert.doesNotMatch(content, /TEMPORARY_RENAME_NOTICE/);
     assert.doesNotMatch(content, /Grok Superpower/);
   }
+  assert.match(english, /CCE CLI \(`cli`\)/);
+  assert.match(chinese, /CCE CLI（`cli`）/);
   assert.doesNotMatch(english, /Upcoming rename/);
   assert.doesNotMatch(chinese, /即将更名/);
 });
 
-test('bilingual READMEs present coordination as added capability of the existing client', () => {
+test('bilingual READMEs present Cursor Bridge as CLI-first with Grok Build Supervisor in maintenance-only details', () => {
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
 
-  assert.match(english, /Use Cursor and Grok Build from the client you already have/);
-  assert.match(english, /I still use Codex as my daily client[\s\S]*Claude Code and Pi work the same way/);
-  assert.match(english, /By AI client I mean the coding app you already chat with/);
-  assert.match(english, /The plugins do not depend on each other[\s\S]*Install Cursor Bridge[\s\S]*Grok Build Supervisor[\s\S]*Installing both/);
-  assert.match(english, /I did not add a separate orchestrator/);
+  assert.match(english, /Cursor Bridge connects your coding agent[\s\S]*CCE CLI \(`cli`\)[\s\S]*primary maintenance route and fresh-install default/);
+  assert.match(english, /Companion plugin: Grok Build Supervisor \(maintenance-only\)/);
   assert.doesNotMatch(english, /Choose one orchestrator|installed directly in Grok Build/);
 
-  assert.match(chinese, /继续用你手头的客户端，接上 Cursor 和 Grok Build/);
-  assert.match(chinese, /我自己日常还是 Codex[\s\S]*Claude Code 和 Pi 一样能接/);
-  assert.match(chinese, /这里说的 AI 客户端，就是你正在对话的那套编程软件/);
-  assert.match(chinese, /两个插件不绑在一起[\s\S]*装 Cursor Bridge[\s\S]*装 Grok Build Supervisor[\s\S]*两个都要/);
-  assert.match(chinese, /我没有再做一层协调器/);
+  assert.match(chinese, /Cursor Bridge 让你的编程客户端[\s\S]*CCE CLI（`cli`）正式升级为主要维护路线与全新安装默认来源/);
+  assert.match(chinese, /配套插件：Grok Build Supervisor（低维护模式）/);
   assert.doesNotMatch(chinese, /选择一个编排客户端|直接安装进 Grok Build/);
 });
 
@@ -123,16 +120,16 @@ test('bilingual quick starts separate installation, reload, initialization, and 
   const english = readProjectFile('README.md');
   const chinese = readProjectFile('README.zh-CN.md');
   const englishSteps = [
-    '### 1. Choose your AI client and install what you need',
+    '### 1. Install Cursor Bridge in your AI client',
     '### 2. Restart or reload your AI client',
-    '### 3. Initialize the plugin you installed',
-    '### 4. Try a real question',
+    '### 3. Configure explicit CCE model, check CLI readiness, and initialize your workspace',
+    '### 4. Ask a real project question',
   ];
   const chineseSteps = [
-    '### 1. 选择当前 AI 客户端，按需安装',
+    '### 1. 选择当前 AI 客户端并安装 Cursor Bridge',
     '### 2. 重启或重载当前 AI 客户端',
-    '### 3. 初始化已经安装的插件',
-    '### 4. 拿一个真问题试试',
+    '### 3. 设置明确模型、检查 CLI 就绪状态并初始化工作区',
+    '### 4. 试一个真实项目问题',
   ];
 
   for (const [content, steps] of [[english, englishSteps], [chinese, chineseSteps]]) {
@@ -160,8 +157,8 @@ test('bilingual quick starts separate installation, reload, initialization, and 
   assert.match(chineseOther, /不要借用 Pi 包/);
   assert.doesNotMatch(englishOther, /pi install npm:pi-cursor-bridge/);
   assert.doesNotMatch(chineseOther, /pi install npm:pi-cursor-bridge/);
-  assert.match(english, /Cursor Bridge and Grok Build Supervisor install separately: take one, or both/);
-  assert.match(chinese, /Cursor Bridge 和 Grok Build Supervisor 分开装：只装一个也行，两个都装也行/);
+  assert.match(english, /standalone \*\*Grok Build Supervisor\*\* plugin \(`0\.4\.3`\) in maintenance-only mode/);
+  assert.match(chinese, /独立的 \*\*Grok Build Supervisor\*\*（`0\.4\.3`）插件并进入低维护（maintenance-only）状态/);
 });
 
 test('public READMEs leave language-adaptation details to release history', () => {
@@ -221,20 +218,20 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
     grokMcp.mcpServers['grok-build-supervisor'].args,
     ['${CLAUDE_PLUGIN_ROOT}/dist/grok-build-supervisor.mjs'],
   );
-  assert.equal(rootPackage.version, '6.2.0');
+  assert.equal(rootPackage.version, '7.0.0');
   assert.equal(rootPackage.name, 'cursor-bridge-workspace');
   assert.equal(rootPackage.private, true);
   assert.match(rootPackage.scripts.prepublishOnly, /repository root is private/);
-  assert.match(codexCursorManifest.version, /^6\.2\.0(?:\+codex\.)?/);
-  assert.equal(claudeCursorManifest.version, '6.2.0');
-  assert.match(serverSource, /const PLUGIN_VERSION = '6\.2\.0';/);
+  assert.match(codexCursorManifest.version, /^7\.0\.0(?:\+codex\.)?/);
+  assert.equal(claudeCursorManifest.version, '7.0.0');
+  assert.match(serverSource, /const PLUGIN_VERSION = '7\.0\.0';/);
   for (const content of [lifecycleSource, serverBundle]) {
     assert.match(content, /wmi-hresult-0x80004005/);
     assert.match(content, /spawnAttempts/);
     assert.match(content, /Original supervisor error:/);
   }
   assert.equal(claudeCursor?.source, '.');
-  assert.equal(claudeCursor?.version, '6.2.0');
+  assert.equal(claudeCursor?.version, '7.0.0');
   assert.match(claudeCursor?.description || '', /Cursor 3\.23\.12/);
   assert.equal(claudeGrok?.source, './plugins/grok-build-supervisor');
   assert.equal(claudeGrok?.version, '0.4.3');
@@ -245,20 +242,20 @@ test('repository marketplace keeps Cursor Bridge stable and publishes Grok as an
   const chinese = readProjectFile('README.zh-CN.md');
   const englishImportant = english.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]*One-time Windows migration:[^\r\n]*)/)?.[1] || '';
   const chineseImportant = chinese.match(/> \[!IMPORTANT\]\r?\n> ([^\r\n]*Windows 一次性迁移：[^\r\n]*)/)?.[1] || '';
-  const englishGrokSection = english.match(/## Grok Build Supervisor \(New\)\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
-  const chineseGrokSection = chinese.match(/## Grok Build Supervisor（New）\r?\n([\s\S]*?)\r?\n## Cursor Bridge/)?.[1] || '';
+  const englishGrokSection = english.match(/<details>\r?\n<summary><strong>Companion plugin: Grok Build Supervisor \(maintenance-only\)<\/strong><\/summary>\r?\n([\s\S]*?)\r?\n<\/details>/)?.[1] || '';
+  const chineseGrokSection = chinese.match(/<details>\r?\n<summary><strong>配套插件：Grok Build Supervisor（低维护模式）<\/strong><\/summary>\r?\n([\s\S]*?)\r?\n<\/details>/)?.[1] || '';
   const englishMigration = english.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n<details>|$)/)?.[0] || '';
   const chineseMigration = chinese.match(/<a id="windows-update-migration"><\/a>[\s\S]*?(?=\r?\n<details>|$)/)?.[0] || '';
   assert.match(english, /\.\/plugins\/grok-build-supervisor\/README\.md/);
   assert.match(chinese, /\.\/plugins\/grok-build-supervisor\/README\.zh-CN\.md/);
   assert.match(englishImportant, /Cursor Bridge[\s\S]*5\.3\.6 or earlier[\s\S]*5\.4\.0 or any later release[\s\S]*#windows-update-migration/);
   assert.match(chineseImportant, /Cursor Bridge[\s\S]*5\.3\.6 或更早版本[\s\S]*5\.4\.0 或任何后续版本[\s\S]*#windows-update-migration/);
-  assert.match(englishGrokSection, /stay on planning and review[\s\S]*Grok Build does the implementation[\s\S]*supervisor follows the run and the checks/i);
-  assert.match(chineseGrokSection, /继续做计划和验收[\s\S]*落地交给 Grok Build[\s\S]*跟着看执行和核对/);
-  assert.doesNotMatch(englishGrokSection, /optional/i);
-  assert.doesNotMatch(chineseGrokSection, /可选/);
-  assert.match(english, /Cursor \*\*3\.23\.12\*\*[\s\S]*Grok 4\.7\/high[\s\S]*IDE and Agents Window/);
-  assert.match(chinese, /Cursor \*\*3\.23\.12\*\*[\s\S]*Grok 4\.7\/high[\s\S]*IDE 与 Agents Window/);
+  assert.doesNotMatch(english, /^## Grok Build Supervisor/m);
+  assert.doesNotMatch(chinese, /^## Grok Build Supervisor/m);
+  assert.match(englishGrokSection, /maintenance-only mode[\s\S]*active development prioritizes Cursor Bridge and CCE CLI/i);
+  assert.match(chineseGrokSection, /低维护（maintenance-only）状态[\s\S]*主线维护聚焦 Cursor Bridge 与 CCE CLI/);
+  assert.match(english, /Cursor 3\.23\.12\*\*[\s\S]*Grok 4\.7\/high[\s\S]*IDE and Agents Window/);
+  assert.match(chinese, /Cursor 3\.23\.12\*\*[\s\S]*Grok 4\.7\/high[\s\S]*IDE 与 Agents Window/);
   assert.doesNotMatch(englishGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(chineseGrokSection, /codex plugin|claude plugin|\/grok_execute|windows-update-migration/);
   assert.doesNotMatch(englishMigration, /Grok Build Supervisor|grok-build-supervisor/);
@@ -621,8 +618,8 @@ test('compatibility history preserves 6.0.8 as the last full acceptance for Curs
   assert.match(chinese, /只维护 Cursor 最新版本/);
   assert.match(english, /Latest release and last completed baseline[\s\S]*3\.23\.12[\s\S]*6\.0\.8[\s\S]*Grok 4\.7\/high/);
   assert.match(chinese, /最新发布与上次完整验收基线[\s\S]*3\.23\.12[\s\S]*6\.0\.8[\s\S]*Grok 4\.7\/high/);
-  assert.equal(data.latestRelease.cursorBridgeVersion, '6.2.0');
-  assert.equal(data.latestRelease.status, 'regression-verified-live-partial');
+  assert.equal(data.latestRelease.cursorBridgeVersion, '7.0.0');
+  assert.equal(data.latestRelease.status, 'cce-cli-primary-verified-offline-and-live-smoke');
   assert.equal(data.latestRelease.pendingLiveCursorVersion, '3.27.22');
   assert.doesNotMatch(english, /Install the current version/);
   assert.doesNotMatch(chinese, /安装当前版本/);

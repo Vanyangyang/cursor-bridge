@@ -9,9 +9,9 @@
 
 ## 最新发布与上次完整验收基线
 
-**CCE CLI 目前为实验模式，尚非稳定功能。** 此状态同时适用于账号 CLI 与自带 Key CLI。建议日常使用默认的 IDE/Agents；CLI 需由用户明确选择后试用。
+**主要维护路线：** 自 **7.0.0** 起，**CCE CLI (`cli`)** 成为主要维护路线与全新安装默认来源（已显式保存的 `cce-source.json` 会原样保留；此前未保存过 `cce-source.json` 的 6.x 升级会默认切换至 `cli`，需安装并登录 Cursor CLI 且显式配置 `cursor_model`，完整迁移与设置见 [`README.zh-CN.md#migrate-to-7-0`](./README.zh-CN.md#migrate-to-7-0)）；Cursor IDE/Agents (`ide`) 仍保留为持久后备选项（可通过 `/cce ide` 或 `cursor_cce(action="set", source="ide")` 切换）。
 
-Cursor Bridge **6.2.0** 新增可选的官方 agent-local 自带 Key Responses 路线，并保留持久 CCE CLI/IDE 来源切换。Windows 定向证据使用 agent-local **2026.10.22-27dcf5f**、精确模型与档位回执及原生本地检索，见 [6.2.0 验收范围](./docs/cce-local-provider-6.2.0-verification.md)。IDE/Agents 行为沿用 [6.0.11 定向检查](./docs/cursor-6.0.11-verification.md)。下表保留上次较完整的 IDE 验收记录，不代表新的完整 IDE 或跨平台 CLI 矩阵已通过。
+Cursor Bridge **7.0.0** 全面强化了 CCE CLI 的速度、可靠可用性与安装健壮性：默认私有隔离 MCP 配置、按 CLI 身份失效的预检缓存、持久化单根 ACP 会话（严格两步配置与 `mode="ask"` 读回校验 + 安全 `print` 回退）、独立 CLI 并发通道（`CURSOR_BRIDGE_CCE_CLI_CONCURRENCY=3`）、多路径启动器发现、`cursor_cce(action="doctor")` 只读自检、`cursor_init` 可恢复的 CLI 预检状态，以及全量 `npm test` / `smoke:cli` / `verify:install` 安装与验证链路加固（`CURSOR_EXE` 失配时严格 fail-closed 不再误拉起宿主 Cursor）。完整发布说明见 `CHANGELOG.md` 与 `compatibility.json`（`latestRelease`）；下表继续保留上一次完整 IDE CDP 兼容基线（`current: 6.0.8 / Cursor 3.23.12`）与历史归档列表。
 
 | Cursor | Cursor Bridge | 来源 | 状态 |
 |---|---|---|---|

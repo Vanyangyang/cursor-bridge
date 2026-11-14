@@ -23,10 +23,10 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { basename, dirname, join, resolve } from 'node:path';
-import { statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { makeClient as createCdpClient } from './cdp-client.mjs';
 import http from 'http';
-import { pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   CURSOR_RUNTIME_MODES,
   cursorStartupBehavior,
@@ -63,16 +63,45 @@ import {
   updateCursorSessionRegistry,
 } from './cursor-session-registry.mjs';
 import { isAgentsWindowTitle } from './cursor-ensure-core.mjs';
-import { CURSOR_CCE_SOURCES, readCcePreferences, resolveCceSourceFile, updateCcePreferences } from './cursor-cce-preferences.mjs';
-import { inspectCursorCli, runCursorCli } from './cursor-cli.mjs';
+import { CURSOR_CCE_SOURCES, normalizeCceSource, readCcePreferences, resolveCceSourceFile, updateCcePreferences } from './cursor-cce-preferences.mjs';
+import { inspectCursorCli, readCursorCliIdentity, runCursorCli, verifyCursorCliModelSelection } from './cursor-cli.mjs';
+import { CursorCliAcpManager } from './cursor-cli-acp.mjs';
 import { localProviderSummary } from './cursor-cli-provider-config.mjs';
 import { resolveCliWorkspace } from './cursor-cli-workspace.mjs';
 import { defaultLifecycleDir, ensureLifecycleDir } from './lifecycle-paths.mjs';
 
-const PLUGIN_VERSION = '6.2.0';
+const PLUGIN_VERSION = '7.0.0';
 const CDP_PORT = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 const ORIGIN = `http://localhost:${CDP_PORT}`;
 const QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 300000);
+const DEFAULT_CLI_INSPECT_TTL_MS = 300_000;
+const CLI_INSPECT_INVALIDATE_CODES = new Set([
+  'CURSOR_CLI_MODEL_UNAVAILABLE',
+  'CURSOR_CLI_MODEL_MISMATCH',
+  'CURSOR_CLI_EXIT_ERROR',
+  'CURSOR_CLI_PROTOCOL_ERROR',
+  'CURSOR_CLI_UNAVAILABLE',
+  'CURSOR_CLI_LAUNCHER_UNSUPPORTED',
+  'CURSOR_CLI_WRONG_BRAND',
+]);
+
+function readCliInspectTtlMs(env = process.env) {
+  const raw = env?.CURSOR_BRIDGE_CLI_INSPECT_TTL_MS;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return DEFAULT_CLI_INSPECT_TTL_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CLI_INSPECT_TTL_MS;
+  return parsed;
+}
+
+const DEFAULT_CLI_CONCURRENCY = 3;
+
+function readCliConcurrency(env = process.env) {
+  const raw = env?.CURSOR_BRIDGE_CCE_CLI_CONCURRENCY;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return DEFAULT_CLI_CONCURRENCY;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_CLI_CONCURRENCY;
+  return Math.max(1, Math.min(8, Math.floor(parsed)));
+}
 
 function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
   return String(value || 'on').trim().toLowerCase() === 'off' ? 'off' : 'on';
@@ -1904,11 +1933,25 @@ class CursorBridge {
       : resolve(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
     this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
     this.cceSourceFile = options.cceSourceFile === null ? null : resolve(options.cceSourceFile || resolveCceSourceFile());
+    this._defaultCceSource = options.cceSource !== undefined
+      ? normalizeCceSource(options.cceSource, 'cli')
+      : null;
     this.cliInspector = options.cliInspector || inspectCursorCli;
+    this.cliIdentityReader = options.cliIdentityReader
+      || (options.cliInspector ? async () => ({ available: true, key: 'injected-inspector' }) : readCursorCliIdentity);
     this.cliRunner = options.cliRunner || runCursorCli;
     this.cliInspections = new Set();
     this.cliClosing = false;
     this.cliMetadata = null;
+    this.cliInspectCache = null;
+    this.cliInspectInFlight = null;
+    this.cliInspectStats = { hits: 0, misses: 0, invalidations: 0 };
+    this.cliLastMcpIsolation = null;
+    this._lastCliPrefKey = null;
+    this._customAcpManager = options.acpManager !== undefined;
+    this.acpManager = options.acpManager !== undefined
+      ? options.acpManager
+      : (options.cliRunner ? null : new CursorCliAcpManager({ env: process.env }));
     this.sessionFile = options.sessionFile === null
       ? null
       : resolve(options.sessionFile || resolveCursorSessionRegistryFile());
@@ -1921,6 +1964,7 @@ class CursorBridge {
     this._healing = null;
     this.tasks = new Map();
     this.nextTaskId = 1;
+    this.activeCli = new Map();
     this.activeParallel = new Map();
     this.currentJob = null;
     this._uiTail = Promise.resolve();
@@ -2412,7 +2456,7 @@ class CursorBridge {
   async _initializeWorkspace(projectPath, options = {}) {
     // Finish a prior read-only heal before changing its target or requesting registration.
     if (this._healing) await this._healing.catch(() => {});
-    if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+    if (this.busy || this.activeCli.size > 0 || this.activeParallel.size > 0 || this.queue.length > 0) {
       throw new Error('cursor_init cannot change workspace while Cursor tasks are queued or running');
     }
     const previousProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
@@ -2423,10 +2467,46 @@ class CursorBridge {
     this.workspaceUpdatedAt = saved.updatedAt;
     this._lastLifecycle = null;
     this._lastWorkspaceBinding = null;
+    const canonicalInitPath = (value) => {
+      const normalized = normalizeWorkspacePath(value);
+      return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    };
+    if (previousProjectPath && canonicalInitPath(previousProjectPath) !== canonicalInitPath(saved.projectPath)) {
+      await this.acpManager?.invalidateWorkspace(previousProjectPath, 'workspace_changed');
+    }
     if (this.ccePreferencesView().cceSource === 'cli') {
       const workspace = resolveCliWorkspace(saved.projectPath);
-      const preferences = readCcePreferences(this.cceSourceFile);
-      await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference: this._modelPreferenceFor('cce') });
+      const preferences = this._effectiveCcePreferences();
+      const modelPreference = this._modelPreferenceFor('cce');
+      let cli = null;
+      try {
+        cli = await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference, forceRefresh: true });
+        if (cli && (Array.isArray(cli.models) || cli.providerVerification)) {
+          verifyCursorCliModelSelection(cli, modelPreference);
+        }
+      } catch (error) {
+        if (error?.code === 'CURSOR_CLI_CANCELLED') throw error;
+        const failure = this._classifyCliInitFailure(error, cli);
+        if (!failure) throw error;
+        return {
+          previousProjectPath,
+          ...this.workspaceView(),
+          ...this.ccePreferencesView(),
+          bindingPersisted: true,
+          ready: false,
+          status: failure.status,
+          errorCode: failure.errorCode,
+          diagnosticCategory: failure.diagnosticCategory,
+          ...(failure.availableModelsSample ? { availableModelsSample: failure.availableModelsSample } : {}),
+          message: failure.message,
+          nextStep: failure.nextStep,
+          retryable: failure.retryable,
+          lifecycle: null,
+        };
+      }
+      if (!preferences.cliProvider && process.env.CURSOR_BRIDGE_CCE_CLI_CHILD !== '1') {
+        void this.acpManager?.prewarm({ projectPath: saved.projectPath, modelPreference, cli });
+      }
       this._lastWorkspaceBinding = {
         ok: true, state: 'workspace_ready', workspace: saved.projectPath,
         environment: 'local', identitySource: 'cursor_cli_workspace',
@@ -2491,7 +2571,7 @@ class CursorBridge {
       let repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || '{}');
       if (registerWorkspace && repository.state === 'workspace_registration_required') {
         const registration = await this._withUiLock(async () => {
-          if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+          if (this.busy || this.activeCli.size > 0 || this.activeParallel.size > 0 || this.queue.length > 0) {
             return { ok: false, state: 'workspace_registration_busy', error: 'Cursor tasks became queued or running before registration' };
           }
           return JSON.parse(await evalJS(c, exprRegisterAgentsWorkspace(projectPath, statSync(projectPath).isFile())) || '{}');
@@ -2537,8 +2617,12 @@ class CursorBridge {
   _refreshModelPreferences() {
     if (!this.modelPreferencesFile) return false;
     const next = readCursorModelPreferences(this.modelPreferencesFile);
+    const prevTargets = JSON.stringify(this.modelPreferences?.targets);
     const changed = JSON.stringify(next) !== JSON.stringify(this.modelPreferences);
     this.modelPreferences = next;
+    if (changed && JSON.stringify(next?.targets) !== prevTargets) {
+      void this.acpManager?.invalidateAll('model_preferences_changed');
+    }
     return changed;
   }
 
@@ -2558,12 +2642,24 @@ class CursorBridge {
   }
 
   configureModelPreferences(options = {}) {
+    const beforeTargets = JSON.stringify(this.modelPreferences?.targets);
     this.modelPreferences = updateCursorModelPreferences(this.modelPreferencesFile, options);
+    if (JSON.stringify(this.modelPreferences?.targets) !== beforeTargets) {
+      void this.acpManager?.invalidateAll('model_preferences_changed');
+    }
     return this.modelPreferencesView();
   }
 
-  ccePreferencesView() {
+  _effectiveCcePreferences() {
     const preferences = readCcePreferences(this.cceSourceFile);
+    if (this._defaultCceSource && (!this.cceSourceFile || !existsSync(this.cceSourceFile))) {
+      return { ...preferences, source: this._defaultCceSource };
+    }
+    return preferences;
+  }
+
+  ccePreferencesView() {
+    const preferences = this._effectiveCcePreferences();
     return { cceSource: preferences.source, cceSourceFile: this.cceSourceFile,
       cceSourcePersistAcrossRestart: !!this.cceSourceFile, cceSourceUpdatedAt: preferences.updatedAt,
       cceCliProvider: localProviderSummary(preferences.cliProvider) };
@@ -2571,19 +2667,218 @@ class CursorBridge {
 
   configureCcePreferences(options = {}) {
     updateCcePreferences(this.cceSourceFile, options);
+    if ((options?.action && options.action !== 'get' && options.action !== 'status')
+      || options?.source !== undefined || Object.hasOwn(options || {}, 'cliProvider')) {
+      this._invalidateCliInspectCache();
+      this._lastCliPrefKey = null;
+      void this.acpManager?.invalidateAll('cce_preferences_changed');
+    }
     return this.ccePreferencesView();
   }
 
-  shouldPrewarmIde() {
-    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === '1') return false;
-    try { return this.ccePreferencesView().cceSource === 'ide'; }
-    catch (error) {
-      console.error(`[cursor-bridge] CCE source configuration needs repair: ${error.message}`);
-      return false;
+  _classifyCliInitFailure(error, cli = null) {
+    if (!error || error.code === 'CURSOR_CLI_CANCELLED') return null;
+    const code = typeof error.code === 'string' && error.code ? error.code : null;
+    if (!code || !code.startsWith('CURSOR_CLI_')) return null;
+    const category = typeof error.diagnosticCategory === 'string' ? error.diagnosticCategory : null;
+    const availableModelsSample = Array.isArray(cli?.models)
+      ? cli.models.slice(0, 12).map((model) => ({ id: model.id, name: model.name }))
+      : undefined;
+    let status = 'cli-preflight-failed';
+    let nextStep = 'Run cursor_cce(action="doctor") to inspect CLI readiness, or switch CCE to IDE with cursor_cce(action="set", source="ide").';
+    if (code === 'CURSOR_CLI_UNAVAILABLE') {
+      status = 'cli-unavailable';
+      nextStep = 'Install Cursor Agent CLI (cursor-agent / agent) on PATH or set CURSOR_BRIDGE_CLI_PATH, then run cursor_cce(action="doctor"), or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === 'CURSOR_CLI_LAUNCHER_UNSUPPORTED') {
+      status = 'cli-launcher-unsupported';
+      nextStep = 'Point CURSOR_BRIDGE_CLI_PATH to a supported Cursor CLI launcher, then re-run cursor_init or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === 'CURSOR_CLI_WRONG_BRAND') {
+      status = 'cli-wrong-brand';
+      nextStep = 'The resolved CLI launcher is not official Cursor Agent CLI. Fix PATH / CURSOR_BRIDGE_CLI_PATH or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === 'CURSOR_CLI_MODELS_UNAVAILABLE') {
+      status = 'cli-models-unavailable';
+      nextStep = 'Verify Cursor CLI authentication ("agent login" / "cursor-agent login") and run cursor_cce(action="doctor"), or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === 'CURSOR_CLI_MODEL_REQUIRED') {
+      status = 'cli-model-required';
+      nextStep = 'Configure an explicit CCE model and effort via cursor_model(action="set", target="cce", model="...", effort="medium"), then re-run cursor_init.';
+    } else if (code === 'CURSOR_CLI_MODEL_UNAVAILABLE') {
+      status = 'cli-model-unavailable';
+      nextStep = 'Select one of the advertised CLI models using cursor_model(action="set", target="cce", model="...", effort="..."), then re-run cursor_init.';
+    } else if (code === 'CURSOR_CLI_EXIT_ERROR') {
+      if (category === 'auth') {
+        status = 'cli-auth-required';
+        nextStep = 'Sign in to Cursor CLI (for example "agent login" / "cursor-agent login"), then run cursor_cce(action="doctor") or re-run cursor_init.';
+      } else if (category === 'trust') {
+        status = 'cli-workspace-untrusted';
+        nextStep = 'Confirm workspace trust in Cursor CLI, then re-run cursor_init.';
+      } else if (category === 'network' || category === 'timeout' || category === 'rate_limit') {
+        status = 'cli-network-error';
+        nextStep = 'Check network connectivity and retry shortly, or run cursor_cce(action="doctor").';
+      }
+    } else if (code.startsWith('CURSOR_CLI_PROVIDER_')) {
+      status = 'cli-provider-unavailable';
+      nextStep = 'Check local cli_provider paths, base_url, api_key_file, and preload helper with cursor_cce(action="doctor"), or clear cli_provider.';
+    } else if (code === 'CURSOR_CLI_PROTOCOL_ERROR') {
+      status = 'cli-protocol-error';
     }
+    return {
+      status,
+      errorCode: code,
+      diagnosticCategory: category,
+      availableModelsSample: availableModelsSample?.length ? availableModelsSample : undefined,
+      message: error.message || 'CCE CLI initialization is not complete, but the workspace binding was saved.',
+      nextStep,
+      retryable: true,
+    };
   }
 
-  async _inspectCli(signal, options = {}) {
+  async diagnoseCce(options = {}) {
+    const preferences = this._effectiveCcePreferences();
+    const modelPreference = this._modelPreferenceFor('cce');
+    const workspaceView = this.workspaceView();
+    let workspaceValid = null;
+    let workspaceRoots = null;
+    let workspaceError = null;
+    if (workspaceView.projectPath) {
+      try {
+        const resolved = resolveCliWorkspace(workspaceView.projectPath);
+        workspaceValid = true;
+        workspaceRoots = [resolved.cwd, ...resolved.additionalRoots];
+      } catch (error) {
+        workspaceValid = false;
+        workspaceError = { code: error?.code || 'WORKSPACE_PATH_INVALID', message: error?.message || String(error) };
+      }
+    }
+    if (preferences.source !== 'cli') {
+      const ready = Boolean(workspaceView.initialized && !workspaceView.workspaceConfirmationRequired && workspaceValid !== false);
+      return {
+        ok: workspaceValid !== false,
+        action: 'doctor',
+        ready,
+        status: workspaceValid === false
+          ? 'workspace-invalid'
+          : (ready ? 'ide-configured' : 'workspace-initialization-required'),
+        ...this.ccePreferencesView(),
+        modelPreference,
+        workspace: {
+          projectPath: workspaceView.projectPath,
+          initialized: workspaceView.initialized,
+          workspaceConfirmationRequired: workspaceView.workspaceConfirmationRequired,
+          valid: workspaceValid,
+          roots: workspaceRoots,
+          error: workspaceError,
+        },
+        cli: null,
+        acp: this.acpManager?.status?.() || null,
+        message: 'CCE is currently configured to use Cursor IDE/Agents (ide).',
+        nextStep: 'Run cursor_init to verify Cursor IDE/Agents connectivity, or switch to CCE CLI via cursor_cce(action="set", source="cli").',
+      };
+    }
+    const identity = preferences.cliProvider
+      ? null
+      : await this.cliIdentityReader({ env: options.env }).catch((error) => ({
+        available: false,
+        key: null,
+        reason: error?.code || 'CURSOR_CLI_UNAVAILABLE',
+      }));
+    let cli = null;
+    let inspectionError = null;
+    try {
+      cli = await this._inspectCli(options.signal, {
+        env: options.env,
+        provider: preferences.cliProvider,
+        modelPreference,
+        forceRefresh: options.forceRefresh === true,
+      });
+    } catch (error) {
+      if (error?.code === 'CURSOR_CLI_CANCELLED') throw error;
+      inspectionError = error;
+    }
+    let modelSelection = null;
+    let modelError = null;
+    if (!inspectionError && cli && (Array.isArray(cli.models) || cli.providerVerification)) {
+      try {
+        modelSelection = verifyCursorCliModelSelection(cli, modelPreference);
+      } catch (error) {
+        modelError = error;
+      }
+    } else if (!inspectionError && (!modelPreference?.model || !modelPreference?.effort)) {
+      modelError = Object.assign(new Error('An explicit named model and effort are required'), {
+        code: 'CURSOR_CLI_MODEL_REQUIRED',
+      });
+    }
+    const preloadFile = fileURLToPath(new URL('./cursor-cli-provider-preload.mjs', import.meta.url));
+    const preloadPresent = existsSync(preloadFile);
+    const cliFailure = inspectionError || modelError;
+    const primaryError = cliFailure || (workspaceValid === false ? workspaceError : null);
+    const classification = cliFailure ? this._classifyCliInitFailure(cliFailure, cli) : null;
+    const ready = Boolean(
+      !primaryError
+      && workspaceView.projectPath
+      && workspaceValid !== false
+      && !workspaceView.workspaceConfirmationRequired
+    );
+    return {
+      ok: !cliFailure && workspaceValid !== false,
+      action: 'doctor',
+      ready,
+      status: primaryError
+        ? (classification?.status || 'workspace-invalid')
+        : (ready ? 'ready' : 'workspace-initialization-required'),
+      ...this.ccePreferencesView(),
+      modelPreference,
+      modelSelection: modelSelection ? {
+        cliModel: modelSelection.selected?.id || null,
+        displayName: modelSelection.selected?.name || null,
+        requestedModel: modelSelection.base,
+        effort: modelSelection.effort,
+      } : null,
+      availableModelsSample: Array.isArray(cli?.models)
+        ? cli.models.slice(0, 12).map((model) => ({ id: model.id, name: model.name }))
+        : null,
+      availableModelCount: Array.isArray(cli?.models) ? cli.models.length : null,
+      launcher: cli?.launcher
+        ? { command: cli.launcher.command, wrapper: cli.launcher.wrapper || null }
+        : (identity?.launcher ? { command: identity.launcher.command, wrapper: identity.launcher.wrapper || null } : null),
+      identity: identity ? { available: !!identity.available, key: identity.key || null, reason: identity.reason || null } : null,
+      providerPreloadPresent: preloadPresent,
+      inspectStats: { ...this.cliInspectStats },
+      acp: this.acpManager?.status?.() || null,
+      workspace: {
+        projectPath: workspaceView.projectPath,
+        initialized: workspaceView.initialized,
+        workspaceConfirmationRequired: workspaceView.workspaceConfirmationRequired,
+        valid: workspaceValid,
+        roots: workspaceRoots,
+        error: workspaceError,
+      },
+      ...(classification ? {
+        errorCode: classification.errorCode,
+        diagnosticCategory: classification.diagnosticCategory,
+        message: classification.message,
+        nextStep: classification.nextStep,
+      } : {
+        errorCode: workspaceError?.code || null,
+        diagnosticCategory: null,
+        message: ready
+          ? 'CCE CLI diagnostics passed cleanly.'
+          : (workspaceError?.message || 'CLI checks passed. Workspace is not bound yet.'),
+        nextStep: ready
+          ? 'You can call cursor_context_engine directly.'
+          : (workspaceError ? 'Pass a valid local workspace directory to cursor_init.' : 'Run cursor_init with your project directory before calling cursor_context_engine.'),
+      }),
+    };
+  }
+
+  _invalidateCliInspectCache() {
+    if (this.cliInspectCache) {
+      this.cliInspectCache = null;
+      this.cliInspectStats.invalidations += 1;
+    }
+    this.cliInspectInFlight = null;
+  }
+
+  _runUncachedCliInspection(signal, options = {}) {
     const controller = new AbortController();
     const cancel = () => controller.abort();
     if (this.cliClosing || signal?.aborted) cancel();
@@ -2596,21 +2891,133 @@ class CursorBridge {
       return this.cliInspector({ ...options, signal: controller.signal });
     });
     this.cliInspections.add(inspection);
-    try {
-      const metadata = await inspection.promise;
+    return inspection.promise.then(metadata => {
       if (this.cliClosing || controller.signal.aborted) throw Object.assign(new Error('CCE CLI inspection cancelled before submission'), {
         code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
       });
       this.cliMetadata = { available: true, checkedAt: new Date().toISOString() };
       return metadata;
-    } catch (error) {
+    }).catch(error => {
       if (!controller.signal.aborted && !this.cliClosing) this.cliMetadata = { available: false, checkedAt: new Date().toISOString(), errorCode: error.code || 'CURSOR_CLI_ERROR' };
       throw error;
-    }
-    finally {
+    }).finally(() => {
       this.cliInspections.delete(inspection);
       signal?.removeEventListener('abort', cancel);
+    });
+  }
+
+  shouldPrewarmIde() {
+    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === '1') return false;
+    try { return this.ccePreferencesView().cceSource === 'ide'; }
+    catch (error) {
+      console.error(`[cursor-bridge] CCE source configuration needs repair: ${error.message}`);
+      return false;
     }
+  }
+
+  async _inspectCli(signal, options = {}) {
+    if (this.cliClosing || signal?.aborted) {
+      throw Object.assign(new Error('CCE CLI inspection cancelled'), {
+        code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
+      });
+    }
+    if (options.provider) {
+      this._invalidateCliInspectCache();
+      return this._runUncachedCliInspection(signal, options);
+    }
+
+    const ttlMs = readCliInspectTtlMs(options.env);
+    if (options.forceRefresh) {
+      this._invalidateCliInspectCache();
+    } else if (ttlMs > 0 && this.cliInspectCache && !this.cliInspectInFlight) {
+      const ageMs = Date.now() - this.cliInspectCache.cachedAtMs;
+      if (ageMs >= 0 && ageMs < ttlMs) {
+        const identity = await this.cliIdentityReader({ env: options.env }).catch(() => ({ key: null }));
+        if (this.cliClosing || signal?.aborted) {
+          throw Object.assign(new Error('CCE CLI inspection cancelled'), {
+            code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
+          });
+        }
+        if (identity?.key && this.cliInspectCache && identity.key === this.cliInspectCache.identityKey
+          && (Date.now() - this.cliInspectCache.cachedAtMs) < ttlMs) {
+          this.cliInspectStats.hits += 1;
+          return this.cliInspectCache.metadata;
+        }
+      }
+      this._invalidateCliInspectCache();
+    }
+
+    let flight = (!options.forceRefresh && this.cliInspectInFlight) || null;
+    if (!flight) {
+      this.cliInspectStats.misses += 1;
+      const controller = new AbortController();
+      const inspection = { controller, promise: null };
+      const waiters = new Set();
+      flight = { controller, inspection, waiters, promise: null };
+      if (!options.forceRefresh) this.cliInspectInFlight = flight;
+      inspection.promise = Promise.resolve().then(async () => {
+        if (this.cliClosing || controller.signal.aborted) {
+          throw Object.assign(new Error('CCE CLI inspection cancelled'), {
+            code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
+          });
+        }
+        const identityBefore = await this.cliIdentityReader({ env: options.env }).catch(() => ({ key: null }));
+        if (this.cliClosing || controller.signal.aborted) {
+          throw Object.assign(new Error('CCE CLI inspection cancelled'), {
+            code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
+          });
+        }
+        const metadata = await this.cliInspector({ ...options, signal: controller.signal });
+        if (this.cliClosing || controller.signal.aborted) {
+          throw Object.assign(new Error('CCE CLI inspection cancelled before submission'), {
+            code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
+          });
+        }
+        if (readCliInspectTtlMs(options.env) > 0 && identityBefore?.key) {
+          this.cliInspectCache = { metadata, identityKey: identityBefore.key, cachedAtMs: Date.now() };
+        }
+        this.cliMetadata = { available: true, checkedAt: new Date().toISOString() };
+        return metadata;
+      }).catch(error => {
+        if (!controller.signal.aborted && !this.cliClosing) {
+          this.cliMetadata = { available: false, checkedAt: new Date().toISOString(), errorCode: error.code || 'CURSOR_CLI_ERROR' };
+        }
+        throw error;
+      }).finally(() => {
+        this.cliInspections.delete(inspection);
+        if (this.cliInspectInFlight === flight) this.cliInspectInFlight = null;
+      });
+      this.cliInspections.add(inspection);
+      flight.promise = inspection.promise;
+    }
+
+    const waiter = {};
+    flight.waiters.add(waiter);
+    return new Promise((resolvePromise, rejectPromise) => {
+      let settled = false;
+      const cleanup = () => {
+        flight.waiters.delete(waiter);
+        signal?.removeEventListener('abort', onCallerAbort);
+      };
+      const onCallerAbort = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (flight.waiters.size === 0 || this.cliClosing) flight.controller.abort();
+        rejectPromise(Object.assign(new Error('CCE CLI inspection cancelled'), {
+          code: 'CURSOR_CLI_CANCELLED', cancelled: true, confirmedNotSent: true, confirmedTerminal: true,
+        }));
+      };
+      if (this.cliClosing || signal?.aborted) {
+        onCallerAbort();
+        return;
+      }
+      signal?.addEventListener('abort', onCallerAbort, { once: true });
+      flight.promise.then(
+        value => { if (settled) return; settled = true; cleanup(); resolvePromise(value); },
+        err => { if (settled) return; settled = true; cleanup(); rejectPromise(err); },
+      );
+    });
   }
 
   _modelPreferenceFor(target) {
@@ -2728,8 +3135,14 @@ class CursorBridge {
       if (this._hasGlobalReservation()) {
         throw new Error('A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first');
       }
-      const preferences = readCcePreferences(this.cceSourceFile);
+      const preferences = this._effectiveCcePreferences();
       const source = preferences.source;
+      const prefKey = `${source}|${preferences.cliProvider ? JSON.stringify(preferences.cliProvider) : 'official'}`;
+      if (this._lastCliPrefKey && this._lastCliPrefKey !== prefKey) {
+        this._invalidateCliInspectCache();
+        void this.acpManager?.invalidateAll('cce_preferences_changed');
+      }
+      this._lastCliPrefKey = prefKey;
       const modelPreference = this._modelPreferenceFor('cce');
       let cli;
       if (source === 'ide') await this._ensureCursor();
@@ -3074,6 +3487,7 @@ class CursorBridge {
     if (isTerminalTask(job)) return this._taskView(job, true);
     const message = String(reason || 'Task cancelled').trim() || 'Task cancelled';
     this.queue = this.queue.filter((candidate) => candidate.id !== job.id);
+    this.activeCli.delete(job.id);
     this.activeParallel.delete(job.id);
     this._invalidateParallelMonitor(job);
     job.cancelRequested = false;
@@ -3236,14 +3650,26 @@ class CursorBridge {
     return this._healing;
   }
   async _drain() {
-    if (this.busy || this.queue.length === 0) return;
-    if (this._hasGlobalReservation()) return;
-    if (this.queue[0].effectiveExecution !== 'parallel_agent' && this.activeParallel.size > 0) {
+    if (this.queue.length === 0 || this._hasGlobalReservation()) return;
+    // Preserve unit-test manual queue pause (`bridge.busy = true` with `currentJob === null`).
+    if (this.busy && this.currentJob === null) return;
+    const isCliCceJob = (candidate) => candidate.kind === 'context_engine' && candidate.cceSource === 'cli';
+    const cliLimit = readCliConcurrency();
+    while (this.activeCli.size < cliLimit && !this._hasGlobalReservation()) {
+      const cliIdx = this.queue.findIndex(isCliCceJob);
+      if (cliIdx < 0) break;
+      const [cliJob] = this.queue.splice(cliIdx, 1);
+      void this._startCliJob(cliJob);
+    }
+    if (this.busy || this.queue.length === 0 || this._hasGlobalReservation()) return;
+    const ideIdx = this.queue.findIndex((candidate) => !isCliCceJob(candidate));
+    if (ideIdx < 0) return;
+    if (this.queue[ideIdx].effectiveExecution !== 'parallel_agent' && this.activeParallel.size > 0) {
       // 由并行任务的明确终态、reap/cancel/abandon 主动唤醒；避免 orphan 时每 400ms 永久空转。
       return;
     }
     this.busy = true;
-    const job = this.queue.shift();
+    const [job] = this.queue.splice(ideIdx, 1);
     this.currentJob = job;
     job.status = 'running';
     job.startedAt = new Date().toISOString();
@@ -3351,8 +3777,57 @@ class CursorBridge {
         }
       });
     } finally {
-      if (this.currentJob === job) this.currentJob = null;
       this.busy = false;
+      if (this.currentJob === job) {
+        this.currentJob = this.activeCli.values().next().value || null;
+      }
+      this._drain();
+      this._maybeRestoreParallelOrigin();
+    }
+  }
+
+  async _startCliJob(job) {
+    this.activeCli.set(job.id, job);
+    if (!this.busy && !this.currentJob) this.currentJob = job;
+    job.status = 'running';
+    job.startedAt = new Date().toISOString();
+    try {
+      await this._withJobLock(job, async () => {
+        try {
+          job.phase = 'running';
+          const result = await this._runCceCli(job);
+          this._finishJob(job, result);
+        } catch (error) {
+          if ((error && error.cancelled) || job.cancelRequested) {
+            if (error && error.stopConfirmed) {
+              this._cancelJob(job, job.cancelReason || error.message || 'Task cancelled', {
+                underlyingStopConfirmed: true,
+              });
+            } else {
+              job.cancelRequested = false;
+              const cause = error instanceof Error
+                ? error
+                : new Error('Cancellation was requested, but Cursor CLI could not be confirmed stopped; the reservation remains held');
+              this._orphanParallelJob(job, cause);
+              job.recoveryState = 'cancel_unconfirmed';
+            }
+          } else if (error && error.confirmedTerminal) {
+            this.activeParallel.delete(job.id);
+            this._failJob(job, error);
+          } else if (error && error.sent) {
+            job.firstWaitError ||= error.message;
+            job.error = `Submission state is uncertain; monitoring continues by agentId: ${error.message}`;
+            this._orphanParallelJob(job, error);
+          } else {
+            this._failJob(job, error);
+          }
+        }
+      });
+    } finally {
+      this.activeCli.delete(job.id);
+      if (this.currentJob === job) {
+        this.currentJob = this.busy ? this.currentJob : (this.activeCli.values().next().value || null);
+      }
       this._drain();
       this._maybeRestoreParallelOrigin();
     }
@@ -3367,26 +3842,65 @@ class CursorBridge {
     const controller = new AbortController();
     job.cliAbortController = controller;
     try {
-      const outcome = await this.cliRunner({
-        projectPath: job.projectPath, prompt: job.prompt, modelPreference: job.modelPreference,
-        timeoutMs: job.timeoutMs, signal: controller.signal, cli: job.cli,
-        onDispatch: () => { job.sendState = 'dispatching'; },
-        onInit: ({ sessionId, modelSelection }) => {
-          job.cliSessionId = sessionId;
-          job.modelSelection = modelSelection;
-          job.sendState = 'sent';
-          job.sentAt ||= new Date().toISOString();
-        },
-      });
+      let outcome = null;
+      const useAcp = this.acpManager && (this._customAcpManager || this.cliRunner === runCursorCli);
+      if (useAcp) {
+        const acpAttempt = await this.acpManager.runOrFallback({
+          projectPath: job.projectPath,
+          prompt: job.prompt,
+          modelPreference: job.modelPreference,
+          timeoutMs: job.timeoutMs,
+          signal: controller.signal,
+          cli: job.cli,
+          onDispatch: () => { job.sendState = 'dispatching'; },
+          onInit: ({ sessionId, modelSelection }) => {
+            job.cliSessionId = sessionId;
+            job.modelSelection = modelSelection;
+            job.cliTransport = 'acp';
+            job.sendState = 'sent';
+            job.sentAt ||= new Date().toISOString();
+          },
+        });
+        if (acpAttempt?.usedAcp) {
+          outcome = acpAttempt;
+        } else if (acpAttempt && acpAttempt.confirmedNotSent !== true) {
+          throw Object.assign(new Error('ACP execution did not return confirmedNotSent before fallback'), {
+            code: 'CURSOR_CLI_PROTOCOL_ERROR',
+            confirmedTerminal: false,
+            sent: true,
+          });
+        }
+        if (!outcome) {
+          this._throwIfCancelledBeforeSend(job);
+        }
+      }
+      if (!outcome) {
+        outcome = await this.cliRunner({
+          projectPath: job.projectPath, prompt: job.prompt, modelPreference: job.modelPreference,
+          timeoutMs: job.timeoutMs, signal: controller.signal, cli: job.cli,
+          onDispatch: () => { job.sendState = 'dispatching'; },
+          onInit: ({ sessionId, modelSelection }) => {
+            job.cliSessionId = sessionId;
+            job.modelSelection = modelSelection;
+            job.cliTransport = 'print';
+            job.sendState = 'sent';
+            job.sentAt ||= new Date().toISOString();
+          },
+        });
+      }
       job.cliSessionId = outcome.sessionId;
       job.modelSelection = outcome.modelSelection;
-      job.terminalEvidence = `cursor_cli_result:${outcome.sessionId}`;
+      job.cliTransport = outcome.cliTransport || job.cliTransport || 'print';
+      if (outcome.mcpIsolation) this.cliLastMcpIsolation = outcome.mcpIsolation;
+      job.terminalEvidence = `${job.cliTransport === 'acp' ? 'cursor_cli_acp_result' : 'cursor_cli_result'}:${outcome.sessionId}`;
       return outcome.result;
     } catch (error) {
+      if (CLI_INSPECT_INVALIDATE_CODES.has(error?.code)) this._invalidateCliInspectCache();
       error.taskId = job.id;
       job.cliError = { code: error.code || 'CURSOR_CLI_ERROR', confirmedTerminal: error.confirmedTerminal === true,
         ...(error.cliProcessId ? { processId: error.cliProcessId } : {}),
-        ...(error.cliConfigDirectory ? { configDirectory: error.cliConfigDirectory } : {}) };
+        ...(error.cliConfigDirectory ? { configDirectory: error.cliConfigDirectory } : {}),
+        ...(error.cliDataDirectory ? { dataDirectory: error.cliDataDirectory } : {}) };
       throw error;
     } finally {
       job.cliAbortController = null;
@@ -3405,7 +3919,11 @@ class CursorBridge {
       if (job.status === 'queued') this._cancelJob(job, job.cancelReason, { underlyingStopConfirmed: true, wake: false });
       else job.cliAbortController?.abort();
     }
-    await Promise.allSettled([...jobs.map(job => job.promise), ...inspections.map(inspection => inspection.promise)]);
+    await Promise.allSettled([
+      ...jobs.map(job => job.promise),
+      ...inspections.map(inspection => inspection.promise),
+      this.acpManager ? this.acpManager.shutdown() : null,
+    ].filter(Boolean));
   }
 
   async _run(prompt, options = {}) {
@@ -4980,6 +5498,7 @@ class CursorBridge {
     const message = String(reason || '').trim();
     this._invalidateParallelMonitor(job);
     this.queue = this.queue.filter((candidate) => candidate.id !== job.id);
+    this.activeCli.delete(job.id);
     this.activeParallel.delete(job.id);
     job.status = 'abandoned';
     job.phase = 'abandoned';
@@ -5573,7 +6092,7 @@ class CursorBridge {
       allowedPaths: job.allowedPaths,
       modelPreference: job.modelPreference,
       modelSelection: job.modelSelection,
-      ...(job.cceSource ? { cceSource: job.cceSource, cliSessionId: job.cliSessionId } : {}),
+      ...(job.cceSource ? { cceSource: job.cceSource, cliSessionId: job.cliSessionId, ...(job.cliTransport ? { cliTransport: job.cliTransport } : {}) } : {}),
       ...(job.cliError ? { cliError: job.cliError } : {}),
       requestContext: job.requestContext || normalizeRequestContext(),
       workspaceBinding: job.workspaceBinding || null,
@@ -5650,6 +6169,7 @@ class CursorBridge {
       effectiveEffort: full.modelSelection.effectiveEffort,
       verificationSource: full.modelSelection.verificationSource,
       cliModel: full.modelSelection.cliModel,
+      ...(full.modelSelection.acpModel !== undefined ? { acpModel: full.modelSelection.acpModel } : {}),
       provider: full.modelSelection.provider,
       providerResponseConfirmed: full.modelSelection.providerResponseConfirmed,
       providerRequestCount: full.modelSelection.providerRequestCount,
@@ -5682,7 +6202,7 @@ class CursorBridge {
       projectPath: full.projectPath,
       sessionId: full.sessionId,
       agentId: full.agentId,
-      ...(full.cceSource ? { cceSource: full.cceSource, cliSessionId: full.cliSessionId } : {}),
+      ...(full.cceSource ? { cceSource: full.cceSource, cliSessionId: full.cliSessionId, ...(full.cliTransport ? { cliTransport: full.cliTransport } : {}) } : {}),
       ...(full.cliError ? { cliError: full.cliError } : {}),
       sendState: full.sendState,
       modelSelection: selection,
@@ -5720,7 +6240,7 @@ class CursorBridge {
         status: view.status,
         phase: view.phase,
         agentId: view.agentId,
-        ...(view.cceSource ? { cceSource: view.cceSource, cliSessionId: view.cliSessionId } : {}),
+        ...(view.cceSource ? { cceSource: view.cceSource, cliSessionId: view.cliSessionId, ...(view.cliTransport ? { cliTransport: view.cliTransport } : {}) } : {}),
         sessionId: view.sessionId,
         resultAvailable: view.resultAvailable,
         resultLength: view.resultLength,
@@ -5892,9 +6412,18 @@ class CursorBridge {
       return { found: !!job, ...this._compactStatusCommon(), ...(job ? this._compactTaskView(job) : { taskId: String(taskId) }) };
     }
     const parallelRunning = this.activeParallel.size;
+    const cliRunning = this.activeCli.size;
+    const cliConcurrency = readCliConcurrency();
     const fifoBusy = this.busy;
+    const anyRunning = fifoBusy || cliRunning > 0 || parallelRunning > 0;
     const uiBusy = fifoBusy && this.currentJob?.cceSource !== 'cli';
     const globalBlocked = this._hasGlobalReservation();
+    const isCliCceJob = (job) => job.kind === 'context_engine' && job.cceSource === 'cli';
+    const blockedQueuedCount = globalBlocked
+      ? this.queue.length
+      : (this.activeParallel.size > 0
+        ? this.queue.filter((job) => !isCliCceJob(job) && job.effectiveExecution !== 'parallel_agent').length
+        : 0);
     const common = normalizedDetail === 'full' ? {
       pluginVersion: PLUGIN_VERSION,
       statusPath: 'json-list',
@@ -5904,16 +6433,17 @@ class CursorBridge {
       ...this.modelPreferencesView(),
       ...this.ccePreferencesView(),
       ...this.sessionRegistryView(),
-      busy: fifoBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
+      busy: anyRunning || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
+      cliRunning,
+      cliConcurrency,
       parallelRunning,
-      idle: !fifoBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
+      idle: !anyRunning && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
-      blockedQueuedCount: this.activeParallel.size > 0
-        ? this.queue.filter((job) => globalBlocked || job.effectiveExecution !== 'parallel_agent').length
-        : 0,
+      blockedQueuedCount,
+      activeCli: [...this.activeCli.values()].map((job) => this._taskView(job)),
       activeParallel: [...this.activeParallel.values()].map((job) => this._taskView(job)),
       recentTasks: [...this.tasks.values()].slice(-10).map((job) => this._taskView(job)),
       unreadResultTaskIds: [...this.tasks.values()].filter((job) => isTerminalTask(job) && job.result != null && !job.resultCollectedAt).map((job) => job.id),
@@ -5938,16 +6468,17 @@ class CursorBridge {
       },
     } : {
       ...this._compactStatusCommon(),
-      busy: fifoBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
+      busy: anyRunning || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
+      cliRunning,
+      cliConcurrency,
       parallelRunning,
-      idle: !fifoBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
+      idle: !anyRunning && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
-      blockedQueuedCount: this.activeParallel.size > 0
-        ? this.queue.filter((job) => globalBlocked || job.effectiveExecution !== 'parallel_agent').length
-        : 0,
+      blockedQueuedCount,
+      activeCli: [...this.activeCli.values()].map((job) => this._compactTaskView(job, { summary: true })),
       activeParallel: [...this.activeParallel.values()].map((job) => this._compactTaskView(job, { summary: true })),
       recentTasks: [...this.tasks.values()]
         .filter((job) => !this.activeParallel.has(job.id))
@@ -5958,8 +6489,25 @@ class CursorBridge {
       lifecycle: this._compactLifecycleView(),
     };
     if (common.cceSource === 'cli') {
+      const inspectTtlMs = readCliInspectTtlMs();
       return { connected: this.cliMetadata?.available === true, ...common, statusPath: 'cli-metadata',
-        cli: this.cliMetadata || { available: null, checkedAt: null } };
+        cli: {
+          ...(this.cliMetadata || { available: null, checkedAt: null }),
+          running: cliRunning,
+          concurrency: cliConcurrency,
+          inspectCache: {
+            cached: Boolean(this.cliInspectCache),
+            ttlMs: inspectTtlMs,
+            ageMs: this.cliInspectCache ? Math.max(0, Date.now() - this.cliInspectCache.cachedAtMs) : null,
+            hits: this.cliInspectStats.hits,
+            misses: this.cliInspectStats.misses,
+            invalidations: this.cliInspectStats.invalidations,
+          },
+          acp: this.acpManager
+            ? this.acpManager.statusView()
+            : { state: 'disabled', reason: 'custom_runner', readySessions: 0, activePrompts: 0, promptsServed: 0, fallbacks: 0, warmProcesses: 0 },
+          ...(this.cliLastMcpIsolation ? { mcpIsolation: this.cliLastMcpIsolation } : {}),
+        } };
     }
     try {
       const ver = await httpJson('/json/version');
@@ -6011,10 +6559,9 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_init',
       description:
-        'Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge saves it, finds Cursor, ensures the required connection, and opens or verifies the matching project. ' +
-        'In Agents Window, initialization registers a missing local workspace through Cursor\'s project service and verifies its exact path before reporting ready. ' +
-        'If Cursor was opened too early without CCE access, initialization safely keeps the binding and tells the user to save, close Cursor once, and repeat the same initialization sentence; it never force-closes Cursor. ' +
-        'Cursor login and the user\'s old/new UI preference are preserved. When both UIs are open, Bridge selects the new Agents Window and creates work in the matching repository instead of Home.',
+        'Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge persists the workspace binding and prepares the active CCE source. ' +
+        'With the default cli source, cursor_init verifies Cursor Agent CLI availability, login/models, explicit CCE model configuration (cursor_model), and ACP prewarm; if CLI setup is incomplete, it preserves the binding and returns a recoverable status, errorCode, and nextStep. ' +
+        'With ide source, Bridge finds Cursor IDE or Agents Window, ensures the required CDP connection, opens or verifies the matching project directly instead of Home, preserves Cursor login and old/new UI preference, and never force-closes Cursor.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -6026,9 +6573,9 @@ function buildToolDefinitions(bridgeInstance) {
     {
       name: 'cursor_context_engine',
       description:
-        'Use this evidence-driven, read-only Cursor Context Engine (CCE) when understanding an indexed project requires discovering an unknown implementation location or tracing behavior, symbols, callers/callees, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Skip it when a known exact file or symbol can answer the question through direct reading or exact search, the needed code is already in context, or the task is only editing, tests, logs, builds, Git work, or external documentation. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies one natural-language intent, not a harness recipe. ' +
-        'It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. ' +
-        'Search uses the shared serialized CCE queue through the persistent ide or cli source chosen with cursor_cce. Both sources use the same evidence contract and model preferences; CLI uses Cursor Ask mode with explicit model selection. Large or cold workspaces can take several minutes. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.',
+        'Use this evidence-driven, read-only Cursor Context Engine (CCE) for semantic retrieval when understanding an indexed project requires discovering an unknown implementation location or tracing behavior, symbols, callers/callees, call chains, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Skip it when a known exact file or symbol can answer the question through direct reading or exact search, the needed code is already in context, or the task is only editing, tests, logs, builds, Git work, or external documentation. Cursor autonomously chooses the necessary investigation depth and retrieval capabilities; the caller supplies one natural-language intent, not a harness recipe. ' +
+        'Results return minimum sufficient context as compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. ' +
+        'Fresh installs default to CCE CLI (cli: isolated Cursor Ask mode over persistent ACP with print fallback and explicit model selection); ide remains available via cursor_cce. Both sources share the same workspace checks, evidence contract, and model preferences. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.',
       inputSchema: buildSearchInputSchema(),
     },
     bridgeInstance.environmentDelegationMode !== 'off' ? {
@@ -6097,11 +6644,11 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: 'cursor_cce',
-      description: 'Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses Cursor Agent CLI in read-only Ask mode, optionally the official agent-local harness with an explicit own-key Responses provider. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives restarts and is snapshotted per request. Omit cli_provider to preserve it across source switches; never clear a configured own-key route implicitly. Failures never fall back. Use set when the user requests source or provider configuration.',
+      description: 'Show, set, or diagnose the CCE execution source. Fresh installations default to cli (Cursor Agent CLI in read-only Ask mode over persistent isolated ACP with preflight checks and explicit model selection, optionally the official agent-local harness with an explicit own-key Responses provider). ide remains available via cursor_cce to route CCE through Cursor IDE/Agents over CDP. Both sources share the same query, evidence format, workspace checks, and CCE model preferences. Omit cli_provider to preserve it across source switches; failures never silently fall back. Use doctor for read-only CLI/model/workspace readiness diagnostics.',
       inputSchema: {
         type: 'object', additionalProperties: false,
         properties: {
-          action: { type: 'string', enum: ['show', 'set'], description: 'show reads the current source; set saves the user-selected source locally.' },
+          action: { type: 'string', enum: ['show', 'set', 'doctor'], description: 'show reads the current source; set saves the user-selected source locally; doctor runs read-only CLI/model/workspace readiness diagnostics.' },
           source: { type: 'string', enum: [...CURSOR_CCE_SOURCES], description: 'Required for set: cli or ide.' },
           cli_provider: {
             description: 'Optional explicit agent-local own-key route. Omit to preserve it when switching sources; null explicitly clears it. Key contents are never accepted here.',
@@ -6209,6 +6756,7 @@ function toolErrorResult(error) {
       ...(error.taskId ? { taskId: error.taskId } : {}),
       ...(error.cliProcessId ? { cliProcessId: error.cliProcessId } : {}),
       ...(error.cliConfigDirectory ? { cliConfigDirectory: error.cliConfigDirectory } : {}),
+      ...(error.cliDataDirectory ? { cliDataDirectory: error.cliDataDirectory } : {}),
       ...(error.confirmedNotSent !== undefined ? { confirmedNotSent: error.confirmedNotSent } : {}),
       ...(error.confirmedTerminal !== undefined ? { confirmedTerminal: error.confirmedTerminal } : {}),
     };
@@ -6291,6 +6839,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     if (name === 'cursor_cce') {
+      const normalizedAction = typeof args?.action === 'string' ? args.action.trim().toLowerCase() : 'show';
+      if (normalizedAction === 'doctor') {
+        const result = await bridge.diagnoseCce({});
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
       const options = { action: args?.action, source: args?.source };
       if (Object.hasOwn(args || {}, 'cli_provider')) {
         const names = { node_path: 'nodePath', base_url: 'baseUrl', api_key_file: 'apiKeyFile' };
@@ -6337,6 +6890,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
             ...bridge.delegationView(),
             ...bridge.runtimeModeView(),
             ...bridge.modelPreferencesView(),
+            ...bridge.ccePreferencesView(),
             ...bridge.sessionRegistryView(),
           }
           : {
@@ -6392,9 +6946,16 @@ async function main() {
 const isMain = import.meta.url === pathToFileURL(process.argv[1] || '').href;
 if (isMain) {
   process.on('unhandledRejection', (r) => console.error('unhandledRejection:', r));
-  const stop = () => { void bridge.shutdownCli().finally(() => process.exit(0)); };
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    void bridge.shutdownCli().finally(() => process.exit(0));
+  };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  process.stdin.once('end', stop);
+  process.stdin.once('close', stop);
 main().catch((e) => { console.error('❌ Fatal error:', e); process.exit(1); });
 }
 export {

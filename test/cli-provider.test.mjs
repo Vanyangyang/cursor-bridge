@@ -150,6 +150,9 @@ test('inspection and execution keep the native harness, private profile and exac
   const cli = await inspectCursorCli(options);
   const answer = await runCursorCli({ projectPath: project, prompt: 'read-only question', modelPreference: preference, cli }, options);
   assert.equal(answer.result, 'complete evidence');
+  assert.equal(answer.cliTransport, 'print');
+  assert.ok(answer.mcpIsolation && typeof answer.mcpIsolation.mode === 'string');
+  if (answer.mcpIsolation.enabled) assert.equal(answer.mcpIsolation.verified, true);
   assert.equal(answer.modelSelection.providerResponseConfirmed, true);
   assert.equal(answer.modelSelection.providerRequestCount, 1);
   assert.equal(answer.modelSelection.provider.harness, 'cursor-agent-local');
@@ -177,7 +180,50 @@ test('local-provider completion rejects invalid identities and pre-tool text as 
       call.child.stdout.write([init, ...tail].map(event => JSON.stringify(event) + '\n').join(''));
       call.child.finish();
     });
+    let captured;
     await assert.rejects(runCursorCli({ projectPath: project, prompt: 'question', modelPreference: preference, cli }, { ...mock,
-      env: { ...process.env, CURSOR_CONFIG_DIR: join(project, 'fixtures', 'missing-native-cli-profile') } }), { code: 'CURSOR_CLI_PROTOCOL_ERROR' });
+      env: { ...process.env, CURSOR_CONFIG_DIR: join(project, 'fixtures', 'missing-native-cli-profile') } }), error => {
+      captured = error;
+      return error.code === 'CURSOR_CLI_PROTOCOL_ERROR';
+    });
+    if (captured?.cliConfigDirectory) rmSync(captured.cliConfigDirectory, { recursive: true, force: true });
+    if (captured?.cliDataDirectory) rmSync(captured.cliDataDirectory, { recursive: true, force: true });
   }
+});
+
+test('local-provider inspection and execution fail closed when preload helper is missing', async () => {
+  const project = dirname(fileURLToPath(import.meta.url));
+  const missingPreload = join(project, 'missing-preload-helper.mjs');
+  const inspectMock = fakeCli(call => {
+    if (call.args.includes('--help')) call.child.stdout.write('Usage: agent-local [options]\nStart the Cursor Agent\n--workspace stream-json\n');
+    call.child.finish();
+  });
+  await assert.rejects(
+    inspectCursorCli({
+      ...inspectMock,
+      env: { ...process.env, CURSOR_CONFIG_DIR: join(project, 'fixtures', 'missing-native-cli-profile') },
+      provider,
+      modelPreference: preference,
+      preloadPath: missingPreload,
+    }),
+    { code: 'CURSOR_CLI_PROVIDER_PRELOAD_MISSING' },
+  );
+
+  const cli = {
+    brand: 'Cursor',
+    launcher: { command: process.execPath, args: [fileURLToPath(import.meta.url)] },
+    provider,
+    preference,
+    models: [{ id: preference.model }],
+    providerVerification: { catalogueVerified: true },
+  };
+  const runMock = fakeCli(() => assert.fail('missing preload must not spawn agent-local'));
+  await assert.rejects(
+    runCursorCli(
+      { projectPath: project, prompt: 'question', modelPreference: preference, cli },
+      { ...runMock, preloadPath: missingPreload },
+    ),
+    { code: 'CURSOR_CLI_PROVIDER_PRELOAD_MISSING' },
+  );
+  assert.equal(runMock.calls.length, 0);
 });

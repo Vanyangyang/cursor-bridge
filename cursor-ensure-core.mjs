@@ -152,8 +152,10 @@ export function findCursorExeDetails(options = {}) {
   const platform = options.platform || process.platform;
   const env = options.env || process.env;
   const existsImpl = options.existsImpl || existsSync;
-  const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
-  if (override) return { path: override, source: 'CURSOR_EXE', platform };
+  if (String(env.CURSOR_EXE || '').trim()) {
+    const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
+    return override ? { path: override, source: 'CURSOR_EXE', platform } : null;
+  }
 
   if (platform === 'win32') {
     const fromReg = cursorFromRegistry({

@@ -6,7 +6,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { CursorBridge, buildContextEnginePrompt, buildToolDefinitions, normalizeRequestContext } from '../server.mjs';
 
 class OfflineBridge extends CursorBridge {
-  constructor() { super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, projectPath: process.cwd() }); }
+  constructor() { super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, cceSource: 'ide', projectPath: process.cwd() }); }
   async _ensureCursor() {}
   _drain() {}
 }

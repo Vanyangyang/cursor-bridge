@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn, execFile } from 'node:child_process';
-import { access, readFile, readdir, realpath } from 'node:fs/promises';
+import { access, readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { resolveCliWorkspace } from './cursor-cli-workspace.mjs';
 import { createCliConfigScope } from './cursor-cli-config.mjs';
@@ -9,9 +10,11 @@ const VERSION = /^\d{4}\.\d{1,2}\.\d{1,2}(?:-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$/;
 const error = (code, message) => Object.assign(new Error(message), { code });
 const clean = value => String(value || '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\u200b-\u200d\ufeff]/g, '');
 const displayText = value => clean(value).toLowerCase().replace(/\b\d+(?:\.\d+)?\s*[km](?:\s*(?:tokens?|context))?\b/g, '').trim();
+const isFastVariant = value => /(?:^|[\s_-])fast\s*$/i.test(displayText(value));
+const stripFastSuffix = value => displayText(value).replace(/(?:^|[\s_-]+)fast\s*$/i, '').trim();
 const display = value => displayText(value).replace(/extra[\s_-]*high/g, 'xhigh').replace(/[^a-z0-9.]+/g, '');
 const effortName = value => String(value || '').trim().toLowerCase().replace(/extra[\s_-]*high/g, 'xhigh');
-const advertisedEffort = value => effortName(/(?:^|[\s_-])(extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i.exec(displayText(value))?.[1]);
+const advertisedEffort = value => effortName(/(?:^|[\s_-])(extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i.exec(stripFastSuffix(value))?.[1]);
 const safeDetail = value => clean(value)
   .replace(/(["']?(?:authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|(?:bearer|basic)\s+\S+|\S+)/gi, '$1[redacted]')
   .replace(/\b(?:bearer|basic)\s+\S+/gi, '[redacted]')
@@ -19,12 +22,37 @@ const safeDetail = value => clean(value)
   .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]').slice(0, 800);
 // CLI stderr may contain arbitrary provider payloads or echoed prompts. Expose
 // only a diagnostic category; redaction patterns alone cannot cover every secret.
+const classifyCliStderrCategory = value => {
+  const text = clean(value);
+  if (!text.trim()) return null;
+  if (/\b(ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|ECONNABORTED|EAI_FAIL)\b/.test(text)
+    || /\b(?:network\s+error|socket\s+hang\s+up|tls\s+handshake)\b/i.test(text)) {
+    return 'network';
+  }
+  if (/not authenticated|authentication|unauthorized|unauthenticated|sign.?in|log.?in|api.?key|session\s+expired/i.test(text)) {
+    return 'auth';
+  }
+  if (/workspace.*trust|untrusted/i.test(text)) {
+    return 'trust';
+  }
+  if (/rate.?limit|too many requests|\b429\b|quota|billing|usage\s+limit/i.test(text)) {
+    return 'rate_limit';
+  }
+  if (/model.*(?:not found|unavailable|unsupported|invalid)|unknown model/i.test(text)) {
+    return 'model';
+  }
+  if (/timed?\s*out|\btimeout\b/i.test(text)) {
+    return 'timeout';
+  }
+  return 'unknown';
+};
 const stderrSummary = value => {
   const text = clean(value);
   const network = /\b(ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN)\b/.exec(text);
   if (network) return network[1];
-  if (/not authenticated|authentication|unauthorized|sign.?in|log.?in|api.?key/i.test(text)) return 'authentication failed; check Cursor CLI login';
-  if (/workspace.*trust|untrusted/i.test(text)) return 'workspace trust was not confirmed';
+  const category = classifyCliStderrCategory(text);
+  if (category === 'auth') return 'authentication failed; check Cursor CLI login';
+  if (category === 'trust') return 'workspace trust was not confirmed';
   return text.trim() ? 'CLI reported an error on stderr (content withheld)' : '';
 };
 const exists = async file => { try { await access(file); return true; } catch { return false; } };
@@ -35,10 +63,32 @@ async function resolveLauncher(options) {
   const env = options.env || process.env;
   const explicit = env.CURSOR_BRIDGE_CLI_PATH;
   if (explicit && !path.isAbsolute(explicit)) throw error('CURSOR_CLI_LAUNCHER_UNSUPPORTED', 'CURSOR_BRIDGE_CLI_PATH must be absolute');
-  const candidates = explicit ? [explicit] : [];
-  if (!explicit && platform === 'win32' && env.LOCALAPPDATA) candidates.push(path.join(env.LOCALAPPDATA, 'cursor-agent', 'cursor-agent.ps1'));
-  if (!explicit) for (const directory of (env.PATH || '').split(platform === 'win32' ? ';' : ':').filter(Boolean)) {
-    for (const name of platform === 'win32' ? ['cursor-agent.ps1', 'cursor-agent.cmd', 'cursor-agent.exe'] : ['cursor-agent', 'agent']) candidates.push(path.join(directory, name));
+  const candidates = [];
+  const addCandidate = candidate => {
+    if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+  };
+  if (explicit) {
+    addCandidate(explicit);
+  } else if (platform === 'win32') {
+    const winNames = ['cursor-agent.ps1', 'cursor-agent.cmd', 'cursor-agent.exe'];
+    const dirs = [];
+    if (env.LOCALAPPDATA) dirs.push(path.join(env.LOCALAPPDATA, 'cursor-agent'));
+    if (env.USERPROFILE) {
+      dirs.push(path.join(env.USERPROFILE, 'AppData', 'Local', 'cursor-agent'));
+      dirs.push(path.join(env.USERPROFILE, '.local', 'bin'));
+    }
+    if (env.APPDATA) dirs.push(path.join(env.APPDATA, 'cursor-agent'));
+    for (const dir of (env.PATH || '').split(';').filter(Boolean)) dirs.push(dir);
+    for (const dir of dirs) for (const name of winNames) addCandidate(path.join(dir, name));
+  } else {
+    const posixNames = ['cursor-agent', 'agent'];
+    const dirs = [];
+    if (env.HOME) {
+      dirs.push(path.join(env.HOME, '.local', 'bin'));
+      dirs.push(path.join(env.HOME, '.cursor', 'bin'));
+    }
+    for (const dir of (env.PATH || '').split(':').filter(Boolean)) dirs.push(dir);
+    for (const dir of dirs) for (const name of posixNames) addCandidate(path.join(dir, name));
   }
   for (const candidate of candidates) {
     if (!await exists(candidate)) continue;
@@ -50,9 +100,12 @@ async function resolveLauncher(options) {
     const directory = path.dirname(absolute);
     const roots = [directory];
     try {
-      const entries = (await readdir(path.join(directory, 'versions'), { withFileTypes: true })).filter(entry => entry.isDirectory() && VERSION.test(entry.name));
-      entries.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
-      roots.push(...entries.map(entry => path.join(directory, 'versions', entry.name)));
+      const subdirs = (await readdir(path.join(directory, 'versions'), { withFileTypes: true })).filter(entry => entry.isDirectory());
+      const dateVersions = subdirs.filter(entry => VERSION.test(entry.name))
+        .sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+      const otherVersions = subdirs.filter(entry => !VERSION.test(entry.name))
+        .sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+      roots.push(...dateVersions.concat(otherVersions).map(entry => path.join(directory, 'versions', entry.name)));
     } catch (cause) { if (cause.code !== 'ENOENT') throw cause; }
     for (const root of roots) if (await exists(path.join(root, 'node.exe')) && await exists(path.join(root, 'index.js'))) {
       return { command: await realpath(path.join(root, 'node.exe')), args: [await realpath(path.join(root, 'index.js'))], wrapper: absolute };
@@ -135,7 +188,8 @@ async function execute(launcher, args, options = {}) {
       if (failure) return finishError(failure, stopped);
       let completionError;
       const detail = stderrSummary(stderr);
-      if (code !== 0) completionError = Object.assign(error('CURSOR_CLI_EXIT_ERROR', `Cursor CLI exited unsuccessfully${detail ? ': ' + detail : ''}`), { exitCode: code, signal });
+      const diagnosticCategory = classifyCliStderrCategory(stderr);
+      if (code !== 0) completionError = Object.assign(error('CURSOR_CLI_EXIT_ERROR', `Cursor CLI exited unsuccessfully${detail ? ': ' + detail : ''}`), { exitCode: code, signal, ...(diagnosticCategory ? { diagnosticCategory } : {}) });
       else if (options.onLine && pending.trim()) completionError = error('CURSOR_CLI_PROTOCOL_ERROR', 'Cursor CLI stream ended without a newline');
       else try { options.onEnd?.(); } catch (cause) { completionError = cause; }
       if (completionError) {
@@ -162,15 +216,48 @@ async function execute(launcher, args, options = {}) {
 }
 
 async function withCliConfig(options, action) {
-  const config = await createCliConfigScope(options.env || process.env);
+  const config = await createCliConfigScope(options.env || process.env, {
+    cwd: options.cwd,
+    userHome: options.userHome,
+    enumerateMcpImpl: options.enumerateMcpImpl,
+  });
   let retain = false;
-  try { return await action(config.env); }
+  try { return await action(config.env, config); }
   catch (cause) {
-    if (cause.confirmedTerminal === false) { retain = true; cause.cliConfigDirectory = config.directory; }
+    if (cause.confirmedTerminal === false) {
+      retain = true;
+      cause.cliConfigDirectory = config.directory;
+      cause.cliDataDirectory = config.dataDirectory;
+    }
     throw cause;
   } finally {
     if (!retain) await config.cleanup().catch(error => console.error(`[cursor-bridge] CLI configuration-copy cleanup failed: ${error.code || 'unknown'}`));
   }
+}
+
+export async function readCursorCliIdentity(options = {}) {
+  const env = options.env || process.env;
+  const userHome = (options.userHome || (process.platform === 'win32' ? env.USERPROFILE : env.HOME) || homedir());
+  const configSource = env.CURSOR_CONFIG_DIR?.trim()
+    || (env.XDG_CONFIG_HOME?.trim() ? path.join(env.XDG_CONFIG_HOME, 'cursor') : path.join(userHome, '.cursor'));
+  let launcher;
+  try {
+    launcher = await resolveLauncher(options);
+  } catch (cause) {
+    return { available: false, key: null, reason: cause?.code || 'CURSOR_CLI_UNAVAILABLE' };
+  }
+  const files = [launcher.command, ...(launcher.args || [])].filter(Boolean);
+  const stats = await Promise.all(files.map(async file => {
+    try {
+      const info = await stat(file);
+      return `${file}:${info.size}:${Math.trunc(info.mtimeMs)}`;
+    } catch {
+      return `${file}:missing`;
+    }
+  }));
+  const mcpMode = String(env.CURSOR_BRIDGE_CCE_CLI_MCP || '').trim().toLowerCase() || 'isolated';
+  const key = [launcher.wrapper || '', ...stats, `cfg:${configSource}`, `mcp:${mcpMode}`].join('|');
+  return { available: true, key, launcher };
 }
 
 export async function inspectCursorCli(options = {}) {
@@ -195,17 +282,50 @@ export async function inspectCursorCli(options = {}) {
 function selectVariant(cli, preference) {
   const base = String(preference?.model || '').trim();
   const effort = effortName(preference?.effort);
-  if (!base || /^(?:auto|default)$/i.test(base) || !effort || !/^(?:minimal|low|medium|high|xhigh|max)$/.test(effort)) throw error('CURSOR_CLI_MODEL_REQUIRED', 'An explicit named model and effort are required');
-  const ids = new Set([`${base}-${effort}`.toLowerCase(), ...(effort === 'xhigh' ? [`${base}-extra-high`.toLowerCase()] : [])]);
-  const candidates = cli.models.filter(model => ids.has(model.id.toLowerCase()) || model.id.toLowerCase() === base.toLowerCase() && advertisedEffort(model.name) === effort);
+  const requestedFast = isFastVariant(base);
+  const stem = stripFastSuffix(base).replace(/[\s_]+/g, '-').replace(/-+/g, '-');
+  if (!base || !stem || /^(?:auto|default)$/i.test(base) || /^(?:auto|default)$/i.test(stem) || !effort || !/^(?:minimal|low|medium|high|xhigh|max)$/.test(effort)) {
+    throw error('CURSOR_CLI_MODEL_REQUIRED', 'An explicit named model and effort are required');
+  }
+  const stems = new Set([stem, stem.startsWith('cursor-') && stem.length > 7 ? stem.slice(7) : `cursor-${stem}`]);
+  const efforts = effort === 'xhigh' ? ['xhigh', 'extra-high'] : [effort];
+  const suffix = requestedFast ? '-fast' : '';
+  const ids = new Set([...stems].flatMap(item => efforts.map(level => `${item}-${level}${suffix}`)));
+  const candidates = cli.models.filter(model => ids.has(model.id.toLowerCase()) || (model.id.toLowerCase() === base.toLowerCase() && advertisedEffort(model.name) === effort && isFastVariant(model.name) === requestedFast));
   if (candidates.length !== 1) throw error('CURSOR_CLI_MODEL_UNAVAILABLE', 'The exact requested CLI model and effort variant is unavailable or ambiguous');
   const selected = candidates[0];
+  if (isFastVariant(selected.name) !== requestedFast || isFastVariant(selected.id) !== requestedFast) {
+    throw error('CURSOR_CLI_MODEL_UNAVAILABLE', 'The advertised model does not confirm the requested speed tier');
+  }
   if (advertisedEffort(selected.name) !== effort) throw error('CURSOR_CLI_MODEL_UNAVAILABLE', 'The advertised model does not confirm the requested effort');
-  const identity = value => displayText(value)
+  const stripProvider = value => value.startsWith('cursor') && value.length > 6 ? value.slice(6) : value;
+  const identity = value => stripProvider(stripFastSuffix(value)
     .replace(/(?:[\s_-]+)(?:extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i, '')
-    .replace(/(\d)[_-](?=\d)/g, '$1.').replace(/[^a-z0-9.]+/g, '');
+    .replace(/(\d)[_-](?=\d)/g, '$1.').replace(/[^a-z0-9.]+/g, ''));
   if (identity(selected.name) !== identity(base)) throw error('CURSOR_CLI_MODEL_UNAVAILABLE', 'The advertised model name conflicts with the requested model identity');
   return { selected, base, effort };
+}
+
+export function verifyCursorCliModelSelection(cli, modelPreference) {
+  if (cli?.providerVerification?.catalogueVerified && cli?.preference) {
+    const requestedModel = String(modelPreference?.model || '').trim();
+    const requestedEffort = effortName(modelPreference?.effort);
+    if (!requestedModel || !requestedEffort) {
+      throw error('CURSOR_CLI_MODEL_REQUIRED', 'An explicit named model and effort are required');
+    }
+    if (requestedModel !== cli.preference.model || requestedEffort !== cli.preference.effort) {
+      throw error('CURSOR_CLI_MODEL_UNAVAILABLE', 'Provider inspection does not match the requested model and effort');
+    }
+    return {
+      selected: { id: cli.preference.model, name: cli.preference.model },
+      base: requestedModel,
+      effort: requestedEffort,
+    };
+  }
+  if (!cli || !Array.isArray(cli.models) || !cli.models.length) {
+    throw error('CURSOR_CLI_MODELS_UNAVAILABLE', 'Cursor CLI did not advertise usable model variants');
+  }
+  return selectVariant(cli, modelPreference);
 }
 
 export async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli }, options = {}) {
@@ -223,7 +343,7 @@ export async function runCursorCli({ projectPath, prompt, modelPreference, timeo
     return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
   };
   const protocolError = message => error('CURSOR_CLI_PROTOCOL_ERROR', message);
-  return withCliConfig(options, async env => {
+  return withCliConfig({ ...options, cwd }, async (env, config) => {
     await execute(cli.launcher, ['--mode', 'ask', '--print', '--output-format', 'stream-json', '--model', selected.id, '--workspace', cwd,
     ...workspace.additionalRoots.flatMap(root => ['--add-dir', root]), '--trust'], {
     ...options, env, cwd, input: prompt, timeoutMs: timeoutMs ?? 120000, signal, onDispatch,
@@ -252,6 +372,24 @@ export async function runCursorCli({ projectPath, prompt, modelPreference, timeo
       }
     },
   });
-    return { result: terminal.result, sessionId: init.session_id, modelSelection };
+    await config.verifyProjectSlug();
+    return {
+      result: terminal.result,
+      sessionId: init.session_id,
+      modelSelection,
+      mcpIsolation: { ...config.mcpIsolation },
+      cliTransport: 'print',
+    };
   });
 }
+
+export {
+  stopTree as stopCliProcessTree,
+  classifyCliStderrCategory,
+  stderrSummary as summarizeCliStderr,
+  resolveLauncher as resolveCursorCliLauncher,
+  clean as cleanCliText,
+  effortName as normalizeCliEffortName,
+  isFastVariant as isFastCliVariant,
+  stripFastSuffix as stripFastCliSuffix,
+};

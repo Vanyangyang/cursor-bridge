@@ -1,8 +1,8 @@
 {
   "name": "cursor-bridge-workspace",
-  "version": "6.2.0",
+  "version": "7.0.0",
   "private": true,
-  "description": "Evidence-backed Cursor Context Engine search and bounded, explicitly continuous Cursor Agent execution over CDP.",
+  "description": "Evidence-backed Cursor Context Engine (CLI-first) search and bounded, explicitly continuous Cursor Agent execution.",
   "type": "module",
   "main": "server.mjs",
   "engines": {
@@ -17,6 +17,9 @@
     "build:mcp-packages": "node scripts/build-mcp-packages.mjs --out .mcp-package-stage",
     "test": "node scripts/test.mjs",
     "smoke:mcp": "node test/smoke-mcp.mjs",
+    "smoke:cli": "node test/smoke-cli-mcp.mjs",
+    "verify:install": "node scripts/verify-install.mjs",
+    "verify": "npm run build && npm test && npm run smoke:mcp && npm run smoke:cli && npm run verify:install",
     "test:live-minimal": "node test/live-minimal-smoke.mjs",
     "test:live-session": "node test/live-session-continuity.mjs",
     "star-history": "node scripts/update-star-history.mjs"

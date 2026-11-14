@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, renameSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -341,8 +342,12 @@ test('inline ensure path still works without supervisor', async () => {
   const previousPort = process.env.CURSOR_BRIDGE_CDP_PORT;
   const previousExe = process.env.CURSOR_EXE;
   const missingDir = mkdtempSync(join(tmpdir(), 'cb-missing-'));
+  const probeServer = createServer();
+  await new Promise((resolve) => probeServer.listen(0, '127.0.0.1', resolve));
+  const { port: unusedPort } = probeServer.address();
+  await new Promise((resolve) => probeServer.close(resolve));
   process.env.CURSOR_BRIDGE_INLINE_ENSURE = '1';
-  process.env.CURSOR_BRIDGE_CDP_PORT = '1';
+  process.env.CURSOR_BRIDGE_CDP_PORT = String(unusedPort);
   process.env.CURSOR_EXE = join(missingDir, 'missing-cursor-binary');
   try {
     const { ensureCursorRunning } = await import('../launch-cursor.mjs');
@@ -350,9 +355,8 @@ test('inline ensure path still works without supervisor', async () => {
     assert.equal(result.adapterPid, process.pid);
     assert.equal(result.supervisorPid, null);
     assert.match(String(result.launchReason || ''), /^inline-/);
-    if (result.ok === false) {
-      assert.ok(['no-exe', 'running-no-debug', 'timeout', 'port-not-cursor', 'workspace-not-ready'].includes(result.status), result.status);
-    }
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'no-exe');
   } finally {
     if (previousInline == null) delete process.env.CURSOR_BRIDGE_INLINE_ENSURE;
     else process.env.CURSOR_BRIDGE_INLINE_ENSURE = previousInline;

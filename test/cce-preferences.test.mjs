@@ -28,12 +28,12 @@ test('sources are strict and the path follows the model preferences configuratio
   assert.match(resolveCceSourceFile(''), /cursor-bridge[/\\]cce-source\.json$/);
 });
 
-test('missing or disabled storage defaults to ide and show never writes', (t) => {
+test('missing or disabled storage defaults to cli and show never writes', (t) => {
   const { directory, file } = fixture(t);
-  const expected = { version: 1, source: 'ide', updatedAt: null };
+  const expected = { version: 1, source: 'cli', updatedAt: null };
   for (const path of [file, null, undefined, '']) assert.deepEqual(readCcePreferences(path), expected);
   assert.deepEqual(updateCcePreferences(file), expected);
-  assert.deepEqual(updateCcePreferences(file, { action: 'show', source: 'cli' }), expected);
+  assert.deepEqual(updateCcePreferences(file, { action: 'show', source: 'ide' }), expected);
   assert.deepEqual(readdirSync(directory), []);
   assert.throws(() => writeCcePreferences(null, { source: 'cli' }), /disabled/);
   assert.throws(() => updateCcePreferences(null, { action: 'set', source: 'cli' }), /disabled/);

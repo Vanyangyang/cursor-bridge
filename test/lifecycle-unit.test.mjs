@@ -789,6 +789,20 @@ test('Cursor executable discovery normalizes easy Windows and macOS override for
     env: { CURSOR_EXE: '/Volumes/Apps/Cursor.app' },
     existsImpl: (candidate) => candidate === macExe,
   }), { path: macExe, source: 'CURSOR_EXE', platform: 'darwin' });
+
+  for (const platform of ['win32', 'darwin']) {
+    let regCalled = false;
+    assert.equal(findCursorExeDetails({
+      platform,
+      env: { CURSOR_EXE: platform === 'win32' ? 'C:\\missing\\Cursor.exe' : '/missing/Cursor.app' },
+      existsImpl: (candidate) => !/missing/i.test(candidate),
+      execFileSyncImpl() {
+        regCalled = true;
+        return '';
+      },
+    }), null);
+    assert.equal(regCalled, false);
+  }
 });
 
 test('Windows Cursor discovery and process probes never invoke a command shell', () => {

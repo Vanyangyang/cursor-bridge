@@ -179,10 +179,10 @@
     }
   ],
   "latestRelease": {
-    "cursorBridgeVersion": "6.2.0",
-    "status": "regression-verified-live-partial",
-    "verification": "docs/cce-local-provider-6.2.0-verification.md",
-    "focusedLiveCursorCliVersion": "2026.10.22-27dcf5f",
+    "cursorBridgeVersion": "7.0.0",
+    "status": "cce-cli-primary-verified-offline-and-live-smoke",
+    "verification": "CHANGELOG.md",
+    "focusedLiveCursorCliVersion": "2026.11.15",
     "focusedLiveCursorVersion": "3.27.22",
     "pendingLiveCursorVersion": "3.27.22"
   }

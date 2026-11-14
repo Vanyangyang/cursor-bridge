@@ -24,7 +24,14 @@ test('runtime modes are intentionally limited to normal and minimal', () => {
   assert.equal(normalizeCursorRuntimeMode('headless', ''), '');
 });
 
-test('minimal runtime prewarms unless autolaunch is explicitly disabled', () => {
+test('minimal runtime prewarms unless autolaunch is explicitly disabled', (t) => {
+  const hadAutoLaunch = Object.hasOwn(process.env, 'CURSOR_BRIDGE_NO_AUTOLAUNCH');
+  const prevAutoLaunch = process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH;
+  delete process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH;
+  t.after(() => {
+    if (hadAutoLaunch) process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH = prevAutoLaunch;
+    else delete process.env.CURSOR_BRIDGE_NO_AUTOLAUNCH;
+  });
   assert.equal(shouldAutoLaunchCursor(undefined), true);
   assert.equal(shouldAutoLaunchCursor('0'), true);
   assert.equal(shouldAutoLaunchCursor('1'), false);

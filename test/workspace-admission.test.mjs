@@ -21,6 +21,7 @@ class AdmissionBridge extends CursorBridge {
       workspaceFile: fixture.workspaceFile,
       modelPreferencesFile: join(fixture.state, 'model-preferences.json'),
       sessionFile: join(fixture.state, 'sessions.json'),
+      cceSource: 'ide',
       runtimeMode: 'normal',
       workspaceKey: 'default',
       delegationMode: 'on',

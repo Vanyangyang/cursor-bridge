@@ -9,7 +9,7 @@ import { writeWorkspaceBinding } from '../workspace-binding.mjs';
 
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
-    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, runtimeMode: 'normal', ...options });
+    super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null, sessionFile: null, cceSource: 'ide', runtimeMode: 'normal', ...options });
   }
   async _ensureCursor() {}
   _drain() {}

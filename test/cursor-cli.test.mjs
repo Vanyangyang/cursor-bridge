@@ -6,7 +6,14 @@ import { mkdir, mkdtemp, readFile, realpath, rm, unlink, writeFile } from 'node:
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { inspectCursorCli, runCursorCli } from '../cursor-cli.mjs';
+import {
+  classifyCliStderrCategory,
+  inspectCursorCli,
+  readCursorCliIdentity,
+  resolveCursorCliLauncher,
+  runCursorCli,
+  verifyCursorCliModelSelection,
+} from '../cursor-cli.mjs';
 
 const projectPath = await realpath(path.dirname(fileURLToPath(import.meta.url)));
 const cli = { brand: 'Cursor', launcher: { command: process.execPath, args: ['cursor-entry.js'] }, models: [{ id: 'grok-4.7-high', name: 'Grok 4.7 High' }] };
@@ -147,13 +154,25 @@ test('malformed, truncated, missing and duplicate terminal events cannot succeed
   ];
   for (const [output, terminal] of cases) {
     const mock = fakeProcess(call => { call.child.stdout.write(output); setImmediate(() => call.child.finish()); });
-    await assert.rejects(run(mock), error => error.code === 'CURSOR_CLI_PROTOCOL_ERROR' && error.confirmedTerminal === terminal);
+    let captured;
+    await assert.rejects(run(mock), error => {
+      captured = error;
+      return error.code === 'CURSOR_CLI_PROTOCOL_ERROR' && error.confirmedTerminal === terminal;
+    });
+    if (captured?.cliConfigDirectory) await rm(captured.cliConfigDirectory, { recursive: true, force: true });
+    if (captured?.cliDataDirectory) await rm(captured.cliDataDirectory, { recursive: true, force: true });
   }
 });
 
 test('nonzero exit overrides an otherwise successful result', async () => {
   const mock = fakeProcess(call => { call.child.stdout.write(line(init()) + line(result())); call.child.finish(9); });
-  await assert.rejects(run(mock), error => error.code === 'CURSOR_CLI_EXIT_ERROR' && error.exitCode === 9 && error.confirmedTerminal === false);
+  let captured;
+  await assert.rejects(run(mock), error => {
+    captured = error;
+    return error.code === 'CURSOR_CLI_EXIT_ERROR' && error.exitCode === 9 && error.confirmedTerminal === false;
+  });
+  if (captured?.cliConfigDirectory) await rm(captured.cliConfigDirectory, { recursive: true, force: true });
+  if (captured?.cliDataDirectory) await rm(captured.cliDataDirectory, { recursive: true, force: true });
 });
 
 test('timeouts and output overflow terminate the process and await close', async () => {
@@ -188,21 +207,37 @@ test('stderr diagnostics do not expose a full prompt or recognizable credentials
     call.child.stderr.write(`failed ${prompt} api_key=secret-value Bearer credential-value user@example.test Authorization: Bearer FAKE_REVIEW_SECRET_123 {"api_key":"FAKE_JSON_SECRET_456"}`);
     call.child.finish(1);
   });
+  let captured;
   await assert.rejects(run(mock, { prompt }), error => {
+    captured = error;
     assert.doesNotMatch(error.message, /PRIVATE PROBE PROMPT|secret-value|credential-value|user@example|FAKE_REVIEW_SECRET_123|FAKE_JSON_SECRET_456/);
     return error.code === 'CURSOR_CLI_EXIT_ERROR';
   });
+  if (captured?.cliConfigDirectory) await rm(captured.cliConfigDirectory, { recursive: true, force: true });
+  if (captured?.cliDataDirectory) await rm(captured.cliDataDirectory, { recursive: true, force: true });
 });
 
 test('unconfirmed cleanup remains possibly sent and nonterminal', async () => {
   const mock = fakeProcess(() => {});
-  await assert.rejects(run({ ...mock, killTree: async () => false, closeTimeoutMs: 15 }, { timeoutMs: 10 }), error => error.sent === true && error.confirmedTerminal === false);
+  let captured;
+  await assert.rejects(run({ ...mock, killTree: async () => false, closeTimeoutMs: 15 }, { timeoutMs: 10 }), error => {
+    captured = error;
+    return error.sent === true && error.confirmedTerminal === false;
+  });
+  if (captured?.cliConfigDirectory) await rm(captured.cliConfigDirectory, { recursive: true, force: true });
+  if (captured?.cliDataDirectory) await rm(captured.cliDataDirectory, { recursive: true, force: true });
 });
 
 test('an exited parent with an incomplete stream cannot prove that its descendants stopped', async () => {
   for (const output of [line(init()) + '{"partial":', line(init())]) {
     const mock = fakeProcess(call => { call.child.stdout.write(output); call.child.finish(); });
-    await assert.rejects(run({ ...mock, killTree: async () => false }), error => error.code === 'CURSOR_CLI_PROTOCOL_ERROR' && error.sent === true && error.confirmedTerminal === false);
+    let captured;
+    await assert.rejects(run({ ...mock, killTree: async () => false }), error => {
+      captured = error;
+      return error.code === 'CURSOR_CLI_PROTOCOL_ERROR' && error.sent === true && error.confirmedTerminal === false;
+    });
+    if (captured?.cliConfigDirectory) await rm(captured.cliConfigDirectory, { recursive: true, force: true });
+    if (captured?.cliDataDirectory) await rm(captured.cliDataDirectory, { recursive: true, force: true });
     assert.equal(mock.stopped.length, 0);
   }
 });
@@ -218,14 +253,249 @@ test('a real exited parent cannot manufacture terminal proof while its detached 
   const program = `const {spawn}=require('node:child_process');const fs=require('node:fs');const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});c.unref();fs.writeFileSync(${JSON.stringify(pidFile)},String(c.pid));process.stdout.write(${JSON.stringify(line(init()) + '{"partial":')});`;
   const localCli = { ...cli, launcher: { command: process.execPath, args: ['-e', program, '--'] } };
   let ownedPid;
+  let captured;
   try {
-    await assert.rejects(run({}, { cli: localCli, timeoutMs: 5000 }), error => error.code === 'CURSOR_CLI_PROTOCOL_ERROR' && error.confirmedTerminal === false && error.sent === true);
+    await assert.rejects(run({}, { cli: localCli, timeoutMs: 5000 }), error => {
+      captured = error;
+      return error.code === 'CURSOR_CLI_PROTOCOL_ERROR' && error.confirmedTerminal === false && error.sent === true;
+    });
     ownedPid = Number(await readFile(pidFile, 'utf8'));
     assert.ok(Number.isSafeInteger(ownedPid) && ownedPid > 0);
     assert.doesNotThrow(() => process.kill(ownedPid, 0));
   } finally {
     if (!ownedPid) try { ownedPid = Number(await readFile(pidFile, 'utf8')); } catch {}
     if (Number.isSafeInteger(ownedPid) && ownedPid > 0) try { process.kill(ownedPid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+    if (captured?.cliConfigDirectory) await rm(captured.cliConfigDirectory, { recursive: true, force: true });
+    if (captured?.cliDataDirectory) await rm(captured.cliDataDirectory, { recursive: true, force: true });
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('selectVariant resolves fast and cursor-prefixed variants strictly without crossing speed tiers', async () => {
+  const mixedCli = {
+    brand: 'Cursor',
+    launcher: cli.launcher,
+    models: [
+      { id: 'cursor-grok-4.6-medium', name: 'Grok 4.6 Medium' },
+      { id: 'cursor-grok-4.6-medium-fast', name: 'Grok 4.6 Medium Fast' },
+    ],
+  };
+
+  const fastMock = fakeProcess(call => {
+    call.child.stdout.write(line(init({ model: 'Grok 4.6 Medium Fast' })) + line(result()));
+    call.child.finish();
+  });
+  const fastAnswer = await run(fastMock, {
+    cli: mixedCli,
+    modelPreference: { model: 'grok-4.6-fast', effort: 'medium' },
+  });
+  assert.equal(fastAnswer.result, 'final answer');
+  assert.equal(fastAnswer.modelSelection.cliModel, 'cursor-grok-4.6-medium-fast');
+  assert.equal(fastAnswer.modelSelection.effectiveModel, 'grok-4.6-fast');
+  assert.equal(fastAnswer.modelSelection.effectiveEffort, 'medium');
+  assert.equal(fastMock.calls[0].args[fastMock.calls[0].args.indexOf('--model') + 1], 'cursor-grok-4.6-medium-fast');
+
+  const standardMismatchMock = fakeProcess(call => {
+    call.child.stdout.write(line(init({ model: 'Grok 4.6 Medium Fast' })) + line(result()));
+  });
+  await assert.rejects(
+    run(standardMismatchMock, {
+      cli: mixedCli,
+      modelPreference: { model: 'grok-4.6', effort: 'medium' },
+    }),
+    error => error.code === 'CURSOR_CLI_MODEL_MISMATCH' && error.confirmedTerminal === true,
+  );
+  assert.equal(standardMismatchMock.calls[0].args[standardMismatchMock.calls[0].args.indexOf('--model') + 1], 'cursor-grok-4.6-medium');
+  assert.equal(standardMismatchMock.stopped.length, 1);
+
+  const missingFastMock = fakeProcess(() => assert.fail('missing fast variant must not spawn'));
+  await assert.rejects(
+    run(missingFastMock, {
+      cli: { ...mixedCli, models: [{ id: 'cursor-grok-4.6-medium', name: 'Grok 4.6 Medium' }] },
+      modelPreference: { model: 'grok-4.6-fast', effort: 'medium' },
+    }),
+    { code: 'CURSOR_CLI_MODEL_UNAVAILABLE' },
+  );
+  assert.equal(missingFastMock.calls.length, 0);
+});
+
+test('runCursorCli isolates MCPs via CURSOR_DATA_DIR, verifies project slug, and detects identity shifts', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'cce-cli-identity-'));
+  try {
+    const entry = path.join(root, 'index.js');
+    const exe = process.execPath;
+    await writeFile(entry, '// v1\n');
+    const id1 = await readCursorCliIdentity({ launcher: { command: exe, args: [entry], wrapper: path.join(root, 'cursor-agent.ps1') }, env: process.env });
+    assert.equal(id1.available, true);
+    await writeFile(entry, '// version-2-with-different-size\n');
+    const id2 = await readCursorCliIdentity({ launcher: { command: exe, args: [entry], wrapper: path.join(root, 'cursor-agent.ps1') }, env: process.env });
+    assert.notEqual(id1.key, id2.key);
+
+    let seenDataDir;
+    const mock = fakeProcess(async call => {
+      const dataDir = call.options.env.CURSOR_DATA_DIR;
+      seenDataDir = dataDir;
+      assert.ok(dataDir);
+      const projects = await (await import('node:fs/promises')).readdir(path.join(dataDir, 'projects'));
+      assert.equal(projects.length, 1);
+      const disabled = JSON.parse(await readFile(path.join(dataDir, 'projects', projects[0], 'mcp-disabled.json'), 'utf8'));
+      assert.deepEqual(disabled, ['mock-mcp']);
+      call.child.stdout.write(line(init()) + line(result()));
+      call.child.finish();
+    });
+    const out = await runCursorCli(
+      { projectPath, prompt: 'hello', modelPreference: preference, cli },
+      { ...mock, enumerateMcpImpl: async () => ({ ids: ['mock-mcp'], partialErrorCategory: null }) },
+    );
+    assert.equal(out.cliTransport, 'print');
+    assert.equal(out.mcpIsolation.enabled, true);
+    assert.equal(out.mcpIsolation.disabledCount, 1);
+    assert.equal(out.mcpIsolation.verified, true);
+    await assert.rejects(readFile(path.join(seenDataDir, 'projects')), { code: 'ENOENT' });
+
+    const mismatchMock = fakeProcess(async call => {
+      await mkdir(path.join(call.options.env.CURSOR_DATA_DIR, 'projects', 'different-slug'), { recursive: true });
+      call.child.stdout.write(line(init()) + line(result()));
+      call.child.finish();
+    });
+    const mismatchOut = await runCursorCli(
+      { projectPath, prompt: 'hello', modelPreference: preference, cli },
+      { ...mismatchMock, enumerateMcpImpl: async () => ({ ids: ['mock-mcp'], partialErrorCategory: null }) },
+    );
+    assert.equal(mismatchOut.mcpIsolation.verified, false);
+    assert.equal(mismatchOut.mcpIsolation.reason, 'slug_mismatch');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('resolveCursorCliLauncher discovers Windows/POSIX candidates and non-date version fallbacks', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'cce-cli-launcher-'));
+  try {
+    const winUser = path.join(root, 'win-user');
+    const localBin = path.join(winUser, '.local', 'bin');
+    const customVersion = path.join(localBin, 'versions', 'custom-build');
+    await mkdir(customVersion, { recursive: true });
+    const wrapper = path.join(localBin, 'cursor-agent.ps1');
+    const customNode = path.join(customVersion, 'node.exe');
+    const customEntry = path.join(customVersion, 'index.js');
+    await writeFile(wrapper, '& "$PSScriptRoot\\versions\\custom-build\\node.exe" "$PSScriptRoot\\versions\\custom-build\\index.js"\n');
+    await writeFile(customNode, '');
+    await writeFile(customEntry, '');
+
+    const fallbackResolved = await resolveCursorCliLauncher({
+      platform: 'win32',
+      env: { USERPROFILE: winUser, PATH: '' },
+    });
+    assert.equal(fallbackResolved.command, await realpath(customNode));
+    assert.deepEqual(fallbackResolved.args, [await realpath(customEntry)]);
+    assert.equal(fallbackResolved.wrapper, await realpath(wrapper));
+
+    const dateVersion = path.join(localBin, 'versions', '2026.11.14-abc1234');
+    await mkdir(dateVersion, { recursive: true });
+    const dateNode = path.join(dateVersion, 'node.exe');
+    const dateEntry = path.join(dateVersion, 'index.js');
+    await writeFile(dateNode, '');
+    await writeFile(dateEntry, '');
+
+    const datedResolved = await resolveCursorCliLauncher({
+      platform: 'win32',
+      env: { USERPROFILE: winUser, PATH: '' },
+    });
+    assert.equal(datedResolved.command, await realpath(dateNode));
+
+    const winAppData = path.join(root, 'win-roaming');
+    const exeDir = path.join(winAppData, 'cursor-agent');
+    await mkdir(exeDir, { recursive: true });
+    const exePath = path.join(exeDir, 'cursor-agent.exe');
+    await writeFile(exePath, '');
+    const exeResolved = await resolveCursorCliLauncher({
+      platform: 'win32',
+      env: { APPDATA: winAppData, PATH: '' },
+    });
+    assert.equal(exeResolved.command, await realpath(exePath));
+
+    const posixHomeA = path.join(root, 'posix-a');
+    await mkdir(path.join(posixHomeA, '.local', 'bin'), { recursive: true });
+    const posixBinA = path.join(posixHomeA, '.local', 'bin', 'cursor-agent');
+    await writeFile(posixBinA, '#!/bin/sh\n');
+    const posixResolvedA = await resolveCursorCliLauncher({
+      platform: 'linux',
+      env: { HOME: posixHomeA, PATH: '' },
+    });
+    assert.equal(posixResolvedA.command, await realpath(posixBinA));
+
+    const posixHomeB = path.join(root, 'posix-b');
+    await mkdir(path.join(posixHomeB, '.cursor', 'bin'), { recursive: true });
+    const posixBinB = path.join(posixHomeB, '.cursor', 'bin', 'agent');
+    await writeFile(posixBinB, '#!/bin/sh\n');
+    const posixResolvedB = await resolveCursorCliLauncher({
+      platform: 'darwin',
+      env: { HOME: posixHomeB, PATH: '' },
+    });
+    assert.equal(posixResolvedB.command, await realpath(posixBinB));
+
+    await assert.rejects(
+      resolveCursorCliLauncher({ platform: 'linux', env: { HOME: path.join(root, 'empty-home'), PATH: '' } }),
+      { code: 'CURSOR_CLI_UNAVAILABLE' },
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('classifyCliStderrCategory and verifyCursorCliModelSelection validate stderr categories and model variants', async () => {
+  assert.equal(classifyCliStderrCategory(''), null);
+  assert.equal(classifyCliStderrCategory('Not authenticated. Please login.'), 'auth');
+  assert.equal(classifyCliStderrCategory('Workspace is untrusted'), 'trust');
+  assert.equal(classifyCliStderrCategory('ECONNREFUSED 127.0.0.1:443'), 'network');
+  assert.equal(classifyCliStderrCategory('HTTP 429 too many requests'), 'rate_limit');
+  assert.equal(classifyCliStderrCategory('Unknown model selected'), 'model');
+  assert.equal(classifyCliStderrCategory('Request timed out'), 'timeout');
+  assert.equal(classifyCliStderrCategory('Unhandled assertion failure'), 'unknown');
+
+  const authMock = fakeProcess(call => {
+    call.child.stderr.write('Not authenticated. Run agent login first. Bearer sk-secret-token-123456\n');
+    call.child.finish(1);
+  });
+  await assert.rejects(
+    inspectCursorCli({ ...authMock, launcher: cli.launcher }),
+    err => err.code === 'CURSOR_CLI_EXIT_ERROR'
+      && err.diagnosticCategory === 'auth'
+      && /authentication failed/i.test(err.message)
+      && !err.message.includes('sk-secret-token'),
+  );
+
+  const selected = verifyCursorCliModelSelection(
+    { brand: 'Cursor', models: [{ id: 'cursor-grok-4.6-medium-fast', name: 'Grok 4.6 Medium Fast' }] },
+    { model: 'grok-4.6-fast', effort: 'medium' },
+  );
+  assert.equal(selected.selected.id, 'cursor-grok-4.6-medium-fast');
+  assert.equal(selected.effort, 'medium');
+
+  assert.throws(
+    () => verifyCursorCliModelSelection(cli, { model: 'auto', effort: 'high' }),
+    { code: 'CURSOR_CLI_MODEL_REQUIRED' },
+  );
+  assert.throws(
+    () => verifyCursorCliModelSelection(cli, { model: 'missing-model', effort: 'high' }),
+    { code: 'CURSOR_CLI_MODEL_UNAVAILABLE' },
+  );
+  assert.throws(
+    () => verifyCursorCliModelSelection({ brand: 'Cursor', models: [] }, preference),
+    { code: 'CURSOR_CLI_MODELS_UNAVAILABLE' },
+  );
+
+  const providerCli = {
+    brand: 'Cursor',
+    providerVerification: { catalogueVerified: true },
+    preference: { model: 'example-reasoner', effort: 'xhigh' },
+    models: [{ id: 'example-reasoner' }],
+  };
+  const providerSelected = verifyCursorCliModelSelection(providerCli, { model: 'example-reasoner', effort: 'xhigh' });
+  assert.equal(providerSelected.selected.id, 'example-reasoner');
+  assert.throws(
+    () => verifyCursorCliModelSelection(providerCli, { model: 'example-reasoner', effort: 'low' }),
+    { code: 'CURSOR_CLI_MODEL_UNAVAILABLE' },
+  );
 });

@@ -3,13 +3,13 @@
   <a href="https://cursor.com/changelog"><img alt="Tracking the latest Cursor releases" src="https://img.shields.io/badge/CURSOR_RELEASES-STAYING_IN_SYNC-00C7B7?style=for-the-badge&amp;logo=cursor&amp;logoColor=white" /></a>
 </p>
 
-<p align="center">If you use this, star the repo.</p>
+<p align="center">If Cursor Bridge helps your workflow, star the repo.</p>
 
-<p align="center"><sub><strong>Compatibility:</strong> I only keep Cursor Bridge working against the latest Cursor. Older Cursor versions are not something I actively support. If you need a historical Cursor, open the <a href="./COMPATIBILITY.md">compatibility and update history</a> and switch to the archived Bridge release listed for that Cursor, if one exists. Archived releases get no further fixes. If nothing there fits, use <strong>Fork</strong> in the top-right corner and keep the adaptation in your own fork.</sub></p>
+<p align="center"><sub><strong>Compatibility:</strong> Cursor Bridge tracks the latest Cursor releases. For older Cursor releases, check <a href="./COMPATIBILITY.md">compatibility and update history</a> and switch to an archived release if one matches; archived releases receive no further updates.</sub></p>
 
-# Cursor Bridge + Grok Build Supervisor
+# Cursor Bridge
 
-[简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [AI install](./docs/ai-install.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
+[简体中文](./README.zh-CN.md) · [Changelog](./CHANGELOG.md) · [Compatibility](./COMPATIBILITY.md) · [AI install](./docs/ai-install.md) · [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) · [Issues](https://github.com/Vanyangyang/cursor-bridge/issues)
 
 [![Release](https://img.shields.io/github/v/release/Vanyangyang/cursor-bridge?style=flat-square&logo=github)](https://github.com/Vanyangyang/cursor-bridge/releases)
 [![Stars](https://img.shields.io/github/stars/Vanyangyang/cursor-bridge?style=flat-square&logo=github)](https://github.com/Vanyangyang/cursor-bridge)
@@ -18,83 +18,107 @@
 [![License](https://img.shields.io/github/license/Vanyangyang/cursor-bridge?style=flat-square)](./LICENSE)
 
 > [!WARNING]
-> **Windows only:** Cursor Bridge and Grok Build Supervisor currently support Windows only. macOS and Linux are not supported or covered by end-to-end acceptance.
+> **Windows primary support:** Cursor Bridge's live-tested runtime and end-to-end acceptance target **Windows**. macOS and Linux have unit and protocol smoke coverage (`macos-basic` CI) for CLI/MCP paths, not full live OS acceptance.
 
-I maintain two MCP plugins. They install separately. Both work with Codex, Claude Code, Grok Build, and Pi. If your AI client speaks MCP but is not one of those four, have the current AI read the [AI install playbook](./docs/ai-install.md) and install the MCP server plus skills itself.
+Cursor Bridge connects your coding agent (**Codex**, **Claude Code**, **Grok Build**, **Pi**, or any MCP-capable host) to **Cursor Context Engine (CCE)**—and optionally to bounded `cursor_do` Agent tasks—with verifiable `path:line` evidence.
 
-| Plugin | Use it for | Documentation |
-|---|---|---|
-| Cursor Bridge | Codex, Claude Code, Grok Build, or Pi can ask Cursor CCE about a project and get source-anchored answers. Optional `cursor_do` can run a clearly scoped Cursor Agent task. | [Continue below](#cursor-bridge) |
-| Grok Build Supervisor | Codex, Claude Code, or Pi keep the plan and the review. Grok Build does the implementation. The supervisor follows the run and the checks. | [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md) |
-
-## Use Cursor and Grok Build from the client you already have
-
-I still use Codex as my daily client, and that is the one I recommend. Claude Code and Pi work the same way. By AI client I mean the coding app you already chat with, not the Cursor Agent that `cursor_do` can run, and not an MCP protocol client.
-
-The plugins do not depend on each other. Install Cursor Bridge if you want that client to use Cursor, or Grok Build Supervisor if you want it to coordinate Grok Build. Installing both is how you get both in one conversation.
-
-```text
-Codex (recommended) / Claude Code / Pi
-      your existing AI client
-              │
-          optional plugins
-          ┌───┴──────────────┐
-          ▼                  ▼
-    Cursor Bridge     Grok Build Supervisor
-   CCE + cursor_do       supervised Grok Build
-```
-
-I usually start with `cursor_context_engine` when I need compact, source-anchored project context. I reach for `cursor_do` when a bounded Cursor Agent pass is faster than doing the edit myself. The current AI client still reviews the real diff and tests. `/grok_execute on` is when Grok Build should implement. The current client still plans, watches progress, answers questions, and verifies.
-
-The plugins attach to the client you already use. I did not add a separate orchestrator.
-
-## Grok Build Supervisor (New)
-
-Codex, Claude Code, or Pi stay on planning and review, and Grok Build does the implementation. The supervisor follows the run and the checks.
-
-It installs and updates separately from Cursor Bridge.
-
-[Read the introduction, installation, and usage guide →](./plugins/grok-build-supervisor/README.md)
-
-## Cursor Bridge
-
-This is the plugin I use when I want Codex, Claude Code, Grok Build, or Pi to go through Cursor CCE for project questions. `cursor_do` is optional: it sends a clearly scoped task to Cursor Agent.
+Starting in **Cursor Bridge 7.0.0**, **CCE CLI (`cli`)** is the **primary maintenance route and fresh-install default**. Existing saved `cce-source.json` selections are preserved intact across upgrades, while upgrades without an existing `cce-source.json` (such as migrating from 6.0.x or never running `/cce` before) adopt `cli` by default; Cursor IDE/Agents over CDP (`ide`) remains available as an explicit fallback source. See [Migrating from 6.x to 7.0.0](#migrate-to-7-0) for exact CLI download and required configuration steps.
 
 > [!IMPORTANT]
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update an existing installation](#windows-update-migration) to clean up old-cache processes once. Later updates use the normal flow.
 
-> [!NOTE]
-> See [Compatibility and update history](./COMPATIBILITY.md) and the [latest release](https://github.com/Vanyangyang/cursor-bridge/releases) for the current pairing and its evidence boundary.
+## What changed in 7.0.0
 
-CCE and `cursor_do` accept optional `request_context`, for example `{"sender":"model","source":"mixed"}`. `sender` declares who directly sends the request (`user/model/unknown`); `source` distinguishes user requirements from model additions (`user/model/mixed/unknown`). Separate both in mixed prompt text. Omitted values remain unknown, are not inferred from the selected model, and never grant extra permission. Task status reports the declaration for that turn.
+- **CCE CLI is now the primary route and fresh-install default (`cli`):** No Cursor IDE window needs to be launched for CCE queries. Existing upgrades never overwrite a previously saved `cce-source.json`, while upgrades without one adopt `cli` automatically.
+- **High-speed isolated CLI pipeline:**
+  - **Private MCP isolation (`CURSOR_DATA_DIR` / `mcp-disabled.json`):** Disables external/host MCP startup overhead inside CCE CLI child processes (set `CURSOR_BRIDGE_CCE_CLI_MCP=native` to opt out).
+  - **Cached official preflight (`CURSOR_BRIDGE_CLI_INSPECT_TTL_MS=300000`):** Deduplicates concurrent CLI metadata inspections and invalidates automatically on launcher/identity/model/source changes or errors.
+  - **Warm persistent single-root ACP sessions (`cursor-cli-acp.mjs`):** Reuses an authenticated Ask-mode ACP session with strict two-step model/effort/fast/`mode="ask"` read-back checks before sending prompts, cleanly falling back to `--print` on cold starts or capability mismatches before dispatch.
+  - **Independent concurrency lane (`CURSOR_BRIDGE_CCE_CLI_CONCURRENCY=3`):** Runs up to 3 CLI CCE queries concurrently without blocking IDE FIFO locks.
+- **Reliable CLI diagnostics and recoverable initialization:**
+  - `cursor_cce(action="doctor")` / `/cce doctor` runs non-mutating launcher, auth/models, explicit model selection, local provider preload, and workspace readiness checks.
+  - `cursor_init` in CLI mode validates launcher + model readiness upfront and returns structured recoverable states (`cli-unavailable`, `cli-auth-required`, `cli-model-required` with `availableModelsSample`, `cli-model-unavailable`, `cli-provider-unavailable`) with actionable `nextStep` instead of leaving opaque failures.
+- **Hardened installation & CI verification (`npm run verify`):** Deterministic `scripts/verify-install.mjs`, end-to-end stdio CLI/ACP smoke (`npm run smoke:cli`), bundle freshness verification, and fail-closed `CURSOR_EXE` isolation in tests so offline test runs never spawn your desktop Cursor instance.
 
-> **Latest release: Cursor Bridge 6.2.0.** Cursor IDE/Agents (`ide`) remains the default CCE source—no Cursor CLI or CLI credential file is needed to use CCE through a compatible Cursor IDE/Agents installation, and upgrades never switch to CLI automatically. CCE CLI is **experimental and not yet stable**. The opt-in `/cce cli` source includes an own-key route powered by Cursor's standalone official `agent-local` build and a local credential file for OpenAI-compatible Responses providers, while preserving independent model/effort defaults, workspace guards, queue admission, and the `CCE_SEARCH_RESULT` contract. See [own-key setup](./docs/cce-cli-provider.md) and the [6.2.0 verification scope](./docs/cce-local-provider-6.2.0-verification.md). The completed live IDE acceptance baseline below remains historical evidence.
+<a id="migrate-to-7-0"></a>
 
-> **Live-tested environment:** Windows 11 + Cursor **3.23.12**, verified from the CLI and embedded package metadata. Cursor Bridge 6.0.8 fixes premature model-menu failure with a unique composer, linked menus, a stable hit-tested point, bounded waiting, and one verified recovery when the trigger stays closed. See the [patch verification scope](./docs/cursor-6.0.8-model-picker-verification.md) for Grok 4.7/high tests and host-loading boundaries. The [6.0.7 acceptance](./docs/cursor-3.23.12-verification.md) covers exact project selection, collapsed History, IDE and Agents Window, scoped cancellation, parallel Agents, session recovery, workspace registration, and single-window restoration. Hidden mode verifies the current model and effort; change them in normal mode first. Requires Node.js 18+, Cursor installed and signed in, and a local project Cursor can open. macOS has not yet been live-tested.
+## Migrating from 6.x to 7.0.0 (Cursor CLI download & required setup)
+
+### Who needs to migrate and how to keep IDE
+
+- **Fresh installs and 6.x upgrades without an existing `cce-source.json`:** Starting in 7.0.0, CCE defaults to `cli` (Cursor Agent CLI). Complete the 3 steps below to install/sign in to Cursor CLI and configure your named model. If you only want desktop Cursor IDE/Agents for now, run `/cce ide` once (or `cursor_cce(action="set", source="ide")`) after upgrading to persist `ide` in `%APPDATA%\cursor-bridge\cce-source.json`.
+- **Upgrades with an existing `%APPDATA%\cursor-bridge\cce-source.json`:** Your saved choice (`cli` or `ide`) is preserved across upgrades. If you used early 6.1/6.2 `cli`, run `/cce doctor` once after updating to verify launcher, auth, and model selection.
+
+### Step 1: Download and install the official Cursor CLI (`cursor-agent`)
+
+Run the official installer in a **new terminal**:
+
+- **Windows PowerShell:**
+
+```powershell
+irm 'https://cursor.com/install?win32=true' | iex
+```
+
+- **macOS / Linux:**
+
+```bash
+curl https://cursor.com/install -fsS | bash
+```
+
+Reopen your terminal (and restart your AI client so `PATH` refreshes), then verify:
+
+```powershell
+cursor-agent --version
+```
+
+> On Windows the installer places the CLI under `%LOCALAPPDATA%\cursor-agent` by default. Cursor Bridge probes `%LOCALAPPDATA%\cursor-agent`, `%USERPROFILE%\.local\bin`, `%APPDATA%\cursor-agent`, and `PATH` automatically, or you can pin an absolute launcher path with `CURSOR_BRIDGE_CLI_PATH`.
+
+### Step 2: Sign in and inspect available models
+
+```powershell
+cursor-agent login
+cursor-agent status
+cursor-agent models
+```
+
+- Complete authentication in the prompt/browser. For non-interactive environments, export `CURSOR_API_KEY` (or see [`docs/cce-cli-provider.md`](./docs/cce-cli-provider.md) for the experimental own-key `agent-local` Responses route).
+- Confirm `cursor-agent models` prints explicit named model variants (such as `grok-4.6-medium-fast`).
+
+### Step 3: Required Cursor Bridge configuration (`cursor_model`, doctor, and init)
+
+1. **Set an explicit named model and effort (`Auto` and `default` are rejected):**
+   Run `cursor_model(action="set", target="cce", model="grok-4.6-fast", effort="medium")` (or another named model/effort shown by `cursor-agent models`; persisted in `%APPDATA%\cursor-bridge\model-preferences.json`).
+2. **Run `/cce doctor`:**
+   Execute `/cce doctor` or `cursor_cce(action="doctor")` and confirm `ready: true` / `status: "ready"`.
+3. **Initialize your project workspace:**
+   Run `cursor_init(path="C:\\absolute\\path\\to\\project")` to persist the workspace binding and start background Ask-mode ACP warmup.
+
+> [!TIP]
+> To return CCE to desktop Cursor IDE (`ide`), or when delegating edits through desktop `cursor_do`, run `/cce ide` (`cursor_cce(action="set", source="ide")`). Both sources share your workspace binding and `cursor_model` defaults across restarts.
 
 ## What is CCE?
 
-Cursor Context Engine (CCE) is Cursor's existing project index and Agent search, exposed to Codex, Claude Code, Grok Build, and Pi over MCP.
+Cursor Context Engine (CCE) exposes Cursor's project index, semantic retrieval, exact search, reference tracing, and Agent exploration over MCP. Ask a project architecture or ownership question once; Bridge returns compact `path:line` evidence (`CCE_SEARCH_RESULT`), separating verified call chains from similarity or gaps instead of dumping raw search noise into your main Agent context.
 
-Ask the project question once. Cursor picks semantic retrieval, exact search, source reading, reference tracing, or Agent exploration as needed. Bridge returns compact `path:line` evidence with relevance notes. It does not dump the whole search into the main Agent context.
+CCE and `cursor_do` also accept optional `request_context` (`{"sender":"model","source":"mixed"}`) to record whether the prompt originated from the user or the driving model. Cursor Bridge does not bypass or manage your Cursor subscription; billing, quotas, and BYOK settings stay inside your signed-in Cursor CLI/account or your explicit local `cli_provider`.
 
-I wrote Bridge so the main agent does not have to guess directories or repeat `grep` just to find the same code.
-
-Cursor Bridge does not inspect or manage your Cursor subscription. Models, quotas, and BYOK options stay whatever your signed-in Cursor already has.
+> [!NOTE]
+> **Historical IDE/Agents acceptance & current pairing:** The last full IDE CDP acceptance remains **Windows 11 + Cursor 3.23.12** (**Grok 4.7/high**, verified across **IDE and Agents Window**, `minimal` and `normal` runtime modes). See [Compatibility and update history](./COMPATIBILITY.md) and the [patch verification scope](./docs/cursor-6.0.8-model-picker-verification.md) for scoped details and evidence boundaries.
 
 ## Quick start
 
-### 1. Choose your AI client and install what you need
+> [!IMPORTANT]
+> **Prerequisite for the default `cli` route:** Install Cursor CLI in PowerShell with `irm 'https://cursor.com/install?win32=true' | iex` and run `cursor-agent login` (full guide: [Migrating from 6.x to 7.0.0](#migrate-to-7-0)). Prefer desktop Cursor IDE without CLI? Switch persistently with `/cce ide` after installing the plugin.
 
-Commands are grouped by the AI client you already use. Cursor Bridge and Grok Build Supervisor install separately: take one, or both.
+### 1. Install Cursor Bridge in your AI client
+
+Commands are grouped by the AI client you already chat with:
 
 #### Codex (recommended)
 
 ```bash
 codex plugin marketplace add Vanyangyang/cursor-bridge --ref main
 codex plugin add cursor-bridge@vanyangyang
-# Optional: add the Supervisor for the combined Cursor + Grok Build workflow
-codex plugin add grok-build-supervisor@vanyangyang
 ```
 
 #### Claude Code
@@ -102,8 +126,6 @@ codex plugin add grok-build-supervisor@vanyangyang
 ```bash
 claude plugin marketplace add Vanyangyang/cursor-bridge
 claude plugin install cursor-bridge@vanyangyang
-# Optional: add the Supervisor for the combined Cursor + Grok Build workflow
-claude plugin install grok-build-supervisor@vanyangyang
 ```
 
 #### Grok Build
@@ -114,121 +136,107 @@ grok plugin install Vanyangyang/cursor-bridge --trust
 grok plugin enable cursor-bridge
 ```
 
-`grok plugin install Vanyangyang/cursor-bridge --trust` also works without adding the marketplace first.
+(`grok plugin install Vanyangyang/cursor-bridge --trust` also works directly.)
 
 #### Pi
 
 ```bash
 pi install npm:pi-cursor-bridge
-# Optional: add the Supervisor for the combined Cursor + Grok Build workflow
-pi install npm:pi-grok-build-supervisor
 ```
 
 <a id="other-mcp-hosts"></a>
 
 #### Other MCP-capable AI clients
 
-Give this sentence to the AI client you are already using:
+Give this prompt to the AI client you are already using:
 
 ```text
 Read https://github.com/Vanyangyang/cursor-bridge/blob/main/docs/ai-install.md completely. Install Cursor Bridge into this AI client. Follow every step. Report against the completion standard at the end. Use only the dedicated generic npm package named in the playbook. Do not invent a marketplace plugin, do not use a Pi package, and do not publish anything.
 ```
 
-The playbook tells the current AI to detect the client. Codex, Claude Code, Grok, and Pi stay on their marketplace commands. Anything else installs `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm`. It then says where the MCP bundle and skills landed, so this AI client can register them, restart, and initialize the workspace. I do not treat that path as a first-class client, and I have not live-tested it. Cursor Bridge is still Windows-only.
+The playbook routes Codex, Claude Code, Grok, and Pi back to their first-class marketplace commands, and instructs any other MCP host to install `vanyangyang-cursor-bridge` into `%LOCALAPPDATA%\cursor-bridge\npm`. It tells the AI client where the bundle and skills landed so this AI client can register them, restart, and initialize the workspace. I do not treat that path as a first-class client and have not live-tested it.
 
 ### 2. Restart or reload your AI client
 
-Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current AI client. Grok keeps plugins disabled until you run `grok plugin enable cursor-bridge`; `--trust` allows the plugin's MCP server and hooks to run.
+Restart Codex and start a new task, restart Claude Code or run `/reload-plugins`, reload Grok via `/plugins` or a new session, restart Pi, or restart your generic MCP host. Open sessions do not hot-load newly installed MCP tools or skills.
 
-### 3. Initialize the plugin you installed
+### 3. Configure explicit CCE model, check CLI readiness, and initialize your workspace
 
-If you installed Cursor Bridge, Pi automatically binds it to the directory where Pi was started. Other AI clients can initialize or switch the project in natural language; Pi can use the same sentence when you intentionally want a different project:
+Account CLI requires an explicit named model and reasoning effort (`Auto` and `default` are rejected rather than silently selected). Tell your agent or set it once persistently:
 
 ```text
-Initialize CCE workspace to C:\absolute\path\to\project
+Set my CCE default model to grok-4.6-fast with medium effort, verify with /cce doctor, and initialize CCE workspace to C:\absolute\path\to\project
 ```
 
-Initialization is persistent. Repeat the sentence with another absolute path whenever you want to switch projects.
+- **Pi** automatically binds the directory where Pi was started; pass a new absolute path whenever you want to switch workspaces.
+- **If `cursor_init` returns `ready: false` (`cli-unavailable`, `cli-auth-required`, `cli-model-required`, `cli-model-unavailable`, or `cli-provider-unavailable`):** Your workspace binding is still saved (`bindingPersisted: true`), and the response includes `errorCode`, `availableModelsSample` (when available), and the exact `nextStep`. Fix the prerequisite (for example `cursor-agent login` or `cursor_model`) and re-run `cursor_init` or `/cce doctor`. To switch back to Cursor IDE/Agents instead, run `/cce ide`.
 
-If you installed Grok Build Supervisor, initialize once (`$grok-build-supervisor init` in Codex), then select **Enable Grok Execution** in the project where Grok should work. **Disable Grok Execution** returns the AI client to normal execution without closing the terminal. Neither control needs an extra argument. See the [Grok guide](./plugins/grok-build-supervisor/README.md#install) for other AI clients and compatibility commands.
-
-### 4. Try a real question
-
-With Cursor Bridge, ask the actual project question:
+### 4. Ask a real project question
 
 ```text
 Who owns this state, and what is the complete path from save loading to runtime use and save write-back?
 ```
 
-With Grok Build Supervisor enabled, send your normal implementation task; the current AI client handles planning and verification while Grok Build executes.
-
 > [!TIP]
-> **Recommended on Windows 11: minimal runtime**
+> **Recommended on Windows 11: minimal runtime (when using IDE/Agents or `cursor_do`)**
 >
-> After initialization, say “Switch CCE to minimal mode.” The real Cursor process, project index, Agent DOM, and task queue keep running in the background. Top-level windows stay hidden. `cursor_context_engine` and `cursor_do` still work; you just do not see the Cursor UI.
+> When routing CCE through `ide` or running `cursor_do`, say “Switch CCE to minimal mode.” Cursor, its project index, Agent DOM, and task queue keep running in the background while top-level Windows windows stay hidden. Cursor 3.23.12 hidden CCE is verified in both UI types; hidden mode verifies the current model and effort (change them in `normal` mode first if the chat uses `Auto`).
 >
-> Cursor 3.23.12 hidden CCE is verified in both UI types. Hidden mode verifies the current model and effort; if you change the requested selection or the chat uses Auto, switch to normal mode first.
->
-> **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and remains hidden. Before you need the Cursor UI again, say “Switch CCE to normal mode.”
+> **Trade-off:** while minimal mode is active, manually opening Cursor reuses the guarded single-instance process and stays hidden. When you need the Cursor UI again, say “Switch CCE to normal mode.”
 
 ## Compatibility
 
-See [Compatibility and update history](./COMPATIBILITY.md) and the [latest release](https://github.com/Vanyangyang/cursor-bridge/releases) for the current pairing, evidence boundary, and archived installation instructions. If Agents Window is not available, CCE uses the IDE when Cursor exposes that surface. Running FIFO tasks publish an Agent ID when the current editor exposes one; `cursor_task_control` cancel then stops that exact task. If no ID is published, Bridge does not guess-click Stop.
+See [Compatibility and update history](./COMPATIBILITY.md) and [Releases](https://github.com/Vanyangyang/cursor-bridge/releases) for current compatibility pairings, evidence scopes, and archived versions.
 
-Supported AI clients are Codex, Claude Code, Grok Build, and Pi. Those are the ones I live-test. Other MCP-capable AI clients can use the [AI install playbook](./docs/ai-install.md). They do not get marketplace updates, and they are not in the live-tested set. After installing on Grok, run `grok plugin enable cursor-bridge`, then `/plugins` and `r`, or start a new session.
+First-class live-tested AI clients are **Codex**, **Claude Code**, **Grok Build**, and **Pi**. Generic MCP hosts use [`docs/ai-install.md`](./docs/ai-install.md) (`docs/ai-install.md`) without first-class marketplace updates.
 
-## Using CCE and `cursor_do`
+## Choose and diagnose the CCE source
 
-`cursor_context_engine` follows ownership, call chains, data flow, registrations, and cross-module relationships. It comes back with compact source anchors, coverage, gaps, and confidence.
+Fresh installations default to **`cli`** (Cursor Agent CLI). Existing `cce-source.json` preferences are preserved intact on upgrade. Neither source silently falls back to the other on failure.
 
-`cursor_do` sends a clearly scoped Cursor Agent task and returns a stable task ID for collection and recovery. It is optional. I use it when a bounded Cursor pass is the faster path. The primary Agent still reviews the result, the real workspace changes, and the verification evidence.
-
-Model choice sticks if you say it out loud: “Use GPT-5.6 Terra with max effort for CCE” or “Use GPT-5.6 Sol with high effort for cursor_do.” `cursor_model` stores separate defaults for CCE and `cursor_do` across AI client tasks and restarts until you change or reset them. Before every prompt, Bridge applies the selection and checks it. If that check fails, it stops instead of silently falling back to Auto.
-
-## Choose the CCE source
-
-> **Experimental CLI:** Both the account and own-key CLI routes are experimental and are not stable modes. IDE/Agents remains the default and is recommended for regular use. Enable CLI only as an explicit trial.
-
-Fresh installations without a saved source always default to `ide` (**Cursor IDE/Agents**). Upgrades preserve any source you explicitly saved; shipping CLI support never switches to `cli` automatically. Cursor CLI and the own-key provider route are both optional. With `ide` selected, CCE works through a normally installed, compatible Cursor IDE/Agents setup without a CLI installation or CLI credential file, even if a `cli_provider` configuration was previously saved.
-
-| Command | Source |
+| Command / Call | Effect |
 |---|---|
-| `/cce ide` | Cursor IDE/Agents through CDP (default). |
-| `/cce cli` | Experimental local Cursor CLI, fresh read-only Ask-mode request per turn. |
-| `/cce` | Show the active/saved source and configuration file path. |
+| `/cce cli` · `cursor_cce(action="set", source="cli")` | Use local Cursor Agent CLI (fresh-install default). |
+| `/cce ide` · `cursor_cce(action="set", source="ide")` | Use Cursor IDE/Agents via CDP. |
+| `/cce doctor` · `cursor_cce(action="doctor")` | Non-mutating readiness check (launcher, auth/models, `cursor_model`, preload, ACP, workspace). |
+| `/cce` · `cursor_cce(action="show")` | Show the saved source, config file path, and optional `cli_provider` summary. |
 
-Hosts may namespace the plugin command (for example `/cursor-bridge:cce cli`), and the packaged `cce` skill handles the same requests. Direct MCP calls use `cursor_cce(action="show")` and `cursor_cce(action="set", source="ide"|"cli")`. The selection persists in `cursor-bridge/cce-source.json` under the user config directory across restarts and plugin updates. Model and reasoning effort (`cursor_model`) remain independent settings and are never cleared when switching sources. Each query snapshots its source, workspace, and model/effort preference on admission; switching affects subsequent queries. If `cli` is explicitly selected while the required CLI runtime is unavailable or fails preflight, Bridge reports an explicit error—use `/cce ide` to switch back explicitly. It never silently changes the source, model, effort, or billing route.
+Hosts may namespace slash commands (for example `/cursor-bridge:cce doctor`), and the packaged `cce` skill supports the same requests in natural language. Both sources share `workspace_path` verification, `cursor_model` defaults, and `CCE_SEARCH_RESULT` formatting:
 
-Both `ide` and `cli` share `cursor_context_engine`, the CCE query contract and `CCE_SEARCH_RESULT` evidence format, `workspace_path` guards, FIFO queue admission, and result collection. `cursor_do` keeps its existing IDE/Agents execution path. When `cli` is selected, both CLI modes run in read-only Ask mode against the asserted workspace (including multi-root `.code-workspace` targets) with isolated native settings/permissions so standalone CLI defaults stay untouched, and without launching the IDE:
-
-- **Account CLI:** Uses a signed-in ordinary Cursor Agent CLI and a model/effort advertised in its catalogue.
-- **Own-key CLI (`agent-local`):** Uses Cursor's standalone official `agent-local` build—not the ordinary account CLI—with your own OpenAI-compatible Responses provider. Cursor still runs the Agent loop, tools, prompt construction, and permissions harness; Bridge adapts the Responses provider and verifies the exact model and effort in provider responses. This authless local mode provides Cursor's local retrieval tools; it does not promise Cursor account cloud services or a server-side semantic index.
-
-Configure the own-key route once via `cursor_cce(action="set", source="cli", cli_provider={...})` using generic local file paths—for example `kind: "openai-responses"`, `node_path: "C:/Tools/CursorAgentLocal/node.exe"`, `entrypoint: "C:/Tools/CursorAgentLocal/index.js"`, `base_url: "https://api.openai.com/v1"`, and `api_key_file: "C:/Private/provider-key.txt"`; see [setup and supported capabilities](./docs/cce-cli-provider.md). The API configuration accepts only the credential file path, never the key content. The child process reads your key directly from that local file—never put API keys into chat, prompts, MCP arguments, Git, or logs. Later `/cce ide` and `/cce cli` switches preserve the saved `cli_provider` (`cli_provider=null` clears it).
+- **Account CLI (default on `cli`):** Uses signed-in `cursor-agent` / `agent` in Read-Only Ask mode. Single-root workspaces prewarm and reuse a persistent ACP session after strict parameterized config read-back checks; cold starts, capability mismatches, `CURSOR_BRIDGE_CCE_CLI_ACP=off`, and multi-root `.code-workspace` targets use one-shot `--print`. Up to `3` CLI CCE tasks run concurrently (`CURSOR_BRIDGE_CCE_CLI_CONCURRENCY`), independent of IDE UI locks.
+- **Own-key CLI (`agent-local`):** Optional configuration via `cursor_cce(action="set", source="cli", cli_provider={kind:"openai-responses", node_path, entrypoint, base_url, api_key_file})`. Uses Cursor's official `agent-local` build with an adjacent preload helper (prechecked before dispatch) and reads your API key directly from the local credential file—never paste secrets into prompts or MCP arguments. Switching `/cce ide` and `/cce cli` preserves `cli_provider` (`cli_provider=null` clears it). See [`docs/cce-cli-provider.md`](./docs/cce-cli-provider.md).
+- **Cursor IDE / Agents (`ide`):** Requires Cursor desktop UI (with optional `minimal` mode on Windows 11). Required if you use `cursor_do` delegation (`CURSOR_BRIDGE_DELEGATION=on`).
 
 ## MCP tools
 
 | Tool | What it does |
 |---|---|
-| `cursor_init` | Initializes or switches CCE to one absolute workspace path. |
-| `cursor_context_engine` | Read-only project understanding from one natural-language `query`; it can assert an intended workspace before sending. |
-| `cursor_do` | Submits a clear, bounded subtask to Cursor Agent for execution. Background submissions return a compact receipt; synchronous `background=false` returns the full result. It can assert an intended workspace before sending. |
-| `cursor_model` | Shows, sets, or resets persistent model and reasoning-effort defaults for CCE, `cursor_do`, or both. |
-| `cursor_cce` | Shows or persistently selects the CCE source (`ide` by default, or optional `cli`) and saves or clears optional local `cli_provider` file-path settings. |
-| `cursor_status` | Reads connection, queue, runtime, persistent model defaults, and configured/effective task state. Task views are compact by default; `cursor_status(task_id, detail="result")` returns the plain complete reply and records receipt. `detail="full"` retains diagnostic task detail plus the reply. |
-| `cursor_runtime` | Switches between visible `normal` mode and Windows 11-tested UI-suppressed `minimal` mode. |
-| `cursor_task_control` | Performs targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery and returns an action/state summary; retrieve the reply separately with `cursor_status(task_id, detail="result")`. |
+| `cursor_init` | Persists the workspace binding and verifies CLI/model readiness (`cli`) or CDP connectivity (`ide`). Returns structured recoverable status if CLI setup is incomplete. |
+| `cursor_context_engine` | Read-only project understanding from one natural-language `query`; supports `workspace_path` assertion. |
+| `cursor_do` | Submits a bounded Cursor Agent task via IDE/Agents (disabled/hidden when `CURSOR_BRIDGE_DELEGATION=off`). Background mode returns a compact receipt; collect full reply via `cursor_status(task_id, detail="result")`. |
+| `cursor_model` | Shows, sets, or resets persistent model and effort defaults independently for `cce`, `cursor_do`, or `both`. |
+| `cursor_cce` | `show`, `set` (`cli` / `ide`, optional `cli_provider`), or `doctor` (read-only CLI/model/workspace readiness diagnostic). |
+| `cursor_status` | Compact by default; reports CLI metadata/concurrency or CDP connection, workspace binding, runtime/model defaults, and tasks (`detail="result"` or `detail="full"`). |
+| `cursor_runtime` | Switches IDE presentation between `normal` and Windows 11-tested `minimal` mode. |
+| `cursor_task_control` | Targeted `reap`, `cancel`, or explicitly acknowledged `abandon` recovery. |
 
-| Parameter | Used by | Meaning |
-|---|---|---|
-| `workspace_path` | `cursor_context_engine`, `cursor_do` | Optional absolute workspace assertion. A mismatch or unconfirmed target fails before sending; it never switches or registers a project. |
-
-When the AI client knows the target project, pass `workspace_path`. Use the host-provided workspace root/current-task cwd unless the request explicitly targets another project; never infer it from a repository name or a saved default. `cursor_init` remains the explicit operation for initialization, registration, and switching. `initialized=true` only means a binding exists, not that this request's target is confirmed.
-
-For pre-send `WORKSPACE_CONFIRMATION_REQUIRED`, `WORKSPACE_INITIALIZATION_REQUIRED`, or `WORKSPACE_MISMATCH` with a known target, first inspect `cursor_status`. If it is idle with no queued or blocking work and `workspaceBusy=false` when exposed, run `cursor_init` for that exact path, verify ready status and the exact path, then retry the original call once. Busy, ambiguous, `needs_attention`, or uncertain send state requires reporting the condition and using the necessary local fallback instead.
+Pass `workspace_path` on `cursor_context_engine` and `cursor_do` whenever your host knows the target project directory. On pre-send `WORKSPACE_CONFIRMATION_REQUIRED`, `WORKSPACE_INITIALIZATION_REQUIRED`, or `WORKSPACE_MISMATCH`, verify `cursor_status` is idle, run `cursor_init` for the intended path, verify `ready`, and retry once.
 
 > [!WARNING]
-> Cursor is an Agent, not a filesystem sandbox. CCE strongly prompts read-only investigation, but prompts and allowed paths are not OS-level isolation. Verify consequential anchors and workspace changes.
+> Cursor is an Agent, not an OS filesystem sandbox. CCE enforces Ask mode in ACP and strongly prompts read-only investigation, but consequential anchors and edits should always be verified locally.
+
+## Reliability and verification
+
+For local validation or after modifying source code or bundles:
+
+```bash
+npm run build           # Rebuild all 5 committed ESM bundles (Bridge, preload, supervisor, Grok companion)
+npm test                # Run isolated test suite (scripts/test.mjs strips host CURSOR_BRIDGE_* env pollution)
+npm run smoke:mcp       # Real stdio MCP protocol & admission gate smoke test (cache-shaped cwd)
+npm run smoke:cli       # End-to-end CLI init, doctor, model verification & ACP smoke test (fake CLI harness)
+npm run verify:install  # Validate bundle manifests, versions, supervisor materialization, and staged npm/Pi bundles
+npm run verify          # Run the full build + test + smoke:mcp + smoke:cli + verify:install pipeline
+```
 
 <a id="windows-update-migration"></a>
 
@@ -263,9 +271,12 @@ Pi:
 pi update npm:pi-cursor-bridge
 ```
 
-Other MCP-capable AI clients: ask the current AI to re-read the [AI install playbook](./docs/ai-install.md) and update the installed npm package, then restart this AI client.
+Other MCP-capable AI clients: ask the current AI to re-read the [AI install playbook](./docs/ai-install.md) and update `vanyangyang-cursor-bridge` to the version pinned in [`docs/ai-install.manifest.json`](./docs/ai-install.manifest.json), then restart this AI client.
 
-After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current AI client. An already open task does not hot-load new MCP, Skill, or command code.
+After updating, start a new Codex task, restart Claude Code or run `/reload-plugins`, reload Grok through `/plugins` or start a new Grok session, restart Pi, or restart the current AI client.
+
+> [!NOTE]
+> **Upgrading from 6.x to 7.0.0:** If no `%APPDATA%\cursor-bridge\cce-source.json` was saved previously, 7.0.0 activates `cli` automatically. Follow [Migrating from 6.x to 7.0.0](#migrate-to-7-0) to install/log in to Cursor CLI, set `cursor_model`, and run `/cce doctor`—or run `/cce ide` once to stay on desktop IDE.
 
 If Codex reports `marketplace 'vanyangyang' is not configured as a Git marketplace`, run `codex plugin marketplace add Vanyangyang/cursor-bridge --ref main` once, then retry the Codex commands above.
 
@@ -284,23 +295,7 @@ After this one-time migration, later updates do not need special process cleanup
 <details>
 <summary><strong>How CCE searches and returns evidence</strong></summary>
 
-`query` carries the project question. The optional absolute `workspace_path` asserts the target project before CCE sends; Cursor adapts the investigation depth to the evidence it discovers.
-
-It can combine:
-
-- indexed semantic retrieval;
-- exact text search;
-- symbol and reference tracing;
-- targeted source inspection;
-- Cursor Explore when cross-file verification actually needs it.
-
-I reuse Cursor because it already has the index and the agent search. Bridge connects that to another coding Agent. I did not want a second code-search stack.
-
-A simple “where is this symbol” question should finish quickly. Call chains, data flows, registrations, interface implementations, and ownership questions can keep walking modules until the evidence is enough.
-
-The installed `cce-routing` Skill offers bounded guidance for selecting CCE on unfamiliar-project semantic questions while leaving known-file reads, tests, logs, builds, Git work, and external documentation on native tools. Grok Build loads the same plugin skills after the plugin is enabled. Claude Code also has a narrow, fail-open routing guard for competing context collection. The AI client's model still controls tool selection.
-
-Result shape:
+`query` carries one focused natural-language project question; optional `workspace_path` asserts the target project before admission.
 
 ```text
 CCE_SEARCH_RESULT
@@ -312,116 +307,48 @@ gaps: none
 confidence: high
 ```
 
-- Evidence is ordered by strength.
-- Semantic similarity is not presented as a proven call edge.
-- Missing evidence returns `NOT_FOUND` and the actual searched scope instead of a framework guess.
-- Conversational preambles are removed without inventing evidence.
+The installed `cce-routing` skill routes unfamiliar architectural or cross-module questions to CCE while keeping known-file reads, builds, tests, logs, and Git commands on native tools.
 
 </details>
 
 <details>
-<summary><strong>Workspace, Cursor UI, and lifecycle behavior</strong></summary>
+<summary><strong>Workspace, Cursor UI, and IDE lifecycle behavior (`ide` / `cursor_do`)</strong></summary>
 
-```text
-Codex / Claude Code / Grok Build / Pi
-        │ MCP
-        ▼
-Cursor Bridge adapter(s)
-        │ singleton IPC
-        ▼
-Shared lifecycle supervisor
-        │ ensure / CDP :9223
-        ▼
-Cursor Agent + project index
-```
-
-- `cursor_init` validates and persists one workspace for the current AI client context. In Agents Window, it registers a missing local workspace through Cursor's workspace service and verifies the exact path before reporting ready. Re-running it switches that context to another workspace; status checks never register projects.
-- Cursor owns project indexing. Bridge ensures the connection and selects a matching, validated CDP target; it does not build the index itself.
-- Multiple MCP adapters share one user-level lifecycle supervisor and re-read the persisted runtime mode before status or lifecycle work.
-- On a cold launch, Bridge starts the CDP-enabled Cursor process without a project or `--new-window` argument, waits for the target list to stabilize, then binds the repository inside Agents v2. A transient first target is never treated as canonical merely because it appeared first.
-- When the Agents Window and the workbench are both open, Bridge prefers the Agents Window for the current project. If only the workbench is available, it uses that. It does not create work in `Home`.
-- If Agents Window is already open, ensure reuses that CDP page and does not spawn `Cursor.exe --new-window`. A new workbench window is opened only when Cursor is connected and neither Agents Window nor a matching editor title exists.
-- `cursor_status` lists CDP page titles only. It does not inspect page DOM. CCE reloads a DOM-blank Agents page once. On Windows normal runtime, reusing an Agents Window also performs a throttled, non-activating native compositor refresh so a healthy DOM cannot remain behind a white Electron surface.
-- Stale target IDs are rejected when the title no longer matches the requested project, except for the Agents Window title `Cursor Agents`, which is a valid reusable target.
-- Cursor UI preference remains user-owned; Bridge does not force old or new UI on.
-- On Windows, the supervisor survives an individual Codex, Claude Code, Grok Build, or Pi session closing.
-
-The path may be an existing project directory or `.code-workspace` file. Quoted paths, Windows UNC/extended paths, and macOS `~` paths are normalized; relative and unrelated file paths are rejected.
-
-Cursor executable discovery is internal. Standard Windows registered/user/system locations and `/Applications/Cursor.app` or `~/Applications/Cursor.app` on macOS are checked automatically. Portable/custom installs may use `CURSOR_EXE`.
-
-The macOS path normalization and executable-discovery branches are implementation details, not an end-to-end support claim; they have not yet been live-tested.
-
-If Cursor is already running without the connection Bridge needs, Bridge returns one `close_cursor_and_retry` step instead of terminating it. Save your work, close Cursor normally once, and repeat the initialization sentence.
+- Multiple MCP adapters share one user-level lifecycle supervisor materialized into `%LOCALAPPDATA%\cursor-bridge\lifecycle\runtime\`, keeping CDP connection management outside versioned plugin caches.
+- In `ide` mode or `cursor_do`, Bridge prefers an open Agents Window for the matching repository and falls back to workbench without creating work in `Home`.
+- If Cursor is already running without `--remote-debugging-port`, `cursor_init` preserves the workspace binding and returns `close_cursor_and_retry` instead of force-killing Cursor.
+- Full session/recovery contracts live in [`docs/CURSOR_SESSION_CONTRACT.md`](./docs/CURSOR_SESSION_CONTRACT.md).
 
 </details>
 
 <details>
-<summary><strong>cursor_do execution and recovery</strong></summary>
-
-- FIFO means first in, first out: ordinary tasks are serialized through one UI lock and start in a clean chat.
-- Independent `parallel_agent` tasks use separate top-level Cursor Agents. Writable parallel tasks require non-overlapping `allowed_paths`; read-only work uses `read_only=true`.
-- An asynchronous `cursor_do(background=true)` returns a compact submission receipt. Save its `task_id`, poll `cursor_status(task_id)` with the default compact view, and after a terminal state call `cursor_status(task_id, detail="result")` to retrieve the raw complete reply and record receipt. It has no JSON wrapper: check `isError` before treating its content as a reply. Use `detail="full"` only when the diagnostic task detail is also needed. Repeating either explicit read returns the same retained result. `cursor_do(background=false)` is synchronous and still returns the complete result body.
-- `cursor_task_control` returns only its action and compact task state, never a result body. After a terminal recovery action, retrieve the normal reply with `cursor_status(task_id, detail="result")`; use `detail="full"` for diagnostics.
-- `session_mode=isolated` remains the default. Use `session_mode=create` only when later turns must keep the same Cursor context; continue through the returned stable `session_id` with `session_mode=continue`.
-- Every continued turn receives a new `task_id` and must repeat `read_only=true` or an `allowed_paths` subset. Persistent sessions require `parallel_agent`, allow one active turn, and never downgrade to FIFO.
-- `cursor_status(session_id)` inspects the durable association. `cursor_session_control(action=close)` ends Bridge continuity without stopping Cursor; an already-closed mapping may be removed with `action=forget, confirm=true`.
-- After an interrupted adapter, `cursor_session_control(action=reconcile)` checks the exact Agent twice and never resends. `abandon` is an explicitly acknowledged last resort when stop evidence cannot be recovered.
-- After reconciliation confirms completion, use `cursor_session_control(action=collect_result)` before continuing to retrieve that turn's complete reply. It always returns the full reply, restores the previous Agent selection, never sends a prompt, and never persists the reply. A changed epoch invalidates collection; repeating a successful collection returns `already_collected`. Numeric reply signatures and read receipts cover restart recovery, including completion before the first read. Older continuation turns without a saved signature require manual inspection.
-- Up to 50 task records are retained. Unread replies are protected: `TASK_RETENTION_FULL` rejects new submissions instead of dropping them. For each ID in `cursor_status().unreadResultTaskIds`, call `cursor_status(task_id, detail="result")`; compact status calls do not record receipt, while either explicit result or full read makes the record eligible for eviction.
-- `timeout_ms` is one post-submission monitoring budget shared by FIFO and automatic recovery. Expiry does not cancel Cursor; explicit `reap` may grant a fresh monitoring budget.
-- If the AI client supplies no workspace identity, every new adapter requires `cursor_init` to confirm the intended project before submission, whether or not a shared `default` path was saved. `initialized=true` does not by itself confirm a request's target. Identity-scoped bindings retain their normal restart behavior. Supply `workspace_path` on each request when the intended path is known.
-- Ready session mappings survive MCP restart and plugin-cache replacement because their atomic registry lives in the user configuration directory. Prompts, replies, credentials, plugin paths, scripts, and CDP target IDs are not persisted.
-- `submitting`, `running`, and `collecting` are normal non-terminal states.
-- Bridge confirms that Cursor accepted the prompt. A prompt left in the editor gets one exact Send-control fallback, then fails as `submit_not_accepted` instead of silently becoming an orphan.
-- Provider-error trays are retained as terminal evidence; Bridge does not click Retry automatically.
-- Uncertain post-send work retains its reservation. It is not silently released or resubmitted.
-- A parallel Agents v2 task keeps its provisional composer identity reserved until a durable History row is evidenced, then migrates exactly once; another concurrent submission cannot replace that task's `agentId` during convergence.
-- `reap` is for a bound parallel orphan. Targeted `cancel` requires the exact published Agent ID. FIFO tasks on Agents Window or workbench that publish an Agent ID can be stopped the same way. If no ID is published, Bridge will not guess-click Stop; confirm the Cursor chat is stopped, then `abandon`.
-- Task records remain process-local. After an MCP restart, inspect Agent History and workspace changes before starting overlapping isolated work; a persistent session may continue only when `cursor_status(session_id)` still reports `ready` with its exact Agent binding.
-
-Internal identity, state, recovery, scope, and update invariants are defined in [Cursor Delivery Session Contract](./docs/CURSOR_SESSION_CONTRACT.md).
-
-</details>
-
-<details>
-<summary><strong>Run from source and advanced overrides</strong></summary>
-
-For a generic MCP-capable AI client, prefer the [AI install playbook](./docs/ai-install.md). The commands below are for local development.
-
-```bash
-git clone https://github.com/Vanyangyang/cursor-bridge.git
-cd cursor-bridge
-npm install
-npm run build
-```
-
-```json
-{
-  "mcpServers": {
-    "cursor-bridge": {
-      "command": "node",
-      "args": ["/absolute/path/to/cursor-bridge/server.mjs"]
-    }
-  }
-}
-```
+<summary><strong>Environment variables and source overrides</strong></summary>
 
 | Variable | Default | Description |
 |---|---|---|
-| `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor remote-debugging port. |
-| `CURSOR_BRIDGE_TIMEOUT` | `300000` | Search completion timeout in milliseconds. |
-| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to disable startup prewarming. |
-| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | Bootstrap mode when no persisted choice exists. |
-| `CURSOR_BRIDGE_RUNTIME_FILE` | user config directory | Override persistent runtime-mode storage. |
-| `CURSOR_BRIDGE_WORKSPACE_FILE` | user lifecycle directory | Override persistent workspace binding storage. |
-| `CURSOR_BRIDGE_SESSION_FILE` | user config directory | Override the Cursor Delivery Session registry. Never point it into a versioned plugin cache. |
-| `CURSOR_BRIDGE_MODEL_PREFERENCES_FILE` | user config directory | Override persistent CCE / `cursor_do` model and effort storage. |
+| `CURSOR_BRIDGE_CLI_PATH` | auto-discovered | Absolute path to `cursor-agent` / `agent` launcher. |
+| `CURSOR_BRIDGE_CLI_INSPECT_TTL_MS` | `300000` | Official CLI preflight cache TTL in ms (`0` disables caching). |
+| `CURSOR_BRIDGE_CCE_CLI_MCP` | unset (`isolated`) | Set to `native` to disable private `CURSOR_DATA_DIR` MCP isolation. |
+| `CURSOR_BRIDGE_CCE_CLI_ACP` | `on` | Set to `off` to disable persistent ACP sessions and use one-shot `--print`. |
+| `CURSOR_BRIDGE_CCE_CLI_ACP_IDLE_MS` | `900000` | Idle recycle timeout in ms for warm ACP processes. |
+| `CURSOR_BRIDGE_CCE_CLI_ACP_MAX_AGE_MS` | `3600000` | Maximum lifetime in ms before rotating a warm ACP process. |
+| `CURSOR_BRIDGE_CCE_CLI_ACP_FAIL_TTL_MS` | `300000` | Capability-failure cache TTL in ms per CLI identity (`0` disables). |
+| `CURSOR_BRIDGE_CCE_CLI_CONCURRENCY` | `3` | Concurrent execution slots on the CLI CCE lane (`1`–`8`). |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set to `off` to disable and hide `cursor_do`. |
-| `CURSOR_PROJECT_PATH` | unset | Compatibility fallback used only without persisted initialization. |
-| `CURSOR_EXE` | auto-detected | Portable/custom executable, Windows install folder, or macOS `.app` override. |
+| `CURSOR_BRIDGE_CDP_PORT` | `9223` | Cursor IDE remote-debugging port (`ide` / `cursor_do`). |
+| `CURSOR_BRIDGE_TIMEOUT` | `300000` | Search timeout in milliseconds. |
+| `CURSOR_BRIDGE_NO_AUTOLAUNCH` | unset | Set to `1` to skip IDE startup prewarming. |
+| `CURSOR_BRIDGE_RUNTIME_MODE` | `normal` | Initial IDE window mode (`normal` or `minimal`). |
+| `CURSOR_EXE` | auto-detected | Override Cursor IDE executable path (fails closed if set to a missing path). |
 
-Advanced lifecycle overrides are compatibility controls. Bypassing the Windows singleton supervisor is not recommended.
+</details>
+
+<details>
+<summary><strong>Companion plugin: Grok Build Supervisor (maintenance-only)</strong></summary>
+
+This repository also still contains the standalone **Grok Build Supervisor** plugin (`0.4.3`) in maintenance-only mode. Existing packages (`grok-build-supervisor`, `pi-grok-build-supervisor`, `vanyangyang-grok-build-supervisor`) remain intact so existing setups keep working, while active development prioritizes Cursor Bridge and CCE CLI.
+
+See the companion documentation if you already use it: [English](./plugins/grok-build-supervisor/README.md) · [简体中文](./plugins/grok-build-supervisor/README.zh-CN.md).
 
 </details>
 

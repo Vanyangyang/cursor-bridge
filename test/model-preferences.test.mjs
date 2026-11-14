@@ -544,6 +544,7 @@ test('new CCE and cursor_do jobs snapshot their independent persistent defaults'
         workspaceFile: null,
         modelPreferencesFile: file,
         runtimeMode: 'normal',
+        cceSource: 'ide',
       });
       this.captured = [];
     }

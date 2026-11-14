@@ -1888,13 +1888,13 @@ var require_keyword = __commonJS({
             modifyData(cxt);
           reportErrs(() => cxt.error());
         } else {
-          const ruleErrs = def.async ? validateAsync2() : validateSync();
+          const ruleErrs = def.async ? validateAsync3() : validateSync();
           if (def.modifying)
             modifyData(cxt);
           reportErrs(() => addErrs(cxt, ruleErrs));
         }
       }
-      function validateAsync2() {
+      function validateAsync3() {
         const ruleErrs = gen.let("ruleErrs", null);
         gen.try(() => assignValid((0, codegen_1._)`await `), (e) => gen.assign(valid, false).if((0, codegen_1._)`${e} instanceof ${it.ValidationError}`, () => gen.assign(ruleErrs, (0, codegen_1._)`${e}.errors`), () => gen.throw(e)));
         return ruleErrs;
@@ -3115,6 +3115,7 @@ var require_utils = __commonJS({
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
+    var isPort = RegExp.prototype.test.bind(/^\d*$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
     var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
     var isPathCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/]$/u);
@@ -3267,8 +3268,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path2) {
-      let input = path2;
+    function removeDotSegments(path3) {
+      let input = path3;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3341,6 +3342,37 @@ var require_utils = __commonJS({
         }
       }
       return output.join("");
+    }
+    function removeDotSegmentsRelative(path3) {
+      if (path3 === "" || path3[0] === "/") {
+        return removeDotSegments(path3);
+      }
+      const segments = path3.split("/");
+      const last = segments.length - 1;
+      const output = [];
+      let trailingDirectory = false;
+      for (let i = 0; i <= last; i++) {
+        const segment = segments[i];
+        if (segment === "." || segment === "..") {
+          if (segment === "..") {
+            if (output.length !== 0 && output[output.length - 1] !== "..") {
+              output.pop();
+            } else {
+              output.push("..");
+            }
+          }
+          trailingDirectory = i === last;
+        } else {
+          output.push(segment);
+        }
+      }
+      if (trailingDirectory && output[output.length - 1] !== "..") {
+        output.push("");
+      }
+      if (output.length === 0 || output[0] === "" || output[0].includes(":")) {
+        output.unshift(".");
+      }
+      return output.join("/");
     }
     var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
     var HOST_DELIM_RE = /[@/?#:]/g;
@@ -3580,8 +3612,12 @@ var require_utils = __commonJS({
         uriTokens.push(host);
       }
       if (typeof component.port === "number" || typeof component.port === "string") {
+        const port = String(component.port);
+        if (!isPort(port)) {
+          throw new TypeError("URI port is malformed.");
+        }
         uriTokens.push(":");
-        uriTokens.push(String(component.port));
+        uriTokens.push(port);
       }
       return uriTokens.length ? uriTokens.join("") : void 0;
     }
@@ -3598,6 +3634,7 @@ var require_utils = __commonJS({
       encodeFragment,
       escapePreservingEscapes,
       removeDotSegments,
+      removeDotSegmentsRelative,
       isIPv4,
       isUUID,
       normalizeIPv6,
@@ -3673,8 +3710,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path2 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
+        const path3 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -3821,16 +3858,18 @@ var require_schemes = __commonJS({
 var require_fast_uri = __commonJS({
   "node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, removeDotSegmentsRelative, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
     var VALID_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/u;
     var MALFORMED_SCHEME_ERROR = "URI scheme is malformed.";
-    function decodeValidScheme(scheme) {
-      const decodedScheme = unescape(String(scheme));
-      if (!VALID_SCHEME.test(decodedScheme)) {
+    var MALFORMED_HOST_ERROR = "URI host is malformed.";
+    var FORBIDDEN_DOMAIN_HOST_CHARACTER = /[\0-\x20"#/:<>?@[\\\]^`{|}\x7F]/u;
+    function validateScheme(scheme) {
+      const stringScheme = String(scheme);
+      if (!VALID_SCHEME.test(stringScheme)) {
         throw new TypeError(MALFORMED_SCHEME_ERROR);
       }
-      return decodedScheme;
+      return stringScheme;
     }
     function normalize2(uri, options) {
       if (typeof uri === "string") {
@@ -3867,6 +3906,9 @@ var require_fast_uri = __commonJS({
       const resolvedSchemeHandler = getSchemeHandler(options && options.scheme || resolved.scheme);
       const resolvedHost = resolved.host;
       const resolvedHostIsIP = resolvedHost !== void 0 && resolvedHost !== "" && (isIPv4(resolvedHost) || normalizeIPv6(resolvedHost).isIPV6);
+      if (hasForbiddenDomainHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP)) {
+        throw new Error(MALFORMED_HOST_ERROR);
+      }
       canonicalizeHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
       const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !/\P{ASCII}/u.test(resolvedHost);
       if (resolved.error && !encodedASCIIHost) {
@@ -3908,14 +3950,15 @@ var require_fast_uri = __commonJS({
             if (relative.path[0] === "/") {
               target.path = removeDotSegments(relative.path);
             } else {
-              if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
+              const baseHasAuthority = base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0;
+              if (baseHasAuthority && !base.path) {
                 target.path = "/" + relative.path;
               } else if (!base.path) {
                 target.path = relative.path;
               } else {
                 target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
               }
-              target.path = removeDotSegments(target.path);
+              target.path = base.scheme === void 0 && !baseHasAuthority && target.path[0] !== "/" ? removeDotSegmentsRelative(target.path) : removeDotSegments(target.path);
             }
             target.query = relative.query;
           }
@@ -3953,12 +3996,13 @@ var require_fast_uri = __commonJS({
       const options = Object.assign({}, opts);
       const uriTokens = [];
       if (component.scheme) {
-        component.scheme = decodeValidScheme(component.scheme);
+        component.scheme = validateScheme(component.scheme);
       }
       const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
       const hasAuthority = component.userinfo !== void 0 || component.host !== void 0 || component.port !== void 0;
-      const pathNoScheme = !options.skipEscape && component.scheme === void 0 && !hasAuthority;
+      const schemelessReference = (component.scheme === void 0 || options.reference === "suffix") && !hasAuthority;
+      const pathNoScheme = !options.skipEscape && schemelessReference;
       if (component.path !== void 0) {
         if (!options.skipEscape) {
           component.path = serializePathEncoding(component.path, pathNoScheme);
@@ -3967,7 +4011,7 @@ var require_fast_uri = __commonJS({
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
-        component.scheme = decodeValidScheme(component.scheme);
+        component.scheme = validateScheme(component.scheme);
         uriTokens.push(component.scheme, ":");
       }
       const authority = recomposeAuthority(component);
@@ -3983,9 +4027,9 @@ var require_fast_uri = __commonJS({
       if (component.path !== void 0) {
         let s = component.path;
         if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
-          s = removeDotSegments(s);
+          s = schemelessReference && s[0] !== "/" ? removeDotSegmentsRelative(s) : removeDotSegments(s);
         }
-        if (pathNoScheme) {
+        if (schemelessReference) {
           s = serializePathEncoding(s, true);
         }
         if (authority === void 0 && s[0] === "/" && s[1] === "/") {
@@ -4024,20 +4068,41 @@ var require_fast_uri = __commonJS({
       }
       return false;
     }
+    function isIPLiteral(host) {
+      return host[0] === "[" && host[host.length - 1] === "]";
+    }
     function hasMalformedComponentPercentEncoding(matches) {
       const host = matches[4];
-      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !(host[0] === "[" && host[host.length - 1] === "]") && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
+      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !isIPLiteral(host) && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
     }
     function canonicalizeHost(parsed, options, schemeHandler, isIP) {
-      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && parsed.host[0] !== "[" && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+      if (hasForbiddenDomainHost(parsed, options, schemeHandler, isIP)) {
+        parsed.error = parsed.error || MALFORMED_HOST_ERROR;
+        return true;
+      }
+      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        let url;
         try {
-          parsed.host = new URL("http://" + parsed.host).hostname;
+          url = new URL("http://" + parsed.host);
         } catch (e) {
           parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
           return true;
         }
+        if (!isHostOnlyURL(url)) {
+          parsed.error = parsed.error || MALFORMED_HOST_ERROR;
+          return true;
+        }
+        parsed.host = url.hostname;
       }
       return false;
+    }
+    function hasForbiddenDomainHost(parsed, options, schemeHandler, isIP) {
+      return Boolean(
+        parsed.host && isIP === false && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && FORBIDDEN_DOMAIN_HOST_CHARACTER.test(parsed.host)
+      );
+    }
+    function isHostOnlyURL(url) {
+      return url.username === "" && url.password === "" && url.port === "" && url.pathname === "/" && url.search === "" && url.hash === "" && url.hostname !== "";
     }
     function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
@@ -4093,9 +4158,8 @@ var require_fast_uri = __commonJS({
         parsed.query = matches[7];
         parsed.fragment = matches[8];
         if (parsed.scheme !== void 0) {
-          const decodedScheme = unescape(parsed.scheme);
-          if (VALID_SCHEME.test(decodedScheme)) {
-            parsed.scheme = decodedScheme.toLowerCase();
+          if (VALID_SCHEME.test(parsed.scheme)) {
+            parsed.scheme = parsed.scheme.toLowerCase();
           } else {
             parsed.error = parsed.error || MALFORMED_SCHEME_ERROR;
             malformedScheme = true;
@@ -4116,13 +4180,14 @@ var require_fast_uri = __commonJS({
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
           if (ipv4result === false) {
-            const bracketedIPLiteral = parsed.host[0] === "[" && parsed.host[parsed.host.length - 1] === "]";
+            const bracketedIPLiteral = isIPLiteral(parsed.host);
+            const hasIPLiteralBracket = parsed.host.indexOf("[") !== -1 || parsed.host.indexOf("]") !== -1;
             const ipv6result = normalizeIPv6(parsed.host);
             isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
-            malformedIPLiteral = bracketedIPLiteral && ipv6result.error === true;
+            malformedIPLiteral = hasIPLiteralBracket && (!bracketedIPLiteral || ipv6result.error === true);
             parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
             if (malformedIPLiteral) {
-              parsed.error = parsed.error || "URI host is malformed.";
+              parsed.error = parsed.error || MALFORMED_HOST_ERROR;
               malformedAuthorityOrPort = true;
             }
           } else {
@@ -4142,14 +4207,17 @@ var require_fast_uri = __commonJS({
           parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
         }
         const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-        malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
-        if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
-          if (uri.indexOf("%") !== -1) {
-            if (parsed.host !== void 0 && !malformedIPLiteral) {
-              const host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
-              parsed.host = reescapeHostDelimiters(host, isIP);
-            }
+        if (!malformedIPLiteral) {
+          malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
+        }
+        if (uri.indexOf("%") !== -1 && parsed.host !== void 0 && !malformedIPLiteral) {
+          let host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
+          if (!isIP) {
+            host = normalizePercentEncoding(host.toLowerCase());
           }
+          parsed.host = isIP || options.scheme !== "null" ? reescapeHostDelimiters(host, isIP) : host;
+        }
+        if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
           if (parsed.path) {
             parsed.path = normalizePathEncoding(parsed.path);
           }
@@ -7220,6 +7288,7 @@ var require_constants = __commonJS({
 var require_buffer_util = __commonJS({
   "node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
+    var { websocketMask, websocketUnmask } = __require("http");
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
     function concat(list, totalLength) {
@@ -7274,7 +7343,16 @@ var require_buffer_util = __commonJS({
       toBuffer,
       unmask: _unmask
     };
-    if (!process.env.WS_NO_BUFFER_UTIL) {
+    if (websocketMask) {
+      module.exports.mask = function(source, mask, output, offset, length) {
+        if (length < 24) _mask(source, mask, output, offset, length);
+        else websocketMask(source, mask, output, offset, length);
+      };
+      module.exports.unmask = function(buffer, mask) {
+        if (buffer.length < 24) _unmask(buffer, mask);
+        else websocketUnmask(buffer, mask);
+      };
+    } else if (!process.env.WS_NO_BUFFER_UTIL) {
       try {
         const bufferUtil = __require("bufferutil");
         module.exports.mask = function(source, mask, output, offset, length) {
@@ -8337,6 +8415,7 @@ var require_receiver = __commonJS({
             unmask(data, this._mask);
           }
         }
+        this._mask = void 0;
         if (this._opcode > 7) {
           this.controlMessage(data, cb);
           return;
@@ -8669,12 +8748,15 @@ var require_sender = __commonJS({
           target[2] = target[3] = 0;
           target.writeUIntBE(dataLength, 4, 6);
         }
-        if (!options.mask) return [target, data];
+        if (!options.mask) {
+          return dataLength ? [target, data] : [target];
+        }
         target[1] |= 128;
         target[offset - 4] = mask[0];
         target[offset - 3] = mask[1];
         target[offset - 2] = mask[2];
         target[offset - 1] = mask[3];
+        if (!dataLength) return [target];
         if (skipMasking) return [target, data];
         if (merge2) {
           applyMask(data, mask, target, offset, dataLength);
@@ -9431,6 +9513,7 @@ var require_websocket = __commonJS({
     var https = __require("https");
     var http3 = __require("http");
     var net2 = __require("net");
+    var querystring = __require("querystring");
     var tls = __require("tls");
     var { randomBytes, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
@@ -9488,21 +9571,38 @@ var require_websocket = __commonJS({
           this._isServer = false;
           this._redirects = 0;
           if (protocols === void 0) {
-            protocols = [];
+            if (!options || options.protocols === void 0) {
+              protocols = [];
+            } else if (Array.isArray(options.protocols)) {
+              protocols = options.protocols;
+            } else {
+              protocols = [options.protocols];
+            }
           } else if (!Array.isArray(protocols)) {
             if (typeof protocols === "object" && protocols !== null) {
               options = protocols;
-              protocols = [];
+              if (options.protocols === void 0) {
+                protocols = [];
+              } else if (Array.isArray(options.protocols)) {
+                protocols = options.protocols;
+              } else {
+                protocols = [options.protocols];
+              }
             } else {
               protocols = [protocols];
             }
           }
-          initAsClient(this, address, protocols, options);
+          options = initAsClient(this, address, protocols, options);
         } else {
-          this._autoPong = options.autoPong;
-          this._closeTimeout = options.closeTimeout;
           this._isServer = true;
         }
+        if (options.autoPong) {
+          this._autoPong = true;
+          this._autoPongComplete = () => autoPongComplete(this);
+          this._pendingAutoPongs = 0;
+          this._maxPendingAutoPongs = options.maxPendingAutoPongs | 0;
+        }
+        this._closeTimeout = options.closeTimeout;
       }
       /**
        * For historical reasons, the custom "nodebuffer" type is used by the default
@@ -9689,7 +9789,6 @@ var require_websocket = __commonJS({
           }
           return;
         }
-        this._readyState = _WebSocket.CLOSING;
         this._sender.close(code, data, !this._isServer, (err) => {
           if (err) return;
           this._closeFrameSent = true;
@@ -9697,6 +9796,7 @@ var require_websocket = __commonJS({
             this._socket.end();
           }
         });
+        this._readyState = _WebSocket.CLOSING;
         setCloseTimer(this);
       }
       /**
@@ -9913,6 +10013,7 @@ var require_websocket = __commonJS({
         maxBufferedChunks: 256 * 1024,
         maxFragments: 16 * 1024,
         maxPayload: 100 * 1024 * 1024,
+        maxPendingAutoPongs: 60,
         skipUTF8Validation: false,
         perMessageDeflate: true,
         followRedirects: false,
@@ -9921,14 +10022,13 @@ var require_websocket = __commonJS({
         socketPath: void 0,
         hostname: void 0,
         protocol: void 0,
+        protocols: void 0,
         timeout: void 0,
         method: "GET",
         host: void 0,
         path: void 0,
         port: void 0
       };
-      websocket._autoPong = opts.autoPong;
-      websocket._closeTimeout = opts.closeTimeout;
       if (!protocolVersions.includes(opts.protocolVersion)) {
         throw new RangeError(
           `Unsupported protocol version: ${opts.protocolVersion} (supported versions: ${protocolVersions.join(", ")})`
@@ -9944,10 +10044,9 @@ var require_websocket = __commonJS({
           throw new SyntaxError(`Invalid URL: ${address}`);
         }
       }
-      if (parsedUrl.protocol === "http:") {
-        parsedUrl.protocol = "ws:";
-      } else if (parsedUrl.protocol === "https:") {
-        parsedUrl.protocol = "wss:";
+      if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+        parsedUrl = new URL2(parsedUrl);
+        parsedUrl.protocol = parsedUrl.protocol === "http:" ? "ws:" : "wss:";
       }
       websocket._url = parsedUrl.href;
       const isSecure = parsedUrl.protocol === "wss:";
@@ -10016,12 +10115,19 @@ var require_websocket = __commonJS({
         }
       }
       if (parsedUrl.username || parsedUrl.password) {
-        opts.auth = `${parsedUrl.username}:${parsedUrl.password}`;
+        const username = querystring.unescape(parsedUrl.username);
+        const password = querystring.unescape(parsedUrl.password);
+        opts.auth = `${username}:${password}`;
       }
       if (isIpcUrl) {
-        const parts = opts.path.split(":");
-        opts.socketPath = parts[0];
-        opts.path = parts[1];
+        const i = opts.path.indexOf(":");
+        if (i === -1) {
+          opts.socketPath = opts.path;
+          opts.path = "";
+        } else {
+          opts.socketPath = opts.path.slice(0, i);
+          opts.path = opts.path.slice(i + 1);
+        }
       }
       let req;
       if (opts.followRedirects) {
@@ -10165,6 +10271,7 @@ var require_websocket = __commonJS({
       } else {
         req.end();
       }
+      return opts;
     }
     function emitErrorAndClose(websocket, err) {
       websocket._readyState = WebSocket2.CLOSING;
@@ -10216,8 +10323,13 @@ var require_websocket = __commonJS({
     function receiverOnConclude(code, reason) {
       const websocket = this[kWebSocket];
       websocket._closeFrameReceived = true;
-      websocket._closeMessage = reason;
       websocket._closeCode = code;
+      if (reason.length === 0) {
+        websocket._closeMessage = EMPTY_BUFFER;
+      } else {
+        websocket._closeMessage = Buffer.allocUnsafeSlow(reason.length);
+        websocket._closeMessage.set(reason);
+      }
       if (websocket._socket[kWebSocket] === void 0) return;
       websocket._socket.removeListener("data", socketOnData);
       process.nextTick(resume, websocket._socket);
@@ -10248,8 +10360,18 @@ var require_websocket = __commonJS({
     }
     function receiverOnPing(data) {
       const websocket = this[kWebSocket];
-      if (websocket._autoPong) websocket.pong(data, !this._isServer, NOOP);
+      if (websocket._autoPong && websocket.readyState === WebSocket2.OPEN) {
+        if (websocket._maxPendingAutoPongs > 0 && websocket._pendingAutoPongs >= websocket._maxPendingAutoPongs) {
+          websocket.terminate();
+        } else {
+          websocket._pendingAutoPongs++;
+          websocket.pong(data, !this._isServer, websocket._autoPongComplete);
+        }
+      }
       websocket.emit("ping", data);
+    }
+    function autoPongComplete(websocket) {
+      websocket._pendingAutoPongs--;
     }
     function receiverOnPong(data) {
       this[kWebSocket].emit("pong", data);
@@ -10504,6 +10626,8 @@ var require_websocket_server = __commonJS({
        *     fragments
        * @param {Number} [options.maxPayload=104857600] The maximum allowed message
        *     size
+       * @param {Number} [options.maxPendingAutoPongs=60] The maximum number of
+       *     pending automatic pongs
        * @param {Boolean} [options.noServer=false] Enable no server mode
        * @param {String} [options.path] Accept only connections matching this path
        * @param {(Boolean|Object)} [options.perMessageDeflate=false] Enable/disable
@@ -10526,6 +10650,7 @@ var require_websocket_server = __commonJS({
           maxBufferedChunks: 256 * 1024,
           maxFragments: 16 * 1024,
           maxPayload: 100 * 1024 * 1024,
+          maxPendingAutoPongs: 60,
           skipUTF8Validation: false,
           perMessageDeflate: false,
           handleProtocols: null,
@@ -11598,8 +11723,10 @@ function findCursorExeDetails(options = {}) {
   const platform = options.platform || process.platform;
   const env = options.env || process.env;
   const existsImpl = options.existsImpl || existsSync2;
-  const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
-  if (override) return { path: override, source: "CURSOR_EXE", platform };
+  if (String(env.CURSOR_EXE || "").trim()) {
+    const override = normalizeCursorExeCandidate(env.CURSOR_EXE, { platform, existsImpl });
+    return override ? { path: override, source: "CURSOR_EXE", platform } : null;
+  }
   if (platform === "win32") {
     const fromReg = cursorFromRegistry({
       execFileSyncImpl: options.execFileSyncImpl,
@@ -12405,7 +12532,7 @@ import {
   unlinkSync,
   writeFileSync as writeFileSync7
 } from "node:fs";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { basename as basename7, dirname as dirname9, join as join11, resolve as resolve10, win32 as win32Path } from "node:path";
 function resolveSupervisorSpawnCwd({
   requestedCwd = null,
@@ -12468,7 +12595,7 @@ function resolveSupervisorScript() {
   if (process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT && existsSync4(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT)) {
     return resolve10(process.env.CURSOR_BRIDGE_SUPERVISOR_SCRIPT);
   }
-  const here = dirname9(fileURLToPath2(import.meta.url));
+  const here = dirname9(fileURLToPath3(import.meta.url));
   const candidates = [];
   if (typeof process.argv[1] === "string") {
     const entryDir = dirname9(resolve10(process.argv[1]));
@@ -12640,9 +12767,9 @@ function filesystemFallbackDetails(error3) {
     canAttachFallback: blocked
   };
 }
-function tryUnlink(path2) {
+function tryUnlink(path3) {
   try {
-    if (path2 && existsSync4(path2)) unlinkSync(path2);
+    if (path3 && existsSync4(path3)) unlinkSync(path3);
   } catch {
   }
 }
@@ -13000,7 +13127,7 @@ __export(launch_cursor_exports, {
   resolveProjectPath: () => resolveProjectPath,
   waitForCdp: () => waitForCdp
 });
-import { pathToFileURL } from "url";
+import { pathToFileURL as pathToFileURL2 } from "url";
 function lifecycleCapabilities(mode) {
   if (mode === "supervised") {
     return { canLaunchCursor: true, canOpenWorkspaceWindow: true, survivesHostExit: "cursor-yes-tasks-no" };
@@ -13084,7 +13211,7 @@ var init_launch_cursor = __esm({
     init_cursor_lifecycle_client();
     init_workspace_binding();
     init_cursor_ensure_core();
-    isMain = import.meta.url === pathToFileURL(process.argv[1] || "").href && import.meta.url.endsWith("launch-cursor.mjs");
+    isMain = import.meta.url === pathToFileURL2(process.argv[1] || "").href && import.meta.url.endsWith("launch-cursor.mjs");
     if (isMain) {
       ensureCursorRunning({ reason: "cli" }).then((r) => {
         console.log(JSON.stringify(r));
@@ -13126,6 +13253,7 @@ __export(util_exports, {
   createTransparentProxy: () => createTransparentProxy,
   defineLazy: () => defineLazy,
   defineLazyInternal: () => defineLazyInternal,
+  derived: () => derived,
   esc: () => esc,
   escapeRegex: () => escapeRegex,
   explicitlyAborted: () => explicitlyAborted,
@@ -13163,9 +13291,11 @@ __export(util_exports, {
   promiseAllObject: () => promiseAllObject,
   propertyKeyTypes: () => propertyKeyTypes,
   randomString: () => randomString,
+  rawShape: () => rawShape,
   required: () => required,
   safeExtend: () => safeExtend,
   shallowClone: () => shallowClone,
+  sizeCaps: () => sizeCaps,
   slugify: () => slugify,
   stringifyPrimitive: () => stringifyPrimitive,
   toZod: () => toZod,
@@ -13203,18 +13333,22 @@ function jsonStringifyReplacer(_, value) {
     return value.toString();
   return value;
 }
-function cached(getter) {
-  const set = false;
-  return {
-    get value() {
-      if (!set) {
-        const value = getter();
-        Object.defineProperty(this, "value", { value });
-        return value;
-      }
-      throw new Error("cached value already set");
+var Cached = class {
+  constructor(getter) {
+    this._getter = getter;
+    this._value = void 0;
+  }
+  get value() {
+    const getter = this._getter;
+    if (getter !== void 0) {
+      this._value = getter();
+      this._getter = void 0;
     }
-  };
+    return this._value;
+  }
+};
+function cached(getter) {
+  return new Cached(getter);
 }
 function nullish(input) {
   return input === null || input === void 0;
@@ -13266,6 +13400,56 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
+function rawShape(def) {
+  const desc = Object.getOwnPropertyDescriptor(def, "shape");
+  return desc?.get ? desc.get.raw : desc?.value;
+}
+function sourceShape(schema) {
+  return rawShape(schema._zod.def) ?? schema._zod.def.shape;
+}
+function deferProp(target, key, getter) {
+  Object.defineProperty(target, key, {
+    get() {
+      const value = getter();
+      assignProp(this, key, value);
+      return value;
+    },
+    enumerable: true,
+    configurable: true
+  });
+}
+function putProp(target, key, value) {
+  if (key in target)
+    assignProp(target, key, value);
+  else
+    target[key] = value;
+}
+function mirrorShape(target, source, keys, wrap) {
+  const raw = sourceShape(source);
+  for (const key of keys) {
+    const desc = Object.getOwnPropertyDescriptor(raw, key);
+    if (!desc.enumerable)
+      continue;
+    if (desc.get) {
+      deferProp(target, key, () => {
+        const value = source._zod.def.shape[key];
+        return wrap ? wrap(value, key) : value;
+      });
+    } else
+      putProp(target, key, wrap ? wrap(desc.value, key) : desc.value);
+  }
+}
+function mirrorProps(target, source) {
+  for (const key of Reflect.ownKeys(source)) {
+    const desc = Object.getOwnPropertyDescriptor(source, key);
+    if (!desc.enumerable)
+      continue;
+    if (desc.get)
+      deferProp(target, key, () => source[key]);
+    else
+      putProp(target, key, desc.value);
+  }
+}
 function mergeDefs(...defs) {
   const mergedDescriptors = {};
   for (const def of defs) {
@@ -13277,10 +13461,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path2) {
-  if (!path2)
+function getElementAtPath(obj, path3) {
+  if (!path3)
     return obj;
-  return path2.reduce((acc, key) => acc?.[key], obj);
+  return path3.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -13504,23 +13688,21 @@ function pick(schema, mask) {
   if (hasChecks) {
     throw new Error(".pick() cannot be used on object schemas containing refinements");
   }
-  const def = mergeDefs(schema._zod.def, {
-    get shape() {
-      const newShape = {};
-      for (const key of Reflect.ownKeys(mask)) {
-        if (!Object.prototype.hasOwnProperty.call(currDef.shape, key)) {
-          throw new Error(`Unrecognized key: "${String(key)}"`);
-        }
-        if (!mask[key])
-          continue;
-        assignProp(newShape, key, currDef.shape[key]);
-      }
-      assignProp(this, "shape", newShape);
-      return newShape;
-    },
-    checks: []
-  });
-  return clone(schema, def);
+  const newShape = {};
+  mirrorShape(newShape, schema, maskedKeys(schema, mask));
+  return clone(schema, mergeDefs(currDef, { shape: newShape, checks: [] }));
+}
+function maskedKeys(schema, mask) {
+  const raw = sourceShape(schema);
+  const keys = [];
+  for (const key of Reflect.ownKeys(mask)) {
+    if (!Object.getOwnPropertyDescriptor(raw, key)?.enumerable) {
+      throw new Error(`Unrecognized key: "${String(key)}"`);
+    }
+    if (mask[key])
+      keys.push(key);
+  }
+  return keys;
 }
 function omit(schema, mask) {
   const currDef = schema._zod.def;
@@ -13529,23 +13711,10 @@ function omit(schema, mask) {
   if (hasChecks) {
     throw new Error(".omit() cannot be used on object schemas containing refinements");
   }
-  const def = mergeDefs(schema._zod.def, {
-    get shape() {
-      const newShape = { ...schema._zod.def.shape };
-      for (const key of Reflect.ownKeys(mask)) {
-        if (!Object.prototype.hasOwnProperty.call(currDef.shape, key)) {
-          throw new Error(`Unrecognized key: "${String(key)}"`);
-        }
-        if (!mask[key])
-          continue;
-        delete newShape[key];
-      }
-      assignProp(this, "shape", newShape);
-      return newShape;
-    },
-    checks: []
-  });
-  return clone(schema, def);
+  const omitted = new Set(maskedKeys(schema, mask));
+  const newShape = {};
+  mirrorShape(newShape, schema, Reflect.ownKeys(sourceShape(schema)).filter((key) => !omitted.has(key)));
+  return clone(schema, mergeDefs(currDef, { shape: newShape, checks: [] }));
 }
 function extend(schema, shape) {
   if (!isPlainObject(shape)) {
@@ -13554,34 +13723,26 @@ function extend(schema, shape) {
   const checks = schema._zod.def.checks;
   const hasChecks = checks && checks.length > 0;
   if (hasChecks) {
-    const existingShape = schema._zod.def.shape;
+    const existingShape = sourceShape(schema);
     for (const key of Reflect.ownKeys(shape)) {
       if (Object.getOwnPropertyDescriptor(existingShape, key) !== void 0) {
         throw new Error("Cannot overwrite keys on object schemas containing refinements. Use `.safeExtend()` instead.");
       }
     }
   }
-  const def = mergeDefs(schema._zod.def, {
-    get shape() {
-      const _shape = { ...schema._zod.def.shape, ...shape };
-      assignProp(this, "shape", _shape);
-      return _shape;
-    }
-  });
-  return clone(schema, def);
+  return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape) }));
+}
+function extended(schema, shape) {
+  const newShape = {};
+  mirrorShape(newShape, schema, Reflect.ownKeys(sourceShape(schema)));
+  mirrorProps(newShape, shape);
+  return newShape;
 }
 function safeExtend(schema, shape) {
   if (!isPlainObject(shape)) {
     throw new Error("Invalid input to safeExtend: expected a plain object");
   }
-  const def = mergeDefs(schema._zod.def, {
-    get shape() {
-      const _shape = { ...schema._zod.def.shape, ...shape };
-      assignProp(this, "shape", _shape);
-      return _shape;
-    }
-  });
-  return clone(schema, def);
+  return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape) }));
 }
 function merge(a, b) {
   if (!b?._zod?.def) {
@@ -13590,12 +13751,11 @@ function merge(a, b) {
   if (a._zod.def.checks?.length) {
     throw new Error(".merge() cannot be used on object schemas containing refinements. Use .safeExtend() instead.");
   }
+  const newShape = {};
+  mirrorShape(newShape, a, Reflect.ownKeys(sourceShape(a)));
+  mirrorShape(newShape, b, Reflect.ownKeys(sourceShape(b)));
   const def = mergeDefs(a._zod.def, {
-    get shape() {
-      const _shape = { ...a._zod.def.shape, ...b._zod.def.shape };
-      assignProp(this, "shape", _shape);
-      return _shape;
-    },
+    shape: newShape,
     get catchall() {
       return b._zod.def.catchall;
     },
@@ -13610,67 +13770,19 @@ function partial(Class2, schema, mask, name = "partial") {
   if (hasChecks) {
     throw new Error(`.${name}() cannot be used on object schemas containing refinements`);
   }
-  const def = mergeDefs(schema._zod.def, {
-    get shape() {
-      const oldShape = schema._zod.def.shape;
-      const shape = { ...oldShape };
-      if (mask) {
-        for (const key of Reflect.ownKeys(mask)) {
-          if (!Object.prototype.hasOwnProperty.call(oldShape, key)) {
-            throw new Error(`Unrecognized key: "${String(key)}"`);
-          }
-          if (!mask[key])
-            continue;
-          shape[key] = Class2 ? new Class2({
-            type: "optional",
-            innerType: oldShape[key]
-          }) : oldShape[key];
-        }
-      } else {
-        for (const key of Reflect.ownKeys(oldShape)) {
-          shape[key] = Class2 ? new Class2({
-            type: "optional",
-            innerType: oldShape[key]
-          }) : oldShape[key];
-        }
-      }
-      assignProp(this, "shape", shape);
-      return shape;
-    },
-    checks: []
-  });
-  return clone(schema, def);
+  const selected = mask ? new Set(maskedKeys(schema, mask)) : void 0;
+  const newShape = {};
+  mirrorShape(newShape, schema, Reflect.ownKeys(sourceShape(schema)), Class2 && ((value, key) => selected && !selected.has(key) ? value : new Class2({ type: "optional", innerType: value })));
+  return clone(schema, mergeDefs(schema._zod.def, { shape: newShape, checks: [] }));
 }
 function required(Class2, schema, mask) {
-  const def = mergeDefs(schema._zod.def, {
-    get shape() {
-      const oldShape = schema._zod.def.shape;
-      const shape = { ...oldShape };
-      if (mask) {
-        for (const key of Reflect.ownKeys(mask)) {
-          if (!Object.prototype.hasOwnProperty.call(shape, key)) {
-            throw new Error(`Unrecognized key: "${String(key)}"`);
-          }
-          if (!mask[key])
-            continue;
-          shape[key] = new Class2({
-            type: "nonoptional",
-            innerType: oldShape[key]
-          });
-        }
-      } else {
-        for (const key of Reflect.ownKeys(oldShape)) {
-          shape[key] = new Class2({
-            type: "nonoptional",
-            innerType: oldShape[key]
-          });
-        }
-      }
-      assignProp(this, "shape", shape);
-      return shape;
-    }
-  });
-  return clone(schema, def);
+  const selected = mask ? new Set(maskedKeys(schema, mask)) : void 0;
+  const newShape = {};
+  mirrorShape(newShape, schema, Reflect.ownKeys(sourceShape(schema)), (value, key) => (
+    // overwrite with non-optional
+    selected && !selected.has(key) ? value : new Class2({ type: "nonoptional", innerType: value })
+  ));
+  return clone(schema, mergeDefs(schema._zod.def, { shape: newShape }));
 }
 function aborted(x, startIndex = 0) {
   if (x.aborted === true)
@@ -13692,16 +13804,28 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path2, issues) {
+function prefixIssues(path3, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path2);
+    iss.path.unshift(path3);
     return iss;
   });
 }
 function unwrapMessage(message) {
   return typeof message === "string" ? message : message?.message;
+}
+function sizeCaps(defChecks) {
+  const caps = [];
+  for (const ch of defChecks ?? []) {
+    const d = ch._zod.def;
+    if (!/_(length|size)$|_equals$/.test(d.check))
+      break;
+    const max = d.maximum ?? d.length ?? d.size;
+    if (max >= 0)
+      caps.push([max, ch]);
+  }
+  return caps;
 }
 function attachSchema(issues, start, inst) {
   var _a3;
@@ -13720,13 +13844,18 @@ function finalizeIssue(iss, ctx, config2) {
   }
   const schemaError = iss.schema !== iss.inst ? iss.schema?._zod.def?.error : void 0;
   const message = iss.message ? iss.message : unwrapMessage(iss.inst?._zod.def?.error?.(iss)) ?? unwrapMessage(schemaError?.(iss)) ?? unwrapMessage(ctx?.error?.(iss)) ?? unwrapMessage(config2.customError?.(iss)) ?? unwrapMessage(config2.localeError?.(iss)) ?? "Invalid input";
-  const { inst: _inst, schema: _schema, continue: _continue, input: _input, ...rest } = iss;
-  rest.path ?? (rest.path = []);
-  rest.message = message;
-  if (ctx?.reportInput) {
-    rest.input = _input;
+  const full = {};
+  for (const k of Object.keys(iss)) {
+    if (k === "inst" || k === "schema" || k === "continue" || k === "input" || k === "__proto__")
+      continue;
+    full[k] = iss[k];
   }
-  return rest;
+  full.path ?? (full.path = []);
+  full.message = message;
+  if (ctx?.reportInput) {
+    full.input = iss.input;
+  }
+  return full;
 }
 function getSizableOrigin(input) {
   if (input instanceof Set)
@@ -13853,6 +13982,23 @@ function own(inst, key, value, enumerable = true) {
 function hide(inst, key, value) {
   return own(inst, key, value, false);
 }
+// @__NO_SIDE_EFFECTS__
+function derived(computes, table) {
+  for (const key in computes) {
+    const compute = computes[key];
+    Object.defineProperty(table, key, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return own(this, key, compute(this));
+      },
+      set(value) {
+        own(this, key, value);
+      }
+    });
+  }
+  return table;
+}
 function defineBound(proto, key, fn) {
   Object.defineProperty(proto, key, {
     configurable: true,
@@ -13977,8 +14123,7 @@ function $constructor(name, initializer3, proto, params) {
       } finally {
         _zodDesc.value = void 0;
       }
-    }
-    if (inst._zod.traits.has(name)) {
+    } else if (inst._zod.traits.has(name)) {
       return;
     }
     inst._zod.traits.add(name);
@@ -14068,16 +14213,12 @@ var _messageDesc = {
   enumerable: true,
   configurable: true
 };
-var _zodDesc2 = { value: void 0, enumerable: false };
 var _issuesDesc = { value: void 0, enumerable: false };
 var _installedToString = /* @__PURE__ */ new WeakSet([Object.prototype, Error.prototype]);
 var initializer = (inst, def) => {
   inst.name = "$ZodError";
-  _zodDesc2.value = inst._zod;
-  Object.defineProperty(inst, "_zod", _zodDesc2);
   _issuesDesc.value = def;
   Object.defineProperty(inst, "issues", _issuesDesc);
-  _zodDesc2.value = void 0;
   _issuesDesc.value = void 0;
   Object.defineProperty(inst, "message", _messageDesc);
   const proto = Object.getPrototypeOf(inst);
@@ -14125,16 +14266,16 @@ function flattenError(error3, mapper = (issue2) => issue2.message) {
 }
 function formatError(error3, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error4, path2 = []) => {
+  const processError = (error4, path3 = []) => {
     for (const issue2 of error4.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path2, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path2, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -14213,23 +14354,69 @@ var _safeParse = (_Err) => (schema, value, _ctx) => {
   if (result instanceof Promise) {
     throw new $ZodAsyncError();
   }
-  return result.issues.length ? {
-    success: false,
-    error: new (_Err ?? $ZodError)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())))
-  } : { success: true, data: result.value };
+  return result.issues.length ? failure(_Err, result.issues, ctx) : { success: true, data: result.value };
 };
 var safeParse = /* @__PURE__ */ _safeParse($ZodRealError);
+function failure(Err, issues, ctx) {
+  let error3;
+  return {
+    success: false,
+    get error() {
+      if (!error3) {
+        error3 = new Err(issues.map((iss) => finalizeIssue(iss, ctx, config())));
+        issues = void 0;
+        ctx = void 0;
+      }
+      return error3;
+    },
+    set error(e) {
+      error3 = e;
+      issues = void 0;
+      ctx = void 0;
+    }
+  };
+}
 var _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
   const ctx = _ctx ? { ..._ctx, async: true } : { async: true };
   let result = schema._zod.run({ value, issues: [] }, ctx);
   if (result instanceof Promise)
     result = await result;
-  return result.issues.length ? {
-    success: false,
-    error: new _Err(result.issues.map((iss) => finalizeIssue(iss, ctx, config())))
-  } : { success: true, data: result.value };
+  return result.issues.length ? failure(_Err, result.issues, ctx) : { success: true, data: result.value };
 };
-var safeParseAsync = /* @__PURE__ */ _safeParseAsync($ZodRealError);
+var COMPILE_INVALID = /* @__PURE__ */ Symbol.for("zod.compile.invalid");
+var COMPILE_FALLBACK = /* @__PURE__ */ Symbol.for("zod.compile.fallback");
+var validate = ((schema, value, _ctx) => {
+  const validator = schema._zod.bag.validator;
+  if (validator !== void 0) {
+    if (validator(value) !== COMPILE_INVALID)
+      return true;
+    if (validator.definite === true && _ctx === void 0)
+      return false;
+  }
+  return validateFallback(schema, value, _ctx);
+});
+function validateFallback(schema, value, _ctx) {
+  const ctx = _ctx ? { ..._ctx, async: false, abortEarly: true } : { async: false, abortEarly: true };
+  const fallbackRun = schema._zod.bag.fallbackRun;
+  let result;
+  if (fallbackRun) {
+    ctx[COMPILE_FALLBACK] = true;
+    result = fallbackRun({ value, issues: [] }, ctx);
+  } else {
+    result = schema._zod.run({ value, issues: [] }, ctx);
+  }
+  if (result instanceof Promise) {
+    throw new $ZodAsyncError();
+  }
+  return result.issues.length === 0;
+}
+var validateAsync = async (schema, value, _ctx) => {
+  const ctx = _ctx ? { ..._ctx, async: true, abortEarly: true } : { async: true, abortEarly: true };
+  let result = schema._zod.run({ value, issues: [] }, ctx);
+  if (result instanceof Promise)
+    result = await result;
+  return result.issues.length === 0;
+};
 var _encode = (_Err) => {
   const parse5 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
@@ -14292,8 +14479,8 @@ var uuid = (version2) => {
     return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
   return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version2}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
-var email = /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
-var _emoji = `^[\\p{Extended_Pictographic}\\p{Emoji_Component}]+$`;
+var email = /^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+var _emoji = `^(?=[\\s\\S]*[\\p{Extended_Pictographic}\\p{Regional_Indicator}\\u20E3])[\\p{Extended_Pictographic}\\p{Emoji_Component}]+$`;
 function emoji() {
   return new RegExp(_emoji, "u");
 }
@@ -14302,7 +14489,7 @@ var ipv6 = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|(
 var cidrv4 = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/([0-9]|[1-2][0-9]|3[0-2])$/;
 var cidrv6 = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
 var base64 = /^$|^(?:[0-9a-zA-Z+/]{4})*(?:(?:[0-9a-zA-Z+/]{2}==)|(?:[0-9a-zA-Z+/]{3}=))?$/;
-var base64url = /^[A-Za-z0-9_-]*$/;
+var base64url = /^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2,3})?$/;
 var httpProtocol = /^https?$/;
 var e164 = /^\+[1-9]\d{6,14}$/;
 var dateSource = `(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))`;
@@ -14326,10 +14513,7 @@ function datetime(args) {
   const timeRegex = args.local ? `${qualified}|${timeSource({ precision: args.precision })}` : qualified;
   return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
 }
-var string = (params) => {
-  const regex = params ? `[\\s\\S]{${params?.minimum ?? 0},${params?.maximum ?? ""}}` : `[\\s\\S]*`;
-  return new RegExp(`^${regex}$`);
-};
+var anyString = /^[\s\S]{0,}$/;
 var integer = /^-?\d+$/;
 var number = /^-?\d+(?:\.\d+)?$/;
 var boolean = /^(?:true|false)$/i;
@@ -14356,16 +14540,6 @@ var numericOriginMap = {
 var $ZodCheckLessThan = /* @__PURE__ */ $constructor("$ZodCheckLessThan", (inst, def) => {
   $ZodCheck.init(inst, def);
   const origin = numericOriginMap[typeof def.value];
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    const curr = (def.inclusive ? bag.maximum : bag.exclusiveMaximum) ?? Number.POSITIVE_INFINITY;
-    if (def.value < curr) {
-      if (def.inclusive)
-        bag.maximum = def.value;
-      else
-        bag.exclusiveMaximum = def.value;
-    }
-  });
   inst._zod.check = (payload) => {
     if (def.inclusive ? payload.value <= def.value : payload.value < def.value) {
       return;
@@ -14384,16 +14558,6 @@ var $ZodCheckLessThan = /* @__PURE__ */ $constructor("$ZodCheckLessThan", (inst,
 var $ZodCheckGreaterThan = /* @__PURE__ */ $constructor("$ZodCheckGreaterThan", (inst, def) => {
   $ZodCheck.init(inst, def);
   const origin = numericOriginMap[typeof def.value];
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    const curr = (def.inclusive ? bag.minimum : bag.exclusiveMinimum) ?? Number.NEGATIVE_INFINITY;
-    if (def.value > curr) {
-      if (def.inclusive)
-        bag.minimum = def.value;
-      else
-        bag.exclusiveMinimum = def.value;
-    }
-  });
   inst._zod.check = (payload) => {
     if (def.inclusive ? payload.value >= def.value : payload.value > def.value) {
       return;
@@ -14411,10 +14575,6 @@ var $ZodCheckGreaterThan = /* @__PURE__ */ $constructor("$ZodCheckGreaterThan", 
 });
 var $ZodCheckMultipleOf = /* @__PURE__ */ $constructor("$ZodCheckMultipleOf", (inst, def) => {
   $ZodCheck.init(inst, def);
-  inst._zod.onattach.push((inst2) => {
-    var _a3;
-    (_a3 = inst2._zod.bag).multipleOf ?? (_a3.multipleOf = def.value);
-  });
   inst._zod.check = (payload) => {
     if (typeof payload.value !== typeof def.value)
       throw new Error("Cannot mix number and bigint in multiple_of check.");
@@ -14440,14 +14600,6 @@ var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat"
   const isInt = def.format?.includes("int");
   const origin = isInt ? "int" : "number";
   const [minimum, maximum] = NUMBER_FORMAT_RANGES[def.format];
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    bag.format = def.format;
-    bag.minimum = minimum;
-    bag.maximum = maximum;
-    if (isInt)
-      bag.pattern = integer;
-  });
   inst._zod.check = (payload) => {
     const input = payload.value;
     if (isInt) {
@@ -14517,11 +14669,6 @@ var $ZodCheckMaxLength = /* @__PURE__ */ $constructor("$ZodCheckMaxLength", (ins
   var _a3;
   $ZodCheck.init(inst, def);
   (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
-  inst._zod.onattach.push((inst2) => {
-    const curr = inst2._zod.bag.maximum ?? Number.POSITIVE_INFINITY;
-    if (def.maximum < curr)
-      inst2._zod.bag.maximum = def.maximum;
-  });
   inst._zod.check = (payload) => {
     const input = payload.value;
     const units = input.length;
@@ -14544,11 +14691,6 @@ var $ZodCheckMinLength = /* @__PURE__ */ $constructor("$ZodCheckMinLength", (ins
   var _a3;
   $ZodCheck.init(inst, def);
   (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
-  inst._zod.onattach.push((inst2) => {
-    const curr = inst2._zod.bag.minimum ?? Number.NEGATIVE_INFINITY;
-    if (def.minimum > curr)
-      inst2._zod.bag.minimum = def.minimum;
-  });
   inst._zod.check = (payload) => {
     const input = payload.value;
     const units = input.length;
@@ -14571,12 +14713,6 @@ var $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals"
   var _a3;
   $ZodCheck.init(inst, def);
   (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    bag.minimum = def.length;
-    bag.maximum = def.length;
-    bag.length = def.length;
-  });
   inst._zod.check = (payload) => {
     const input = payload.value;
     const units = input.length;
@@ -14599,14 +14735,6 @@ var $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals"
 var $ZodCheckStringFormat = /* @__PURE__ */ $constructor("$ZodCheckStringFormat", (inst, def) => {
   var _a3, _b;
   $ZodCheck.init(inst, def);
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    bag.format = def.format;
-    if (def.pattern) {
-      bag.patterns ?? (bag.patterns = /* @__PURE__ */ new Set());
-      bag.patterns.add(def.pattern);
-    }
-  });
   if (def.pattern)
     (_a3 = inst._zod).check ?? (_a3.check = (payload) => {
       def.pattern.lastIndex = 0;
@@ -14656,11 +14784,6 @@ var $ZodCheckIncludes = /* @__PURE__ */ $constructor("$ZodCheckIncludes", (inst,
   const escapedRegex = escapeRegex(def.includes);
   const pattern = new RegExp(typeof def.position === "number" ? `^.{${def.position},}${escapedRegex}` : escapedRegex);
   def.pattern = pattern;
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    bag.patterns ?? (bag.patterns = /* @__PURE__ */ new Set());
-    bag.patterns.add(pattern);
-  });
   inst._zod.check = (payload) => {
     if (payload.value.includes(def.includes, def.position))
       return;
@@ -14679,11 +14802,6 @@ var $ZodCheckStartsWith = /* @__PURE__ */ $constructor("$ZodCheckStartsWith", (i
   $ZodCheck.init(inst, def);
   const pattern = new RegExp(`^${escapeRegex(def.prefix)}.*`);
   def.pattern ?? (def.pattern = pattern);
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    bag.patterns ?? (bag.patterns = /* @__PURE__ */ new Set());
-    bag.patterns.add(pattern);
-  });
   inst._zod.check = (payload) => {
     if (payload.value.startsWith(def.prefix))
       return;
@@ -14702,11 +14820,6 @@ var $ZodCheckEndsWith = /* @__PURE__ */ $constructor("$ZodCheckEndsWith", (inst,
   $ZodCheck.init(inst, def);
   const pattern = new RegExp(`.*${escapeRegex(def.suffix)}$`);
   def.pattern ?? (def.pattern = pattern);
-  inst._zod.onattach.push((inst2) => {
-    const bag = inst2._zod.bag;
-    bag.patterns ?? (bag.patterns = /* @__PURE__ */ new Set());
-    bag.patterns.add(pattern);
-  });
   inst._zod.check = (payload) => {
     if (payload.value.endsWith(def.suffix))
       return;
@@ -14736,10 +14849,14 @@ var Doc = class {
     this.args = args;
     this.closed = closed;
   }
+  // the compiler catches a child's throw and keeps writing into this doc, so the indent has to unwind with it
   indented(fn) {
     this.indent += 1;
-    fn(this);
-    this.indent -= 1;
+    try {
+      fn(this);
+    } finally {
+      this.indent -= 1;
+    }
   }
   write(arg) {
     if (typeof arg === "function") {
@@ -14768,8 +14885,8 @@ ${content.join("\n")}
 // node_modules/zod/v4/core/versions.js
 var version = {
   major: 4,
-  minor: 5,
-  patch: 2
+  minor: 6,
+  patch: 7
 };
 
 // node_modules/zod/v4/core/schemas.js
@@ -14882,15 +14999,22 @@ var $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
     own(this, "~standard", value);
   }
 });
-var toStandardResult = (r) => r.success ? { value: r.data } : { issues: r.error?.issues };
+var toStandardResult = (r, ctx) => r.issues.length ? { issues: r.issues.map((iss) => finalizeIssue(iss, ctx, config())) } : { value: r.value };
+async function validateAsync2(inst, value) {
+  const ctx = { async: true };
+  return toStandardResult(await inst._zod.run({ value, issues: [] }, ctx), ctx);
+}
 function standardProps(inst) {
   return {
     validate: (value) => {
+      const ctx = { async: false };
       try {
-        return toStandardResult(safeParse(inst, value));
+        const r = inst._zod.run({ value, issues: [] }, ctx);
+        if (!(r instanceof Promise))
+          return toStandardResult(r, ctx);
       } catch (_) {
-        return safeParseAsync(inst, value).then(toStandardResult);
       }
+      return validateAsync2(inst, value);
     },
     vendor: "zod",
     version: 1
@@ -14898,7 +15022,7 @@ function standardProps(inst) {
 }
 var $ZodString = /* @__PURE__ */ $constructor("$ZodString", (inst, def) => {
   $ZodType.init(inst, def);
-  inst._zod.pattern = [...inst?._zod.bag?.patterns ?? []].pop() ?? string(inst._zod.bag);
+  inst._zod.pattern = def.pattern ?? anyString;
   inst._zod.parse = (payload, _) => {
     if (def.coerce)
       try {
@@ -14950,11 +15074,32 @@ var $ZodEmail = /* @__PURE__ */ $constructor("$ZodEmail", (inst, def) => {
 });
 var URL_BAD_FORMAT = 1;
 var URL_UNPARSEABLE = 2;
+function canParseURL(input) {
+  try {
+    if (typeof URL !== "undefined" && typeof URL.canParse === "function")
+      return URL.canParse(input);
+    new URL(input);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function validateURL(trimmed, def) {
+  if (!("normalize" in def) && !("hostname" in def) && !("protocol" in def)) {
+    return canParseURL(trimmed) || URL_UNPARSEABLE;
+  }
+  return parseURLObject(trimmed, def);
+}
 function parseURLObject(trimmed, def) {
   if (!def.normalize && def.protocol?.source === httpProtocol.source && !/^https?:\/\//i.test(trimmed)) {
     return URL_BAD_FORMAT;
   }
   try {
+    if (typeof URL !== "undefined") {
+      const URLStatic = URL;
+      if (typeof URLStatic.parse === "function")
+        return URLStatic.parse(trimmed) ?? URL_UNPARSEABLE;
+    }
     return new URL(trimmed);
   } catch {
     return URL_UNPARSEABLE;
@@ -14977,7 +15122,7 @@ var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
   inst._zod.check = (payload) => {
     try {
       const trimmed = payload.value.trim();
-      const url = parseURLObject(trimmed, def);
+      const url = validateURL(trimmed, def);
       if (url === URL_BAD_FORMAT) {
         payload.issues.push({
           code: "invalid_format",
@@ -14997,6 +15142,10 @@ var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
           inst,
           continue: !def.abort
         });
+        return;
+      }
+      if (url === true) {
+        payload.value = stripTabAndNewline(trimmed);
         return;
       }
       if (def.hostname && !urlHostnameOk(url, def.hostname)) {
@@ -15067,12 +15216,6 @@ var $ZodKSUID = /* @__PURE__ */ $constructor("$ZodKSUID", (inst, def) => {
 var $ZodISODateTime = /* @__PURE__ */ $constructor("$ZodISODateTime", (inst, def) => {
   def.pattern ?? (def.pattern = datetime(def));
   $ZodStringFormat.init(inst, def);
-  if (def.local || def.precision === -1) {
-    inst._zod.bag.laxFormat = true;
-    inst._zod.onattach.push((s) => {
-      s._zod.bag.laxFormat = true;
-    });
-  }
 });
 var $ZodISODate = /* @__PURE__ */ $constructor("$ZodISODate", (inst, def) => {
   def.pattern ?? (def.pattern = date);
@@ -15089,23 +15232,16 @@ var $ZodISODuration = /* @__PURE__ */ $constructor("$ZodISODuration", (inst, def
 var $ZodIPv4 = /* @__PURE__ */ $constructor("$ZodIPv4", (inst, def) => {
   def.pattern ?? (def.pattern = ipv4);
   $ZodStringFormat.init(inst, def);
-  inst._zod.bag.format = `ipv4`;
 });
 var ipv6Alphabet = /^[0-9a-fA-F:.]+$/;
 function isValidIPv6(value) {
   if (!ipv6Alphabet.test(value))
     return false;
-  try {
-    new URL(`http://[${value}]`);
-    return true;
-  } catch {
-    return false;
-  }
+  return canParseURL(`http://[${value}]`);
 }
 var $ZodIPv6 = /* @__PURE__ */ $constructor("$ZodIPv6", (inst, def) => {
   def.pattern ?? (def.pattern = ipv6);
   $ZodStringFormat.init(inst, def);
-  inst._zod.bag.format = `ipv6`;
   inst._zod.check = (payload) => {
     if (!isValidIPv6(payload.value)) {
       payload.issues.push({
@@ -15165,10 +15301,10 @@ function isValidBase64(data) {
     return false;
   }
 }
+var base64Charset = /^[0-9a-zA-Z+/]*={0,2}$/;
 var $ZodBase64 = /* @__PURE__ */ $constructor("$ZodBase64", (inst, def) => {
-  def.pattern ?? (def.pattern = base64);
+  def.pattern ?? (def.pattern = base64Charset);
   $ZodStringFormat.init(inst, def);
-  inst._zod.bag.contentEncoding = "base64";
   inst._zod.check = (payload) => {
     if (isValidBase64(payload.value))
       return;
@@ -15181,17 +15317,17 @@ var $ZodBase64 = /* @__PURE__ */ $constructor("$ZodBase64", (inst, def) => {
     });
   };
 });
+var base64urlCharset = /^[A-Za-z0-9_-]*$/;
 function isValidBase64URL(data) {
-  if (!base64url.test(data))
+  if (!base64urlCharset.test(data))
     return false;
   const base642 = data.replace(/[-_]/g, (c) => c === "-" ? "+" : "/");
   const padded = base642.padEnd(Math.ceil(base642.length / 4) * 4, "=");
   return isValidBase64(padded);
 }
 var $ZodBase64URL = /* @__PURE__ */ $constructor("$ZodBase64URL", (inst, def) => {
-  def.pattern ?? (def.pattern = base64url);
+  def.pattern ?? (def.pattern = base64urlCharset);
   $ZodStringFormat.init(inst, def);
-  inst._zod.bag.contentEncoding = "base64url";
   inst._zod.check = (payload) => {
     if (isValidBase64URL(payload.value))
       return;
@@ -15244,7 +15380,7 @@ var $ZodJWT = /* @__PURE__ */ $constructor("$ZodJWT", (inst, def) => {
 });
 var $ZodNumber = /* @__PURE__ */ $constructor("$ZodNumber", (inst, def) => {
   $ZodType.init(inst, def);
-  inst._zod.pattern = inst._zod.bag.pattern ?? number;
+  inst._zod.pattern = number;
   inst._zod.parse = (payload, _ctx) => {
     if (def.coerce)
       try {
@@ -15324,6 +15460,29 @@ var $ZodNever = /* @__PURE__ */ $constructor("$ZodNever", (inst, def) => {
     return payload;
   };
 });
+function capSize(inst, size) {
+  const caps = sizeCaps(inst._zod.def.checks);
+  if (!caps.length)
+    return;
+  const cap = Math.min(...caps.map((c) => c[0]));
+  const parse5 = inst._zod.parse;
+  inst._zod.parse = (payload, ctx) => {
+    const n = size(payload.value);
+    if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
+      for (const [max, ch] of sizeCaps(inst._zod.def.checks)) {
+        if (n > max && ch._zod.def.when(payload)) {
+          const start = payload.issues.length;
+          ch._zod.check(payload);
+          payload.issues[start].continue = false;
+          attachSchema(payload.issues, start, inst);
+          return payload;
+        }
+      }
+    }
+    return parse5(payload, ctx);
+  };
+}
+var arraySize = (input) => Array.isArray(input) ? input.length : -1;
 function handleArrayResult(result, final, index) {
   if (result.issues.length) {
     final.issues.push(...prefixIssues(index, result.issues));
@@ -15347,6 +15506,7 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     }
     payload.value = memo2 ? memo2.alloc(inst, payload, Array(input.length), ctx) : Array(input.length);
     const proms = [];
+    const abortEarly = ctx?.abortEarly;
     for (let i = 0; i < input.length; i++) {
       const item = input[i];
       const result = def.element._zod.run({
@@ -15357,6 +15517,8 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
         proms.push(result.then((result2) => handleArrayResult(result2, payload, i)));
       } else {
         handleArrayResult(result, payload, i);
+        if (abortEarly && result.issues.length !== 0 && aborted(result))
+          break;
       }
     }
     if (proms.length) {
@@ -15364,6 +15526,7 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     }
     return payload;
   };
+  capSize(inst, arraySize);
 });
 function handlePropertyResult(result, final, key, input, optin, optout) {
   const isPresent = key in input;
@@ -15389,7 +15552,7 @@ function handlePropertyResult(result, final, key, input, optin, optout) {
     return;
   }
   if (result.value === void 0) {
-    if (isPresent) {
+    if (isPresent || optin === "defaulted" && !isOptionalOut) {
       final.value[key] = void 0;
     }
   } else {
@@ -15418,14 +15581,20 @@ function normalizeDef(def) {
     optionalKeys: new Set(okeys)
   };
 }
-function handleCatchall(proms, input, payload, ctx, def, inst) {
+function handleCatchall(proms, input, payload, ctx, def, inst, abortEarly) {
   const unrecognized = [];
   const keySet = def.keySet;
   const _catchall = def.catchall._zod;
   const t = _catchall.def.type;
   const optin = _catchall.optin;
   const optout = _catchall.optout;
+  let seen = 0;
   for (const key in input) {
+    if (abortEarly && payload.issues.length !== seen) {
+      if (aborted(payload, seen))
+        break;
+      seen = payload.issues.length;
+    }
     if (keySet.has(key))
       continue;
     if (key === "__proto__") {
@@ -15460,23 +15629,19 @@ function handleCatchall(proms, input, payload, ctx, def, inst) {
     return payload;
   });
 }
-var propShapes = /* @__PURE__ */ new WeakMap();
 var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   $ZodType.init(inst, def);
   const desc = Object.getOwnPropertyDescriptor(def, "shape");
-  if (!desc?.get) {
-    const sh = def.shape;
-    propShapes.set(def, sh);
-    Object.defineProperty(def, "shape", {
-      get: () => {
-        const newSh = { ...sh };
-        Object.defineProperty(def, "shape", {
-          value: newSh
-        });
-        propShapes.set(def, newSh);
-        return newSh;
-      }
-    });
+  const sh = desc?.get ? desc.get.raw : def.shape ?? {};
+  if (sh) {
+    const get = () => {
+      const newSh = { ...sh };
+      Object.defineProperty(def, "shape", { value: newSh });
+      get.raw = newSh;
+      return newSh;
+    };
+    get.raw = sh;
+    Object.defineProperty(def, "shape", { get });
   }
   const _normalized = cached(() => normalizeDef(def));
   defineLazyInternal(inst, "propValues", (zod) => {
@@ -15516,7 +15681,14 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     payload.value = memo2 ? memo2.alloc(inst, payload, {}, ctx) : {};
     const proms = [];
     const shape = value.shape;
+    const abortEarly = ctx?.abortEarly;
+    let seen = payload.issues.length;
     for (const key of value.allKeys) {
+      if (abortEarly && payload.issues.length !== seen) {
+        if (aborted(payload, seen))
+          break;
+        seen = payload.issues.length;
+      }
       if (key === "__proto__")
         continue;
       const el = shape[key];
@@ -15532,7 +15704,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     if (!catchall) {
       return proms.length ? Promise.all(proms).then(() => payload) : payload;
     }
-    return handleCatchall(proms, input, payload, ctx, _normalized.value, inst);
+    return handleCatchall(proms, input, payload, ctx, _normalized.value, inst, abortEarly === true);
   };
 });
 var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) => {
@@ -15546,10 +15718,16 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
     const doc = new Doc(["payload", "ctx"], { shape, inst, memo: memo2, syms });
     const parseStr = (k) => `shape[${k}]._zod.run({ value: input[${k}], issues: [] }, ctx)`;
     const prefixStr = (id, k) => `
+          let ${id}_ab = false;
           for (let i = 0; i < ${id}.issues.length; i++) {
             const iss = ${id}.issues[i];
             iss.path = iss.path ? [${k}, ...iss.path] : [${k}];
             payload.issues.push(iss);
+            if (iss.continue !== true) ${id}_ab = true;
+          }
+          if (${id}_ab && ctx && ctx.abortEarly) {
+            payload.value = newResult;
+            return payload;
           }`;
     doc.write(`const input = payload.value;`);
     const ids = /* @__PURE__ */ Object.create(null);
@@ -15595,6 +15773,10 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
             input: undefined,
             path: [${k}]
           });
+          if (ctx && ctx.abortEarly) {
+            payload.value = newResult;
+            return payload;
+          }
         }
 
         if (${id}_present) {
@@ -15606,16 +15788,16 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
         doc.write(`
         if (${id}.issues.length) {${prefixStr(id, k)}
         }
-        
-        if (${id}.value === undefined) {
-          if (${isPresent}) {
-            newResult[${k}] = undefined;
-          }
+      `);
+        if (optin === "defaulted") {
+          doc.write(`newResult[${k}] = ${id}.value;`);
         } else {
+          doc.write(`
+        if (${id}.value !== undefined || ${isPresent}) {
           newResult[${k}] = ${id}.value;
         }
-
       `);
+        }
       }
     }
     doc.write(`payload.value = newResult;`);
@@ -15647,7 +15829,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
       payload = fastpass(payload, ctx);
       if (!catchall)
         return payload;
-      return handleCatchall([], input, payload, ctx, value, inst);
+      return handleCatchall([], input, payload, ctx, value, inst, ctx?.abortEarly === true);
     }
     return superParse(payload, ctx);
   };
@@ -15717,16 +15899,37 @@ var $ZodUnion = /* @__PURE__ */ $constructor("$ZodUnion", (inst, def) => {
     });
   };
 });
+function discriminatorMap(def) {
+  const map = /* @__PURE__ */ new Map();
+  for (const option of def.options) {
+    const values = option._zod.propValues?.[def.discriminator];
+    if (!values || values.size === 0)
+      throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(option)}"`);
+    for (const value of values) {
+      if (map.has(value)) {
+        if (value !== void 0)
+          throw new Error(`Duplicate discriminator value "${String(value)}"`);
+        map.set(value, null);
+      } else {
+        map.set(value, option);
+      }
+    }
+  }
+  return map;
+}
 var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnion", (inst, def) => {
   def.inclusive = false;
   $ZodUnion.init(inst, def);
   const _super = inst._zod.parse;
   defineLazyInternal(inst, "propValues", (zod) => {
     const propValues = {};
+    let undefinedCount = 0;
     for (const option of zod.def.options) {
       const pv = option._zod.propValues;
       if (!pv || Object.keys(pv).length === 0)
         throw new Error(`Invalid discriminated union option at index "${zod.def.options.indexOf(option)}"`);
+      if (pv[zod.def.discriminator]?.has(void 0))
+        undefinedCount++;
       for (const [k, v] of Object.entries(pv)) {
         if (!Object.prototype.hasOwnProperty.call(propValues, k)) {
           assignProp(propValues, k, /* @__PURE__ */ new Set());
@@ -15736,30 +15939,17 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
         }
       }
     }
+    if (!zod.def.unionFallback && undefinedCount > 1)
+      propValues[zod.def.discriminator]?.delete(void 0);
     return propValues;
   });
   def.options.forEach((option, i) => {
-    const propShape = propShapes.get(option._zod.def);
+    const propShape = rawShape(option._zod.def);
     if (propShape && !Object.prototype.hasOwnProperty.call(propShape, def.discriminator)) {
       throw new Error(`Invalid discriminated union option at index "${i}"`);
     }
   });
-  const disc = cached(() => {
-    const opts = def.options;
-    const map = /* @__PURE__ */ new Map();
-    for (const o of opts) {
-      const values = o._zod.propValues?.[def.discriminator];
-      if (!values || values.size === 0)
-        throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(o)}"`);
-      for (const v of values) {
-        if (map.has(v)) {
-          throw new Error(`Duplicate discriminator value "${String(v)}"`);
-        }
-        map.set(v, o);
-      }
-    }
-    return map;
-  });
+  const disc = cached(() => discriminatorMap(def));
   inst._zod.parse = (payload, ctx) => {
     const input = payload.value;
     if (!isObject(input)) {
@@ -15771,8 +15961,9 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
       });
       return payload;
     }
-    const opt = disc.value.get(input?.[def.discriminator]);
-    if (opt) {
+    const value = input?.[def.discriminator];
+    const opt = disc.value.get(value);
+    if (opt && (value !== void 0 || ctx.direction !== "backward")) {
       return opt._zod.run(payload, ctx);
     }
     if (def.unionFallback || ctx.direction === "backward") {
@@ -15783,7 +15974,7 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
       errors: [],
       note: "No matching discriminator",
       discriminator: def.discriminator,
-      options: Array.from(disc.value.keys()),
+      options: Array.from(disc.value.keys()).filter((value2) => disc.value.get(value2) !== null),
       input,
       path: [def.discriminator],
       inst
@@ -16065,8 +16256,10 @@ var $ZodEnum = /* @__PURE__ */ $constructor("$ZodEnum", (inst, def) => {
   const values = getEnumValues(def.entries);
   const valuesSet = new Set(values);
   inst._zod.values = valuesSet;
-  const patternValues = values.filter((k) => propertyKeyTypes.has(typeof k));
-  inst._zod.pattern = new RegExp(patternValues.length ? `^(${patternValues.map((o) => escapeRegex(o.toString())).join("|")})$` : "^[^\\s\\S]$");
+  defineLazyInternal(inst, "pattern", (zod) => {
+    const patternValues = getEnumValues(zod.def.entries).filter((k) => propertyKeyTypes.has(typeof k));
+    return new RegExp(patternValues.length ? `^(${patternValues.map((o) => escapeRegex(o.toString())).join("|")})$` : "^[^\\s\\S]$");
+  });
   inst._zod.parse = (payload, _ctx) => {
     const input = payload.value;
     if (valuesSet.has(input)) {
@@ -16085,7 +16278,10 @@ var $ZodLiteral = /* @__PURE__ */ $constructor("$ZodLiteral", (inst, def) => {
   $ZodType.init(inst, def);
   const values = new Set(def.values);
   inst._zod.values = values;
-  inst._zod.pattern = new RegExp(def.values.length ? `^(${def.values.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$` : "^[^\\s\\S]$");
+  defineLazyInternal(inst, "pattern", (zod) => {
+    const vals = zod.def.values;
+    return new RegExp(vals.length ? `^(${vals.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$` : "^[^\\s\\S]$");
+  });
   inst._zod.parse = (payload, _ctx) => {
     const input = payload.value;
     if (values.has(input)) {
@@ -16369,49 +16565,157 @@ var $ZodCyclicError = class extends Error {
 };
 var STATE = "~memo";
 var NO_ISSUES = [];
+function isRef(value) {
+  return value !== null && typeof value === "object";
+}
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
 var recursive = /* @__PURE__ */ new WeakMap();
-function isRecursive(inst, stack) {
+var NONE = 0;
+var ASSUMED = 1;
+var PROVEN = 2;
+function isRecursive(inst, stack, resolve12) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
-    return cached2;
+    return cached2 ? PROVEN : NONE;
   if (stack.has(inst))
-    return true;
+    return PROVEN;
   stack.add(inst);
-  let result = false;
+  let result = NONE;
   const check = (child) => {
-    if (!result && child?._zod && isRecursive(child, stack))
-      result = true;
+    if (result !== PROVEN && child?._zod) {
+      const answer = isRecursive(child, stack, resolve12);
+      if (answer > result)
+        result = answer;
+    }
+  };
+  const shape = (sh, spread) => {
+    let answer = NONE;
+    for (const key of Reflect.ownKeys(sh)) {
+      const desc = Object.getOwnPropertyDescriptor(sh, key);
+      if (spread && !desc.enumerable)
+        continue;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve12) : NONE;
+      if (child > answer)
+        answer = child;
+    }
+    return answer;
+  };
+  const merge2 = (answer) => {
+    if (answer > result)
+      result = answer;
   };
   const def = inst._zod.def;
-  if (def.type === "lazy") {
-    check(inst._zod.innerType);
-  } else {
-    const shape = def.shape;
-    if (shape)
-      for (const key of Reflect.ownKeys(shape))
-        check(shape[key]);
-    for (const key in def) {
-      const value = def[key];
-      if (!value || typeof value !== "object")
-        continue;
-      if (value._zod)
-        check(value);
-      else if (Array.isArray(value))
-        for (const el of value)
-          check(el);
+  const kind = def.type;
+  switch (kind) {
+    case "object": {
+      const raw = rawShape(def);
+      merge2(raw ? shape(raw, true) : ASSUMED);
+      check(def.catchall);
+      break;
+    }
+    case "array":
+      check(def.element);
+      break;
+    case "tuple":
+      for (const el of def.items)
+        check(el);
+      check(def.rest);
+      break;
+    case "record":
+    case "map":
+      check(def.keyType);
+      check(def.valueType);
+      break;
+    case "set":
+      check(def.valueType);
+      break;
+    case "union":
+      for (const el of def.options)
+        check(el);
+      break;
+    case "intersection":
+      check(def.left);
+      check(def.right);
+      break;
+    case "optional":
+    case "nullable":
+    case "default":
+    case "prefault":
+    case "catch":
+    case "readonly":
+    case "nonoptional":
+    case "promise":
+    case "success":
+      check(def.innerType);
+      break;
+    case "pipe":
+      check(def.in);
+      check(def.out);
+      break;
+    case "function":
+      check(def.input);
+      check(def.output);
+      break;
+    // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
+    case "lazy": {
+      const inner = def._cachedInner ?? (resolve12 ? inst._zod.innerType : void 0);
+      merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
+      break;
+    }
+    // a leaf by choice: `parts` are regex fragments, not data positions
+    case "template_literal":
+    // leaves
+    case "string":
+    case "number":
+    case "int":
+    case "boolean":
+    case "bigint":
+    case "symbol":
+    case "undefined":
+    case "null":
+    case "void":
+    case "never":
+    case "any":
+    case "unknown":
+    case "date":
+    case "nan":
+    case "enum":
+    case "literal":
+    case "file":
+    case "transform":
+    case "custom":
+      break;
+    default: {
+      kind;
+      for (const key in def) {
+        const desc = Object.getOwnPropertyDescriptor(def, key);
+        if (!desc || desc.get)
+          continue;
+        const value = desc.value;
+        if (!value || typeof value !== "object")
+          continue;
+        if (value._zod)
+          check(value);
+        else if (Array.isArray(value))
+          for (const el of value)
+            check(el);
+      }
     }
   }
   stack.delete(inst);
-  recursive.set(inst, result);
-  return result;
+  return settle(inst, result);
+}
+function settle(inst, answer) {
+  if (answer !== ASSUMED)
+    recursive.set(inst, answer === PROVEN);
+  return answer;
 }
 function bucketFor(state, inst) {
   let bucket = state.buckets.get(inst);
   if (!bucket) {
-    bucket = /* @__PURE__ */ new Map();
+    bucket = /* @__PURE__ */ new WeakMap();
     state.buckets.set(inst, bucket);
   }
   return bucket;
@@ -16447,6 +16751,7 @@ var memo = {
   attach(inst) {
     var _a3;
     let isRecursiveInst;
+    let rechecked = false;
     let lastCtx;
     let lastBucket;
     (_a3 = inst._zod).deferred ?? (_a3.deferred = []);
@@ -16454,20 +16759,24 @@ var memo = {
       const base = inst._zod.parse;
       const wrapped = (payload, ctx) => {
         if (isRecursiveInst === void 0) {
-          isRecursiveInst = isRecursive(inst, /* @__PURE__ */ new Set());
-          if (!isRecursiveInst) {
+          const walked = isRecursive(inst, /* @__PURE__ */ new Set(), false);
+          if (walked === NONE) {
             inst._zod.parse = base;
             if (inst._zod.run === wrapped)
               inst._zod.run = base;
             return base(payload, ctx);
           }
+          if (walked === PROVEN || rechecked)
+            isRecursiveInst = true;
+          else
+            rechecked = true;
         }
         const input = payload.value;
-        if (input === null || typeof input !== "object")
+        if (!isRef(input))
           return base(payload, ctx);
         let state = ctx[STATE];
         if (!state) {
-          state = { buckets: /* @__PURE__ */ new Map(), backEdges: void 0 };
+          state = { buckets: /* @__PURE__ */ new WeakMap(), backEdges: void 0 };
           ctx[STATE] = state;
         }
         let bucket;
@@ -16486,7 +16795,7 @@ var memo = {
               payload.issues.push(...cloneIssues(hit.issues));
           } else {
             payload.memo = true;
-            state.backEdges ?? (state.backEdges = /* @__PURE__ */ new Set());
+            state.backEdges ?? (state.backEdges = /* @__PURE__ */ new WeakSet());
             state.backEdges.add(hit.value);
           }
           return payload;
@@ -16518,7 +16827,7 @@ function memoizer() {
 }
 function isBackEdge(ctx, value) {
   const backEdges = ctx[STATE]?.backEdges;
-  return backEdges !== void 0 && value !== null && typeof value === "object" && backEdges.has(value);
+  return backEdges !== void 0 && isRef(value) && backEdges.has(value);
 }
 
 // node_modules/zod/v4/locales/en.js
@@ -16561,7 +16870,9 @@ var error = () => {
     base64url: "base64url-encoded string",
     json_string: "JSON string",
     e164: "E.164 number",
+    currency_code: "currency code",
     credit_card: "credit card number",
+    iban: "IBAN",
     jwt: "JWT",
     template_literal: "input"
   };
@@ -16693,12 +17004,14 @@ function registry() {
 var globalRegistry = globalThis.__zod_globalRegistry;
 
 // node_modules/zod/v4/core/api.js
+function snapshotChecks(def) {
+  if (def.checks)
+    def.checks = [...def.checks];
+  return def;
+}
 // @__NO_SIDE_EFFECTS__
 function _string(Class2, params) {
-  return new Class2({
-    type: "string",
-    ...normalizeParams(params)
-  });
+  return new Class2(snapshotChecks({ type: "string", ...normalizeParams(params) }));
 }
 // @__NO_SIDE_EFFECTS__
 function _email(Class2, params) {
@@ -16965,11 +17278,7 @@ function _isoDuration(Class2, params) {
 }
 // @__NO_SIDE_EFFECTS__
 function _number(Class2, params) {
-  return new Class2({
-    type: "number",
-    checks: [],
-    ...normalizeParams(params)
-  });
+  return new Class2(snapshotChecks({ type: "number", checks: [], ...normalizeParams(params) }));
 }
 // @__NO_SIDE_EFFECTS__
 function _int(Class2, params) {
@@ -17253,6 +17562,7 @@ function initializeContext(params) {
     cycles: params?.cycles ?? "ref",
     reused: params?.reused ?? "inline",
     intersections: [],
+    deferred: [],
     external: params?.external ?? void 0
   };
 }
@@ -17265,7 +17575,7 @@ function handleUnrepresentable(schema, ctx, json, params, message) {
   Object.assign(json, result);
   return true;
 }
-function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
+function processSchema(schema, ctx, _params = { path: [], schemaPath: [] }) {
   var _a3;
   const def = schema._zod.def;
   const seen = ctx.seen.get(schema);
@@ -17304,7 +17614,7 @@ function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
     if (parent) {
       if (!result.ref)
         result.ref = parent;
-      process2(parent, ctx, params);
+      processSchema(parent, ctx, params);
       ctx.seen.get(parent).isParent = true;
     }
   }
@@ -17411,7 +17721,6 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     if (seen.count > 1) {
       if (ctx.reused === "ref") {
         extractToDef(entry);
-        continue;
       }
     }
   }
@@ -17601,6 +17910,8 @@ function finalize(ctx, schema) {
         compactTypeUnion(entry[1].def ?? entry[1].schema);
       }
     }
+    for (const rewrite of ctx.deferred)
+      rewrite();
     if (ctx.intersections.length) {
       const carriers = /* @__PURE__ */ new Map();
       for (const seen of ctx.seen.values()) {
@@ -17737,19 +18048,107 @@ function isTransforming(_schema, _ctx) {
 }
 var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   const ctx = initializeContext({ ...params, processors });
-  process2(schema, ctx);
+  processSchema(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
 var createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params) => {
   const { libraryOptions, target } = params ?? {};
   const ctx = initializeContext({ ...libraryOptions ?? {}, target, io, processors });
-  process2(schema, ctx);
+  processSchema(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
 
 // node_modules/zod/v4/core/json-schema-processors.js
+var narrowMin = (agg, key, value) => {
+  if (agg[key] === void 0 || value > agg[key])
+    agg[key] = value;
+};
+var narrowMax = (agg, key, value) => {
+  if (agg[key] === void 0 || value < agg[key])
+    agg[key] = value;
+};
+var narrowBoth = (agg, value) => {
+  narrowMin(agg, "minimum", value);
+  narrowMax(agg, "maximum", value);
+};
+var addDivisor = (agg, value) => {
+  agg.multipleOf ?? (agg.multipleOf = []);
+  if (!agg.multipleOf.includes(value))
+    agg.multipleOf.push(value);
+};
+var addPattern = (agg, pattern) => {
+  agg.patterns ?? (agg.patterns = /* @__PURE__ */ new Set());
+  agg.patterns.add(pattern);
+};
+var intersectMime = (agg, mime) => {
+  agg.mime = agg.mime ? agg.mime.filter((m) => mime.includes(m)) : [...mime];
+};
+var setFormat = (agg, format2) => {
+  agg.format = format2;
+  if (format2.includes("int"))
+    agg.isInt = true;
+};
+var minContributor = (agg, def) => narrowMin(agg, "minimum", def.minimum);
+var maxContributor = (agg, def) => narrowMax(agg, "maximum", def.maximum);
+var formatContributor = (ranges) => (agg, def) => {
+  setFormat(agg, def.format);
+  const [minimum, maximum] = ranges[def.format];
+  narrowMin(agg, "minimum", minimum);
+  narrowMax(agg, "maximum", maximum);
+};
+var contributors = {
+  greater_than: (agg, def) => narrowMin(agg, def.inclusive ? "minimum" : "exclusiveMinimum", def.value),
+  less_than: (agg, def) => narrowMax(agg, def.inclusive ? "maximum" : "exclusiveMaximum", def.value),
+  multiple_of: (agg, def) => addDivisor(agg, def.value),
+  number_format: formatContributor(NUMBER_FORMAT_RANGES),
+  bigint_format: formatContributor(BIGINT_FORMAT_RANGES),
+  min_length: minContributor,
+  max_length: maxContributor,
+  length_equals: (agg, def) => narrowBoth(agg, def.length),
+  min_size: minContributor,
+  max_size: maxContributor,
+  size_equals: (agg, def) => narrowBoth(agg, def.size),
+  string_format: (agg, def) => {
+    setFormat(agg, def.format);
+    if (def.pattern)
+      addPattern(agg, def.pattern);
+    if (def.format === "base64" || def.format === "base64url")
+      agg.contentEncoding = def.format;
+    if (def.local || def.precision === -1)
+      agg.laxFormat = true;
+  },
+  mime_type: (agg, def) => intersectMime(agg, def.mime)
+};
+function aggregateChecks(schema) {
+  const agg = {};
+  const def = schema._zod.def;
+  const list = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
+  for (const ch of list)
+    contributors[ch._zod.def.check]?.(agg, ch._zod.def);
+  const bag = schema._zod.bag;
+  if (bag.minimum !== void 0)
+    narrowMin(agg, "minimum", bag.minimum);
+  if (bag.exclusiveMinimum !== void 0)
+    narrowMin(agg, "exclusiveMinimum", bag.exclusiveMinimum);
+  if (bag.maximum !== void 0)
+    narrowMax(agg, "maximum", bag.maximum);
+  if (bag.exclusiveMaximum !== void 0)
+    narrowMax(agg, "exclusiveMaximum", bag.exclusiveMaximum);
+  if (bag.multipleOf !== void 0)
+    addDivisor(agg, bag.multipleOf);
+  if (bag.format !== void 0) {
+    agg.format ?? (agg.format = bag.format);
+    if (bag.format.includes("int"))
+      agg.isInt = true;
+  }
+  if (bag.mime)
+    intersectMime(agg, bag.mime);
+  for (const pattern of bag.patterns ?? [])
+    addPattern(agg, pattern);
+  return agg;
+}
 var formatMap = {
   guid: "uuid",
   url: "uri",
@@ -17758,10 +18157,15 @@ var formatMap = {
   regex: ""
   // do not set
 };
+var exactPatterns = /* @__PURE__ */ new Map([
+  [base64Charset, base64],
+  [base64urlCharset, base64url]
+]);
+var exactPattern = (p) => exactPatterns.get(p) ?? p;
 var stringProcessor = (schema, ctx, _json, _params) => {
   const json = _json;
   json.type = "string";
-  const { minimum, maximum, format: format2, patterns, contentEncoding, laxFormat } = schema._zod.bag;
+  const { minimum, maximum, format: format2, patterns, contentEncoding, laxFormat } = aggregateChecks(schema);
   if (typeof minimum === "number")
     json.minLength = minimum;
   if (typeof maximum === "number")
@@ -17777,12 +18181,12 @@ var stringProcessor = (schema, ctx, _json, _params) => {
   if (contentEncoding)
     json.contentEncoding = contentEncoding;
   if (patterns && patterns.size > 0) {
-    const regexes = [...patterns];
-    if (regexes.length === 1)
-      json.pattern = regexes[0].source;
-    else if (regexes.length > 1) {
+    const patternList = [...patterns].map(exactPattern);
+    if (patternList.length === 1)
+      json.pattern = patternList[0].source;
+    else if (patternList.length > 1) {
       json.allOf = [
-        ...regexes.map((regex) => ({
+        ...patternList.map((regex) => ({
           ...ctx.target === "draft-07" || ctx.target === "draft-04" || ctx.target === "openapi-3.0" ? { type: "string" } : {},
           pattern: regex.source
         }))
@@ -17792,11 +18196,8 @@ var stringProcessor = (schema, ctx, _json, _params) => {
 };
 var numberProcessor = (schema, ctx, _json, params) => {
   const json = _json;
-  const { minimum, maximum, format: format2, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
-  if (typeof format2 === "string" && format2.includes("int"))
-    json.type = "integer";
-  else
-    json.type = "number";
+  const { minimum, maximum, multipleOf, exclusiveMaximum, exclusiveMinimum, isInt } = aggregateChecks(schema);
+  json.type = isInt ? "integer" : "number";
   const exMin = typeof exclusiveMinimum === "number" && exclusiveMinimum >= (minimum ?? Number.NEGATIVE_INFINITY);
   const exMax = typeof exclusiveMaximum === "number" && exclusiveMaximum <= (maximum ?? Number.POSITIVE_INFINITY);
   const legacy = ctx.target === "draft-04" || ctx.target === "openapi-3.0";
@@ -17820,11 +18221,19 @@ var numberProcessor = (schema, ctx, _json, params) => {
   } else if (typeof maximum === "number") {
     json.maximum = maximum;
   }
-  if (typeof multipleOf === "number") {
-    if (Number.isFinite(multipleOf) && multipleOf !== 0)
-      json.multipleOf = Math.abs(multipleOf);
-    else
-      handleUnrepresentable(schema, ctx, json, params, `A multipleOf divisor of ${multipleOf} cannot be represented in JSON Schema`);
+  if (multipleOf) {
+    const divisors = /* @__PURE__ */ new Set();
+    for (const divisor of multipleOf) {
+      if (Number.isFinite(divisor) && divisor !== 0)
+        divisors.add(Math.abs(divisor));
+      else
+        handleUnrepresentable(schema, ctx, json, params, `A multipleOf divisor of ${divisor} cannot be represented in JSON Schema`);
+    }
+    const [first, ...rest] = divisors;
+    if (first !== void 0)
+      json.multipleOf = first;
+    if (rest.length)
+      json.allOf = [...json.allOf ?? [], ...rest.map((m) => ({ multipleOf: m }))];
   }
 };
 var booleanProcessor = (_schema, _ctx, json, _params) => {
@@ -17906,13 +18315,13 @@ var transformProcessor = (schema, ctx, json, params) => {
 var arrayProcessor = (schema, ctx, _json, params) => {
   const json = _json;
   const def = schema._zod.def;
-  const { minimum, maximum } = schema._zod.bag;
+  const { minimum, maximum } = aggregateChecks(schema);
   if (typeof minimum === "number")
     json.minItems = minimum;
   if (typeof maximum === "number")
     json.maxItems = maximum;
   json.type = "array";
-  json.items = process2(def.element, ctx, {
+  json.items = processSchema(def.element, ctx, {
     ...params,
     path: [...params.path, "items"]
   });
@@ -17938,22 +18347,20 @@ var objectProcessor = (schema, ctx, _json, params) => {
   json.type = "object";
   json.properties = {};
   for (const key in shape) {
-    assignProp(json.properties, key, process2(shape[key], ctx, {
+    assignProp(json.properties, key, processSchema(shape[key], ctx, {
       ...params,
       path: [...params.path, "properties", key]
     }));
   }
-  const allKeys = new Set(Object.keys(shape));
-  const requiredKeys = new Set([...allKeys].filter((key) => {
+  const requiredKeys = [];
+  for (const key of Object.keys(shape)) {
     const field = def.shape[key];
-    if (ctx.io === "input") {
-      return inputOptin(field) === void 0;
-    } else {
-      return field._zod.optout === void 0;
+    if (ctx.io === "input" ? inputOptin(field) === void 0 : field._zod.optout === void 0) {
+      requiredKeys.push(key);
     }
-  }));
-  if (requiredKeys.size > 0) {
-    json.required = Array.from(requiredKeys);
+  }
+  if (requiredKeys.length > 0) {
+    json.required = requiredKeys;
   }
   if (def.catchall?._zod.def.type === "never") {
     json.additionalProperties = false;
@@ -17961,7 +18368,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
     if (ctx.io === "output")
       json.additionalProperties = false;
   } else if (def.catchall) {
-    json.additionalProperties = process2(def.catchall, ctx, {
+    json.additionalProperties = processSchema(def.catchall, ctx, {
       ...params,
       path: [...params.path, "additionalProperties"]
     });
@@ -17970,7 +18377,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
 var unionProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
   const isExclusive = def.inclusive === false;
-  const options = def.options.map((x, i) => process2(x, ctx, {
+  const options = def.options.map((x, i) => processSchema(x, ctx, {
     ...params,
     path: [...params.path, isExclusive ? "oneOf" : "anyOf", i]
   }));
@@ -17982,11 +18389,11 @@ var unionProcessor = (schema, ctx, json, params) => {
 };
 var intersectionProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  const a = process2(def.left, ctx, {
+  const a = processSchema(def.left, ctx, {
     ...params,
     path: [...params.path, "allOf", 0]
   });
-  const b = process2(def.right, ctx, {
+  const b = processSchema(def.right, ctx, {
     ...params,
     path: [...params.path, "allOf", 1]
   });
@@ -17998,30 +18405,99 @@ var intersectionProcessor = (schema, ctx, json, params) => {
   json.allOf = allOf;
   ctx.intersections.push(allOf);
 };
+function stringifyKeyNames(bySchema, json, visited) {
+  if (json.$ref) {
+    if (visited.has(json))
+      return json;
+    visited.add(json);
+    const def = bySchema.get(json)?.def;
+    if (!def)
+      return json;
+    const inlined = stringifyKeyNames(bySchema, def, visited);
+    return inlined === def ? json : inlined;
+  }
+  for (const keyword of ["anyOf", "oneOf"]) {
+    const branches = json[keyword];
+    if (!Array.isArray(branches))
+      continue;
+    const mapped = branches.map((branch) => stringifyKeyNames(bySchema, branch, visited));
+    if (mapped.some((branch, i) => branch !== branches[i]))
+      json = { ...json, [keyword]: mapped };
+  }
+  const types = Array.isArray(json.type) ? json.type : [json.type];
+  const numericType = !types.includes("string") && types.some((t) => t === "number" || t === "integer");
+  const values = json.enum ?? (json.const !== void 0 ? [json.const] : void 0);
+  if (!numericType && !values?.some((v) => typeof v === "number"))
+    return json;
+  const { minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf, format: format2, id, ...rest } = json;
+  if (rest.enum)
+    rest.enum = rest.enum.map((v) => typeof v === "number" ? String(v) : v);
+  else if (typeof rest.const === "number")
+    rest.const = String(rest.const);
+  if (!numericType)
+    return rest;
+  rest.type = "string";
+  if (!values)
+    rest.pattern = (types.includes("number") ? number : integer).source;
+  return rest;
+}
+var pendingRecords = /* @__PURE__ */ new WeakMap();
+function rewriteKeyNames(ctx) {
+  const bySchema = /* @__PURE__ */ new Map();
+  for (const entry of ctx.seen.values()) {
+    if (entry.def && !bySchema.has(entry.schema))
+      bySchema.set(entry.schema, entry);
+  }
+  const rewrites = /* @__PURE__ */ new Map();
+  for (const record2 of pendingRecords.get(ctx) ?? []) {
+    const seen = ctx.seen.get(record2);
+    const names = (seen?.def ?? seen?.schema)?.propertyNames;
+    if (!names || names === true || rewrites.has(names))
+      continue;
+    const rewritten = stringifyKeyNames(bySchema, names, /* @__PURE__ */ new Set());
+    if (rewritten !== names)
+      rewrites.set(names, rewritten);
+  }
+  if (!rewrites.size)
+    return;
+  for (const entry of ctx.seen.values()) {
+    for (const carrier of [entry.schema, entry.def]) {
+      const rewritten = carrier && rewrites.get(carrier.propertyNames);
+      if (rewritten)
+        carrier.propertyNames = rewritten;
+    }
+  }
+}
 var recordProcessor = (schema, ctx, _json, params) => {
   const json = _json;
   const def = schema._zod.def;
   json.type = "object";
   const keyType = def.keyType;
-  const keyBag = keyType._zod.bag;
-  const patterns = keyBag?.patterns;
+  const patterns = aggregateChecks(keyType).patterns;
   if (def.mode === "loose" && patterns && patterns.size > 0) {
-    const valueSchema = process2(def.valueType, ctx, {
+    const valueSchema = processSchema(def.valueType, ctx, {
       ...params,
       path: [...params.path, "patternProperties", "*"]
     });
     json.patternProperties = {};
     for (const pattern of patterns) {
-      assignProp(json.patternProperties, pattern.source, valueSchema);
+      assignProp(json.patternProperties, exactPattern(pattern).source, valueSchema);
     }
   } else {
     if (ctx.target === "draft-07" || ctx.target === "draft-2020-12") {
-      json.propertyNames = process2(def.keyType, ctx, {
+      json.propertyNames = processSchema(def.keyType, ctx, {
         ...params,
         path: [...params.path, "propertyNames"]
       });
+      let pending = pendingRecords.get(ctx);
+      if (!pending) {
+        pending = [];
+        pendingRecords.set(ctx, pending);
+        ctx.deferred.push(() => rewriteKeyNames(ctx));
+      }
+      pending.push(schema);
     }
-    json.additionalProperties = process2(def.valueType, ctx, {
+    json.additionalProperties = processSchema(def.valueType, ctx, {
       ...params,
       path: [...params.path, "additionalProperties"]
     });
@@ -18031,13 +18507,13 @@ var recordProcessor = (schema, ctx, _json, params) => {
   if (keyValues && !def.partial && !omittableOnInput) {
     const validKeyValues = [...keyValues].filter((v) => typeof v === "string" || typeof v === "number");
     if (validKeyValues.length > 0) {
-      json.required = validKeyValues;
+      json.required = validKeyValues.map(String);
     }
   }
 };
 var nullableProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  const inner = process2(def.innerType, ctx, params);
+  const inner = processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   if (ctx.target === "openapi-3.0") {
     seen.ref = def.innerType;
@@ -18048,7 +18524,7 @@ var nullableProcessor = (schema, ctx, json, params) => {
 };
 var nonoptionalProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
@@ -18068,7 +18544,7 @@ function serializeDefaultValue(value, schema, ctx, json, params) {
 }
 var defaultProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   const value = serializeDefaultValue(def.defaultValue, schema, ctx, json, params);
@@ -18077,7 +18553,7 @@ var defaultProcessor = (schema, ctx, json, params) => {
 };
 var prefaultProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   if (ctx.io !== "input")
@@ -18088,7 +18564,7 @@ var prefaultProcessor = (schema, ctx, json, params) => {
 };
 var catchProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   let catchValue;
@@ -18104,20 +18580,20 @@ var pipeProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
   const inIsTransform = def.in._zod.traits.has("$ZodTransform");
   const innerType = ctx.io === "input" ? inIsTransform ? def.out : def.in : def.out;
-  process2(innerType, ctx, params);
+  processSchema(innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = innerType;
 };
 var readonlyProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   json.readOnly = true;
 };
 var optionalProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  processSchema(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
@@ -18139,24 +18615,24 @@ function safeParse2(schema, data) {
 function getObjectShape(schema) {
   if (!schema)
     return void 0;
-  let rawShape;
+  let rawShape2;
   if (isZ4Schema(schema)) {
     const v4Schema = schema;
-    rawShape = v4Schema._zod?.def?.shape;
+    rawShape2 = v4Schema._zod?.def?.shape;
   } else {
     const v3Schema = schema;
-    rawShape = v3Schema.shape;
+    rawShape2 = v3Schema.shape;
   }
-  if (!rawShape)
+  if (!rawShape2)
     return void 0;
-  if (typeof rawShape === "function") {
+  if (typeof rawShape2 === "function") {
     try {
-      return rawShape();
+      return rawShape2();
     } catch {
       return void 0;
     }
   }
-  return rawShape;
+  return rawShape2;
 }
 function getLiteralValue(schema) {
   if (isZ4Schema(schema)) {
@@ -18386,6 +18862,12 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   set spa(value) {
     util_exports.own(this, "spa", value);
   },
+  validate(data, params) {
+    return validate(this, data, params);
+  },
+  validateAsync(data, params) {
+    return validateAsync(this, data, params);
+  },
   encode: function _encode2(data, params) {
     return encode2(this, data, params, { callee: _encode2 });
   },
@@ -18422,61 +18904,65 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
     return this._zod.def;
   }
 });
-var _ZodString = /* @__PURE__ */ $constructor("_ZodString", (inst, def) => {
-  $ZodString.init(inst, def);
-  ZodType.init(inst, def);
-  inst._zod.processJSONSchema = (ctx, json, params) => stringProcessor(inst, ctx, json, params);
-  const bag = inst._zod.bag;
-  inst.format = bag.format ?? null;
-  inst.minLength = bag.minimum ?? null;
-  inst.maxLength = bag.maximum ?? null;
-}, {
-  regex(...args) {
-    return this.check(_regex(...args));
+var _ZodString = /* @__PURE__ */ $constructor(
+  "_ZodString",
+  (inst, def) => {
+    $ZodString.init(inst, def);
+    ZodType.init(inst, def);
+    inst._zod.processJSONSchema = (ctx, json, params) => stringProcessor(inst, ctx, json, params);
   },
-  includes(...args) {
-    return this.check(_includes(...args));
-  },
-  startsWith(...args) {
-    return this.check(_startsWith(...args));
-  },
-  endsWith(...args) {
-    return this.check(_endsWith(...args));
-  },
-  min(...args) {
-    return this.check(_minLength(...args));
-  },
-  max(...args) {
-    return this.check(_maxLength(...args));
-  },
-  length(...args) {
-    return this.check(_length(...args));
-  },
-  nonempty(...args) {
-    return this.check(_minLength(1, ...args));
-  },
-  lowercase(params) {
-    return this.check(_lowercase(params));
-  },
-  uppercase(params) {
-    return this.check(_uppercase(params));
-  },
-  trim() {
-    return this.check(_trim());
-  },
-  normalize(...args) {
-    return this.check(_normalize(...args));
-  },
-  toLowerCase() {
-    return this.check(_toLowerCase());
-  },
-  toUpperCase() {
-    return this.check(_toUpperCase());
-  },
-  slugify() {
-    return this.check(_slugify());
-  }
-});
+  /* @__PURE__ */ util_exports.derived({
+    format: (inst) => aggregateChecks(inst).format ?? null,
+    minLength: (inst) => aggregateChecks(inst).minimum ?? null,
+    maxLength: (inst) => aggregateChecks(inst).maximum ?? null
+  }, {
+    regex(...args) {
+      return this.check(_regex(...args));
+    },
+    includes(...args) {
+      return this.check(_includes(...args));
+    },
+    startsWith(...args) {
+      return this.check(_startsWith(...args));
+    },
+    endsWith(...args) {
+      return this.check(_endsWith(...args));
+    },
+    min(...args) {
+      return this.check(_minLength(...args));
+    },
+    max(...args) {
+      return this.check(_maxLength(...args));
+    },
+    length(...args) {
+      return this.check(_length(...args));
+    },
+    nonempty(...args) {
+      return this.check(_minLength(1, ...args));
+    },
+    lowercase(params) {
+      return this.check(_lowercase(params));
+    },
+    uppercase(params) {
+      return this.check(_uppercase(params));
+    },
+    trim() {
+      return this.check(_trim());
+    },
+    normalize(...args) {
+      return this.check(_normalize(...args));
+    },
+    toLowerCase() {
+      return this.check(_toLowerCase());
+    },
+    toUpperCase() {
+      return this.check(_toUpperCase());
+    },
+    slugify() {
+      return this.check(_slugify());
+    }
+  })
+);
 var ZodString = /* @__PURE__ */ $constructor("ZodString", (inst, def) => {
   $ZodString.init(inst, def);
   _ZodString.init(inst, def);
@@ -18659,63 +19145,76 @@ var ZodJWT = /* @__PURE__ */ $constructor("ZodJWT", (inst, def) => {
   $ZodJWT.init(inst, def);
   ZodStringFormat.init(inst, def);
 });
-var ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
-  $ZodNumber.init(inst, def);
-  ZodType.init(inst, def);
-  inst._zod.processJSONSchema = (ctx, json, params) => numberProcessor(inst, ctx, json, params);
-  const bag = inst._zod.bag;
-  inst.minValue = Math.max(bag.minimum ?? Number.NEGATIVE_INFINITY, bag.exclusiveMinimum ?? Number.NEGATIVE_INFINITY) ?? null;
-  inst.maxValue = Math.min(bag.maximum ?? Number.POSITIVE_INFINITY, bag.exclusiveMaximum ?? Number.POSITIVE_INFINITY) ?? null;
-  inst.isInt = (bag.format ?? "").includes("int") || Number.isSafeInteger(bag.multipleOf ?? 0.5);
-  inst.isFinite = true;
-  inst.format = bag.format ?? null;
-}, {
-  gt(value, params) {
-    return this.check(_gt(value, params));
+var ZodNumber = /* @__PURE__ */ $constructor(
+  "ZodNumber",
+  (inst, def) => {
+    $ZodNumber.init(inst, def);
+    ZodType.init(inst, def);
+    inst._zod.processJSONSchema = (ctx, json, params) => numberProcessor(inst, ctx, json, params);
+    inst.isFinite = true;
   },
-  gte(value, params) {
-    return this.check(_gte(value, params));
-  },
-  min(value, params) {
-    return this.check(_gte(value, params));
-  },
-  lt(value, params) {
-    return this.check(_lt(value, params));
-  },
-  lte(value, params) {
-    return this.check(_lte(value, params));
-  },
-  max(value, params) {
-    return this.check(_lte(value, params));
-  },
-  int(params) {
-    return this.check(int(params));
-  },
-  safe(params) {
-    return this.check(int(params));
-  },
-  positive(params) {
-    return this.check(_gt(0, params));
-  },
-  nonnegative(params) {
-    return this.check(_gte(0, params));
-  },
-  negative(params) {
-    return this.check(_lt(0, params));
-  },
-  nonpositive(params) {
-    return this.check(_lte(0, params));
-  },
-  multipleOf(value, params) {
-    return this.check(_multipleOf(value, params));
-  },
-  step(value, params) {
-    return this.check(_multipleOf(value, params));
-  },
-  finite() {
-    return this;
-  }
-});
+  /* @__PURE__ */ util_exports.derived({
+    minValue: (inst) => {
+      const { minimum, exclusiveMinimum } = aggregateChecks(inst);
+      return Math.max(minimum ?? Number.NEGATIVE_INFINITY, exclusiveMinimum ?? Number.NEGATIVE_INFINITY);
+    },
+    maxValue: (inst) => {
+      const { maximum, exclusiveMaximum } = aggregateChecks(inst);
+      return Math.min(maximum ?? Number.POSITIVE_INFINITY, exclusiveMaximum ?? Number.POSITIVE_INFINITY);
+    },
+    isInt: (inst) => {
+      const { isInt, multipleOf } = aggregateChecks(inst);
+      return !!isInt || !!multipleOf?.some(Number.isSafeInteger);
+    },
+    format: (inst) => aggregateChecks(inst).format ?? null
+  }, {
+    gt(value, params) {
+      return this.check(_gt(value, params));
+    },
+    gte(value, params) {
+      return this.check(_gte(value, params));
+    },
+    min(value, params) {
+      return this.check(_gte(value, params));
+    },
+    lt(value, params) {
+      return this.check(_lt(value, params));
+    },
+    lte(value, params) {
+      return this.check(_lte(value, params));
+    },
+    max(value, params) {
+      return this.check(_lte(value, params));
+    },
+    int(params) {
+      return this.check(int(params));
+    },
+    safe(params) {
+      return this.check(int(params));
+    },
+    positive(params) {
+      return this.check(_gt(0, params));
+    },
+    nonnegative(params) {
+      return this.check(_gte(0, params));
+    },
+    negative(params) {
+      return this.check(_lt(0, params));
+    },
+    nonpositive(params) {
+      return this.check(_lte(0, params));
+    },
+    multipleOf(value, params) {
+      return this.check(_multipleOf(value, params));
+    },
+    step(value, params) {
+      return this.check(_multipleOf(value, params));
+    },
+    finite() {
+      return this;
+    }
+  })
+);
 function number2(params) {
   return _number(ZodNumber, params);
 }
@@ -18795,19 +19294,19 @@ var ZodObject = /* @__PURE__ */ $constructor("ZodObject", (inst, def) => {
     return _enum(Object.keys(this._zod.def.shape));
   },
   catchall(catchall) {
-    return this.clone({ ...this._zod.def, catchall });
+    return this.clone(util_exports.mergeDefs(this._zod.def, { catchall }));
   },
   passthrough() {
-    return this.clone({ ...this._zod.def, catchall: unknown() });
+    return this.clone(util_exports.mergeDefs(this._zod.def, { catchall: unknown() }));
   },
   loose() {
-    return this.clone({ ...this._zod.def, catchall: unknown() });
+    return this.clone(util_exports.mergeDefs(this._zod.def, { catchall: unknown() }));
   },
   strict() {
-    return this.clone({ ...this._zod.def, catchall: never() });
+    return this.clone(util_exports.mergeDefs(this._zod.def, { catchall: never() }));
   },
   strip() {
-    return this.clone({ ...this._zod.def, catchall: void 0 });
+    return this.clone(util_exports.mergeDefs(this._zod.def, { catchall: void 0 }));
   },
   extend(incoming) {
     return util_exports.extend(this, incoming);
@@ -18916,7 +19415,7 @@ var ZodEnum = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   ZodType.init(inst, def);
   inst._zod.processJSONSchema = (ctx, json, params) => enumProcessor(inst, ctx, json, params);
   inst.enum = def.entries;
-  inst.options = Object.values(def.entries);
+  inst.options = [...inst._zod.values];
   const keys = new Set(Object.keys(def.entries));
   inst.extract = (values, params) => {
     const newEntries = {};
@@ -20782,6 +21281,9 @@ var Protocol = class {
       this.setRequestHandler(GetTaskPayloadRequestSchema, async (request2, extra) => {
         const handleTaskResult = async () => {
           const taskId = request2.params.taskId;
+          if (!await this._taskStore.getTask(taskId, extra.sessionId)) {
+            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
+          }
           if (this._taskMessageQueue) {
             let queuedMessage;
             while (queuedMessage = await this._taskMessageQueue.dequeue(taskId, extra.sessionId)) {
@@ -20812,12 +21314,12 @@ var Protocol = class {
             throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
           }
           if (!isTerminal(task.status)) {
-            await this._waitForTaskUpdate(taskId, extra.signal);
+            await this._waitForTaskUpdate(taskId, extra.signal, extra.sessionId);
             return await handleTaskResult();
           }
           if (isTerminal(task.status)) {
             const result = await this._taskStore.getTaskResult(taskId, extra.sessionId);
-            this._clearTaskQueue(taskId);
+            this._clearTaskQueue(taskId, extra.sessionId);
             return {
               ...result,
               _meta: {
@@ -20854,7 +21356,7 @@ var Protocol = class {
             throw new McpError(ErrorCode.InvalidParams, `Cannot cancel task in terminal status: ${task.status}`);
           }
           await this._taskStore.updateTaskStatus(request2.params.taskId, "cancelled", "Client cancelled task execution.", extra.sessionId);
-          this._clearTaskQueue(request2.params.taskId);
+          this._clearTaskQueue(request2.params.taskId, extra.sessionId);
           const cancelledTask = await this._taskStore.getTask(request2.params.taskId, extra.sessionId);
           if (!cancelledTask) {
             throw new McpError(ErrorCode.InvalidParams, `Task not found after cancellation: ${request2.params.taskId}`);
@@ -20982,6 +21484,19 @@ var Protocol = class {
     const handler = this._requestHandlers.get(request2.method) ?? this.fallbackRequestHandler;
     const capturedTransport = this._transport;
     const relatedTaskId = request2.params?._meta?.[RELATED_TASK_META_KEY]?.taskId;
+    const sessionId = capturedTransport?.sessionId;
+    const store = this._taskStore;
+    let relatedTaskFound = true;
+    let relatedTaskLookup;
+    if (relatedTaskId && store && this._taskMessageQueue && sessionId !== void 0) {
+      relatedTaskFound = false;
+      relatedTaskLookup = (async () => {
+        if (!await store.getTask(relatedTaskId, sessionId)) {
+          throw new McpError(ErrorCode.InvalidParams, `Task not found: ${relatedTaskId}`);
+        }
+        relatedTaskFound = true;
+      })();
+    }
     if (handler === void 0) {
       const errorResponse = {
         jsonrpc: "2.0",
@@ -20991,7 +21506,10 @@ var Protocol = class {
           message: "Method not found"
         }
       };
-      if (relatedTaskId && this._taskMessageQueue) {
+      if (relatedTaskId && relatedTaskLookup) {
+        const queuedError = { type: "error", message: errorResponse, timestamp: Date.now() };
+        relatedTaskLookup.then(() => this._enqueueTaskMessage(relatedTaskId, queuedError, sessionId), () => capturedTransport?.send(errorResponse)).catch((error3) => this._onerror(new Error(`Failed to send an error response: ${error3}`)));
+      } else if (relatedTaskId && this._taskMessageQueue) {
         this._enqueueTaskMessage(relatedTaskId, {
           type: "error",
           message: errorResponse,
@@ -21042,7 +21560,10 @@ var Protocol = class {
       closeSSEStream: extra?.closeSSEStream,
       closeStandaloneSSEStream: extra?.closeStandaloneSSEStream
     };
-    Promise.resolve().then(() => {
+    (relatedTaskLookup ?? Promise.resolve()).then(() => {
+      if (relatedTaskLookup && abortController.signal.aborted) {
+        throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
+      }
       if (taskCreationParams) {
         this.assertTaskHandlerCapability(request2.method);
       }
@@ -21077,7 +21598,7 @@ var Protocol = class {
           ...error3["data"] !== void 0 && { data: error3["data"] }
         }
       };
-      if (relatedTaskId && this._taskMessageQueue) {
+      if (relatedTaskId && this._taskMessageQueue && relatedTaskFound) {
         await this._enqueueTaskMessage(relatedTaskId, {
           type: "error",
           message: errorResponse,
@@ -21557,7 +22078,7 @@ var Protocol = class {
       throw new Error("Cannot enqueue task message: taskStore and taskMessageQueue are not configured");
     }
     const maxQueueSize = this._options?.maxTaskQueueSize;
-    await this._taskMessageQueue.enqueue(taskId, message, sessionId, maxQueueSize);
+    await this._taskMessageQueue.enqueue(taskId, message, sessionId ?? this._transport?.sessionId, maxQueueSize);
   }
   /**
    * Clears the message queue for a task and rejects any pending request resolvers.
@@ -21586,12 +22107,13 @@ var Protocol = class {
    * Uses polling to check for updates at the task's configured poll interval.
    * @param taskId The task ID to wait for
    * @param signal Abort signal to cancel the wait
+   * @param sessionId Session of the request that waits, passed to the task store
    * @returns Promise that resolves when an update occurs or rejects if aborted
    */
-  async _waitForTaskUpdate(taskId, signal) {
+  async _waitForTaskUpdate(taskId, signal, sessionId) {
     let interval = this._options?.defaultTaskPollInterval ?? 1e3;
     try {
-      const task = await this._taskStore?.getTask(taskId);
+      const task = await this._taskStore?.getTask(taskId, sessionId);
       if (task?.pollInterval) {
         interval = task.pollInterval;
       }
@@ -22383,7 +22905,7 @@ var Server = class extends Protocol {
 };
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
-import process3 from "node:process";
+import process2 from "node:process";
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
 var STDIO_DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024;
@@ -22424,7 +22946,7 @@ function serializeMessage(message) {
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 var StdioServerTransport = class {
-  constructor(_stdin = process3.stdin, _stdout = process3.stdout, options) {
+  constructor(_stdin = process2.stdin, _stdout = process2.stdout, options) {
     this._stdin = _stdin;
     this._stdout = _stdout;
     this._started = false;
@@ -22491,7 +23013,7 @@ var StdioServerTransport = class {
 
 // server.mjs
 import { basename as basename8, dirname as dirname10, join as join12, resolve as resolve11 } from "node:path";
-import { statSync as statSync4 } from "node:fs";
+import { existsSync as existsSync5, statSync as statSync4 } from "node:fs";
 
 // node_modules/ws/wrapper.mjs
 var import_stream = __toESM(require_stream(), 1);
@@ -22772,7 +23294,7 @@ function makeClient(wsUrl, options = {}) {
 // server.mjs
 init_cursor_runtime();
 import http2 from "http";
-import { pathToFileURL as pathToFileURL2 } from "url";
+import { fileURLToPath as fileURLToPath4, pathToFileURL as pathToFileURL3 } from "node:url";
 
 // cursor-model-preferences.mjs
 import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, renameSync as renameSync2, rmSync as rmSync2, writeFileSync as writeFileSync2 } from "node:fs";
@@ -23070,7 +23592,7 @@ function invalidConfig(message, cause) {
   return error3;
 }
 function readCcePreferences(filePath) {
-  const defaults = { version: 1, source: "ide", updatedAt: null };
+  const defaults = { version: 1, source: "cli", updatedAt: null };
   if (!filePath) return defaults;
   let parsed;
   try {
@@ -23121,7 +23643,8 @@ function updateCcePreferences(filePath, { action = "show", source, ...options } 
 
 // cursor-cli.mjs
 import { spawn as nodeSpawn, execFile } from "node:child_process";
-import { access, readFile as readFile3, readdir, realpath as realpath2 } from "node:fs/promises";
+import { access as access3, readFile as readFile3, readdir as readdir2, realpath as realpath2, stat as stat2 } from "node:fs/promises";
+import { homedir as homedir10 } from "node:os";
 import path from "node:path";
 
 // cursor-cli-workspace.mjs
@@ -23995,12 +24518,12 @@ function invalid(message, cause) {
   error3.confirmedNotSent = true;
   return error3;
 }
-function localDirectory(path2) {
+function localDirectory(path3) {
   try {
-    if (!statSync3(path2).isDirectory()) throw new Error("not a directory");
-    return realpathSync(path2);
+    if (!statSync3(path3).isDirectory()) throw new Error("not a directory");
+    return realpathSync(path3);
   } catch (error3) {
-    throw invalid(`CCE CLI workspace directory is unavailable: ${path2}`, error3);
+    throw invalid(`CCE CLI workspace directory is unavailable: ${path3}`, error3);
   }
 }
 function resolveCliWorkspace(projectPath) {
@@ -24024,20 +24547,20 @@ function resolveCliWorkspace(projectPath) {
     const hasPath = typeof folder.path === "string" && folder.path.trim().length > 0;
     const hasUri = typeof folder.uri === "string" && folder.uri.trim().length > 0;
     if (hasPath === hasUri) throw invalid("CCE workspace folder must have exactly one local path or file URI");
-    let path2;
+    let path3;
     if (hasPath) {
       if (/^[a-z][a-z\d+.-]*:/i.test(folder.path) && !/^[a-z]:[\\/]/i.test(folder.path)) throw invalid("CCE CLI supports local workspace folders only");
-      path2 = resolve8(dirname7(workspacePath), folder.path);
+      path3 = resolve8(dirname7(workspacePath), folder.path);
     } else {
       try {
         const uri = new URL(folder.uri);
         if (uri.protocol !== "file:" || uri.search || uri.hash) throw new Error("not a local file URI");
-        path2 = fileURLToPath(uri);
+        path3 = fileURLToPath(uri);
       } catch (error3) {
         throw invalid("CCE CLI supports local file-URI workspace folders only", error3);
       }
     }
-    const root = localDirectory(path2);
+    const root = localDirectory(path3);
     const key = (value) => process.platform === "win32" ? value.toLowerCase() : value;
     if (!roots.some((existing) => key(existing) === key(root))) roots.push(root);
   }
@@ -24045,7 +24568,7 @@ function resolveCliWorkspace(projectPath) {
 }
 
 // cursor-cli-config.mjs
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir as homedir9, tmpdir } from "node:os";
 import { basename as basename6, dirname as dirname8, isAbsolute as isAbsolute4, join as join9, resolve as resolve9 } from "node:path";
 var bridgeTools = [
@@ -24062,18 +24585,148 @@ var bridgeTools = [
   "cursor_task_control",
   "cursor_session_control"
 ];
-async function createCliConfigScope(env = process.env) {
+var MAX_CONFIG_FILE_BYTES = 4 * 1024 * 1024;
+var PLUGIN_MANIFEST_CANDIDATES = [
+  [".cursor-plugin", "plugin.json"],
+  [".claude-plugin", "plugin.json"],
+  ["plugin.json"]
+];
+function resolveUserHome(env = process.env, explicitHome) {
+  if (explicitHome && String(explicitHome).trim()) return explicitHome;
+  const fromEnv = process.platform === "win32" ? env.USERPROFILE || env.HOME : env.HOME || env.USERPROFILE;
+  return fromEnv && String(fromEnv).trim() ? fromEnv : homedir9();
+}
+async function findCliProjectRoot(cwd) {
+  const start = resolve9(String(cwd || "."));
+  let current = start;
+  while (true) {
+    try {
+      await access(join9(current, ".git"));
+      return current;
+    } catch {
+    }
+    const parent = dirname8(current);
+    if (parent === current) return start;
+    current = parent;
+  }
+}
+function computeCliProjectSlug(projectRoot) {
+  return String(projectRoot || "").replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+}
+async function readJsoncFileSafe(filePath) {
+  let buffer;
+  try {
+    buffer = await readFile(filePath);
+  } catch (error3) {
+    if (error3?.code === "ENOENT" || error3?.code === "ENOTDIR" || error3?.code === "EISDIR") return { ok: true, data: null };
+    return { ok: false, data: null, category: "mcp_config_read_error" };
+  }
+  if (buffer.length > MAX_CONFIG_FILE_BYTES) return { ok: false, data: null, category: "mcp_config_too_large" };
+  const errors = [];
+  const data = parse4(buffer.toString("utf8"), errors, { allowTrailingComma: true });
+  if (errors.length > 0 || !data || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, data: null, category: "mcp_config_parse_error" };
+  }
+  return { ok: true, data };
+}
+function extractMcpServerNames(config2) {
+  if (!config2 || typeof config2 !== "object" || Array.isArray(config2)) return [];
+  if (config2.mcpServers && typeof config2.mcpServers === "object" && !Array.isArray(config2.mcpServers)) {
+    return Object.keys(config2.mcpServers).filter((key) => typeof key === "string" && key.trim());
+  }
+  if (!("mcpServers" in config2)) {
+    return Object.entries(config2).filter(([key, value]) => typeof key === "string" && key.trim() && key !== "$schema" && value && typeof value === "object" && !Array.isArray(value)).map(([key]) => key);
+  }
+  return [];
+}
+async function listSubdirectoriesSafe(directory) {
+  try {
+    const entries = await readdir(directory, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch (error3) {
+    if (error3?.code === "ENOENT" || error3?.code === "ENOTDIR") return [];
+    throw error3;
+  }
+}
+async function collectPluginMcpIds(pluginDir, fallbackName, ids, categories) {
+  let manifest = null;
+  for (const parts of PLUGIN_MANIFEST_CANDIDATES) {
+    const res = await readJsoncFileSafe(join9(pluginDir, ...parts));
+    if (!res.ok) categories.add(res.category);
+    if (res.data) {
+      manifest = res.data;
+      break;
+    }
+  }
+  const pluginName = typeof manifest?.name === "string" && manifest.name.trim() ? manifest.name.trim() : fallbackName;
+  if (!pluginName) return;
+  const serverNames = /* @__PURE__ */ new Set();
+  if (manifest?.mcpServers && typeof manifest.mcpServers === "object" && !Array.isArray(manifest.mcpServers)) {
+    for (const key of Object.keys(manifest.mcpServers)) {
+      if (typeof key === "string" && key.trim()) serverNames.add(key.trim());
+    }
+  }
+  for (const filename of ["mcp.json", ".mcp.json"]) {
+    const res = await readJsoncFileSafe(join9(pluginDir, filename));
+    if (!res.ok) categories.add(res.category);
+    for (const name of extractMcpServerNames(res.data)) serverNames.add(name.trim());
+  }
+  for (const serverName of serverNames) ids.add(`plugin-${pluginName}-${serverName}`);
+}
+async function enumerateNativeMcpServerIds({ env = process.env, projectRoot = null, userHome = null } = {}) {
+  const home = resolveUserHome(env, userHome);
+  const ids = /* @__PURE__ */ new Set();
+  const categories = /* @__PURE__ */ new Set();
+  const userMcp = await readJsoncFileSafe(join9(home, ".cursor", "mcp.json"));
+  if (!userMcp.ok) categories.add(userMcp.category);
+  for (const name of extractMcpServerNames(userMcp.data)) ids.add(name.trim());
+  if (projectRoot) {
+    const projectMcp = await readJsoncFileSafe(join9(projectRoot, ".cursor", "mcp.json"));
+    if (!projectMcp.ok) categories.add(projectMcp.category);
+    for (const name of extractMcpServerNames(projectMcp.data)) ids.add(name.trim());
+  }
+  try {
+    const localBase = join9(home, ".cursor", "plugins", "local");
+    for (const name of await listSubdirectoriesSafe(localBase)) {
+      await collectPluginMcpIds(join9(localBase, name), name, ids, categories);
+    }
+  } catch {
+    categories.add("mcp_plugin_scan_error");
+  }
+  try {
+    const cacheBase = join9(home, ".cursor", "plugins", "cache");
+    for (const marketplace of await listSubdirectoriesSafe(cacheBase)) {
+      const marketplaceDir = join9(cacheBase, marketplace);
+      for (const pluginSlug of await listSubdirectoriesSafe(marketplaceDir)) {
+        const slugDir = join9(marketplaceDir, pluginSlug);
+        for (const sha of await listSubdirectoriesSafe(slugDir)) {
+          await collectPluginMcpIds(join9(slugDir, sha), pluginSlug, ids, categories);
+        }
+      }
+    }
+  } catch {
+    categories.add("mcp_plugin_scan_error");
+  }
+  const partialErrorCategory = categories.size > 0 ? [...categories][0] : null;
+  return { ids: [...ids].filter(Boolean).sort(), partialErrorCategory };
+}
+async function createCliConfigScope(env = process.env, options = {}) {
   const configured = env.CURSOR_CONFIG_DIR;
-  const userHome = (process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir9();
+  const userHome = resolveUserHome(env, options.userHome);
   const source = configured?.trim() ? configured : env.XDG_CONFIG_HOME?.trim() ? join9(env.XDG_CONFIG_HOME, "cursor") : join9(userHome, ".cursor");
   if (!isAbsolute4(source)) throw Object.assign(new Error("Cursor CLI configuration directory must be absolute"), { code: "CURSOR_CLI_CONFIG_INVALID", confirmedNotSent: true });
-  const parent = resolve9(tmpdir()), prefix = "cursor-bridge-cce-config-";
+  const parent = resolve9(tmpdir()), prefix = "cursor-bridge-cce-config-", dataPrefix = "cursor-bridge-cce-data-";
   const directory = await mkdtemp(join9(parent, prefix));
+  const dataDirectory = await mkdtemp(join9(parent, dataPrefix));
   let released = false;
   const cleanup = async () => {
     if (released) return;
     if (dirname8(resolve9(directory)) !== parent || !basename6(directory).startsWith(prefix)) throw new Error("Refusing to remove an unexpected CLI configuration directory");
-    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    if (dirname8(resolve9(dataDirectory)) !== parent || !basename6(dataDirectory).startsWith(dataPrefix)) throw new Error("Refusing to remove an unexpected CLI data directory");
+    await Promise.all([
+      rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }),
+      rm(dataDirectory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
+    ]);
     released = true;
   };
   try {
@@ -24086,7 +24739,7 @@ async function createCliConfigScope(env = process.env) {
         if (error3.code === "ENOENT") continue;
         throw error3;
       }
-      if (contents.length > 4 * 1024 * 1024) throw new Error("Cursor CLI configuration file exceeds 4 MiB");
+      if (contents.length > MAX_CONFIG_FILE_BYTES) throw new Error("Cursor CLI configuration file exceeds 4 MiB");
       if (name === "cli-config.json") settings = JSON.parse(contents.toString("utf8"));
       else await writeFile(join9(directory, name), contents, { flag: "wx", mode: 384 });
     }
@@ -24098,7 +24751,70 @@ async function createCliConfigScope(env = process.env) {
       deny: [.../* @__PURE__ */ new Set([...settings.permissions?.deny || [], ...bridgeTools.map((tool) => `Mcp(*:${tool})`)])]
     };
     await writeFile(join9(directory, "cli-config.json"), JSON.stringify(settings, null, 2) + "\n", { flag: "wx", mode: 384 });
-    return { directory, env: { ...env, CURSOR_CONFIG_DIR: directory }, cleanup };
+    const mcpModeRaw = String(env.CURSOR_BRIDGE_CCE_CLI_MCP || "").trim().toLowerCase();
+    let mcpIsolation;
+    if (mcpModeRaw === "native") {
+      mcpIsolation = { enabled: false, mode: "native", disabledCount: 0, slug: null, verified: null, reason: null };
+    } else if (!options.cwd) {
+      mcpIsolation = { enabled: false, mode: "no_workspace", disabledCount: 0, slug: null, verified: null, reason: null };
+    } else {
+      try {
+        const projectRoot = await findCliProjectRoot(options.cwd);
+        const slug = computeCliProjectSlug(projectRoot);
+        if (!slug) throw Object.assign(new Error("Empty project slug"), { category: "mcp_slug_empty" });
+        const enumerator = options.enumerateMcpImpl || enumerateNativeMcpServerIds;
+        const enumerated = await enumerator({ env, projectRoot, userHome });
+        const ids = Array.isArray(enumerated) ? enumerated : Array.isArray(enumerated?.ids) ? enumerated.ids : [];
+        const partialErrorCategory = !Array.isArray(enumerated) ? enumerated?.partialErrorCategory || null : null;
+        const projectDir = join9(dataDirectory, "projects", slug);
+        await mkdir(projectDir, { recursive: true, mode: 448 });
+        await writeFile(join9(projectDir, "mcp-disabled.json"), JSON.stringify(ids, null, 2) + "\n", { flag: "wx", mode: 384 });
+        mcpIsolation = {
+          enabled: true,
+          mode: "disabled_list",
+          disabledCount: ids.length,
+          slug,
+          verified: null,
+          reason: partialErrorCategory
+        };
+      } catch (error3) {
+        mcpIsolation = {
+          enabled: false,
+          mode: "fail_open",
+          disabledCount: 0,
+          slug: null,
+          verified: false,
+          reason: error3?.category || error3?.code || "mcp_isolation_failed"
+        };
+      }
+    }
+    const verifyProjectSlug = async () => {
+      if (!mcpIsolation.enabled || !mcpIsolation.slug) return { ok: true, reason: null };
+      try {
+        const entries = await readdir(join9(dataDirectory, "projects"), { withFileTypes: true });
+        const unexpected = entries.filter((entry) => entry.isDirectory() && entry.name !== mcpIsolation.slug);
+        if (unexpected.length > 0) {
+          mcpIsolation.verified = false;
+          mcpIsolation.reason = "slug_mismatch";
+          return { ok: false, reason: "slug_mismatch" };
+        }
+        mcpIsolation.verified = true;
+        return { ok: true, reason: null };
+      } catch (error3) {
+        if (error3?.code === "ENOENT") return { ok: true, reason: null };
+        mcpIsolation.verified = false;
+        mcpIsolation.reason = error3?.code || "slug_verify_failed";
+        return { ok: false, reason: mcpIsolation.reason };
+      }
+    };
+    return {
+      directory,
+      dataDirectory,
+      env: { ...env, CURSOR_CONFIG_DIR: directory, CURSOR_DATA_DIR: dataDirectory },
+      mcpIsolation,
+      verifyProjectSlug,
+      cleanup
+    };
   } catch (cause) {
     await cleanup().catch(() => {
     });
@@ -24107,14 +24823,24 @@ async function createCliConfigScope(env = process.env) {
 }
 
 // cursor-cli-provider.mjs
-import { readFile as readFile2, realpath, stat, writeFile as writeFile2 } from "node:fs/promises";
+import { access as access2, readFile as readFile2, realpath, stat, writeFile as writeFile2 } from "node:fs/promises";
 import { isAbsolute as isAbsolute5, join as join10, normalize } from "node:path";
-var failure = (code, message) => Object.assign(new Error(message), { code });
+import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
+async function resolveProviderPreloadUrl(options = {}) {
+  const url = options.preloadPath ? pathToFileURL(String(options.preloadPath)) : new URL("./cursor-cli-provider-preload.mjs", import.meta.url);
+  try {
+    await access2(fileURLToPath2(url));
+  } catch {
+    throw failure2("CURSOR_CLI_PROVIDER_PRELOAD_MISSING", "The local CLI provider preload helper is missing next to cursor-cli-provider.mjs");
+  }
+  return url.href;
+}
+var failure2 = (code, message) => Object.assign(new Error(message), { code });
 var preferenceFor = (value) => {
   const model = typeof value?.model === "string" ? value.model.trim() : "";
   const effort = typeof value?.effort === "string" ? value.effort.trim().toLowerCase() : "";
   if (!model || /^(auto|default)$/i.test(model) || /[\r\n\0]/.test(model) || !["minimal", "low", "medium", "high", "xhigh", "max"].includes(effort)) {
-    throw failure("CURSOR_CLI_MODEL_REQUIRED", "A named model and explicit effort are required for the local provider");
+    throw failure2("CURSOR_CLI_MODEL_REQUIRED", "A named model and explicit effort are required for the local provider");
   }
   return { model, effort };
 };
@@ -24127,11 +24853,15 @@ var readAudit = async (file) => {
     if ((await stat(file)).size > 2 * 1024 * 1024) throw new Error("limit");
     return (await readFile2(file, "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
   } catch {
-    throw failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "Local provider verification evidence is missing or invalid");
+    throw failure2("CURSOR_CLI_PROVIDER_UNVERIFIED", "Local provider verification evidence is missing or invalid");
   }
 };
 async function withProviderScope(provider, preference, options, allowInference, action) {
-  const scope = await createCliConfigScope(options.env || process.env);
+  const scope = await createCliConfigScope(options.env || process.env, {
+    cwd: options.cwd,
+    userHome: options.userHome,
+    enumerateMcpImpl: options.enumerateMcpImpl
+  });
   let retain = false;
   try {
     const file = join10(scope.directory, "cli-config.json");
@@ -24162,11 +24892,12 @@ async function withProviderScope(provider, preference, options, allowInference, 
       AGENT_CLI_CREDENTIAL_STORE: "file"
     });
     if (env.NODE_USE_ENV_PROXY === void 0 && (env.HTTPS_PROXY || env.HTTP_PROXY)) env.NODE_USE_ENV_PROXY = "1";
-    return await action({ env, auditFile });
+    return await action({ env, auditFile, scope });
   } catch (error3) {
     if (error3.confirmedTerminal === false) {
       retain = true;
       error3.cliConfigDirectory = scope.directory;
+      error3.cliDataDirectory = scope.dataDirectory;
     }
     throw error3;
   } finally {
@@ -24180,19 +24911,20 @@ async function inspectLocalCliProvider(options, execute2) {
   try {
     launcher = { command: await realpath(provider.nodePath), args: [await realpath(provider.entrypoint)] };
   } catch {
-    throw failure("CURSOR_CLI_PROVIDER_UNAVAILABLE", "The configured agent-local Node runtime or entrypoint is unavailable");
+    throw failure2("CURSOR_CLI_PROVIDER_UNAVAILABLE", "The configured agent-local Node runtime or entrypoint is unavailable");
   }
   return withProviderScope(provider, preference, options, false, async ({ env, auditFile }) => {
     const metadata = { ...options, env, input: void 0, onLine: void 0, onDispatch: void 0, timeoutMs: options.timeoutMs ?? 3e4 };
     const help = await execute2(launcher, ["--help"], metadata);
     if (!/Usage:\s*agent-local\b/.test(help.stdout) || !/Start the Cursor Agent/.test(help.stdout) || !/stream-json/.test(help.stdout)) {
-      throw failure("CURSOR_CLI_WRONG_BRAND", "The local provider requires the official agent-local CLI build");
+      throw failure2("CURSOR_CLI_WRONG_BRAND", "The local provider requires the official agent-local CLI build");
     }
-    const adapted = { command: launcher.command, args: ["--import", new URL("./cursor-cli-provider-preload.mjs", import.meta.url).href, ...launcher.args] };
+    const preloadUrl = await resolveProviderPreloadUrl(options);
+    const adapted = { command: launcher.command, args: ["--import", preloadUrl, ...launcher.args] };
     await execute2(adapted, ["--authless", "--base-url", provider.baseUrl, "--disable-auto-update", "models"], metadata);
     const events = await readAudit(auditFile);
     if (events.some((event) => event.stage === "provider_error") || !events.some((event) => event.stage === "catalogue_verified" && event.model === preference.model)) {
-      throw failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "The provider did not confirm the exact configured model");
+      throw failure2("CURSOR_CLI_PROVIDER_UNVERIFIED", "The provider did not confirm the exact configured model");
     }
     return {
       brand: "Cursor",
@@ -24208,8 +24940,9 @@ async function runLocalCliProvider({ workspace, prompt, modelPreference, timeout
   const preference = preferenceFor(modelPreference);
   const provider = normalizeCliProvider(cli.provider);
   if (preference.model !== cli.preference?.model || preference.effort !== cli.preference?.effort || !cli.providerVerification?.catalogueVerified) {
-    throw failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "Provider inspection does not match the frozen model and effort");
+    throw failure2("CURSOR_CLI_PROVIDER_UNVERIFIED", "Provider inspection does not match the frozen model and effort");
   }
+  const preloadUrl = await resolveProviderPreloadUrl(options);
   let init, terminal;
   let finalText = "";
   const selection = {
@@ -24224,8 +24957,8 @@ async function runLocalCliProvider({ workspace, prompt, modelPreference, timeout
     providerResponseConfirmed: false,
     provider: localProviderSummary(provider)
   };
-  return withProviderScope(provider, preference, { ...options, timeoutMs }, true, async ({ env, auditFile }) => {
-    const launcher = { command: cli.launcher.command, args: ["--import", new URL("./cursor-cli-provider-preload.mjs", import.meta.url).href, ...cli.launcher.args] };
+  return withProviderScope(provider, preference, { ...options, cwd: workspace.cwd, timeoutMs }, true, async ({ env, auditFile, scope }) => {
+    const launcher = { command: cli.launcher.command, args: ["--import", preloadUrl, ...cli.launcher.args] };
     await execute2(launcher, [
       "--authless",
       "--base-url",
@@ -24249,31 +24982,31 @@ async function runLocalCliProvider({ workspace, prompt, modelPreference, timeout
       timeoutMs: timeoutMs ?? 3e5,
       onDispatch,
       onEnd() {
-        if (!init || !terminal) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local closed without a complete successful turn");
+        if (!init || !terminal) throw failure2("CURSOR_CLI_PROTOCOL_ERROR", "agent-local closed without a complete successful turn");
       },
       onLine(line) {
         let event;
         try {
           event = JSON.parse(line);
         } catch {
-          throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local emitted invalid JSON");
+          throw failure2("CURSOR_CLI_PROTOCOL_ERROR", "agent-local emitted invalid JSON");
         }
-        if (!event || typeof event !== "object" || Array.isArray(event) || typeof event.type !== "string" || terminal) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "Invalid or post-terminal agent-local event");
+        if (!event || typeof event !== "object" || Array.isArray(event) || typeof event.type !== "string" || terminal) throw failure2("CURSOR_CLI_PROTOCOL_ERROR", "Invalid or post-terminal agent-local event");
         if (event.type === "system" && event.subtype === "init") {
-          if (init || typeof event.session_id !== "string" || !event.session_id || typeof event.cwd !== "string" || !isAbsolute5(event.cwd) || canonical(event.cwd) !== canonical(workspace.cwd)) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local init identity or workspace does not match");
-          if (event.model !== preference.model) throw failure("CURSOR_CLI_MODEL_MISMATCH", "agent-local initialized another model");
+          if (init || typeof event.session_id !== "string" || !event.session_id || typeof event.cwd !== "string" || !isAbsolute5(event.cwd) || canonical(event.cwd) !== canonical(workspace.cwd)) throw failure2("CURSOR_CLI_PROTOCOL_ERROR", "agent-local init identity or workspace does not match");
+          if (event.model !== preference.model) throw failure2("CURSOR_CLI_MODEL_MISMATCH", "agent-local initialized another model");
           init = event;
           onInit?.({ sessionId: init.session_id, modelSelection: selection });
           return;
         }
-        if (!init || event.session_id !== void 0 && event.session_id !== init.session_id || ["user", "assistant", "tool_call", "result"].includes(event.type) && event.session_id !== init.session_id) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local session identity is inconsistent");
+        if (!init || event.session_id !== void 0 && event.session_id !== init.session_id || ["user", "assistant", "tool_call", "result"].includes(event.type) && event.session_id !== init.session_id) throw failure2("CURSOR_CLI_PROTOCOL_ERROR", "agent-local session identity is inconsistent");
         if (event.type === "tool_call") finalText = "";
         if (event.type === "assistant") {
           const text = event.message?.content?.filter((item) => item.type === "text").map((item) => item.text).join("") || "";
           if (text.trim()) finalText = text;
         }
         if (event.type === "result") {
-          if (event.subtype !== "success" || event.is_error !== false) throw failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local did not confirm a successful terminal result");
+          if (event.subtype !== "success" || event.is_error !== false) throw failure2("CURSOR_CLI_PROTOCOL_ERROR", "agent-local did not confirm a successful terminal result");
           terminal = event;
         }
       }
@@ -24283,17 +25016,24 @@ async function runLocalCliProvider({ workspace, prompt, modelPreference, timeout
     const created = events.filter((event) => event.stage === "response.created");
     const completed = events.filter((event) => event.stage === "response.completed");
     if (events.some((event) => event.stage === "provider_error") || !sent.length || sent.length !== created.length || sent.length !== completed.length || [...sent, ...created, ...completed].some((event) => event.model !== preference.model || event.effort !== preference.effort)) {
-      throw Object.assign(failure("CURSOR_CLI_PROVIDER_UNVERIFIED", "Provider responses did not confirm every model request and effort"), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
+      throw Object.assign(failure2("CURSOR_CLI_PROVIDER_UNVERIFIED", "Provider responses did not confirm every model request and effort"), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
     }
     const result = typeof terminal.result === "string" && terminal.result.trim() ? terminal.result : finalText;
-    if (!result.trim()) throw Object.assign(failure("CURSOR_CLI_PROTOCOL_ERROR", "agent-local returned no complete reply after its tools"), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
-    return { result, sessionId: init.session_id, modelSelection: {
-      ...selection,
-      verificationSource: "cursor_cli_provider_response",
-      providerResponseConfirmed: true,
-      providerRequestCount: sent.length,
-      verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
-    } };
+    if (!result.trim()) throw Object.assign(failure2("CURSOR_CLI_PROTOCOL_ERROR", "agent-local returned no complete reply after its tools"), { sent: true, confirmedNotSent: false, confirmedTerminal: true });
+    await scope.verifyProjectSlug();
+    return {
+      result,
+      sessionId: init.session_id,
+      modelSelection: {
+        ...selection,
+        verificationSource: "cursor_cli_provider_response",
+        providerResponseConfirmed: true,
+        providerRequestCount: sent.length,
+        verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
+      },
+      mcpIsolation: { ...scope.mcpIsolation },
+      cliTransport: "print"
+    };
   });
 }
 
@@ -24302,21 +25042,47 @@ var VERSION = /^\d{4}\.\d{1,2}\.\d{1,2}(?:-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$/;
 var error2 = (code, message) => Object.assign(new Error(message), { code });
 var clean = (value) => String(value || "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\u200b-\u200d\ufeff]/g, "");
 var displayText = (value) => clean(value).toLowerCase().replace(/\b\d+(?:\.\d+)?\s*[km](?:\s*(?:tokens?|context))?\b/g, "").trim();
+var isFastVariant = (value) => /(?:^|[\s_-])fast\s*$/i.test(displayText(value));
+var stripFastSuffix = (value) => displayText(value).replace(/(?:^|[\s_-]+)fast\s*$/i, "").trim();
 var display = (value) => displayText(value).replace(/extra[\s_-]*high/g, "xhigh").replace(/[^a-z0-9.]+/g, "");
 var effortName = (value) => String(value || "").trim().toLowerCase().replace(/extra[\s_-]*high/g, "xhigh");
-var advertisedEffort = (value) => effortName(/(?:^|[\s_-])(extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i.exec(displayText(value))?.[1]);
+var advertisedEffort = (value) => effortName(/(?:^|[\s_-])(extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i.exec(stripFastSuffix(value))?.[1]);
 var safeDetail = (value) => clean(value).replace(/(["']?(?:authorization|proxy-authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|(?:bearer|basic)\s+\S+|\S+)/gi, "$1[redacted]").replace(/\b(?:bearer|basic)\s+\S+/gi, "[redacted]").replace(/\b(?:sk|key|token)-[a-z0-9_-]{12,}/gi, "[redacted]").replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]").slice(0, 800);
+var classifyCliStderrCategory = (value) => {
+  const text = clean(value);
+  if (!text.trim()) return null;
+  if (/\b(ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|ECONNABORTED|EAI_FAIL)\b/.test(text) || /\b(?:network\s+error|socket\s+hang\s+up|tls\s+handshake)\b/i.test(text)) {
+    return "network";
+  }
+  if (/not authenticated|authentication|unauthorized|unauthenticated|sign.?in|log.?in|api.?key|session\s+expired/i.test(text)) {
+    return "auth";
+  }
+  if (/workspace.*trust|untrusted/i.test(text)) {
+    return "trust";
+  }
+  if (/rate.?limit|too many requests|\b429\b|quota|billing|usage\s+limit/i.test(text)) {
+    return "rate_limit";
+  }
+  if (/model.*(?:not found|unavailable|unsupported|invalid)|unknown model/i.test(text)) {
+    return "model";
+  }
+  if (/timed?\s*out|\btimeout\b/i.test(text)) {
+    return "timeout";
+  }
+  return "unknown";
+};
 var stderrSummary = (value) => {
   const text = clean(value);
   const network = /\b(ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN)\b/.exec(text);
   if (network) return network[1];
-  if (/not authenticated|authentication|unauthorized|sign.?in|log.?in|api.?key/i.test(text)) return "authentication failed; check Cursor CLI login";
-  if (/workspace.*trust|untrusted/i.test(text)) return "workspace trust was not confirmed";
+  const category = classifyCliStderrCategory(text);
+  if (category === "auth") return "authentication failed; check Cursor CLI login";
+  if (category === "trust") return "workspace trust was not confirmed";
   return text.trim() ? "CLI reported an error on stderr (content withheld)" : "";
 };
 var exists = async (file) => {
   try {
-    await access(file);
+    await access3(file);
     return true;
   } catch {
     return false;
@@ -24328,10 +25094,32 @@ async function resolveLauncher(options) {
   const env = options.env || process.env;
   const explicit = env.CURSOR_BRIDGE_CLI_PATH;
   if (explicit && !path.isAbsolute(explicit)) throw error2("CURSOR_CLI_LAUNCHER_UNSUPPORTED", "CURSOR_BRIDGE_CLI_PATH must be absolute");
-  const candidates = explicit ? [explicit] : [];
-  if (!explicit && platform === "win32" && env.LOCALAPPDATA) candidates.push(path.join(env.LOCALAPPDATA, "cursor-agent", "cursor-agent.ps1"));
-  if (!explicit) for (const directory of (env.PATH || "").split(platform === "win32" ? ";" : ":").filter(Boolean)) {
-    for (const name of platform === "win32" ? ["cursor-agent.ps1", "cursor-agent.cmd", "cursor-agent.exe"] : ["cursor-agent", "agent"]) candidates.push(path.join(directory, name));
+  const candidates = [];
+  const addCandidate = (candidate) => {
+    if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+  };
+  if (explicit) {
+    addCandidate(explicit);
+  } else if (platform === "win32") {
+    const winNames = ["cursor-agent.ps1", "cursor-agent.cmd", "cursor-agent.exe"];
+    const dirs = [];
+    if (env.LOCALAPPDATA) dirs.push(path.join(env.LOCALAPPDATA, "cursor-agent"));
+    if (env.USERPROFILE) {
+      dirs.push(path.join(env.USERPROFILE, "AppData", "Local", "cursor-agent"));
+      dirs.push(path.join(env.USERPROFILE, ".local", "bin"));
+    }
+    if (env.APPDATA) dirs.push(path.join(env.APPDATA, "cursor-agent"));
+    for (const dir of (env.PATH || "").split(";").filter(Boolean)) dirs.push(dir);
+    for (const dir of dirs) for (const name of winNames) addCandidate(path.join(dir, name));
+  } else {
+    const posixNames = ["cursor-agent", "agent"];
+    const dirs = [];
+    if (env.HOME) {
+      dirs.push(path.join(env.HOME, ".local", "bin"));
+      dirs.push(path.join(env.HOME, ".cursor", "bin"));
+    }
+    for (const dir of (env.PATH || "").split(":").filter(Boolean)) dirs.push(dir);
+    for (const dir of dirs) for (const name of posixNames) addCandidate(path.join(dir, name));
   }
   for (const candidate of candidates) {
     if (!await exists(candidate)) continue;
@@ -24343,9 +25131,10 @@ async function resolveLauncher(options) {
     const directory = path.dirname(absolute);
     const roots = [directory];
     try {
-      const entries = (await readdir(path.join(directory, "versions"), { withFileTypes: true })).filter((entry) => entry.isDirectory() && VERSION.test(entry.name));
-      entries.sort((a, b) => b.name.localeCompare(a.name, void 0, { numeric: true }));
-      roots.push(...entries.map((entry) => path.join(directory, "versions", entry.name)));
+      const subdirs = (await readdir2(path.join(directory, "versions"), { withFileTypes: true })).filter((entry) => entry.isDirectory());
+      const dateVersions = subdirs.filter((entry) => VERSION.test(entry.name)).sort((a, b) => b.name.localeCompare(a.name, void 0, { numeric: true }));
+      const otherVersions = subdirs.filter((entry) => !VERSION.test(entry.name)).sort((a, b) => b.name.localeCompare(a.name, void 0, { numeric: true }));
+      roots.push(...dateVersions.concat(otherVersions).map((entry) => path.join(directory, "versions", entry.name)));
     } catch (cause) {
       if (cause.code !== "ENOENT") throw cause;
     }
@@ -24382,7 +25171,7 @@ async function execute(launcher, args, options = {}) {
   };
   if (options.signal?.aborted) throw Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true, stopConfirmed: true, confirmedTerminal: true, confirmedNotSent: true, sent: false });
   return new Promise((resolve12, reject) => {
-    let child, stdout = "", stderr = "", pending = "", bytes = 0, failure2, closed = false, dispatched = false, stopPromise;
+    let child, stdout = "", stderr = "", pending = "", bytes = 0, failure3, closed = false, dispatched = false, stopPromise;
     let closeTimer;
     const timeoutMs = Math.max(1, options.timeoutMs ?? 15e3);
     const maxBytes = options.maxOutputBytes ?? 8 * 1024 * 1024;
@@ -24396,12 +25185,12 @@ async function execute(launcher, args, options = {}) {
       reject(cause);
     };
     const fail = (cause) => {
-      if (failure2) return;
-      failure2 = cause;
+      if (failure3) return;
+      failure3 = cause;
       stopPromise = Promise.resolve().then(() => stopTree(child, options)).then((value) => value !== false, () => false);
       closeTimer = setTimeout(async () => {
         cleanup();
-        finishError(failure2, false);
+        finishError(failure3, false);
       }, options.closeTimeoutMs ?? 6e3);
     };
     const abort = () => fail(Object.assign(error2("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled"), { cancelled: true }));
@@ -24429,7 +25218,7 @@ async function execute(launcher, args, options = {}) {
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      if (failure2) return;
+      if (failure3) return;
       bytes += Buffer.byteLength(chunk);
       if (bytes > maxBytes) return fail(error2("CURSOR_CLI_OUTPUT_LIMIT", "Cursor CLI output exceeded the limit"));
       if (!options.onLine) {
@@ -24438,7 +25227,7 @@ async function execute(launcher, args, options = {}) {
       }
       pending += chunk;
       let boundary;
-      while ((boundary = pending.indexOf("\n")) >= 0 && !failure2) {
+      while ((boundary = pending.indexOf("\n")) >= 0 && !failure3) {
         const line = pending.slice(0, boundary).replace(/\r$/, "");
         pending = pending.slice(boundary + 1);
         if (!line.trim()) continue;
@@ -24456,17 +25245,18 @@ async function execute(launcher, args, options = {}) {
       if (!closed) fail(cause);
     });
     child.on("error", (cause) => {
-      failure2 ||= cause;
+      failure3 ||= cause;
     });
     child.on("close", async (code, signal) => {
       if (closed) return;
       closed = true;
       cleanup();
       const stopped = stopPromise ? await stopPromise : true;
-      if (failure2) return finishError(failure2, stopped);
+      if (failure3) return finishError(failure3, stopped);
       let completionError;
       const detail = stderrSummary(stderr);
-      if (code !== 0) completionError = Object.assign(error2("CURSOR_CLI_EXIT_ERROR", `Cursor CLI exited unsuccessfully${detail ? ": " + detail : ""}`), { exitCode: code, signal });
+      const diagnosticCategory = classifyCliStderrCategory(stderr);
+      if (code !== 0) completionError = Object.assign(error2("CURSOR_CLI_EXIT_ERROR", `Cursor CLI exited unsuccessfully${detail ? ": " + detail : ""}`), { exitCode: code, signal, ...diagnosticCategory ? { diagnosticCategory } : {} });
       else if (options.onLine && pending.trim()) completionError = error2("CURSOR_CLI_PROTOCOL_ERROR", "Cursor CLI stream ended without a newline");
       else try {
         options.onEnd?.();
@@ -24479,11 +25269,11 @@ async function execute(launcher, args, options = {}) {
       resolve12({ stdout, stderr: safeDetail(stderr), code });
     });
     child.once("spawn", () => {
-      if (failure2) return;
+      if (failure3) return;
       try {
         if (options.input !== void 0) {
           options.onDispatch?.();
-          if (failure2 || options.signal?.aborted) return;
+          if (failure3 || options.signal?.aborted) return;
           dispatched = true;
           child.stdin.end(options.input, "utf8");
         } else child.stdin.end();
@@ -24495,19 +25285,47 @@ async function execute(launcher, args, options = {}) {
   });
 }
 async function withCliConfig(options, action) {
-  const config2 = await createCliConfigScope(options.env || process.env);
+  const config2 = await createCliConfigScope(options.env || process.env, {
+    cwd: options.cwd,
+    userHome: options.userHome,
+    enumerateMcpImpl: options.enumerateMcpImpl
+  });
   let retain = false;
   try {
-    return await action(config2.env);
+    return await action(config2.env, config2);
   } catch (cause) {
     if (cause.confirmedTerminal === false) {
       retain = true;
       cause.cliConfigDirectory = config2.directory;
+      cause.cliDataDirectory = config2.dataDirectory;
     }
     throw cause;
   } finally {
     if (!retain) await config2.cleanup().catch((error3) => console.error(`[cursor-bridge] CLI configuration-copy cleanup failed: ${error3.code || "unknown"}`));
   }
+}
+async function readCursorCliIdentity(options = {}) {
+  const env = options.env || process.env;
+  const userHome = options.userHome || (process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir10();
+  const configSource = env.CURSOR_CONFIG_DIR?.trim() || (env.XDG_CONFIG_HOME?.trim() ? path.join(env.XDG_CONFIG_HOME, "cursor") : path.join(userHome, ".cursor"));
+  let launcher;
+  try {
+    launcher = await resolveLauncher(options);
+  } catch (cause) {
+    return { available: false, key: null, reason: cause?.code || "CURSOR_CLI_UNAVAILABLE" };
+  }
+  const files = [launcher.command, ...launcher.args || []].filter(Boolean);
+  const stats = await Promise.all(files.map(async (file) => {
+    try {
+      const info = await stat2(file);
+      return `${file}:${info.size}:${Math.trunc(info.mtimeMs)}`;
+    } catch {
+      return `${file}:missing`;
+    }
+  }));
+  const mcpMode = String(env.CURSOR_BRIDGE_CCE_CLI_MCP || "").trim().toLowerCase() || "isolated";
+  const key = [launcher.wrapper || "", ...stats, `cfg:${configSource}`, `mcp:${mcpMode}`].join("|");
+  return { available: true, key, launcher };
 }
 async function inspectCursorCli(options = {}) {
   if (options.provider) return inspectLocalCliProvider(options, execute);
@@ -24530,15 +25348,47 @@ async function inspectCursorCli(options = {}) {
 function selectVariant(cli, preference) {
   const base = String(preference?.model || "").trim();
   const effort = effortName(preference?.effort);
-  if (!base || /^(?:auto|default)$/i.test(base) || !effort || !/^(?:minimal|low|medium|high|xhigh|max)$/.test(effort)) throw error2("CURSOR_CLI_MODEL_REQUIRED", "An explicit named model and effort are required");
-  const ids = /* @__PURE__ */ new Set([`${base}-${effort}`.toLowerCase(), ...effort === "xhigh" ? [`${base}-extra-high`.toLowerCase()] : []]);
-  const candidates = cli.models.filter((model) => ids.has(model.id.toLowerCase()) || model.id.toLowerCase() === base.toLowerCase() && advertisedEffort(model.name) === effort);
+  const requestedFast = isFastVariant(base);
+  const stem = stripFastSuffix(base).replace(/[\s_]+/g, "-").replace(/-+/g, "-");
+  if (!base || !stem || /^(?:auto|default)$/i.test(base) || /^(?:auto|default)$/i.test(stem) || !effort || !/^(?:minimal|low|medium|high|xhigh|max)$/.test(effort)) {
+    throw error2("CURSOR_CLI_MODEL_REQUIRED", "An explicit named model and effort are required");
+  }
+  const stems = /* @__PURE__ */ new Set([stem, stem.startsWith("cursor-") && stem.length > 7 ? stem.slice(7) : `cursor-${stem}`]);
+  const efforts = effort === "xhigh" ? ["xhigh", "extra-high"] : [effort];
+  const suffix = requestedFast ? "-fast" : "";
+  const ids = new Set([...stems].flatMap((item) => efforts.map((level) => `${item}-${level}${suffix}`)));
+  const candidates = cli.models.filter((model) => ids.has(model.id.toLowerCase()) || model.id.toLowerCase() === base.toLowerCase() && advertisedEffort(model.name) === effort && isFastVariant(model.name) === requestedFast);
   if (candidates.length !== 1) throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The exact requested CLI model and effort variant is unavailable or ambiguous");
   const selected = candidates[0];
+  if (isFastVariant(selected.name) !== requestedFast || isFastVariant(selected.id) !== requestedFast) {
+    throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The advertised model does not confirm the requested speed tier");
+  }
   if (advertisedEffort(selected.name) !== effort) throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The advertised model does not confirm the requested effort");
-  const identity = (value) => displayText(value).replace(/(?:[\s_-]+)(?:extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i, "").replace(/(\d)[_-](?=\d)/g, "$1.").replace(/[^a-z0-9.]+/g, "");
+  const stripProvider = (value) => value.startsWith("cursor") && value.length > 6 ? value.slice(6) : value;
+  const identity = (value) => stripProvider(stripFastSuffix(value).replace(/(?:[\s_-]+)(?:extra[\s_-]*high|xhigh|minimal|low|medium|high|max)\s*$/i, "").replace(/(\d)[_-](?=\d)/g, "$1.").replace(/[^a-z0-9.]+/g, ""));
   if (identity(selected.name) !== identity(base)) throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "The advertised model name conflicts with the requested model identity");
   return { selected, base, effort };
+}
+function verifyCursorCliModelSelection(cli, modelPreference) {
+  if (cli?.providerVerification?.catalogueVerified && cli?.preference) {
+    const requestedModel = String(modelPreference?.model || "").trim();
+    const requestedEffort = effortName(modelPreference?.effort);
+    if (!requestedModel || !requestedEffort) {
+      throw error2("CURSOR_CLI_MODEL_REQUIRED", "An explicit named model and effort are required");
+    }
+    if (requestedModel !== cli.preference.model || requestedEffort !== cli.preference.effort) {
+      throw error2("CURSOR_CLI_MODEL_UNAVAILABLE", "Provider inspection does not match the requested model and effort");
+    }
+    return {
+      selected: { id: cli.preference.model, name: cli.preference.model },
+      base: requestedModel,
+      effort: requestedEffort
+    };
+  }
+  if (!cli || !Array.isArray(cli.models) || !cli.models.length) {
+    throw error2("CURSOR_CLI_MODELS_UNAVAILABLE", "Cursor CLI did not advertise usable model variants");
+  }
+  return selectVariant(cli, modelPreference);
 }
 async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli }, options = {}) {
   if (typeof prompt !== "string" || !prompt.trim()) throw error2("CURSOR_CLI_PROMPT_REQUIRED", "A nonempty prompt is required");
@@ -24555,7 +25405,7 @@ async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, s
     return process.platform === "win32" ? normalized.toLowerCase() : normalized;
   };
   const protocolError = (message) => error2("CURSOR_CLI_PROTOCOL_ERROR", message);
-  return withCliConfig(options, async (env) => {
+  return withCliConfig({ ...options, cwd }, async (env, config2) => {
     await execute(cli.launcher, [
       "--mode",
       "ask",
@@ -24614,16 +25464,1324 @@ async function runCursorCli({ projectPath, prompt, modelPreference, timeoutMs, s
         }
       }
     });
-    return { result: terminal.result, sessionId: init.session_id, modelSelection };
+    await config2.verifyProjectSlug();
+    return {
+      result: terminal.result,
+      sessionId: init.session_id,
+      modelSelection,
+      mcpIsolation: { ...config2.mcpIsolation },
+      cliTransport: "print"
+    };
   });
 }
 
+// cursor-cli-acp.mjs
+import { spawn as nodeSpawn2 } from "node:child_process";
+import path2 from "node:path";
+var DEFAULT_ACP_IDLE_MS = 9e5;
+var DEFAULT_ACP_MAX_AGE_MS = 36e5;
+var DEFAULT_ACP_CAPABILITY_FAIL_TTL_MS = 3e5;
+var DEFAULT_ACP_POOL_SIZE = 1;
+var DEFAULT_ACP_CANCEL_GRACE_MS = 3e3;
+var DEFAULT_ACP_CLOSE_TIMEOUT_MS = 6e3;
+var DEFAULT_ACP_HANDSHAKE_TIMEOUT_MS = 3e4;
+var MAX_ACP_OUTPUT_BYTES = 8 * 1024 * 1024;
+var ACP_THINKING_CONFIG_IDS = /* @__PURE__ */ new Set([
+  "effort",
+  "reasoning_effort",
+  "thinking",
+  "reasoning",
+  "thought_level"
+]);
+function cliError(code, message, extra = {}) {
+  return Object.assign(new Error(message), { code }, extra);
+}
+function canonicalPath(value) {
+  const normalized = path2.normalize(String(value || "")).replace(/[\\/]+$/, "");
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+function parsePositiveInt(value, fallback) {
+  if (value === void 0 || value === null || String(value).trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+function parseNonNegativeInt(value, fallback) {
+  if (value === void 0 || value === null || String(value).trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+function getAcpDisabledReason(env = process.env) {
+  if (String(env?.CURSOR_BRIDGE_CCE_CLI_CHILD || "").trim() === "1") return "child_process_guard";
+  if (String(env?.CURSOR_BRIDGE_CCE_CLI_ACP || "").trim().toLowerCase() === "off") return "env_disabled";
+  return null;
+}
+function normalizeModelIdentityKey(value) {
+  const cleaned = clean(value).toLowerCase().trim();
+  const stripped = cleaned.startsWith("cursor-") && cleaned.length > 7 ? cleaned.slice(7) : cleaned.startsWith("cursor ") && cleaned.length > 7 ? cleaned.slice(7) : cleaned;
+  return stripped.replace(/(\d)[_-](?=\d)/g, "$1.").replace(/[^a-z0-9.]+/g, "");
+}
+function parseAcpModelPreference(modelPreference) {
+  const base = String(modelPreference?.model || "").trim();
+  const effort = effortName(modelPreference?.effort);
+  const requestedFast = isFastVariant(base);
+  const stem = stripFastSuffix(base).replace(/[\s_]+/g, "-").replace(/-+/g, "-");
+  if (!base || !stem || /^(?:auto|default)$/i.test(base) || /^(?:auto|default)$/i.test(stem) || !effort || !/^(?:minimal|low|medium|high|xhigh|max)$/.test(effort)) {
+    throw cliError("CURSOR_CLI_MODEL_REQUIRED", "An explicit named model and effort are required", {
+      confirmedNotSent: true,
+      confirmedTerminal: true,
+      sent: false
+    });
+  }
+  const bareStem = stem.startsWith("cursor-") && stem.length > 7 ? stem.slice(7) : stem;
+  return {
+    base,
+    rawEffort: modelPreference.effort,
+    effort,
+    requestedFast,
+    stem,
+    bareStem,
+    identityKey: normalizeModelIdentityKey(bareStem)
+  };
+}
+function findUniqueConfigOption(configOptions, predicate) {
+  if (!Array.isArray(configOptions)) return null;
+  const matches = configOptions.filter((opt) => opt && typeof opt === "object" && predicate(opt));
+  return matches.length === 1 ? matches[0] : null;
+}
+function optionEntries(option) {
+  return Array.isArray(option?.options) ? option.options.filter((item) => item && item.value !== void 0 && item.value !== null) : [];
+}
+function resolveAcpModelOption(configOptions, parsedPreference) {
+  const modelOption = findUniqueConfigOption(configOptions, (opt) => opt.id === "model");
+  if (!modelOption) return { ok: false, reason: "missing_model_config" };
+  const entries = optionEntries(modelOption).filter((item) => {
+    const val = clean(item.value);
+    const name = clean(item.name);
+    if (/\[effort=/i.test(val) || /\[effort=/i.test(name)) return false;
+    if (isFastVariant(val) || isFastVariant(name)) return false;
+    return true;
+  });
+  const exactTargets = /* @__PURE__ */ new Set([parsedPreference.stem.toLowerCase(), parsedPreference.bareStem.toLowerCase()]);
+  let matches = entries.filter((item) => exactTargets.has(clean(item.value).toLowerCase()));
+  if (matches.length === 0) {
+    matches = entries.filter((item) => normalizeModelIdentityKey(item.value) === parsedPreference.identityKey || item.name && normalizeModelIdentityKey(item.name) === parsedPreference.identityKey);
+  }
+  if (matches.length !== 1) return { ok: false, reason: "model_option_unavailable" };
+  return {
+    ok: true,
+    option: modelOption,
+    desiredValue: String(matches[0].value),
+    currentValue: modelOption.currentValue == null ? null : String(modelOption.currentValue)
+  };
+}
+function resolveAcpModelDependentOptions(configOptions, parsedPreference) {
+  const modeOption = findUniqueConfigOption(configOptions, (opt) => opt.id === "mode");
+  if (!modeOption) return { ok: false, reason: "missing_mode_config" };
+  const askMatches = optionEntries(modeOption).filter((item) => clean(item.value).toLowerCase() === "ask");
+  if (askMatches.length !== 1) return { ok: false, reason: "ask_mode_unavailable" };
+  const thinkingOption = findUniqueConfigOption(configOptions, (opt) => ACP_THINKING_CONFIG_IDS.has(opt.id));
+  if (!thinkingOption) return { ok: false, reason: "thinking_option_unavailable" };
+  const effortMatches = optionEntries(thinkingOption).filter((item) => effortName(clean(item.value)) === parsedPreference.effort || item.name && effortName(clean(item.name)) === parsedPreference.effort);
+  if (effortMatches.length !== 1) return { ok: false, reason: "effort_option_unavailable" };
+  const fastOptions = Array.isArray(configOptions) ? configOptions.filter((opt) => opt && opt.id === "fast") : [];
+  if (fastOptions.length > 1) return { ok: false, reason: "fast_option_ambiguous" };
+  const fastOption = fastOptions[0] || null;
+  let desiredFastValue = null;
+  if (parsedPreference.requestedFast) {
+    if (!fastOption) return { ok: false, reason: "fast_option_unavailable" };
+    const trueMatches = optionEntries(fastOption).filter((item) => clean(String(item.value)).toLowerCase() === "true");
+    if (trueMatches.length !== 1) return { ok: false, reason: "fast_option_unavailable" };
+    desiredFastValue = String(trueMatches[0].value);
+  } else if (fastOption) {
+    const falseMatches = optionEntries(fastOption).filter((item) => clean(String(item.value)).toLowerCase() === "false");
+    if (falseMatches.length !== 1) return { ok: false, reason: "fast_option_unavailable" };
+    desiredFastValue = String(falseMatches[0].value);
+  }
+  return {
+    ok: true,
+    mode: {
+      configId: "mode",
+      desiredValue: String(askMatches[0].value),
+      currentValue: modeOption.currentValue == null ? null : String(modeOption.currentValue)
+    },
+    thinking: {
+      configId: thinkingOption.id,
+      desiredValue: String(effortMatches[0].value),
+      currentValue: thinkingOption.currentValue == null ? null : String(thinkingOption.currentValue)
+    },
+    fast: fastOption ? {
+      configId: "fast",
+      desiredValue: desiredFastValue,
+      currentValue: fastOption.currentValue == null ? null : String(fastOption.currentValue)
+    } : null
+  };
+}
+function verifyAcpConfigReadback(configOptions, expected) {
+  if (!Array.isArray(configOptions)) return { ok: false, reason: "config_options_missing" };
+  const modeOption = findUniqueConfigOption(configOptions, (opt) => opt.id === "mode");
+  const modelOption = findUniqueConfigOption(configOptions, (opt) => opt.id === "model");
+  const thinkingOption = findUniqueConfigOption(configOptions, (opt) => ACP_THINKING_CONFIG_IDS.has(opt.id));
+  const fastOptions = configOptions.filter((opt) => opt && opt.id === "fast");
+  if (!modeOption || String(modeOption.currentValue) !== String(expected.modeValue)) {
+    return { ok: false, reason: "mode_readback_mismatch" };
+  }
+  if (!modelOption || String(modelOption.currentValue) !== String(expected.modelValue)) {
+    return { ok: false, reason: "model_readback_mismatch" };
+  }
+  if (!thinkingOption || thinkingOption.id !== expected.thinkingConfigId || String(thinkingOption.currentValue) !== String(expected.thinkingValue)) {
+    return { ok: false, reason: "thinking_readback_mismatch" };
+  }
+  if (expected.fastValue !== null && expected.fastValue !== void 0) {
+    if (fastOptions.length !== 1 || String(fastOptions[0].currentValue) !== String(expected.fastValue)) {
+      return { ok: false, reason: "fast_readback_mismatch" };
+    }
+  } else if (fastOptions.length > 0 && String(fastOptions[0].currentValue).toLowerCase() === "true") {
+    return { ok: false, reason: "fast_readback_mismatch" };
+  }
+  return { ok: true, reason: null };
+}
+function buildPermissionDenialResult(params) {
+  const options = Array.isArray(params?.options) ? params.options : [];
+  const rejectOption = options.find((opt) => opt && opt.optionId != null && (/reject/i.test(String(opt.kind || "")) || /reject|deny|decline/i.test(String(opt.optionId || "")) || /\b(?:reject|deny|decline)\b/i.test(String(opt.name || ""))));
+  if (rejectOption) {
+    return { outcome: { outcome: "selected", optionId: String(rejectOption.optionId) } };
+  }
+  return { outcome: { outcome: "cancelled" } };
+}
+var CursorCliAcpManager = class {
+  constructor(options = {}) {
+    this.env = options.env || process.env;
+    this.spawn = options.spawn || nodeSpawn2;
+    this.killTree = options.killTree || null;
+    this.inspectIdentity = options.inspectIdentity || readCursorCliIdentity;
+    this.resolveLauncher = options.resolveLauncher || resolveLauncher;
+    this.createScope = options.createScope || createCliConfigScope;
+    this.resolveWorkspace = options.resolveWorkspace || resolveCliWorkspace;
+    this.enumerateMcpImpl = options.enumerateMcpImpl;
+    this.userHome = options.userHome;
+    this.now = options.now || (() => Date.now());
+    this.poolSize = options.poolSize ?? DEFAULT_ACP_POOL_SIZE;
+    this.idleMs = options.idleMs ?? parsePositiveInt(this.env.CURSOR_BRIDGE_CCE_CLI_ACP_IDLE_MS, DEFAULT_ACP_IDLE_MS);
+    this.maxAgeMs = options.maxAgeMs ?? parsePositiveInt(this.env.CURSOR_BRIDGE_CCE_CLI_ACP_MAX_AGE_MS, DEFAULT_ACP_MAX_AGE_MS);
+    this.capabilityFailTtlMs = options.capabilityFailTtlMs ?? parseNonNegativeInt(
+      this.env.CURSOR_BRIDGE_CCE_CLI_ACP_FAIL_TTL_MS,
+      DEFAULT_ACP_CAPABILITY_FAIL_TTL_MS
+    );
+    this.cancelGraceMs = options.cancelGraceMs ?? DEFAULT_ACP_CANCEL_GRACE_MS;
+    this.closeTimeoutMs = options.closeTimeoutMs ?? DEFAULT_ACP_CLOSE_TIMEOUT_MS;
+    this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_ACP_HANDSHAKE_TIMEOUT_MS;
+    this.processes = /* @__PURE__ */ new Map();
+    this.capabilityFailures = /* @__PURE__ */ new Map();
+    this.closing = false;
+    this.stats = {
+      promptsServed: 0,
+      fallbacks: 0,
+      lastFallbackReason: null,
+      lastUnavailableReason: null
+    };
+  }
+  _buildProcessKey({ cwd, parsedPreference, identityKey }) {
+    return JSON.stringify([
+      canonicalPath(cwd),
+      parsedPreference.identityKey,
+      parsedPreference.effort,
+      parsedPreference.requestedFast,
+      identityKey
+    ]);
+  }
+  _recordCapabilityFailure(identityKey, reason) {
+    this.stats.lastUnavailableReason = reason;
+    if (this.capabilityFailTtlMs > 0 && identityKey) {
+      this.capabilityFailures.set(identityKey, { reason, atMs: this.now() });
+    }
+  }
+  _getCapabilityFailure(identityKey) {
+    if (!identityKey) return null;
+    const entry = this.capabilityFailures.get(identityKey);
+    if (!entry) return null;
+    if (this.capabilityFailTtlMs <= 0 || this.now() - entry.atMs >= this.capabilityFailTtlMs) {
+      this.capabilityFailures.delete(identityKey);
+      return null;
+    }
+    return entry;
+  }
+  _clearTimers(proc) {
+    if (proc.idleTimer) {
+      clearTimeout(proc.idleTimer);
+      proc.idleTimer = null;
+    }
+    if (proc.maxAgeTimer) {
+      clearTimeout(proc.maxAgeTimer);
+      proc.maxAgeTimer = null;
+    }
+  }
+  _touchIdleTimer(proc) {
+    if (proc.idleTimer) {
+      clearTimeout(proc.idleTimer);
+      proc.idleTimer = null;
+    }
+    if (proc.state === "closing" || proc.state === "closed" || proc.state === "failed" || proc.state === "orphaned") return;
+    if (!(this.idleMs > 0)) return;
+    proc.idleTimer = setTimeout(() => {
+      proc.idleTimer = null;
+      if (proc.activePrompts.size > 0 || proc.replenishing) return;
+      void this._retireProcess(proc, "idle_timeout");
+    }, this.idleMs);
+    proc.idleTimer.unref?.();
+  }
+  _startMaxAgeTimer(proc) {
+    if (proc.maxAgeTimer) {
+      clearTimeout(proc.maxAgeTimer);
+      proc.maxAgeTimer = null;
+    }
+    if (!(this.maxAgeMs > 0)) return;
+    proc.maxAgeTimer = setTimeout(() => {
+      proc.maxAgeTimer = null;
+      if (proc.activePrompts.size > 0) {
+        proc.retireAfterActive = true;
+        return;
+      }
+      void this._retireProcess(proc, "max_age");
+    }, this.maxAgeMs);
+    proc.maxAgeTimer.unref?.();
+  }
+  async _resolveEnvironment({ env, cli, projectPath }) {
+    const activeEnv = env || this.env;
+    const disabledReason = getAcpDisabledReason(activeEnv);
+    if (disabledReason) return { eligible: false, reason: disabledReason };
+    if (this.closing) return { eligible: false, reason: "manager_closing" };
+    if (cli?.provider) return { eligible: false, reason: "local_provider" };
+    const workspace = await this.resolveWorkspace(projectPath);
+    if (workspace.additionalRoots.length > 0) {
+      return { eligible: false, reason: "multi_root_workspace", workspace };
+    }
+    const identity = await this.inspectIdentity({
+      env: activeEnv,
+      ...cli?.launcher ? { launcher: cli.launcher } : {}
+    });
+    if (!identity?.available || !identity?.key) {
+      return { eligible: false, reason: identity?.reason || "CURSOR_CLI_UNAVAILABLE", workspace };
+    }
+    const launcher = cli?.launcher || identity.launcher || await this.resolveLauncher({ env: activeEnv });
+    const cachedFailure = this._getCapabilityFailure(identity.key);
+    if (cachedFailure) {
+      return { eligible: false, reason: cachedFailure.reason, workspace, identityKey: identity.key };
+    }
+    return { eligible: true, env: activeEnv, workspace, identityKey: identity.key, launcher };
+  }
+  _sendRpc(proc, method, params, timeoutMs) {
+    if (!proc.child?.stdin || proc.child.stdin.destroyed || proc.child.stdin.writableEnded) {
+      return Promise.reject(cliError("CURSOR_CLI_EXIT_ERROR", "ACP process stdin is closed"));
+    }
+    const id = ++proc.nextRpcId;
+    const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n";
+    return new Promise((resolve12, reject) => {
+      let timer = null;
+      if (timeoutMs > 0) {
+        timer = setTimeout(() => {
+          proc.pendingRpc.delete(id);
+          reject(cliError("CURSOR_CLI_TIMEOUT", `Cursor CLI ACP ${method} timed out`));
+        }, timeoutMs);
+        timer.unref?.();
+      }
+      proc.pendingRpc.set(id, { resolve: resolve12, reject, timer });
+      try {
+        proc.child.stdin.write(payload, "utf8");
+      } catch (cause) {
+        proc.pendingRpc.delete(id);
+        if (timer) clearTimeout(timer);
+        reject(cliError("CURSOR_CLI_EXIT_ERROR", "Failed to write ACP request", { cause }));
+      }
+    });
+  }
+  _sendNotification(proc, method, params) {
+    if (!proc.child?.stdin || proc.child.stdin.destroyed || proc.child.stdin.writableEnded) return false;
+    try {
+      proc.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n", "utf8");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  _replyRpcResult(proc, id, result) {
+    if (!proc.child?.stdin || proc.child.stdin.destroyed || proc.child.stdin.writableEnded) return;
+    try {
+      proc.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n", "utf8");
+    } catch {
+    }
+  }
+  _replyRpcError(proc, id, code, message) {
+    if (!proc.child?.stdin || proc.child.stdin.destroyed || proc.child.stdin.writableEnded) return;
+    try {
+      proc.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n", "utf8");
+    } catch {
+    }
+  }
+  async _cleanupScopeSafely(proc) {
+    if (!proc.scope || proc.retainScope) return;
+    const scope = proc.scope;
+    proc.scope = null;
+    await scope.cleanup().catch((error3) => {
+      console.error(`[cursor-bridge] ACP CLI configuration-copy cleanup failed: ${error3?.code || "unknown"}`);
+    });
+  }
+  _handleStdoutLine(proc, line) {
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      this._failAllPending(proc, cliError("CURSOR_CLI_PROTOCOL_ERROR", "Cursor CLI ACP emitted invalid JSON"));
+      void this._retireProcess(proc, "protocol_error");
+      return;
+    }
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) {
+      this._failAllPending(proc, cliError("CURSOR_CLI_PROTOCOL_ERROR", "Cursor CLI ACP emitted an invalid message"));
+      void this._retireProcess(proc, "protocol_error");
+      return;
+    }
+    if (msg.id !== void 0 && msg.method === void 0 && (Object.hasOwn(msg, "result") || Object.hasOwn(msg, "error"))) {
+      const waiter = proc.pendingRpc.get(msg.id);
+      if (!waiter) return;
+      proc.pendingRpc.delete(msg.id);
+      if (waiter.timer) clearTimeout(waiter.timer);
+      if (msg.error) {
+        const err = cliError("CURSOR_CLI_ACP_RPC_ERROR", String(msg.error.message || "Cursor CLI ACP error"), {
+          rpcCode: msg.error.code
+        });
+        waiter.reject(err);
+      } else {
+        waiter.resolve(msg.result);
+      }
+      return;
+    }
+    if (msg.method && msg.id !== void 0) {
+      if (msg.method === "session/request_permission") {
+        this._replyRpcResult(proc, msg.id, buildPermissionDenialResult(msg.params));
+      } else {
+        this._replyRpcError(proc, msg.id, -32601, `Method not supported in read-only CCE ACP client: ${msg.method}`);
+      }
+      return;
+    }
+    if (msg.method === "session/update") {
+      const sessionId = msg.params?.sessionId;
+      const active = sessionId ? proc.activePrompts.get(sessionId) : null;
+      const update = msg.params?.update;
+      if (active && update && typeof update === "object" && update.sessionUpdate === "agent_message_chunk") {
+        const text = update.content?.text;
+        if (typeof text === "string" && text.length > 0) {
+          active.outputBytes += Buffer.byteLength(text, "utf8");
+          if (active.outputBytes > MAX_ACP_OUTPUT_BYTES) {
+            const limitErr = cliError("CURSOR_CLI_OUTPUT_LIMIT", "Cursor CLI ACP output exceeded the limit");
+            active.abortWithError?.(limitErr);
+            return;
+          }
+          active.chunks.push(text);
+        }
+      }
+    }
+  }
+  _failAllPending(proc, error3) {
+    for (const [id, waiter] of proc.pendingRpc) {
+      proc.pendingRpc.delete(id);
+      if (waiter.timer) clearTimeout(waiter.timer);
+      waiter.reject(error3);
+    }
+  }
+  async _terminateProcess(proc, reason = "shutdown", { closeTimeoutMs = this.closeTimeoutMs } = {}) {
+    if (proc.stopPromise) return proc.stopPromise;
+    const hadActivePrompt = proc.activePrompts.size > 0;
+    proc.state = "closing";
+    this._clearTimers(proc);
+    if (this.processes.get(proc.key) === proc) this.processes.delete(proc.key);
+    proc.stopPromise = (async () => {
+      const child = proc.child;
+      let confirmedTerminal = false;
+      if (!child || proc.closed) {
+        confirmedTerminal = !hadActivePrompt;
+      } else {
+        const stopped = await stopTree(child, { killTree: this.killTree }).then(
+          (value) => value !== false,
+          () => false
+        );
+        try {
+          child.stdin?.end();
+        } catch {
+        }
+        if (stopped || !hadActivePrompt && (proc.closed || child.exitCode != null || child.signalCode != null)) {
+          confirmedTerminal = await new Promise((resolve12) => {
+            if (proc.closed) {
+              resolve12(true);
+              return;
+            }
+            let done = false;
+            const onClose = () => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              resolve12(true);
+            };
+            const timer = setTimeout(() => {
+              if (done) return;
+              done = true;
+              child.removeListener("close", onClose);
+              resolve12(false);
+            }, Math.max(10, closeTimeoutMs));
+            timer.unref?.();
+            child.once("close", onClose);
+          });
+        }
+      }
+      if (confirmedTerminal) {
+        proc.state = "closed";
+        await this._cleanupScopeSafely(proc);
+      } else {
+        proc.state = "orphaned";
+        proc.retainScope = true;
+      }
+      if (proc.pendingRpc.size > 0) {
+        this._failAllPending(
+          proc,
+          cliError("CURSOR_CLI_ACP_CLOSED", `Cursor CLI ACP process terminated (${reason})`, {
+            confirmedTerminal,
+            confirmedNotSent: false,
+            cliProcessId: child?.pid || null,
+            ...!confirmedTerminal ? {
+              cliConfigDirectory: proc.scope?.directory || null,
+              cliDataDirectory: proc.scope?.dataDirectory || null
+            } : {}
+          })
+        );
+      }
+      return {
+        confirmedTerminal,
+        reason,
+        cliProcessId: child?.pid || null,
+        cliConfigDirectory: proc.scope?.directory || null,
+        cliDataDirectory: proc.scope?.dataDirectory || null
+      };
+    })();
+    return proc.stopPromise;
+  }
+  async _retireProcess(proc, reason) {
+    if (proc && !proc.child && !proc.scope && !proc.stopPromise) {
+      proc.cancelledBeforeSpawn = true;
+      proc.cancelReason = reason;
+      proc.state = "closing";
+      if (this.processes.get(proc.key) === proc) this.processes.delete(proc.key);
+      return { confirmedTerminal: true, reason, cliProcessId: null, cliConfigDirectory: null, cliDataDirectory: null };
+    }
+    const err = cliError("CURSOR_CLI_ACP_RETIRED", `Cursor CLI ACP process retired (${reason})`, {
+      confirmedNotSent: true,
+      confirmedTerminal: true
+    });
+    this._failAllPending(proc, err);
+    return this._terminateProcess(proc, reason);
+  }
+  async _spawnProcess({ key, cwd, launcher, env, parsedPreference, identityKey, onProcess }) {
+    const scope = await this.createScope(env, {
+      cwd,
+      userHome: this.userHome,
+      enumerateMcpImpl: this.enumerateMcpImpl
+    });
+    const childEnv = {
+      ...scope.env,
+      CURSOR_BRIDGE_CCE_CLI_CHILD: "1",
+      CURSOR_BRIDGE_NO_AUTOLAUNCH: "1",
+      CURSOR_BRIDGE_DELEGATION: "off"
+    };
+    const proc = {
+      key,
+      cwd,
+      parsedPreference,
+      identityKey,
+      scope,
+      launcher,
+      child: null,
+      state: "starting",
+      createdAtMs: this.now(),
+      lastUsedAtMs: this.now(),
+      nextRpcId: 0,
+      pendingRpc: /* @__PURE__ */ new Map(),
+      activePrompts: /* @__PURE__ */ new Map(),
+      readySessions: [],
+      acquiringSession: false,
+      replenishing: null,
+      setupTail: Promise.resolve(),
+      stderr: "",
+      pendingStdout: "",
+      nonPromptBytes: 0,
+      closed: false,
+      retainScope: false,
+      retireAfterActive: false,
+      idleTimer: null,
+      maxAgeTimer: null,
+      stopPromise: null,
+      startupPromise: null,
+      capabilityError: null
+    };
+    if (this.closing) {
+      await this._cleanupScopeSafely(proc);
+      throw cliError("CURSOR_CLI_CANCELLED", "ACP manager is shutting down", { confirmedNotSent: true, confirmedTerminal: true });
+    }
+    onProcess?.(proc);
+    try {
+      proc.child = this.spawn(
+        launcher.command,
+        [...launcher.args || [], "--workspace", cwd, "--trust", "acp"],
+        {
+          cwd,
+          env: childEnv,
+          shell: false,
+          windowsHide: true,
+          detached: process.platform !== "win32",
+          stdio: ["pipe", "pipe", "pipe"]
+        }
+      );
+    } catch (cause) {
+      await this._cleanupScopeSafely(proc);
+      throw cliError("CURSOR_CLI_EXIT_ERROR", "Failed to spawn Cursor CLI ACP process", {
+        cause,
+        confirmedNotSent: true,
+        confirmedTerminal: true
+      });
+    }
+    proc.child.stdout.setEncoding("utf8");
+    proc.child.stderr.setEncoding("utf8");
+    proc.child.stdout.on("data", (chunk) => {
+      if (proc.closed || proc.state === "closing") return;
+      proc.pendingStdout += chunk;
+      if (Buffer.byteLength(proc.pendingStdout, "utf8") > MAX_ACP_OUTPUT_BYTES) {
+        const limitErr = cliError("CURSOR_CLI_OUTPUT_LIMIT", "Cursor CLI ACP stdout line exceeded the limit");
+        this._failAllPending(proc, limitErr);
+        void this._terminateProcess(proc, "output_limit");
+        return;
+      }
+      let boundary;
+      while ((boundary = proc.pendingStdout.indexOf("\n")) >= 0) {
+        const rawLine = proc.pendingStdout.slice(0, boundary).replace(/\r$/, "");
+        proc.pendingStdout = proc.pendingStdout.slice(boundary + 1);
+        if (!rawLine.trim()) continue;
+        if (proc.activePrompts.size === 0) {
+          proc.nonPromptBytes += Buffer.byteLength(rawLine, "utf8");
+          if (proc.nonPromptBytes > MAX_ACP_OUTPUT_BYTES) {
+            const limitErr = cliError("CURSOR_CLI_OUTPUT_LIMIT", "Cursor CLI ACP output exceeded the limit");
+            this._failAllPending(proc, limitErr);
+            void this._terminateProcess(proc, "output_limit");
+            return;
+          }
+        }
+        this._handleStdoutLine(proc, rawLine);
+      }
+    });
+    proc.child.stderr.on("data", (chunk) => {
+      proc.stderr = (proc.stderr + chunk).slice(-4096);
+    });
+    proc.child.stdin.on("error", (cause) => {
+      if (!proc.closed && proc.state !== "closing") {
+        const detail = stderrSummary(proc.stderr);
+        const err = cliError("CURSOR_CLI_EXIT_ERROR", `Cursor CLI ACP stdin failed${detail ? ": " + detail : ""}`, { cause });
+        this._failAllPending(proc, err);
+      }
+    });
+    proc.child.on("error", (cause) => {
+      const err = cliError("CURSOR_CLI_EXIT_ERROR", "Cursor CLI ACP process error", { cause });
+      this._failAllPending(proc, err);
+    });
+    proc.child.on("close", (code, signal) => {
+      if (proc.closed) return;
+      proc.closed = true;
+      this._clearTimers(proc);
+      if (this.processes.get(proc.key) === proc) this.processes.delete(proc.key);
+      const detail = stderrSummary(proc.stderr);
+      const exitedUnexpectedly = !proc.stopPromise && proc.state !== "closing" && proc.state !== "closed";
+      if (exitedUnexpectedly) {
+        proc.state = "failed";
+        const hasActivePrompt = proc.activePrompts.size > 0;
+        if (hasActivePrompt) proc.retainScope = true;
+        const exitError = cliError(
+          code === 0 ? "CURSOR_CLI_PROTOCOL_ERROR" : "CURSOR_CLI_EXIT_ERROR",
+          code === 0 ? "Cursor CLI ACP closed before completing the prompt" : `Cursor CLI ACP exited unsuccessfully${detail ? ": " + detail : ""}`,
+          {
+            exitCode: code,
+            signal,
+            cliProcessId: proc.child?.pid || null,
+            ...hasActivePrompt ? {
+              confirmedTerminal: false,
+              sent: true,
+              confirmedNotSent: false,
+              cliConfigDirectory: proc.scope?.directory || null,
+              cliDataDirectory: proc.scope?.dataDirectory || null
+            } : {
+              confirmedTerminal: true,
+              confirmedNotSent: true,
+              sent: false
+            }
+          }
+        );
+        this._failAllPending(proc, exitError);
+      }
+      if (!proc.retainScope && !proc.stopPromise) {
+        void this._cleanupScopeSafely(proc);
+      }
+    });
+    this._touchIdleTimer(proc);
+    this._startMaxAgeTimer(proc);
+    const startupPromise = (async () => {
+      const initResult = await this._sendRpc(
+        proc,
+        "initialize",
+        {
+          protocolVersion: 1,
+          clientCapabilities: {
+            fs: { readTextFile: false, writeTextFile: false },
+            terminal: false,
+            _meta: { parameterizedModelPicker: true }
+          }
+        },
+        this.handshakeTimeoutMs
+      );
+      if (!initResult || typeof initResult !== "object" || initResult.protocolVersion !== 1) {
+        const err = cliError("CURSOR_CLI_ACP_UNSUPPORTED", "Cursor CLI ACP initialize returned an unsupported handshake");
+        err.capabilityFailureReason = "acp_initialize_unsupported";
+        throw err;
+      }
+      proc.state = "ready";
+      const firstSession = await this._createVerifiedSession(proc, parsedPreference);
+      proc.readySessions.push(firstSession);
+      this._touchIdleTimer(proc);
+      return proc;
+    })();
+    proc.startupPromise = startupPromise;
+    try {
+      await startupPromise;
+      return proc;
+    } catch (error3) {
+      proc.capabilityError = error3;
+      if (error3?.capabilityFailureReason) {
+        this._recordCapabilityFailure(identityKey, error3.capabilityFailureReason);
+      } else if (error3?.code === "CURSOR_CLI_EXIT_ERROR" || error3?.code === "CURSOR_CLI_ACP_RPC_ERROR" || error3?.code === "CURSOR_CLI_TIMEOUT") {
+        this._recordCapabilityFailure(identityKey, error3.code.toLowerCase());
+      }
+      await this._terminateProcess(proc, "startup_failed");
+      throw error3;
+    }
+  }
+  _enqueueSetup(proc, fn) {
+    const run = proc.setupTail.then(fn, fn);
+    proc.setupTail = run.catch(() => {
+    });
+    return run;
+  }
+  async _createVerifiedSession(proc, parsedPreference) {
+    return this._enqueueSetup(proc, async () => {
+      if (proc.closed || proc.state === "closing" || proc.state === "failed" || proc.state === "orphaned") {
+        throw cliError("CURSOR_CLI_ACP_CLOSED", "ACP process is no longer active", { confirmedNotSent: true });
+      }
+      const created = await this._sendRpc(proc, "session/new", { cwd: proc.cwd, mcpServers: [] }, this.handshakeTimeoutMs);
+      const sessionId = created?.sessionId;
+      if (typeof sessionId !== "string" || !sessionId || !Array.isArray(created?.configOptions)) {
+        const err = cliError("CURSOR_CLI_ACP_UNSUPPORTED", "Cursor CLI ACP session/new did not expose parameterized configOptions", {
+          confirmedNotSent: true
+        });
+        err.capabilityFailureReason = "acp_missing_config_options";
+        throw err;
+      }
+      proc.nonPromptBytes = 0;
+      let configOptions = created.configOptions;
+      const modelPlan = resolveAcpModelOption(configOptions, parsedPreference);
+      if (!modelPlan.ok) {
+        const err = cliError("CURSOR_CLI_ACP_INCOMPATIBLE", "Model preference is incompatible with ACP selection", {
+          confirmedNotSent: true,
+          capabilityFailureReason: modelPlan.reason
+        });
+        throw err;
+      }
+      if (modelPlan.currentValue !== modelPlan.desiredValue) {
+        const appliedModel = await this._sendRpc(
+          proc,
+          "session/set_config_option",
+          { sessionId, configId: "model", value: modelPlan.desiredValue },
+          this.handshakeTimeoutMs
+        );
+        if (!Array.isArray(appliedModel?.configOptions)) {
+          const err = cliError("CURSOR_CLI_ACP_UNSUPPORTED", "ACP set_config_option(model) did not return configOptions", {
+            confirmedNotSent: true,
+            capabilityFailureReason: "acp_config_readback_missing"
+          });
+          throw err;
+        }
+        configOptions = appliedModel.configOptions;
+      }
+      const dependentPlan = resolveAcpModelDependentOptions(configOptions, parsedPreference);
+      if (!dependentPlan.ok) {
+        const err = cliError("CURSOR_CLI_ACP_INCOMPATIBLE", "Model parameters are incompatible with ACP selection", {
+          confirmedNotSent: true,
+          capabilityFailureReason: dependentPlan.reason
+        });
+        throw err;
+      }
+      const applyIfChanged = async (step) => {
+        if (!step || step.currentValue === step.desiredValue) return;
+        const applied = await this._sendRpc(
+          proc,
+          "session/set_config_option",
+          { sessionId, configId: step.configId, value: step.desiredValue },
+          this.handshakeTimeoutMs
+        );
+        if (!Array.isArray(applied?.configOptions)) {
+          throw cliError("CURSOR_CLI_ACP_UNSUPPORTED", `ACP set_config_option(${step.configId}) did not return configOptions`, {
+            confirmedNotSent: true,
+            capabilityFailureReason: "acp_config_readback_missing"
+          });
+        }
+        configOptions = applied.configOptions;
+      };
+      await applyIfChanged(dependentPlan.thinking);
+      await applyIfChanged(dependentPlan.fast);
+      await applyIfChanged(dependentPlan.mode);
+      const verification = verifyAcpConfigReadback(configOptions, {
+        modeValue: dependentPlan.mode.desiredValue,
+        modelValue: modelPlan.desiredValue,
+        thinkingConfigId: dependentPlan.thinking.configId,
+        thinkingValue: dependentPlan.thinking.desiredValue,
+        fastValue: dependentPlan.fast ? dependentPlan.fast.desiredValue : null
+      });
+      if (!verification.ok) {
+        throw cliError("CURSOR_CLI_MODEL_MISMATCH", `Cursor CLI ACP configuration readback failed (${verification.reason})`, {
+          confirmedNotSent: true,
+          capabilityFailureReason: verification.reason
+        });
+      }
+      return {
+        sessionId,
+        createdAtMs: this.now(),
+        modelSelection: {
+          configured: true,
+          applied: true,
+          requestedModel: parsedPreference.base,
+          requestedEffort: parsedPreference.rawEffort,
+          effectiveModel: parsedPreference.base,
+          effectiveEffort: parsedPreference.effort,
+          verificationSource: "cursor_cli_acp_config",
+          acpModel: modelPlan.desiredValue,
+          verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
+        }
+      };
+    });
+  }
+  _replenishPool(proc) {
+    if (proc.replenishing || proc.closed || proc.state !== "ready" || proc.retireAfterActive || this.closing) {
+      return proc.replenishing;
+    }
+    if (proc.readySessions.length >= this.poolSize) return null;
+    proc.replenishing = (async () => {
+      try {
+        while (!proc.closed && proc.state === "ready" && !proc.retireAfterActive && !this.closing && proc.readySessions.length < this.poolSize) {
+          const session = await this._createVerifiedSession(proc, proc.parsedPreference);
+          if (proc.closed || proc.state !== "ready" || proc.retireAfterActive || this.closing) break;
+          proc.readySessions.push(session);
+        }
+      } catch (error3) {
+        if (error3?.capabilityFailureReason) {
+          this._recordCapabilityFailure(proc.identityKey, error3.capabilityFailureReason);
+          void this._retireProcess(proc, error3.capabilityFailureReason);
+        }
+      } finally {
+        proc.replenishing = null;
+        this._touchIdleTimer(proc);
+      }
+    })();
+    return proc.replenishing;
+  }
+  async _acquireReadySession(proc) {
+    if (proc.readySessions.length > 0) {
+      return proc.readySessions.shift();
+    }
+    if (proc.replenishing) {
+      await proc.replenishing;
+      if (proc.readySessions.length > 0) {
+        return proc.readySessions.shift();
+      }
+    }
+    return this._createVerifiedSession(proc, proc.parsedPreference);
+  }
+  async prewarm({ projectPath, modelPreference, cli, env } = {}) {
+    if (this.closing) return { warmed: false, reason: "manager_closing" };
+    let parsedPreference;
+    try {
+      parsedPreference = parseAcpModelPreference(modelPreference);
+    } catch {
+      return { warmed: false, reason: "invalid_model_preference" };
+    }
+    let resolved;
+    try {
+      resolved = await this._resolveEnvironment({ env, cli, projectPath });
+    } catch {
+      return { warmed: false, reason: "workspace_unavailable" };
+    }
+    if (!resolved.eligible) return { warmed: false, reason: resolved.reason };
+    const key = this._buildProcessKey({
+      cwd: resolved.workspace.cwd,
+      parsedPreference,
+      identityKey: resolved.identityKey
+    });
+    const existing = this.processes.get(key);
+    if (existing && (existing.state === "starting" || existing.state === "ready")) {
+      try {
+        await existing.startupPromise;
+        return { warmed: true, reused: true, readySessions: existing.readySessions.length };
+      } catch {
+        return { warmed: false, reason: existing.capabilityError?.capabilityFailureReason || "startup_failed" };
+      }
+    }
+    const placeholder = {
+      key,
+      state: "starting",
+      readySessions: [],
+      activePrompts: /* @__PURE__ */ new Map(),
+      startupPromise: null,
+      cancelledBeforeSpawn: false,
+      cancelReason: null
+    };
+    this.processes.set(key, placeholder);
+    const spawnPromise = this._spawnProcess({
+      key,
+      cwd: resolved.workspace.cwd,
+      launcher: resolved.launcher,
+      env: resolved.env,
+      parsedPreference,
+      identityKey: resolved.identityKey,
+      onProcess: (proc) => {
+        if (placeholder.cancelledBeforeSpawn || this.closing) {
+          void this._retireProcess(proc, placeholder.cancelReason || "cancelled_before_spawn");
+          return;
+        }
+        proc.cwd = resolved.workspace.cwd;
+        this.processes.set(key, proc);
+      }
+    });
+    placeholder.startupPromise = spawnPromise;
+    try {
+      const proc = await spawnPromise;
+      return { warmed: true, reused: false, readySessions: proc.readySessions.length };
+    } catch (error3) {
+      if (this.processes.get(key) === placeholder) this.processes.delete(key);
+      return { warmed: false, reason: error3?.capabilityFailureReason || error3?.code || "startup_failed" };
+    }
+  }
+  async _executePromptOnProcess(proc, session, { prompt, timeoutMs = 12e4, signal, onDispatch, onInit }) {
+    const sid = session.sessionId;
+    if (signal?.aborted) {
+      throw cliError("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", {
+        cancelled: true,
+        stopConfirmed: true,
+        confirmedTerminal: true,
+        confirmedNotSent: true,
+        sent: false
+      });
+    }
+    if (proc.closed || proc.state !== "ready") {
+      throw cliError("CURSOR_CLI_ACP_CLOSED", "Cursor CLI ACP process is not ready", {
+        confirmedNotSent: true,
+        confirmedTerminal: true,
+        sent: false
+      });
+    }
+    onDispatch?.();
+    if (signal?.aborted) {
+      throw cliError("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", {
+        cancelled: true,
+        stopConfirmed: true,
+        confirmedTerminal: true,
+        confirmedNotSent: true,
+        sent: false
+      });
+    }
+    const active = {
+      sessionId: sid,
+      chunks: [],
+      outputBytes: 0,
+      dispatched: true,
+      abortWithError: null
+    };
+    proc.activePrompts.set(sid, active);
+    proc.lastUsedAtMs = this.now();
+    this._touchIdleTimer(proc);
+    const effectiveTimeoutMs = Math.max(1, Number(timeoutMs) || 12e4);
+    const rpcPromise = this._sendRpc(
+      proc,
+      "session/prompt",
+      { sessionId: sid, prompt: [{ type: "text", text: prompt }] },
+      0
+    );
+    onInit?.({ sessionId: sid, modelSelection: session.modelSelection });
+    return new Promise((resolve12, reject) => {
+      let settled = false;
+      let cancelRequested = false;
+      let handlingTermination = false;
+      let cancelGraceTimer = null;
+      let promptTimer = null;
+      const finish = (err, val) => {
+        if (settled) return;
+        settled = true;
+        if (cancelGraceTimer) clearTimeout(cancelGraceTimer);
+        if (promptTimer) clearTimeout(promptTimer);
+        signal?.removeEventListener("abort", onCallerAbort);
+        proc.activePrompts.delete(sid);
+        this._touchIdleTimer(proc);
+        if (proc.retireAfterActive && proc.activePrompts.size === 0) {
+          void this._retireProcess(proc, "max_age");
+        } else if (proc.state === "ready" && !proc.closed && !this.closing && proc.activePrompts.size === 0) {
+          this._replenishPool(proc);
+        }
+        if (err) reject(err);
+        else resolve12(val);
+      };
+      const killForUnconfirmedStop = (baseCode, baseMessage, isCancelled) => {
+        handlingTermination = true;
+        if (cancelGraceTimer) clearTimeout(cancelGraceTimer);
+        if (promptTimer) clearTimeout(promptTimer);
+        void this._terminateProcess(proc, isCancelled ? "cancel_grace_expired" : "prompt_timeout").then((outcome) => {
+          const err = cliError(baseCode, baseMessage, {
+            sent: true,
+            confirmedNotSent: false,
+            confirmedTerminal: outcome.confirmedTerminal === true,
+            cliProcessId: outcome.cliProcessId,
+            ...isCancelled ? { cancelled: true, stopConfirmed: outcome.confirmedTerminal === true } : {},
+            ...!outcome.confirmedTerminal ? {
+              cliConfigDirectory: outcome.cliConfigDirectory,
+              cliDataDirectory: outcome.cliDataDirectory
+            } : {}
+          });
+          finish(err);
+        });
+      };
+      const triggerCancelOrTimeout = (isCancelled, baseCode, baseMessage, graceWindowMs) => {
+        if (settled || cancelRequested) return;
+        cancelRequested = true;
+        const sentCancel = this._sendNotification(proc, "session/cancel", { sessionId: sid });
+        if (!sentCancel) {
+          killForUnconfirmedStop(baseCode, baseMessage, isCancelled);
+          return;
+        }
+        cancelGraceTimer = setTimeout(() => {
+          killForUnconfirmedStop(baseCode, baseMessage, isCancelled);
+        }, Math.max(10, graceWindowMs));
+        cancelGraceTimer.unref?.();
+      };
+      const onCallerAbort = () => {
+        triggerCancelOrTimeout(true, "CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", this.cancelGraceMs);
+      };
+      active.abortWithError = (err) => {
+        handlingTermination = true;
+        void this._terminateProcess(proc, err.code || "output_limit").then((outcome) => {
+          Object.assign(err, {
+            sent: true,
+            confirmedNotSent: false,
+            confirmedTerminal: outcome.confirmedTerminal === true,
+            cliProcessId: outcome.cliProcessId,
+            ...!outcome.confirmedTerminal ? {
+              cliConfigDirectory: outcome.cliConfigDirectory,
+              cliDataDirectory: outcome.cliDataDirectory
+            } : {}
+          });
+          finish(err);
+        });
+      };
+      if (signal?.aborted) {
+        onCallerAbort();
+        return;
+      }
+      signal?.addEventListener("abort", onCallerAbort, { once: true });
+      promptTimer = setTimeout(() => {
+        const graceMs = Math.min(this.cancelGraceMs, Math.max(25, Math.floor(effectiveTimeoutMs / 2)));
+        triggerCancelOrTimeout(false, "CURSOR_CLI_TIMEOUT", "Cursor CLI request timed out", graceMs);
+      }, effectiveTimeoutMs);
+      promptTimer.unref?.();
+      rpcPromise.then(
+        async (result) => {
+          if (settled || handlingTermination) return;
+          if (cancelRequested) {
+            if (result?.stopReason === "cancelled") {
+              finish(cliError("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", {
+                cancelled: true,
+                stopConfirmed: true,
+                confirmedTerminal: true,
+                sent: true,
+                confirmedNotSent: false
+              }));
+            } else {
+              killForUnconfirmedStop("CURSOR_CLI_CANCELLED", "Cursor CLI cancel did not return stopReason=cancelled", true);
+            }
+            return;
+          }
+          if (result?.stopReason !== "end_turn") {
+            finish(cliError("CURSOR_CLI_PROTOCOL_ERROR", `Cursor CLI ACP stopped with unexpected reason: ${String(result?.stopReason || "unknown")}`, {
+              sent: true,
+              confirmedNotSent: false,
+              confirmedTerminal: true
+            }));
+            return;
+          }
+          const combined = active.chunks.join("");
+          if (!combined.trim()) {
+            finish(cliError("CURSOR_CLI_PROTOCOL_ERROR", "Cursor CLI ACP completed without response text", {
+              sent: true,
+              confirmedNotSent: false,
+              confirmedTerminal: true
+            }));
+            return;
+          }
+          await proc.scope?.verifyProjectSlug?.();
+          this.stats.promptsServed += 1;
+          finish(null, {
+            usedAcp: true,
+            result: combined,
+            sessionId: sid,
+            modelSelection: session.modelSelection,
+            mcpIsolation: proc.scope?.mcpIsolation ? { ...proc.scope.mcpIsolation } : null,
+            cliTransport: "acp"
+          });
+        },
+        (error3) => {
+          if (settled || handlingTermination) return;
+          const postSendError = error3 instanceof Error ? error3 : cliError("CURSOR_CLI_ERROR", String(error3));
+          postSendError.sent = true;
+          postSendError.confirmedNotSent = false;
+          if (postSendError.confirmedTerminal !== false) {
+            postSendError.confirmedTerminal = !proc.closed && proc.state !== "orphaned" && proc.state !== "failed" ? true : postSendError.confirmedTerminal === true;
+          }
+          if (cancelRequested && !postSendError.cancelled) {
+            postSendError.cancelled = true;
+            postSendError.stopConfirmed = postSendError.confirmedTerminal === true;
+          }
+          finish(postSendError);
+        }
+      );
+    });
+  }
+  async runOrFallback({ projectPath, prompt, modelPreference, timeoutMs, signal, onInit, onDispatch, cli, allowColdStart = false } = {}) {
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      throw cliError("CURSOR_CLI_PROMPT_REQUIRED", "A nonempty prompt is required", { confirmedNotSent: true, confirmedTerminal: true });
+    }
+    if (signal?.aborted) {
+      throw cliError("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", {
+        cancelled: true,
+        stopConfirmed: true,
+        confirmedTerminal: true,
+        confirmedNotSent: true,
+        sent: false
+      });
+    }
+    const parsedPreference = parseAcpModelPreference(modelPreference);
+    const resolved = await this._resolveEnvironment({ env: this.env, cli, projectPath });
+    if (!resolved.eligible) {
+      this.stats.fallbacks += 1;
+      this.stats.lastFallbackReason = resolved.reason;
+      return { usedAcp: false, confirmedNotSent: true, fallbackReason: resolved.reason };
+    }
+    const key = this._buildProcessKey({
+      cwd: resolved.workspace.cwd,
+      parsedPreference,
+      identityKey: resolved.identityKey
+    });
+    let proc = this.processes.get(key);
+    if (proc && this.maxAgeMs > 0 && this.now() - proc.createdAtMs >= this.maxAgeMs && proc.activePrompts.size === 0) {
+      await this._retireProcess(proc, "max_age");
+      proc = null;
+    }
+    if (!proc || proc.state === "starting") {
+      if (!allowColdStart) {
+        const reason = proc?.state === "starting" ? "acp_warming" : "acp_cold_start";
+        if (!proc) void this.prewarm({ projectPath, modelPreference, cli, env: resolved.env });
+        this.stats.fallbacks += 1;
+        this.stats.lastFallbackReason = reason;
+        return { usedAcp: false, confirmedNotSent: true, fallbackReason: reason };
+      }
+      if (!proc) {
+        const warm = await this.prewarm({ projectPath, modelPreference, cli, env: resolved.env });
+        proc = this.processes.get(key);
+        if (!warm.warmed || !proc || proc.state !== "ready") {
+          const reason = warm.reason || "acp_unavailable";
+          this.stats.fallbacks += 1;
+          this.stats.lastFallbackReason = reason;
+          return { usedAcp: false, confirmedNotSent: true, fallbackReason: reason };
+        }
+      } else {
+        try {
+          proc = await proc.startupPromise;
+        } catch (error3) {
+          if (signal?.aborted) throw error3;
+          const reason = error3?.capabilityFailureReason || error3?.code || "acp_startup_failed";
+          this.stats.fallbacks += 1;
+          this.stats.lastFallbackReason = reason;
+          return { usedAcp: false, confirmedNotSent: true, fallbackReason: reason };
+        }
+      }
+    }
+    if (!proc || proc.state !== "ready") {
+      const reason = "acp_not_ready";
+      this.stats.fallbacks += 1;
+      this.stats.lastFallbackReason = reason;
+      return { usedAcp: false, confirmedNotSent: true, fallbackReason: reason };
+    }
+    if (proc.activePrompts.size > 0 || proc.acquiringSession) {
+      const reason = "acp_busy";
+      this.stats.fallbacks += 1;
+      this.stats.lastFallbackReason = reason;
+      return { usedAcp: false, confirmedNotSent: true, fallbackReason: reason };
+    }
+    proc.acquiringSession = true;
+    let session;
+    try {
+      session = await this._acquireReadySession(proc);
+    } catch (error3) {
+      proc.acquiringSession = false;
+      if (signal?.aborted) {
+        throw cliError("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", {
+          cancelled: true,
+          stopConfirmed: true,
+          confirmedTerminal: true,
+          confirmedNotSent: true,
+          sent: false
+        });
+      }
+      if (error3?.capabilityFailureReason) {
+        this._recordCapabilityFailure(resolved.identityKey, error3.capabilityFailureReason);
+        void this._retireProcess(proc, error3.capabilityFailureReason);
+      } else if (error3?.code === "CURSOR_CLI_EXIT_ERROR" || error3?.code === "CURSOR_CLI_ACP_RPC_ERROR") {
+        void this._retireProcess(proc, "session_setup_failed");
+      }
+      const reason = error3?.capabilityFailureReason || error3?.code || "acp_session_setup_failed";
+      this.stats.fallbacks += 1;
+      this.stats.lastFallbackReason = reason;
+      return { usedAcp: false, confirmedNotSent: true, fallbackReason: reason };
+    }
+    if (signal?.aborted) {
+      proc.acquiringSession = false;
+      if (proc.state === "ready" && proc.readySessions.length < this.poolSize) {
+        proc.readySessions.push(session);
+      }
+      throw cliError("CURSOR_CLI_CANCELLED", "Cursor CLI request cancelled", {
+        cancelled: true,
+        stopConfirmed: true,
+        confirmedTerminal: true,
+        confirmedNotSent: true,
+        sent: false
+      });
+    }
+    try {
+      return await this._executePromptOnProcess(proc, session, { prompt, timeoutMs, signal, onInit, onDispatch });
+    } finally {
+      proc.acquiringSession = false;
+    }
+  }
+  async invalidateWorkspace(projectPath, reason = "workspace_changed") {
+    if (!projectPath) return;
+    let targetCwd;
+    try {
+      targetCwd = canonicalPath((await this.resolveWorkspace(projectPath)).cwd);
+    } catch {
+      targetCwd = canonicalPath(projectPath);
+    }
+    const pending = [];
+    for (const proc of [...this.processes.values()]) {
+      if (proc.cwd && canonicalPath(proc.cwd) === targetCwd) {
+        pending.push(this._retireProcess(proc, reason));
+      }
+    }
+    await Promise.allSettled(pending);
+  }
+  async invalidateAll(reason = "configuration_changed") {
+    const pending = [...this.processes.values()].map((proc) => this._retireProcess(proc, reason));
+    await Promise.allSettled(pending);
+  }
+  async shutdown() {
+    this.closing = true;
+    const pending = [...this.processes.values()].map((proc) => this._retireProcess(proc, "shutdown"));
+    await Promise.allSettled(pending);
+  }
+  statusView(env = this.env) {
+    const disabledReason = getAcpDisabledReason(env);
+    if (disabledReason) {
+      return {
+        state: "disabled",
+        reason: disabledReason,
+        readySessions: 0,
+        activePrompts: 0,
+        promptsServed: this.stats.promptsServed,
+        fallbacks: this.stats.fallbacks,
+        warmProcesses: 0
+      };
+    }
+    let readySessions = 0;
+    let activePrompts = 0;
+    let warmProcesses = 0;
+    let warming = false;
+    for (const proc of this.processes.values()) {
+      if (proc.state === "ready") {
+        warmProcesses += 1;
+        readySessions += proc.readySessions?.length || 0;
+        activePrompts += proc.activePrompts?.size || 0;
+      } else if (proc.state === "starting") {
+        warming = true;
+      }
+    }
+    let state = "idle";
+    let reason = null;
+    if (warmProcesses > 0) state = "ready";
+    else if (warming) state = "warming";
+    else if (this.stats.lastUnavailableReason) {
+      const hasValidFailure = [...this.capabilityFailures.keys()].some((key) => this._getCapabilityFailure(key));
+      if (hasValidFailure) {
+        state = "unavailable";
+        reason = this.stats.lastUnavailableReason;
+      }
+    }
+    return {
+      state,
+      reason,
+      readySessions,
+      activePrompts,
+      promptsServed: this.stats.promptsServed,
+      fallbacks: this.stats.fallbacks,
+      lastFallbackReason: this.stats.lastFallbackReason,
+      warmProcesses
+    };
+  }
+};
+
 // server.mjs
 init_lifecycle_paths();
-var PLUGIN_VERSION = "6.2.0";
+var PLUGIN_VERSION = "7.0.0";
 var CDP_PORT2 = Number(process.env.CURSOR_BRIDGE_CDP_PORT || 9223);
 var ORIGIN = `http://localhost:${CDP_PORT2}`;
 var QUERY_TIMEOUT = Number(process.env.CURSOR_BRIDGE_TIMEOUT || 3e5);
+var DEFAULT_CLI_INSPECT_TTL_MS = 3e5;
+var CLI_INSPECT_INVALIDATE_CODES = /* @__PURE__ */ new Set([
+  "CURSOR_CLI_MODEL_UNAVAILABLE",
+  "CURSOR_CLI_MODEL_MISMATCH",
+  "CURSOR_CLI_EXIT_ERROR",
+  "CURSOR_CLI_PROTOCOL_ERROR",
+  "CURSOR_CLI_UNAVAILABLE",
+  "CURSOR_CLI_LAUNCHER_UNSUPPORTED",
+  "CURSOR_CLI_WRONG_BRAND"
+]);
+function readCliInspectTtlMs(env = process.env) {
+  const raw = env?.CURSOR_BRIDGE_CLI_INSPECT_TTL_MS;
+  if (raw === void 0 || raw === null || String(raw).trim() === "") return DEFAULT_CLI_INSPECT_TTL_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CLI_INSPECT_TTL_MS;
+  return parsed;
+}
+var DEFAULT_CLI_CONCURRENCY = 3;
+function readCliConcurrency(env = process.env) {
+  const raw = env?.CURSOR_BRIDGE_CCE_CLI_CONCURRENCY;
+  if (raw === void 0 || raw === null || String(raw).trim() === "") return DEFAULT_CLI_CONCURRENCY;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_CLI_CONCURRENCY;
+  return Math.max(1, Math.min(8, Math.floor(parsed)));
+}
 function normalizeDelegationMode(value = process.env.CURSOR_BRIDGE_DELEGATION) {
   return String(value || "on").trim().toLowerCase() === "off" ? "off" : "on";
 }
@@ -24726,9 +26884,9 @@ function shouldScheduleParallelOriginRestore(job) {
 var DO_DEFAULT_CONTRACT = "\n\nCompletion requirements: Work directly in the workspace currently open in Cursor; do not push to a remote. Before finishing, inspect the actual changes and run verification proportional to risk. The final reply must list completed work, changed files, verification results, and remaining risks or blockers.";
 var DO_LANGUAGE_CONTRACT = "\n\nResponse language: Reply in the language of the user task unless it explicitly requests another language. Never translate paths, commands, identifiers, keys, enum values, exact options, or error/status codes.";
 var CDP_HOST2 = "127.0.0.1";
-function httpJson(path2) {
+function httpJson(path3) {
   return new Promise((resolve12, reject) => {
-    const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path: path2 }, (res) => {
+    const req = http2.get({ host: CDP_HOST2, port: CDP_PORT2, path: path3 }, (res) => {
       let d = "";
       res.on("data", (c) => d += c);
       res.on("end", () => {
@@ -26282,11 +28440,20 @@ var CursorBridge = class {
     this.modelPreferencesFile = options.modelPreferencesFile === null ? null : resolve11(options.modelPreferencesFile || resolveCursorModelPreferencesFile());
     this.modelPreferences = readCursorModelPreferences(this.modelPreferencesFile);
     this.cceSourceFile = options.cceSourceFile === null ? null : resolve11(options.cceSourceFile || resolveCceSourceFile());
+    this._defaultCceSource = options.cceSource !== void 0 ? normalizeCceSource(options.cceSource, "cli") : null;
     this.cliInspector = options.cliInspector || inspectCursorCli;
+    this.cliIdentityReader = options.cliIdentityReader || (options.cliInspector ? async () => ({ available: true, key: "injected-inspector" }) : readCursorCliIdentity);
     this.cliRunner = options.cliRunner || runCursorCli;
     this.cliInspections = /* @__PURE__ */ new Set();
     this.cliClosing = false;
     this.cliMetadata = null;
+    this.cliInspectCache = null;
+    this.cliInspectInFlight = null;
+    this.cliInspectStats = { hits: 0, misses: 0, invalidations: 0 };
+    this.cliLastMcpIsolation = null;
+    this._lastCliPrefKey = null;
+    this._customAcpManager = options.acpManager !== void 0;
+    this.acpManager = options.acpManager !== void 0 ? options.acpManager : options.cliRunner ? null : new CursorCliAcpManager({ env: process.env });
     this.sessionFile = options.sessionFile === null ? null : resolve11(options.sessionFile || resolveCursorSessionRegistryFile());
     this.sessionInstanceId = String(
       options.sessionInstanceId || `cursor-adapter-${createCursorSessionId().slice("cursor-session-".length)}`
@@ -26297,6 +28464,7 @@ var CursorBridge = class {
     this._healing = null;
     this.tasks = /* @__PURE__ */ new Map();
     this.nextTaskId = 1;
+    this.activeCli = /* @__PURE__ */ new Map();
     this.activeParallel = /* @__PURE__ */ new Map();
     this.currentJob = null;
     this._uiTail = Promise.resolve();
@@ -26757,7 +28925,7 @@ var CursorBridge = class {
   async _initializeWorkspace(projectPath, options = {}) {
     if (this._healing) await this._healing.catch(() => {
     });
-    if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+    if (this.busy || this.activeCli.size > 0 || this.activeParallel.size > 0 || this.queue.length > 0) {
       throw new Error("cursor_init cannot change workspace while Cursor tasks are queued or running");
     }
     const previousProjectPath = this.projectPath || this._lastLifecycle && this._lastLifecycle.projectPath || null;
@@ -26768,10 +28936,46 @@ var CursorBridge = class {
     this.workspaceUpdatedAt = saved.updatedAt;
     this._lastLifecycle = null;
     this._lastWorkspaceBinding = null;
+    const canonicalInitPath = (value) => {
+      const normalized = normalizeWorkspacePath(value);
+      return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+    };
+    if (previousProjectPath && canonicalInitPath(previousProjectPath) !== canonicalInitPath(saved.projectPath)) {
+      await this.acpManager?.invalidateWorkspace(previousProjectPath, "workspace_changed");
+    }
     if (this.ccePreferencesView().cceSource === "cli") {
       const workspace = resolveCliWorkspace(saved.projectPath);
-      const preferences = readCcePreferences(this.cceSourceFile);
-      await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference: this._modelPreferenceFor("cce") });
+      const preferences = this._effectiveCcePreferences();
+      const modelPreference = this._modelPreferenceFor("cce");
+      let cli = null;
+      try {
+        cli = await this._inspectCli(options.signal, { provider: preferences.cliProvider, modelPreference, forceRefresh: true });
+        if (cli && (Array.isArray(cli.models) || cli.providerVerification)) {
+          verifyCursorCliModelSelection(cli, modelPreference);
+        }
+      } catch (error3) {
+        if (error3?.code === "CURSOR_CLI_CANCELLED") throw error3;
+        const failure3 = this._classifyCliInitFailure(error3, cli);
+        if (!failure3) throw error3;
+        return {
+          previousProjectPath,
+          ...this.workspaceView(),
+          ...this.ccePreferencesView(),
+          bindingPersisted: true,
+          ready: false,
+          status: failure3.status,
+          errorCode: failure3.errorCode,
+          diagnosticCategory: failure3.diagnosticCategory,
+          ...failure3.availableModelsSample ? { availableModelsSample: failure3.availableModelsSample } : {},
+          message: failure3.message,
+          nextStep: failure3.nextStep,
+          retryable: failure3.retryable,
+          lifecycle: null
+        };
+      }
+      if (!preferences.cliProvider && process.env.CURSOR_BRIDGE_CCE_CLI_CHILD !== "1") {
+        void this.acpManager?.prewarm({ projectPath: saved.projectPath, modelPreference, cli });
+      }
       this._lastWorkspaceBinding = {
         ok: true,
         state: "workspace_ready",
@@ -26846,7 +29050,7 @@ var CursorBridge = class {
       let repository = JSON.parse(await evalJS(c, exprInspectWorkspaceRepository(projectPath)) || "{}");
       if (registerWorkspace && repository.state === "workspace_registration_required") {
         const registration = await this._withUiLock(async () => {
-          if (this.busy || this.activeParallel.size > 0 || this.queue.length > 0) {
+          if (this.busy || this.activeCli.size > 0 || this.activeParallel.size > 0 || this.queue.length > 0) {
             return { ok: false, state: "workspace_registration_busy", error: "Cursor tasks became queued or running before registration" };
           }
           return JSON.parse(await evalJS(c, exprRegisterAgentsWorkspace(projectPath, statSync4(projectPath).isFile())) || "{}");
@@ -26889,8 +29093,12 @@ var CursorBridge = class {
   _refreshModelPreferences() {
     if (!this.modelPreferencesFile) return false;
     const next = readCursorModelPreferences(this.modelPreferencesFile);
+    const prevTargets = JSON.stringify(this.modelPreferences?.targets);
     const changed = JSON.stringify(next) !== JSON.stringify(this.modelPreferences);
     this.modelPreferences = next;
+    if (changed && JSON.stringify(next?.targets) !== prevTargets) {
+      void this.acpManager?.invalidateAll("model_preferences_changed");
+    }
     return changed;
   }
   modelPreferencesView() {
@@ -26908,11 +29116,22 @@ var CursorBridge = class {
     };
   }
   configureModelPreferences(options = {}) {
+    const beforeTargets = JSON.stringify(this.modelPreferences?.targets);
     this.modelPreferences = updateCursorModelPreferences(this.modelPreferencesFile, options);
+    if (JSON.stringify(this.modelPreferences?.targets) !== beforeTargets) {
+      void this.acpManager?.invalidateAll("model_preferences_changed");
+    }
     return this.modelPreferencesView();
   }
-  ccePreferencesView() {
+  _effectiveCcePreferences() {
     const preferences = readCcePreferences(this.cceSourceFile);
+    if (this._defaultCceSource && (!this.cceSourceFile || !existsSync5(this.cceSourceFile))) {
+      return { ...preferences, source: this._defaultCceSource };
+    }
+    return preferences;
+  }
+  ccePreferencesView() {
+    const preferences = this._effectiveCcePreferences();
     return {
       cceSource: preferences.source,
       cceSourceFile: this.cceSourceFile,
@@ -26923,18 +29142,194 @@ var CursorBridge = class {
   }
   configureCcePreferences(options = {}) {
     updateCcePreferences(this.cceSourceFile, options);
+    if (options?.action && options.action !== "get" && options.action !== "status" || options?.source !== void 0 || Object.hasOwn(options || {}, "cliProvider")) {
+      this._invalidateCliInspectCache();
+      this._lastCliPrefKey = null;
+      void this.acpManager?.invalidateAll("cce_preferences_changed");
+    }
     return this.ccePreferencesView();
   }
-  shouldPrewarmIde() {
-    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === "1") return false;
-    try {
-      return this.ccePreferencesView().cceSource === "ide";
-    } catch (error3) {
-      console.error(`[cursor-bridge] CCE source configuration needs repair: ${error3.message}`);
-      return false;
+  _classifyCliInitFailure(error3, cli = null) {
+    if (!error3 || error3.code === "CURSOR_CLI_CANCELLED") return null;
+    const code = typeof error3.code === "string" && error3.code ? error3.code : null;
+    if (!code || !code.startsWith("CURSOR_CLI_")) return null;
+    const category = typeof error3.diagnosticCategory === "string" ? error3.diagnosticCategory : null;
+    const availableModelsSample = Array.isArray(cli?.models) ? cli.models.slice(0, 12).map((model) => ({ id: model.id, name: model.name })) : void 0;
+    let status = "cli-preflight-failed";
+    let nextStep = 'Run cursor_cce(action="doctor") to inspect CLI readiness, or switch CCE to IDE with cursor_cce(action="set", source="ide").';
+    if (code === "CURSOR_CLI_UNAVAILABLE") {
+      status = "cli-unavailable";
+      nextStep = 'Install Cursor Agent CLI (cursor-agent / agent) on PATH or set CURSOR_BRIDGE_CLI_PATH, then run cursor_cce(action="doctor"), or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === "CURSOR_CLI_LAUNCHER_UNSUPPORTED") {
+      status = "cli-launcher-unsupported";
+      nextStep = 'Point CURSOR_BRIDGE_CLI_PATH to a supported Cursor CLI launcher, then re-run cursor_init or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === "CURSOR_CLI_WRONG_BRAND") {
+      status = "cli-wrong-brand";
+      nextStep = 'The resolved CLI launcher is not official Cursor Agent CLI. Fix PATH / CURSOR_BRIDGE_CLI_PATH or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === "CURSOR_CLI_MODELS_UNAVAILABLE") {
+      status = "cli-models-unavailable";
+      nextStep = 'Verify Cursor CLI authentication ("agent login" / "cursor-agent login") and run cursor_cce(action="doctor"), or switch with cursor_cce(action="set", source="ide").';
+    } else if (code === "CURSOR_CLI_MODEL_REQUIRED") {
+      status = "cli-model-required";
+      nextStep = 'Configure an explicit CCE model and effort via cursor_model(action="set", target="cce", model="...", effort="medium"), then re-run cursor_init.';
+    } else if (code === "CURSOR_CLI_MODEL_UNAVAILABLE") {
+      status = "cli-model-unavailable";
+      nextStep = 'Select one of the advertised CLI models using cursor_model(action="set", target="cce", model="...", effort="..."), then re-run cursor_init.';
+    } else if (code === "CURSOR_CLI_EXIT_ERROR") {
+      if (category === "auth") {
+        status = "cli-auth-required";
+        nextStep = 'Sign in to Cursor CLI (for example "agent login" / "cursor-agent login"), then run cursor_cce(action="doctor") or re-run cursor_init.';
+      } else if (category === "trust") {
+        status = "cli-workspace-untrusted";
+        nextStep = "Confirm workspace trust in Cursor CLI, then re-run cursor_init.";
+      } else if (category === "network" || category === "timeout" || category === "rate_limit") {
+        status = "cli-network-error";
+        nextStep = 'Check network connectivity and retry shortly, or run cursor_cce(action="doctor").';
+      }
+    } else if (code.startsWith("CURSOR_CLI_PROVIDER_")) {
+      status = "cli-provider-unavailable";
+      nextStep = 'Check local cli_provider paths, base_url, api_key_file, and preload helper with cursor_cce(action="doctor"), or clear cli_provider.';
+    } else if (code === "CURSOR_CLI_PROTOCOL_ERROR") {
+      status = "cli-protocol-error";
     }
+    return {
+      status,
+      errorCode: code,
+      diagnosticCategory: category,
+      availableModelsSample: availableModelsSample?.length ? availableModelsSample : void 0,
+      message: error3.message || "CCE CLI initialization is not complete, but the workspace binding was saved.",
+      nextStep,
+      retryable: true
+    };
   }
-  async _inspectCli(signal, options = {}) {
+  async diagnoseCce(options = {}) {
+    const preferences = this._effectiveCcePreferences();
+    const modelPreference = this._modelPreferenceFor("cce");
+    const workspaceView = this.workspaceView();
+    let workspaceValid = null;
+    let workspaceRoots = null;
+    let workspaceError = null;
+    if (workspaceView.projectPath) {
+      try {
+        const resolved = resolveCliWorkspace(workspaceView.projectPath);
+        workspaceValid = true;
+        workspaceRoots = [resolved.cwd, ...resolved.additionalRoots];
+      } catch (error3) {
+        workspaceValid = false;
+        workspaceError = { code: error3?.code || "WORKSPACE_PATH_INVALID", message: error3?.message || String(error3) };
+      }
+    }
+    if (preferences.source !== "cli") {
+      const ready2 = Boolean(workspaceView.initialized && !workspaceView.workspaceConfirmationRequired && workspaceValid !== false);
+      return {
+        ok: workspaceValid !== false,
+        action: "doctor",
+        ready: ready2,
+        status: workspaceValid === false ? "workspace-invalid" : ready2 ? "ide-configured" : "workspace-initialization-required",
+        ...this.ccePreferencesView(),
+        modelPreference,
+        workspace: {
+          projectPath: workspaceView.projectPath,
+          initialized: workspaceView.initialized,
+          workspaceConfirmationRequired: workspaceView.workspaceConfirmationRequired,
+          valid: workspaceValid,
+          roots: workspaceRoots,
+          error: workspaceError
+        },
+        cli: null,
+        acp: this.acpManager?.status?.() || null,
+        message: "CCE is currently configured to use Cursor IDE/Agents (ide).",
+        nextStep: 'Run cursor_init to verify Cursor IDE/Agents connectivity, or switch to CCE CLI via cursor_cce(action="set", source="cli").'
+      };
+    }
+    const identity = preferences.cliProvider ? null : await this.cliIdentityReader({ env: options.env }).catch((error3) => ({
+      available: false,
+      key: null,
+      reason: error3?.code || "CURSOR_CLI_UNAVAILABLE"
+    }));
+    let cli = null;
+    let inspectionError = null;
+    try {
+      cli = await this._inspectCli(options.signal, {
+        env: options.env,
+        provider: preferences.cliProvider,
+        modelPreference,
+        forceRefresh: options.forceRefresh === true
+      });
+    } catch (error3) {
+      if (error3?.code === "CURSOR_CLI_CANCELLED") throw error3;
+      inspectionError = error3;
+    }
+    let modelSelection = null;
+    let modelError = null;
+    if (!inspectionError && cli && (Array.isArray(cli.models) || cli.providerVerification)) {
+      try {
+        modelSelection = verifyCursorCliModelSelection(cli, modelPreference);
+      } catch (error3) {
+        modelError = error3;
+      }
+    } else if (!inspectionError && (!modelPreference?.model || !modelPreference?.effort)) {
+      modelError = Object.assign(new Error("An explicit named model and effort are required"), {
+        code: "CURSOR_CLI_MODEL_REQUIRED"
+      });
+    }
+    const preloadFile = fileURLToPath4(new URL("./cursor-cli-provider-preload.mjs", import.meta.url));
+    const preloadPresent = existsSync5(preloadFile);
+    const cliFailure = inspectionError || modelError;
+    const primaryError = cliFailure || (workspaceValid === false ? workspaceError : null);
+    const classification = cliFailure ? this._classifyCliInitFailure(cliFailure, cli) : null;
+    const ready = Boolean(
+      !primaryError && workspaceView.projectPath && workspaceValid !== false && !workspaceView.workspaceConfirmationRequired
+    );
+    return {
+      ok: !cliFailure && workspaceValid !== false,
+      action: "doctor",
+      ready,
+      status: primaryError ? classification?.status || "workspace-invalid" : ready ? "ready" : "workspace-initialization-required",
+      ...this.ccePreferencesView(),
+      modelPreference,
+      modelSelection: modelSelection ? {
+        cliModel: modelSelection.selected?.id || null,
+        displayName: modelSelection.selected?.name || null,
+        requestedModel: modelSelection.base,
+        effort: modelSelection.effort
+      } : null,
+      availableModelsSample: Array.isArray(cli?.models) ? cli.models.slice(0, 12).map((model) => ({ id: model.id, name: model.name })) : null,
+      availableModelCount: Array.isArray(cli?.models) ? cli.models.length : null,
+      launcher: cli?.launcher ? { command: cli.launcher.command, wrapper: cli.launcher.wrapper || null } : identity?.launcher ? { command: identity.launcher.command, wrapper: identity.launcher.wrapper || null } : null,
+      identity: identity ? { available: !!identity.available, key: identity.key || null, reason: identity.reason || null } : null,
+      providerPreloadPresent: preloadPresent,
+      inspectStats: { ...this.cliInspectStats },
+      acp: this.acpManager?.status?.() || null,
+      workspace: {
+        projectPath: workspaceView.projectPath,
+        initialized: workspaceView.initialized,
+        workspaceConfirmationRequired: workspaceView.workspaceConfirmationRequired,
+        valid: workspaceValid,
+        roots: workspaceRoots,
+        error: workspaceError
+      },
+      ...classification ? {
+        errorCode: classification.errorCode,
+        diagnosticCategory: classification.diagnosticCategory,
+        message: classification.message,
+        nextStep: classification.nextStep
+      } : {
+        errorCode: workspaceError?.code || null,
+        diagnosticCategory: null,
+        message: ready ? "CCE CLI diagnostics passed cleanly." : workspaceError?.message || "CLI checks passed. Workspace is not bound yet.",
+        nextStep: ready ? "You can call cursor_context_engine directly." : workspaceError ? "Pass a valid local workspace directory to cursor_init." : "Run cursor_init with your project directory before calling cursor_context_engine."
+      }
+    };
+  }
+  _invalidateCliInspectCache() {
+    if (this.cliInspectCache) {
+      this.cliInspectCache = null;
+      this.cliInspectStats.invalidations += 1;
+    }
+    this.cliInspectInFlight = null;
+  }
+  _runUncachedCliInspection(signal, options = {}) {
     const controller = new AbortController();
     const cancel = () => controller.abort();
     if (this.cliClosing || signal?.aborted) cancel();
@@ -26950,8 +29345,7 @@ var CursorBridge = class {
       return this.cliInspector({ ...options, signal: controller.signal });
     });
     this.cliInspections.add(inspection);
-    try {
-      const metadata = await inspection.promise;
+    return inspection.promise.then((metadata) => {
       if (this.cliClosing || controller.signal.aborted) throw Object.assign(new Error("CCE CLI inspection cancelled before submission"), {
         code: "CURSOR_CLI_CANCELLED",
         cancelled: true,
@@ -26960,13 +29354,150 @@ var CursorBridge = class {
       });
       this.cliMetadata = { available: true, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
       return metadata;
-    } catch (error3) {
+    }).catch((error3) => {
       if (!controller.signal.aborted && !this.cliClosing) this.cliMetadata = { available: false, checkedAt: (/* @__PURE__ */ new Date()).toISOString(), errorCode: error3.code || "CURSOR_CLI_ERROR" };
       throw error3;
-    } finally {
+    }).finally(() => {
       this.cliInspections.delete(inspection);
       signal?.removeEventListener("abort", cancel);
+    });
+  }
+  shouldPrewarmIde() {
+    if (process.env.CURSOR_BRIDGE_CCE_CLI_CHILD === "1") return false;
+    try {
+      return this.ccePreferencesView().cceSource === "ide";
+    } catch (error3) {
+      console.error(`[cursor-bridge] CCE source configuration needs repair: ${error3.message}`);
+      return false;
     }
+  }
+  async _inspectCli(signal, options = {}) {
+    if (this.cliClosing || signal?.aborted) {
+      throw Object.assign(new Error("CCE CLI inspection cancelled"), {
+        code: "CURSOR_CLI_CANCELLED",
+        cancelled: true,
+        confirmedNotSent: true,
+        confirmedTerminal: true
+      });
+    }
+    if (options.provider) {
+      this._invalidateCliInspectCache();
+      return this._runUncachedCliInspection(signal, options);
+    }
+    const ttlMs = readCliInspectTtlMs(options.env);
+    if (options.forceRefresh) {
+      this._invalidateCliInspectCache();
+    } else if (ttlMs > 0 && this.cliInspectCache && !this.cliInspectInFlight) {
+      const ageMs = Date.now() - this.cliInspectCache.cachedAtMs;
+      if (ageMs >= 0 && ageMs < ttlMs) {
+        const identity = await this.cliIdentityReader({ env: options.env }).catch(() => ({ key: null }));
+        if (this.cliClosing || signal?.aborted) {
+          throw Object.assign(new Error("CCE CLI inspection cancelled"), {
+            code: "CURSOR_CLI_CANCELLED",
+            cancelled: true,
+            confirmedNotSent: true,
+            confirmedTerminal: true
+          });
+        }
+        if (identity?.key && this.cliInspectCache && identity.key === this.cliInspectCache.identityKey && Date.now() - this.cliInspectCache.cachedAtMs < ttlMs) {
+          this.cliInspectStats.hits += 1;
+          return this.cliInspectCache.metadata;
+        }
+      }
+      this._invalidateCliInspectCache();
+    }
+    let flight = !options.forceRefresh && this.cliInspectInFlight || null;
+    if (!flight) {
+      this.cliInspectStats.misses += 1;
+      const controller = new AbortController();
+      const inspection = { controller, promise: null };
+      const waiters = /* @__PURE__ */ new Set();
+      flight = { controller, inspection, waiters, promise: null };
+      if (!options.forceRefresh) this.cliInspectInFlight = flight;
+      inspection.promise = Promise.resolve().then(async () => {
+        if (this.cliClosing || controller.signal.aborted) {
+          throw Object.assign(new Error("CCE CLI inspection cancelled"), {
+            code: "CURSOR_CLI_CANCELLED",
+            cancelled: true,
+            confirmedNotSent: true,
+            confirmedTerminal: true
+          });
+        }
+        const identityBefore = await this.cliIdentityReader({ env: options.env }).catch(() => ({ key: null }));
+        if (this.cliClosing || controller.signal.aborted) {
+          throw Object.assign(new Error("CCE CLI inspection cancelled"), {
+            code: "CURSOR_CLI_CANCELLED",
+            cancelled: true,
+            confirmedNotSent: true,
+            confirmedTerminal: true
+          });
+        }
+        const metadata = await this.cliInspector({ ...options, signal: controller.signal });
+        if (this.cliClosing || controller.signal.aborted) {
+          throw Object.assign(new Error("CCE CLI inspection cancelled before submission"), {
+            code: "CURSOR_CLI_CANCELLED",
+            cancelled: true,
+            confirmedNotSent: true,
+            confirmedTerminal: true
+          });
+        }
+        if (readCliInspectTtlMs(options.env) > 0 && identityBefore?.key) {
+          this.cliInspectCache = { metadata, identityKey: identityBefore.key, cachedAtMs: Date.now() };
+        }
+        this.cliMetadata = { available: true, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
+        return metadata;
+      }).catch((error3) => {
+        if (!controller.signal.aborted && !this.cliClosing) {
+          this.cliMetadata = { available: false, checkedAt: (/* @__PURE__ */ new Date()).toISOString(), errorCode: error3.code || "CURSOR_CLI_ERROR" };
+        }
+        throw error3;
+      }).finally(() => {
+        this.cliInspections.delete(inspection);
+        if (this.cliInspectInFlight === flight) this.cliInspectInFlight = null;
+      });
+      this.cliInspections.add(inspection);
+      flight.promise = inspection.promise;
+    }
+    const waiter = {};
+    flight.waiters.add(waiter);
+    return new Promise((resolvePromise, rejectPromise) => {
+      let settled = false;
+      const cleanup = () => {
+        flight.waiters.delete(waiter);
+        signal?.removeEventListener("abort", onCallerAbort);
+      };
+      const onCallerAbort = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (flight.waiters.size === 0 || this.cliClosing) flight.controller.abort();
+        rejectPromise(Object.assign(new Error("CCE CLI inspection cancelled"), {
+          code: "CURSOR_CLI_CANCELLED",
+          cancelled: true,
+          confirmedNotSent: true,
+          confirmedTerminal: true
+        }));
+      };
+      if (this.cliClosing || signal?.aborted) {
+        onCallerAbort();
+        return;
+      }
+      signal?.addEventListener("abort", onCallerAbort, { once: true });
+      flight.promise.then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolvePromise(value);
+        },
+        (err) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          rejectPromise(err);
+        }
+      );
+    });
   }
   _modelPreferenceFor(target) {
     this._refreshModelPreferences();
@@ -27070,8 +29601,14 @@ var CursorBridge = class {
       if (this._hasGlobalReservation()) {
         throw new Error("A global Cursor reservation has an unconfirmed Stop state; resolve blockingTaskIds from cursor_status first");
       }
-      const preferences = readCcePreferences(this.cceSourceFile);
+      const preferences = this._effectiveCcePreferences();
       const source = preferences.source;
+      const prefKey = `${source}|${preferences.cliProvider ? JSON.stringify(preferences.cliProvider) : "official"}`;
+      if (this._lastCliPrefKey && this._lastCliPrefKey !== prefKey) {
+        this._invalidateCliInspectCache();
+        void this.acpManager?.invalidateAll("cce_preferences_changed");
+      }
+      this._lastCliPrefKey = prefKey;
       const modelPreference = this._modelPreferenceFor("cce");
       let cli;
       if (source === "ide") await this._ensureCursor();
@@ -27405,6 +29942,7 @@ var CursorBridge = class {
     if (isTerminalTask(job)) return this._taskView(job, true);
     const message = String(reason || "Task cancelled").trim() || "Task cancelled";
     this.queue = this.queue.filter((candidate) => candidate.id !== job.id);
+    this.activeCli.delete(job.id);
     this.activeParallel.delete(job.id);
     this._invalidateParallelMonitor(job);
     job.cancelRequested = false;
@@ -27561,13 +30099,24 @@ var CursorBridge = class {
     return this._healing;
   }
   async _drain() {
-    if (this.busy || this.queue.length === 0) return;
-    if (this._hasGlobalReservation()) return;
-    if (this.queue[0].effectiveExecution !== "parallel_agent" && this.activeParallel.size > 0) {
+    if (this.queue.length === 0 || this._hasGlobalReservation()) return;
+    if (this.busy && this.currentJob === null) return;
+    const isCliCceJob = (candidate) => candidate.kind === "context_engine" && candidate.cceSource === "cli";
+    const cliLimit = readCliConcurrency();
+    while (this.activeCli.size < cliLimit && !this._hasGlobalReservation()) {
+      const cliIdx = this.queue.findIndex(isCliCceJob);
+      if (cliIdx < 0) break;
+      const [cliJob] = this.queue.splice(cliIdx, 1);
+      void this._startCliJob(cliJob);
+    }
+    if (this.busy || this.queue.length === 0 || this._hasGlobalReservation()) return;
+    const ideIdx = this.queue.findIndex((candidate) => !isCliCceJob(candidate));
+    if (ideIdx < 0) return;
+    if (this.queue[ideIdx].effectiveExecution !== "parallel_agent" && this.activeParallel.size > 0) {
       return;
     }
     this.busy = true;
-    const job = this.queue.shift();
+    const [job] = this.queue.splice(ideIdx, 1);
     this.currentJob = job;
     job.status = "running";
     job.startedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -27671,8 +30220,54 @@ var CursorBridge = class {
         }
       });
     } finally {
-      if (this.currentJob === job) this.currentJob = null;
       this.busy = false;
+      if (this.currentJob === job) {
+        this.currentJob = this.activeCli.values().next().value || null;
+      }
+      this._drain();
+      this._maybeRestoreParallelOrigin();
+    }
+  }
+  async _startCliJob(job) {
+    this.activeCli.set(job.id, job);
+    if (!this.busy && !this.currentJob) this.currentJob = job;
+    job.status = "running";
+    job.startedAt = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await this._withJobLock(job, async () => {
+        try {
+          job.phase = "running";
+          const result = await this._runCceCli(job);
+          this._finishJob(job, result);
+        } catch (error3) {
+          if (error3 && error3.cancelled || job.cancelRequested) {
+            if (error3 && error3.stopConfirmed) {
+              this._cancelJob(job, job.cancelReason || error3.message || "Task cancelled", {
+                underlyingStopConfirmed: true
+              });
+            } else {
+              job.cancelRequested = false;
+              const cause = error3 instanceof Error ? error3 : new Error("Cancellation was requested, but Cursor CLI could not be confirmed stopped; the reservation remains held");
+              this._orphanParallelJob(job, cause);
+              job.recoveryState = "cancel_unconfirmed";
+            }
+          } else if (error3 && error3.confirmedTerminal) {
+            this.activeParallel.delete(job.id);
+            this._failJob(job, error3);
+          } else if (error3 && error3.sent) {
+            job.firstWaitError ||= error3.message;
+            job.error = `Submission state is uncertain; monitoring continues by agentId: ${error3.message}`;
+            this._orphanParallelJob(job, error3);
+          } else {
+            this._failJob(job, error3);
+          }
+        }
+      });
+    } finally {
+      this.activeCli.delete(job.id);
+      if (this.currentJob === job) {
+        this.currentJob = this.busy ? this.currentJob : this.activeCli.values().next().value || null;
+      }
       this._drain();
       this._maybeRestoreParallelOrigin();
     }
@@ -27686,34 +30281,75 @@ var CursorBridge = class {
     const controller = new AbortController();
     job.cliAbortController = controller;
     try {
-      const outcome = await this.cliRunner({
-        projectPath: job.projectPath,
-        prompt: job.prompt,
-        modelPreference: job.modelPreference,
-        timeoutMs: job.timeoutMs,
-        signal: controller.signal,
-        cli: job.cli,
-        onDispatch: () => {
-          job.sendState = "dispatching";
-        },
-        onInit: ({ sessionId, modelSelection }) => {
-          job.cliSessionId = sessionId;
-          job.modelSelection = modelSelection;
-          job.sendState = "sent";
-          job.sentAt ||= (/* @__PURE__ */ new Date()).toISOString();
+      let outcome = null;
+      const useAcp = this.acpManager && (this._customAcpManager || this.cliRunner === runCursorCli);
+      if (useAcp) {
+        const acpAttempt = await this.acpManager.runOrFallback({
+          projectPath: job.projectPath,
+          prompt: job.prompt,
+          modelPreference: job.modelPreference,
+          timeoutMs: job.timeoutMs,
+          signal: controller.signal,
+          cli: job.cli,
+          onDispatch: () => {
+            job.sendState = "dispatching";
+          },
+          onInit: ({ sessionId, modelSelection }) => {
+            job.cliSessionId = sessionId;
+            job.modelSelection = modelSelection;
+            job.cliTransport = "acp";
+            job.sendState = "sent";
+            job.sentAt ||= (/* @__PURE__ */ new Date()).toISOString();
+          }
+        });
+        if (acpAttempt?.usedAcp) {
+          outcome = acpAttempt;
+        } else if (acpAttempt && acpAttempt.confirmedNotSent !== true) {
+          throw Object.assign(new Error("ACP execution did not return confirmedNotSent before fallback"), {
+            code: "CURSOR_CLI_PROTOCOL_ERROR",
+            confirmedTerminal: false,
+            sent: true
+          });
         }
-      });
+        if (!outcome) {
+          this._throwIfCancelledBeforeSend(job);
+        }
+      }
+      if (!outcome) {
+        outcome = await this.cliRunner({
+          projectPath: job.projectPath,
+          prompt: job.prompt,
+          modelPreference: job.modelPreference,
+          timeoutMs: job.timeoutMs,
+          signal: controller.signal,
+          cli: job.cli,
+          onDispatch: () => {
+            job.sendState = "dispatching";
+          },
+          onInit: ({ sessionId, modelSelection }) => {
+            job.cliSessionId = sessionId;
+            job.modelSelection = modelSelection;
+            job.cliTransport = "print";
+            job.sendState = "sent";
+            job.sentAt ||= (/* @__PURE__ */ new Date()).toISOString();
+          }
+        });
+      }
       job.cliSessionId = outcome.sessionId;
       job.modelSelection = outcome.modelSelection;
-      job.terminalEvidence = `cursor_cli_result:${outcome.sessionId}`;
+      job.cliTransport = outcome.cliTransport || job.cliTransport || "print";
+      if (outcome.mcpIsolation) this.cliLastMcpIsolation = outcome.mcpIsolation;
+      job.terminalEvidence = `${job.cliTransport === "acp" ? "cursor_cli_acp_result" : "cursor_cli_result"}:${outcome.sessionId}`;
       return outcome.result;
     } catch (error3) {
+      if (CLI_INSPECT_INVALIDATE_CODES.has(error3?.code)) this._invalidateCliInspectCache();
       error3.taskId = job.id;
       job.cliError = {
         code: error3.code || "CURSOR_CLI_ERROR",
         confirmedTerminal: error3.confirmedTerminal === true,
         ...error3.cliProcessId ? { processId: error3.cliProcessId } : {},
-        ...error3.cliConfigDirectory ? { configDirectory: error3.cliConfigDirectory } : {}
+        ...error3.cliConfigDirectory ? { configDirectory: error3.cliConfigDirectory } : {},
+        ...error3.cliDataDirectory ? { dataDirectory: error3.cliDataDirectory } : {}
       };
       throw error3;
     } finally {
@@ -27732,7 +30368,11 @@ var CursorBridge = class {
       if (job.status === "queued") this._cancelJob(job, job.cancelReason, { underlyingStopConfirmed: true, wake: false });
       else job.cliAbortController?.abort();
     }
-    await Promise.allSettled([...jobs.map((job) => job.promise), ...inspections.map((inspection) => inspection.promise)]);
+    await Promise.allSettled([
+      ...jobs.map((job) => job.promise),
+      ...inspections.map((inspection) => inspection.promise),
+      this.acpManager ? this.acpManager.shutdown() : null
+    ].filter(Boolean));
   }
   async _run(prompt, options = {}) {
     let page = await findPage({
@@ -28359,10 +30999,10 @@ var CursorBridge = class {
       }
     } catch (error3) {
       primaryError = error3 instanceof Error ? error3 : new Error(String(error3));
-      let failure2 = primaryError.modelSelectionFailure;
-      if (!failure2) {
+      let failure3 = primaryError.modelSelectionFailure;
+      if (!failure3) {
         const pickerUnavailable = /model picker (?:is unavailable|did not open)/i.test(primaryError.message);
-        failure2 = {
+        failure3 = {
           failureClass: primaryError.pickerRead ? "picker_read_failed" : pickerUnavailable ? "picker_did_not_open" : "probe_error",
           retryable: true
         };
@@ -28378,15 +31018,15 @@ var CursorBridge = class {
         cdp: primaryError.cdp || null,
         requestedModel,
         requestedEffort,
-        failureClass: failure2.failureClass,
-        retryable: failure2.retryable === true,
-        errorCode: primaryError.code || `CURSOR_MODEL_${String(failure2.failureClass).toUpperCase()}`,
-        available: failure2.available || [],
-        attempts: failure2.attempts || [],
-        trigger: failure2.trigger || null,
-        lastPollError: failure2.lastPollError || null,
+        failureClass: failure3.failureClass,
+        retryable: failure3.retryable === true,
+        errorCode: primaryError.code || `CURSOR_MODEL_${String(failure3.failureClass).toUpperCase()}`,
+        available: failure3.available || [],
+        attempts: failure3.attempts || [],
+        trigger: failure3.trigger || null,
+        lastPollError: failure3.lastPollError || null,
         configurationCheck,
-        menu: failure2.menu || null,
+        menu: failure3.menu || null,
         runtimeMode: this.runtimeMode,
         lastError: primaryError.message,
         failedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -29283,6 +31923,7 @@ var CursorBridge = class {
     const message = String(reason || "").trim();
     this._invalidateParallelMonitor(job);
     this.queue = this.queue.filter((candidate) => candidate.id !== job.id);
+    this.activeCli.delete(job.id);
     this.activeParallel.delete(job.id);
     job.status = "abandoned";
     job.phase = "abandoned";
@@ -29853,7 +32494,7 @@ var CursorBridge = class {
       allowedPaths: job.allowedPaths,
       modelPreference: job.modelPreference,
       modelSelection: job.modelSelection,
-      ...job.cceSource ? { cceSource: job.cceSource, cliSessionId: job.cliSessionId } : {},
+      ...job.cceSource ? { cceSource: job.cceSource, cliSessionId: job.cliSessionId, ...job.cliTransport ? { cliTransport: job.cliTransport } : {} } : {},
       ...job.cliError ? { cliError: job.cliError } : {},
       requestContext: job.requestContext || normalizeRequestContext(),
       workspaceBinding: job.workspaceBinding || null,
@@ -29924,6 +32565,7 @@ var CursorBridge = class {
       effectiveEffort: full.modelSelection.effectiveEffort,
       verificationSource: full.modelSelection.verificationSource,
       cliModel: full.modelSelection.cliModel,
+      ...full.modelSelection.acpModel !== void 0 ? { acpModel: full.modelSelection.acpModel } : {},
       provider: full.modelSelection.provider,
       providerResponseConfirmed: full.modelSelection.providerResponseConfirmed,
       providerRequestCount: full.modelSelection.providerRequestCount,
@@ -29956,7 +32598,7 @@ var CursorBridge = class {
       projectPath: full.projectPath,
       sessionId: full.sessionId,
       agentId: full.agentId,
-      ...full.cceSource ? { cceSource: full.cceSource, cliSessionId: full.cliSessionId } : {},
+      ...full.cceSource ? { cceSource: full.cceSource, cliSessionId: full.cliSessionId, ...full.cliTransport ? { cliTransport: full.cliTransport } : {} } : {},
       ...full.cliError ? { cliError: full.cliError } : {},
       sendState: full.sendState,
       modelSelection: selection,
@@ -29994,7 +32636,7 @@ var CursorBridge = class {
         status: view.status,
         phase: view.phase,
         agentId: view.agentId,
-        ...view.cceSource ? { cceSource: view.cceSource, cliSessionId: view.cliSessionId } : {},
+        ...view.cceSource ? { cceSource: view.cceSource, cliSessionId: view.cliSessionId, ...view.cliTransport ? { cliTransport: view.cliTransport } : {} } : {},
         sessionId: view.sessionId,
         resultAvailable: view.resultAvailable,
         resultLength: view.resultLength,
@@ -30113,8 +32755,8 @@ var CursorBridge = class {
       if (!current) {
         throw this._workspaceRecoveryError("WORKSPACE_INITIALIZATION_REQUIRED", "Run cursor_init with workspace_path before submitting work.", expected);
       }
-      const canonical2 = (path2) => {
-        const normalized = normalizeWorkspacePath(path2);
+      const canonical2 = (path3) => {
+        const normalized = normalizeWorkspacePath(path3);
         return process.platform === "win32" ? normalized.toLowerCase() : normalized;
       };
       if (canonical2(current) !== canonical2(expected)) {
@@ -30157,9 +32799,14 @@ var CursorBridge = class {
       return { found: !!job, ...this._compactStatusCommon(), ...job ? this._compactTaskView(job) : { taskId: String(taskId) } };
     }
     const parallelRunning = this.activeParallel.size;
+    const cliRunning = this.activeCli.size;
+    const cliConcurrency = readCliConcurrency();
     const fifoBusy = this.busy;
+    const anyRunning = fifoBusy || cliRunning > 0 || parallelRunning > 0;
     const uiBusy = fifoBusy && this.currentJob?.cceSource !== "cli";
     const globalBlocked = this._hasGlobalReservation();
+    const isCliCceJob = (job) => job.kind === "context_engine" && job.cceSource === "cli";
+    const blockedQueuedCount = globalBlocked ? this.queue.length : this.activeParallel.size > 0 ? this.queue.filter((job) => !isCliCceJob(job) && job.effectiveExecution !== "parallel_agent").length : 0;
     const common = normalizedDetail === "full" ? {
       pluginVersion: PLUGIN_VERSION,
       statusPath: "json-list",
@@ -30169,14 +32816,17 @@ var CursorBridge = class {
       ...this.modelPreferencesView(),
       ...this.ccePreferencesView(),
       ...this.sessionRegistryView(),
-      busy: fifoBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
+      busy: anyRunning || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
+      cliRunning,
+      cliConcurrency,
       parallelRunning,
-      idle: !fifoBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
+      idle: !anyRunning && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
-      blockedQueuedCount: this.activeParallel.size > 0 ? this.queue.filter((job) => globalBlocked || job.effectiveExecution !== "parallel_agent").length : 0,
+      blockedQueuedCount,
+      activeCli: [...this.activeCli.values()].map((job) => this._taskView(job)),
       activeParallel: [...this.activeParallel.values()].map((job) => this._taskView(job)),
       recentTasks: [...this.tasks.values()].slice(-10).map((job) => this._taskView(job)),
       unreadResultTaskIds: [...this.tasks.values()].filter((job) => isTerminalTask(job) && job.result != null && !job.resultCollectedAt).map((job) => job.id),
@@ -30201,14 +32851,17 @@ var CursorBridge = class {
       }
     } : {
       ...this._compactStatusCommon(),
-      busy: fifoBusy || parallelRunning > 0 || this.queue.length > 0 || this._workspacePending > 0,
+      busy: anyRunning || this.queue.length > 0 || this._workspacePending > 0,
       uiBusy,
+      cliRunning,
+      cliConcurrency,
       parallelRunning,
-      idle: !fifoBusy && parallelRunning === 0 && this.queue.length === 0 && this._workspacePending === 0,
+      idle: !anyRunning && this.queue.length === 0 && this._workspacePending === 0,
       queued: this.queue.length,
       blockingTaskIds: [...this.activeParallel.values()].filter((job) => !isTerminalTask(job)).map((job) => job.id),
       globallyBlocked: globalBlocked,
-      blockedQueuedCount: this.activeParallel.size > 0 ? this.queue.filter((job) => globalBlocked || job.effectiveExecution !== "parallel_agent").length : 0,
+      blockedQueuedCount,
+      activeCli: [...this.activeCli.values()].map((job) => this._compactTaskView(job, { summary: true })),
       activeParallel: [...this.activeParallel.values()].map((job) => this._compactTaskView(job, { summary: true })),
       recentTasks: [...this.tasks.values()].filter((job) => !this.activeParallel.has(job.id)).slice(-10).map((job) => this._compactTaskView(job, { summary: true })),
       unreadResultTaskIds: [...this.tasks.values()].filter((job) => isTerminalTask(job) && job.result != null && !job.resultCollectedAt).map((job) => job.id),
@@ -30216,11 +32869,26 @@ var CursorBridge = class {
       lifecycle: this._compactLifecycleView()
     };
     if (common.cceSource === "cli") {
+      const inspectTtlMs = readCliInspectTtlMs();
       return {
         connected: this.cliMetadata?.available === true,
         ...common,
         statusPath: "cli-metadata",
-        cli: this.cliMetadata || { available: null, checkedAt: null }
+        cli: {
+          ...this.cliMetadata || { available: null, checkedAt: null },
+          running: cliRunning,
+          concurrency: cliConcurrency,
+          inspectCache: {
+            cached: Boolean(this.cliInspectCache),
+            ttlMs: inspectTtlMs,
+            ageMs: this.cliInspectCache ? Math.max(0, Date.now() - this.cliInspectCache.cachedAtMs) : null,
+            hits: this.cliInspectStats.hits,
+            misses: this.cliInspectStats.misses,
+            invalidations: this.cliInspectStats.invalidations
+          },
+          acp: this.acpManager ? this.acpManager.statusView() : { state: "disabled", reason: "custom_runner", readySessions: 0, activePrompts: 0, promptsServed: 0, fallbacks: 0, warmProcesses: 0 },
+          ...this.cliLastMcpIsolation ? { mcpIsolation: this.cliLastMcpIsolation } : {}
+        }
       };
     }
     try {
@@ -30267,7 +32935,7 @@ function buildToolDefinitions(bridgeInstance) {
   return [
     {
       name: "cursor_init",
-      description: "Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge saves it, finds Cursor, ensures the required connection, and opens or verifies the matching project. In Agents Window, initialization registers a missing local workspace through Cursor's project service and verifies its exact path before reporting ready. If Cursor was opened too early without CCE access, initialization safely keeps the binding and tells the user to save, close Cursor once, and repeat the same initialization sentence; it never force-closes Cursor. Cursor login and the user's old/new UI preference are preserved. When both UIs are open, Bridge selects the new Agents Window and creates work in the matching repository instead of Home.",
+      description: "Initialize or reinitialize CCE for one local workspace. Give only the project path: Bridge persists the workspace binding and prepares the active CCE source. With the default cli source, cursor_init verifies Cursor Agent CLI availability, login/models, explicit CCE model configuration (cursor_model), and ACP prewarm; if CLI setup is incomplete, it preserves the binding and returns a recoverable status, errorCode, and nextStep. With ide source, Bridge finds Cursor IDE or Agents Window, ensures the required CDP connection, opens or verifies the matching project directly instead of Home, preserves Cursor login and old/new UI preference, and never force-closes Cursor.",
       inputSchema: {
         type: "object",
         properties: {
@@ -30278,7 +32946,7 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_context_engine",
-      description: "Use this evidence-driven, read-only Cursor Context Engine (CCE) when understanding an indexed project requires discovering an unknown implementation location or tracing behavior, symbols, callers/callees, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Skip it when a known exact file or symbol can answer the question through direct reading or exact search, the needed code is already in context, or the task is only editing, tests, logs, builds, Git work, or external documentation. Cursor autonomously chooses the necessary investigation depth and its available semantic retrieval, exact search, symbol/reference tracing, targeted source reading, or Explore capabilities; the caller supplies one natural-language intent, not a harness recipe. It follows simple locations quickly and continues through call chains, data flows, registrations, interfaces, or cross-module relationships only when the question requires them, stopping at minimum sufficient context. Results return compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. Search uses the shared serialized CCE queue through the persistent ide or cli source chosen with cursor_cce. Both sources use the same evidence contract and model preferences; CLI uses Cursor Ask mode with explicit model selection. Large or cold workspaces can take several minutes. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.",
+      description: "Use this evidence-driven, read-only Cursor Context Engine (CCE) for semantic retrieval when understanding an indexed project requires discovering an unknown implementation location or tracing behavior, symbols, callers/callees, call chains, data flow, registrations, interface implementations, ownership boundaries, or cross-module relationships. Skip it when a known exact file or symbol can answer the question through direct reading or exact search, the needed code is already in context, or the task is only editing, tests, logs, builds, Git work, or external documentation. Cursor autonomously chooses the necessary investigation depth and retrieval capabilities; the caller supplies one natural-language intent, not a harness recipe. Results return minimum sufficient context as compact verifiable workspace-relative path:line evidence, distinguish proven relationships from semantic similarity and gaps, and say NOT_FOUND instead of guessing from framework convention. Fresh installs default to CCE CLI (cli: isolated Cursor Ask mode over persistent ACP with print fallback and explicit model selection); ide remains available via cursor_cce. Both sources share the same workspace checks, evidence contract, and model preferences. Read-only behavior is strongly prompted and audited in the result contract, but it is not a filesystem sandbox.",
       inputSchema: buildSearchInputSchema()
     },
     bridgeInstance.environmentDelegationMode !== "off" ? {
@@ -30336,12 +33004,12 @@ function buildToolDefinitions(bridgeInstance) {
     },
     {
       name: "cursor_cce",
-      description: "Show or persist the CCE execution source. ide uses Cursor IDE/Agents through CDP; cli uses Cursor Agent CLI in read-only Ask mode, optionally the official agent-local harness with an explicit own-key Responses provider. Both sources keep the same query, evidence format, workspace checks and CCE model preferences. The local choice survives restarts and is snapshotted per request. Omit cli_provider to preserve it across source switches; never clear a configured own-key route implicitly. Failures never fall back. Use set when the user requests source or provider configuration.",
+      description: "Show, set, or diagnose the CCE execution source. Fresh installations default to cli (Cursor Agent CLI in read-only Ask mode over persistent isolated ACP with preflight checks and explicit model selection, optionally the official agent-local harness with an explicit own-key Responses provider). ide remains available via cursor_cce to route CCE through Cursor IDE/Agents over CDP. Both sources share the same query, evidence format, workspace checks, and CCE model preferences. Omit cli_provider to preserve it across source switches; failures never silently fall back. Use doctor for read-only CLI/model/workspace readiness diagnostics.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
         properties: {
-          action: { type: "string", enum: ["show", "set"], description: "show reads the current source; set saves the user-selected source locally." },
+          action: { type: "string", enum: ["show", "set", "doctor"], description: "show reads the current source; set saves the user-selected source locally; doctor runs read-only CLI/model/workspace readiness diagnostics." },
           source: { type: "string", enum: [...CURSOR_CCE_SOURCES], description: "Required for set: cli or ide." },
           cli_provider: {
             description: "Optional explicit agent-local own-key route. Omit to preserve it when switching sources; null explicitly clears it. Key contents are never accepted here.",
@@ -30441,6 +33109,7 @@ function toolErrorResult(error3) {
       ...error3.taskId ? { taskId: error3.taskId } : {},
       ...error3.cliProcessId ? { cliProcessId: error3.cliProcessId } : {},
       ...error3.cliConfigDirectory ? { cliConfigDirectory: error3.cliConfigDirectory } : {},
+      ...error3.cliDataDirectory ? { cliDataDirectory: error3.cliDataDirectory } : {},
       ...error3.confirmedNotSent !== void 0 ? { confirmedNotSent: error3.confirmedNotSent } : {},
       ...error3.confirmedTerminal !== void 0 ? { confirmedTerminal: error3.confirmedTerminal } : {}
     };
@@ -30519,6 +33188,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request2, extra) => {
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
     if (name === "cursor_cce") {
+      const normalizedAction = typeof args?.action === "string" ? args.action.trim().toLowerCase() : "show";
+      if (normalizedAction === "doctor") {
+        const result2 = await bridge.diagnoseCce({});
+        return { content: [{ type: "text", text: JSON.stringify(result2, null, 2) }] };
+      }
       const options = { action: args?.action, source: args?.source };
       if (Object.hasOwn(args || {}, "cli_provider")) {
         const names = { node_path: "nodePath", base_url: "baseUrl", api_key_file: "apiKeyFile" };
@@ -30562,6 +33236,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request2, extra) => {
           ...bridge.delegationView(),
           ...bridge.runtimeModeView(),
           ...bridge.modelPreferencesView(),
+          ...bridge.ccePreferencesView(),
           ...bridge.sessionRegistryView()
         } : {
           connected: false,
@@ -30599,14 +33274,19 @@ async function main() {
   console.error("\u2705 MCP connected.");
   void startupEnsure;
 }
-var isMain2 = import.meta.url === pathToFileURL2(process.argv[1] || "").href;
+var isMain2 = import.meta.url === pathToFileURL3(process.argv[1] || "").href;
 if (isMain2) {
   process.on("unhandledRejection", (r) => console.error("unhandledRejection:", r));
+  let stopping = false;
   const stop = () => {
+    if (stopping) return;
+    stopping = true;
     void bridge.shutdownCli().finally(() => process.exit(0));
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
+  process.stdin.once("end", stop);
+  process.stdin.once("close", stop);
   main().catch((e) => {
     console.error("\u274C Fatal error:", e);
     process.exit(1);

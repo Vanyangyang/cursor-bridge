@@ -1,7 +1,7 @@
 {
   "name": "cursor-bridge",
-  "version": "6.2.0",
-  "description": "Evidence-backed Cursor Context Engine search and bounded Cursor Agent execution, including a UI-suppressed minimal runtime.",
+  "version": "7.0.0",
+  "description": "Evidence-backed Cursor Context Engine (CLI-first over isolated ACP) and optional bounded Cursor Agent execution.",
   "author": {
     "name": "Vanyangyang"
   },
@@ -19,8 +19,8 @@
   },
   "interface": {
     "displayName": "Cursor Bridge",
-    "shortDescription": "Evidence-backed CCE search and bounded, optionally continuous cursor_do execution.",
-    "longDescription": "Use Cursor's indexed Agent as an adaptive Cursor Context Engine. State the intent once; Cursor chooses the necessary investigation depth and returns compact path:line evidence instead of guessed locations. When execution is useful, cursor_do supports isolated FIFO or independent Agent tasks plus explicit persistent sessions for continued delivery to the same verified Agent. The supervising host retains scope, review, and final control. User-facing prose follows the task language while machine fields remain stable. Minimal runtime keeps CCE and execution tools available while hiding the Windows Cursor UI.",
+    "shortDescription": "CLI-first evidence-backed CCE search and optional bounded cursor_do execution.",
+    "longDescription": "Cursor Bridge routes Cursor Context Engine (CCE) searches through Cursor Agent CLI by default (read-only Ask mode over persistent isolated ACP with preflight checks and explicit model selection), and retains Cursor IDE/Agents over CDP as an explicit fallback source for CCE and cursor_do.",
     "developerName": "Vanyangyang",
     "category": "Developer Tools",
     "capabilities": [

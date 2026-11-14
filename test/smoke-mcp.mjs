@@ -56,7 +56,7 @@ async function smoke() {
       { version: 1, mode: 'normal' },
       { version: 1, targets: { cce: null, cursor_do: null }, updatedAt: null },
       { version: 1, sessions: {}, updatedAt: null },
-      null, // A fresh install has no source preference and must default to IDE.
+      null, // A fresh install has no source preference and must default to CLI in 7.0.0+.
     ];
     const snapshots = Object.values(files).map((file, index) => {
       const text = configs[index] === null ? null : `${JSON.stringify(configs[index])}\n`;
@@ -110,7 +110,7 @@ async function smoke() {
       assert.equal(data.workspaceConfirmationRequired, true);
       assert.equal(data.startupBehavior, 'manual_launch_only');
       assert.equal(data.connected, false, 'Status must use the isolated port');
-      assert.equal(data.cceSource, 'ide', 'A fresh install must use IDE without a CLI');
+      assert.equal(data.cceSource, 'cli', 'A fresh install must default to cli');
       idle(data);
       return data;
     }
@@ -133,7 +133,14 @@ async function smoke() {
     assert.deepEqual(payload(model).modelPreferences, before.modelPreferences);
     const source = await call('cursor_cce', { action: 'show' });
     assert.notEqual(source.isError, true);
-    assert.equal(payload(source).cceSource, 'ide');
+    assert.equal(payload(source).cceSource, 'cli');
+    const doctor = await call('cursor_cce', { action: 'doctor' });
+    assert.notEqual(doctor.isError, true, 'Read-only cursor_cce doctor must return structured diagnostics');
+    const doctorData = payload(doctor);
+    assert.equal(doctorData.action, 'doctor');
+    assert.equal(doctorData.cceSource, 'cli');
+    assert.equal(doctorData.ready, false);
+    assert.equal(doctorData.status, 'cli-unavailable');
     // Empty arguments are the read-only runtime view; action=show can alter presentation.
     const runtimeSchema = definitions.get('cursor_runtime').inputSchema;
     let runtimeShow = 'skipped-schema-requires-arguments';
@@ -150,7 +157,7 @@ async function smoke() {
       if (text === null) assert.equal(existsSync(file), false, 'Read-only probes must not create a source preference');
       else assert.equal(readFileSync(file, 'utf8'), text, 'Read-only probes must preserve temporary configuration');
     }
-    return { result: 'PASS', bundle, version: expectedVersion, toolCount: tools.length, workspaceRejections: 2, submissionStarted: false, modelPreferencesUnchanged: true, defaultCceSource: 'ide', cliRequired: false, runtimeShow };
+    return { result: 'PASS', bundle, version: expectedVersion, toolCount: tools.length, workspaceRejections: 2, submissionStarted: false, modelPreferencesUnchanged: true, defaultCceSource: 'cli', cliDoctorVerified: true, runtimeShow };
   } finally {
     try {
       await client?.close();

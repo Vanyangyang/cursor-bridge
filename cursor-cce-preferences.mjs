@@ -27,7 +27,7 @@ function invalidConfig(message, cause) {
 }
 
 export function readCcePreferences(filePath) {
-  const defaults = { version: 1, source: 'ide', updatedAt: null };
+  const defaults = { version: 1, source: 'cli', updatedAt: null };
   if (!filePath) return defaults;
   let parsed;
   try {

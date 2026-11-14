@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import { CursorBridge } from '../server.mjs';
 class OfflineBridge extends CursorBridge {
   constructor(options = {}) {
     super({ runtimeFile: null, workspaceFile: null, modelPreferencesFile: null,
-      sessionFile: null, projectPath: process.cwd(), ...options });
+      sessionFile: null, cceSource: 'ide', projectPath: process.cwd(), ...options });
   }
   async _ensureCursor() {}
   _drain() {}
@@ -174,10 +174,18 @@ test('compact orphan status keeps safety, model application and recovery evidenc
 });
 
 test('bundled MCP exposes compact/full and preserves disconnected/error semantics', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'cursor-bridge-compact-contract-'));
+  const cceSourceFile = join(tempDir, 'cce-source.json');
+  writeFileSync(cceSourceFile, JSON.stringify({ version: 1, source: 'ide', updatedAt: '2026-11-15T00:00:00.000Z' }));
   const client = new Client({ name: 'compact-contract-test', version: '1' });
   const transport = new StdioClientTransport({ command: process.execPath,
     args: [fileURLToPath(new URL('../dist/cursor-bridge.mjs', import.meta.url))],
-    env: { ...process.env, CURSOR_BRIDGE_NO_AUTOLAUNCH: '1', CURSOR_BRIDGE_CDP_PORT: '1' } });
+    env: {
+      ...process.env,
+      CURSOR_BRIDGE_NO_AUTOLAUNCH: '1',
+      CURSOR_BRIDGE_CDP_PORT: '1',
+      CURSOR_BRIDGE_CCE_SOURCE_FILE: cceSourceFile,
+    } });
   const call = (args) => client.callTool({ name: 'cursor_status', arguments: args });
   try {
     await client.connect(transport);
@@ -200,5 +208,6 @@ test('bundled MCP exposes compact/full and preserves disconnected/error semantic
     assert.equal(missing.taskId, 'missing');
   } finally {
     await client.close();
+    rmSync(tempDir, { recursive: true, force: true });
   }
 });
