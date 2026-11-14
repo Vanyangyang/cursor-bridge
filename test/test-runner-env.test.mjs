@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { createIsolatedTestEnv } from '../scripts/test.mjs';
 
 test('test runner isolates host Cursor Bridge and coding-agent session variables without dropping system paths', () => {
@@ -80,5 +84,38 @@ test('test runner isolates host Cursor Bridge and coding-agent session variables
     'CLAUDE_PLUGIN_DATA',
   ]) {
     assert.equal(Object.hasOwn(isolated, key), false, `${key} should be stripped`);
+  }
+});
+
+test('test runner supports explicit file selection alongside reporter flags and strips host env', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'runner-single-'));
+  try {
+    const tempTestFile = join(dir, 'single.test.mjs');
+    writeFileSync(tempTestFile, [
+      "import assert from 'node:assert/strict';",
+      "import test from 'node:test';",
+      "test('isolated single file', () => {",
+      "  assert.equal(process.env.CURSOR_BRIDGE_DELEGATION, undefined);",
+      "  console.log('SINGLE_RUNNER_MARKER');",
+      '});',
+      '',
+    ].join('\n'));
+    const runnerPath = fileURLToPath(new URL('../scripts/test.mjs', import.meta.url));
+    const childEnv = { ...process.env, CURSOR_BRIDGE_DELEGATION: 'off' };
+    delete childEnv.NODE_TEST_CONTEXT;
+    const result = spawnSync(
+      process.execPath,
+      [runnerPath, '--test-reporter=spec', tempTestFile],
+      {
+        encoding: 'utf8',
+        env: childEnv,
+      },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SINGLE_RUNNER_MARKER/);
+    assert.match(result.stdout, /tests 1\b/);
+    assert.match(result.stdout, /pass 1\b/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });

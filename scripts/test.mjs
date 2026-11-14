@@ -38,9 +38,21 @@ if (isMain) {
   const root = fileURLToPath(new URL('../', import.meta.url));
   const directory = mkdtempSync(join(tmpdir(), 'cursor-bridge-tests-'));
   try {
-    const files = readdirSync(join(root, 'test')).filter(name => name.endsWith('.test.mjs')).sort()
-      .map(name => join(root, 'test', name));
-    const child = spawnSync(process.execPath, ['--test', ...process.argv.slice(2), ...files], {
+    const args = process.argv.slice(2);
+    const explicitFiles = [];
+    const runnerFlags = [];
+    for (const arg of args) {
+      if (!arg.startsWith('-') && /\.(?:mjs|js)$/i.test(arg)) {
+        explicitFiles.push(resolve(root, arg));
+      } else {
+        runnerFlags.push(arg);
+      }
+    }
+    const files = explicitFiles.length > 0
+      ? explicitFiles
+      : readdirSync(join(root, 'test')).filter(name => name.endsWith('.test.mjs')).sort()
+        .map(name => join(root, 'test', name));
+    const child = spawnSync(process.execPath, ['--test', ...runnerFlags, ...files], {
       cwd: root,
       stdio: 'inherit',
       env: createIsolatedTestEnv(process.env, directory),

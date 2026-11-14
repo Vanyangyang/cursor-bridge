@@ -155,10 +155,11 @@ async function smokeCli() {
       linkOrCopyNode(join(versionDir, 'node.exe'));
     } else {
       mkdirSync(cliRoot, { recursive: true });
+      const entryPath = join(cliRoot, 'index.mjs');
+      writeFileSync(entryPath, fakeCliScriptSource());
       cliPath = join(cliRoot, 'cursor-agent');
-      writeFileSync(cliPath, `#!/usr/bin/env node\n${fakeCliScriptSource()}`);
+      writeFileSync(cliPath, `#!/bin/sh\nexec "${process.execPath}" "${entryPath}" "$@"\n`);
       chmodSync(cliPath, 0o755);
-      writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ type: 'module' }) + '\n');
     }
 
     await new Promise((accept, reject) => {

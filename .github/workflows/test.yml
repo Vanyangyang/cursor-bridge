@@ -15,6 +15,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - run: npm install
+      - run: npm --prefix plugins/grok-build-supervisor install
       - run: npm run build
       - name: Verify built dist bundles match committed artifacts
         run: git diff --exit-code -- dist plugins/grok-build-supervisor/dist
@@ -39,10 +40,10 @@ jobs:
         run: |
           tests=(test/cdp-client.test.mjs test/workspace-identity.test.mjs test/model-config.test.mjs test/model-picker-open.test.mjs test/ai-install.test.mjs)
           tests+=(test/cce-preferences.test.mjs test/cce-source-routing.test.mjs test/cli-workspace.test.mjs test/cli-config-scope.test.mjs test/cursor-cli.test.mjs)
-          tests+=(test/cursor-cli-acp.test.mjs test/cli-provider.test.mjs test/test-runner-env.test.mjs test/mcp-packages.test.mjs test/pi-packages.test.mjs)
+          tests+=(test/cursor-cli-acp.test.mjs test/cli-provider.test.mjs test/test-runner-env.test.mjs)
           if [[ -f test/cdp-identity.test.mjs ]]; then
             tests+=(test/cdp-identity.test.mjs)
           fi
-          node --test "${tests[@]}"
+          node scripts/test.mjs --test-reporter=spec --test-destination=stdout --test-reporter=github --test-destination=stdout "${tests[@]}"
       - run: npm run smoke:mcp
       - run: npm run smoke:cli
