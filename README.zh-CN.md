@@ -14,12 +14,26 @@
 > [!WARNING]
 > **Windows 为主验平台：** 完整实机验收当前以 **Windows** 为准。macOS / Linux 在 CI（`macos-basic`）覆盖了 CLI/ACP 单测与 stdio MCP 冒烟检查，尚未经过全量实机端到端验收。
 
-Cursor Bridge 让你的编程客户端（**Codex**、**Claude Code**、**Grok Build**、**Pi** 或其他支持 MCP 的客户端）接入 **Cursor Context Engine（CCE）**，并可选交付有边界的 `cursor_do` 任务，仅返回可核对的 `path:line` 源码锚点（`CCE_SEARCH_RESULT`），不污染主上下文、不接管订阅或计费。
+Cursor Bridge 让你的编程客户端（**Codex**、**Claude Code**、**Grok Build**、**Pi**、**AGY / Antigravity** 或其他支持 MCP 的客户端）接入 **Cursor Context Engine（CCE）**，并可选交付有边界的 `cursor_do` 任务，仅返回可核对的 `path:line` 源码锚点（`CCE_SEARCH_RESULT`），不污染主上下文、不接管订阅或计费。
 
-自 **7.0.0** 起，**CCE CLI（`cli`）正式升级为主要维护路线与全新安装默认来源**（已保存的 `cce-source.json` 原样保留，桌面端可通过 `/cce ide` 切回）。依托常驻 Ask 模式 ACP 会话池、私有 `CURSOR_DATA_DIR` MCP 隔离与预检缓存，派发前固定开销从 `~21s` 降至 `0.0–0.2s`：Windows 下 `grok-4.6-fast` / `medium` 实测单条最快 **`19.8s`**（6.2.0 基线为 `42.9–45.3s`），3 路并发总墙钟 **`30.4s`**（串行和 `82.6s`）。CLI 下载与设置详见[从 6.x 迁移到 7.0.0](#migrate-to-7-0)。
+自 **7.0.0** 起，**CCE CLI（`cli`）正式升级为主要维护路线与全新安装默认来源**（已保存的 `cce-source.json` 原样保留，桌面端可通过 `/cce ide` 切回）。依托常驻 Ask 模式 ACP 会话池，Windows 下单条查询最快 **19.8s**（对比 6.2.0 基线 42.9–45.3s **提速约 2.2 倍**），3 路并发总墙钟 **30.4s**（串行总和 82.6s）。CLI 下载与设置详见[从 6.x 迁移到 7.0.0](#migrate-to-7-0)。
 
 > [!IMPORTANT]
 > **Windows 一次性迁移：** 如果当前安装的是 Cursor Bridge 5.3.6 或更早版本，首次升级到 5.4.0 或任何后续版本前，请先保存工作，并按[更新 Cursor Bridge](#windows-update-migration) 完成一次旧缓存进程清理。
+
+## 为什么全面转向 CLI 版 CCE？
+
+将 **CCE CLI（`cli`）** 确立为主路线完全基于**时间效率**考量：我们希望把工程精力集中于全面提升 CCE 语义检索的速度与稳定性体验，同时**逐步淡化其他边缘功能**——包括重型桌面 IDE/CDP 窗口耦合（`/cce ide` 仅保留为按需回退）、`cursor_do` 任务委派（可通过 `CURSOR_BRIDGE_DELEGATION=off` 隐藏关闭）以及进入低维护模式的配套插件。
+
+促成这一决定的直接原因，是当下许多 Coding Agent（**尤其是 AGY / Antigravity**）在陌生代码库上的原生工具使用效率偏低：`read_file` 盲读命中率与定位正确率低、顺着引用连环猜文件，极易把主上下文迅速塞满并陷入“压缩失忆 → 重复重读”循环。以下为我们项目中的真实实测审计数据：
+
+| 真实项目实测场景 | 原生 `read_file` 盲读 / 7.0.0 前耗时与上下文代价 | 接入 7.0.0 CCE CLI（`cli`）后 |
+|---|---|---|
+| **AGY 447 步真实编码会话审计**（19 个文件、`+328 / -70` 行改动） | 开局未做语义定位即盲读 **20+ 个无关外围文件**（第 59 步尚未改代码即触发首次压缩）；**67 次批量读取中 60 次（90%）** 超内联上限落盘，随后 **93 次 `read_file`** 将 **273 万 / 350.6 万总字符（约 78% 冗余读取）** 灌入窗口，触发 **5 次上下文压缩**，同一批 24–59 KB 核心文件被反复重读 **6–11 遍** | **1 次 `cursor_context_engine`** 仅返回约 **1–2 KB** 的可核验 `path:line` 锚点（`CCE_SEARCH_RESULT`），后续仅对命中的精确行段按需窄读 |
+| **AGY 1 父 + 4 子会话盲测审计**与 **360+ 步零 CCE 会话** | 6.2.0 阶段前 3 轮因触发宿主 180s MCP 超时回退本地盲读，4 个子会话执行 **172 次 `read_file`（约 163 万字符）**、父会话执行 **134 次 `read_file`（约 114 万字符）**；磁盘读取仅耗 **14–17s**，但膨胀至 **25.4 万–26.3 万输入 tokens** 的长上下文使单子任务模型步耗达 **8.6–14.2 分钟**、单步最长卡顿 **220–265s**（另一场 360+ 步零 CCE 会话同样盲读膨胀超 **26 万 tokens**） | 20s 级 CLI 响应彻底避开宿主 180s MCP 超时门槛，从源头阻断顺着 `import` 无头苍蝇式跨文件盲读 |
+| **Windows CCE CLI 端到端实测**（`grok-4.6-fast`、`medium` 思考程度） | 6.2.0 `--print` 每次承受 **~21s** 派发前 shell/MCP 固定开销（单查 **42.9–45.3s**；3 路串行总和 **82.6s**） | 常驻 Ask 模式 ACP + 私有 `CURSOR_DATA_DIR` 隔离 + 预检缓存将派发前开销压至 **0.0–0.2s**：单查最快 **19.8s（提速约 2.2 倍）**，3 路并发总墙钟 **30.4s（吞吐提升约 2.7 倍）** |
+
+在 **AGY** 及同类 Agent 上配合使用 CCE CLI，可以用一次约 20 秒的独立语义检索替代数十次低命中率 `read_file` 盲猜与百万字符级上下文重装，在定位准确率、单轮响应速度与上下文洁净度上获得显著的体验跃升。
 
 <a id="migrate-to-7-0"></a>
 
@@ -53,7 +67,7 @@ claude plugin install cursor-bridge@vanyangyang
 
 ```bash
 grok plugin marketplace add Vanyangyang/cursor-bridge
-grok plugin install Vanyangyang/cursor-bridge --trust
+grok plugin install cursor-bridge@vanyangyang --trust
 grok plugin enable cursor-bridge
 ```
 
@@ -178,7 +192,7 @@ npm run verify          # 一键串联构建 + 单测 + 双冒烟 + 安装校验
 | `CURSOR_BRIDGE_CCE_CLI_MCP` | 隔离（未设置） | 设为 `native` 关闭私有 `CURSOR_DATA_DIR` MCP 隔离。 |
 | `CURSOR_BRIDGE_CCE_CLI_ACP` | `on` | 设为 `off` 关闭常驻 ACP 复用，全部走 `--print`。 |
 | `CURSOR_BRIDGE_CCE_CLI_ACP_IDLE_MS` / `_MAX_AGE_MS` / `_FAIL_TTL_MS` | `900000` / `3600000` / `300000` | 常驻 ACP 空闲回收、最大存活与失败缓存 TTL（毫秒）。 |
-| `CURSOR_BRIDGE_CCE_CLI_CONCURRENCY` | `3` | CLI CCE 并发槽位数（`1`–`8`）。 |
+| `CURSOR_BRIDGE_CCE_CLI_CONCURRENCY` | `3` | CLI CCE 并发槽位数（1–8）。 |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | 设为 `off` 禁用并隐藏 `cursor_do`。 |
 | `CURSOR_BRIDGE_CDP_PORT` / `_TIMEOUT` / `_NO_AUTOLAUNCH` / `_RUNTIME_MODE` | `9223` / `300000` / 未设置 / `normal` | IDE 调试端口、超时（毫秒）、禁用预热（`1`）与初始窗口模式。 |
 | `CURSOR_EXE` | 自动探测 | 覆盖 Cursor IDE 可执行路径（路径不存在时严格 fail-closed）。 |

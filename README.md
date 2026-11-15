@@ -14,12 +14,26 @@
 > [!WARNING]
 > **Windows primary support:** Live-tested runtime and end-to-end acceptance target **Windows**. macOS and Linux have unit and protocol smoke coverage (`macos-basic` CI) for CLI/MCP paths, not full live OS acceptance.
 
-Cursor Bridge connects your coding agent (**Codex**, **Claude Code**, **Grok Build**, **Pi**, or any MCP-capable host) to **Cursor Context Engine (CCE)**—and optionally to bounded `cursor_do` Agent tasks—returning compact verified `path:line` evidence (`CCE_SEARCH_RESULT`) without flooding main context or touching Cursor billing.
+Cursor Bridge connects your coding agent (**Codex**, **Claude Code**, **Grok Build**, **Pi**, **AGY / Antigravity**, or any MCP-capable host) to **Cursor Context Engine (CCE)**—and optionally to bounded `cursor_do` Agent tasks—returning compact verified `path:line` evidence (`CCE_SEARCH_RESULT`) without flooding main context or touching Cursor billing.
 
-Starting in **7.0.0**, **CCE CLI (`cli`)** is the **primary maintenance route and fresh-install default** (existing saved `cce-source.json` selections stay intact; desktop IDE/Agents over CDP remains selectable via `/cce ide`). Warm persistent Ask-mode ACP sessions plus private `CURSOR_DATA_DIR` MCP isolation and preflight caching cut pre-dispatch shell overhead from `~21s` to `0.0–0.2s`: live Windows `grok-4.6-fast` / `medium` queries reached **`19.8s`** single-query end-to-end vs. 6.2.0 baseline `42.9–45.3s`, and **`30.4s`** wall-clock across 3 concurrent queries (`82.6s` serial sum). Setup & CLI download: [Migrating from 6.x to 7.0.0](#migrate-to-7-0).
+Starting in **7.0.0**, **CCE CLI (`cli`)** is the **primary maintenance route and fresh-install default** (existing saved `cce-source.json` selections stay intact; desktop IDE over CDP remains selectable via `/cce ide`). Warm Ask-mode ACP sessions cut single-query latency to **19.8s** (vs. 42.9–45.3s in 6.2.0, **2.2x faster**) and 3-query concurrent wall-clock to **30.4s** (vs. 82.6s serial sum). Setup & CLI download: [Migrating from 6.x to 7.0.0](#migrate-to-7-0).
 
 > [!IMPORTANT]
 > **One-time Windows migration:** If the installed Cursor Bridge version is 5.3.6 or earlier, save your work before the first upgrade to 5.4.0 or any later release, then follow [Update Cursor Bridge](#windows-update-migration) to clean up old-cache processes once.
+
+## Why CLI-first CCE?
+
+Moving to **CCE CLI (`cli`)** as the primary route is driven by **time efficiency**: our focus is an across-the-board upgrade to the CCE retrieval experience while **gradually fading out peripheral features**—heavy desktop IDE/CDP window coupling (`/cce ide` stays an opt-in fallback), `cursor_do` task delegation (disableable via `CURSOR_BRIDGE_DELEGATION=off`), and companion plugins in maintenance-only mode.
+
+What prompted this decision is low native tool-use efficiency in many current coding agents—**especially AGY (Antigravity)**—where low `read_file` hit rate, wrong-file detours, and whole-file dumps rapidly stuff the context window on unfamiliar codebases:
+
+| Measured project benchmark | Native `read_file` / pre-7.0.0 cost | With 7.0.0 CCE CLI (`cli`) |
+|---|---|---|
+| **AGY 447-step coding session** (19-file, +328 / -70 line diff) | Blindly pre-read **20+ unrelated files** before editing (1st compaction at step 59); **60 / 67 (90%)** batch reads overflowed inline caps; **93 `read_file` calls** dumped **2.73M of 3.51M total chars (~78% waste)** into context, triggering **5 compactions** and **6–11x re-reads** of the same 24–59 KB files | **1 `cursor_context_engine` call** returns **~1–2 KB** of verified `path:line` anchors (`CCE_SEARCH_RESULT`), followed only by targeted line-range reads |
+| **AGY 4-child + parent blind audit** & **360+ step 0-CCE run** | When pre-7.0.0 CCE hit 180s host MCP timeouts in 3 / 4 rounds, local fallback issued **172 child (~1.63M chars) + 134 parent (~1.14M chars) `read_file` calls**; disk I/O took **14–17s**, while **254K–263K token** prompts consumed **8.6–14.2 min** per child and up to **220–265s** per model step (a 360+ step 0-CCE run likewise chained blind `read_file` hops past **260K tokens**) | Sub-20s CLI turnaround avoids 180s host MCP timeouts and stops blind `import`-hopping before context bloat starts |
+| **Windows CCE CLI speed** (`grok-4.6-fast`, `medium` effort) | 6.2.0 `--print` paid **~21s** pre-dispatch shell/MCP overhead (**42.9–45.3s** single query; **82.6s** serial sum for 3 queries) | Warm Ask-mode ACP + private `CURSOR_DATA_DIR` + preflight cache cut pre-dispatch overhead to **0.0–0.2s**: **19.8s** single query (**~2.2x faster**) and **30.4s** wall-clock across 3 concurrent queries (**~2.7x throughput**) |
+
+Pairing CCE CLI with **AGY** and similar agents replaces dozens of low-hit-rate `read_file` guesses and multi-megabyte context reloads with one ~20s semantic lookup plus exact line-bounded verification—delivering a major upgrade in localization accuracy, turn speed, and context cleanliness.
 
 <a id="migrate-to-7-0"></a>
 
@@ -53,7 +67,7 @@ claude plugin install cursor-bridge@vanyangyang
 
 ```bash
 grok plugin marketplace add Vanyangyang/cursor-bridge
-grok plugin install Vanyangyang/cursor-bridge --trust
+grok plugin install cursor-bridge@vanyangyang --trust
 grok plugin enable cursor-bridge
 ```
 
@@ -178,7 +192,7 @@ npm run verify          # Full build + test + smoke:mcp + smoke:cli + verify:ins
 | `CURSOR_BRIDGE_CCE_CLI_MCP` | isolated | Set `native` to disable private `CURSOR_DATA_DIR` MCP isolation. |
 | `CURSOR_BRIDGE_CCE_CLI_ACP` | `on` | Set `off` to disable persistent ACP sessions and use `--print`. |
 | `CURSOR_BRIDGE_CCE_CLI_ACP_IDLE_MS` / `_MAX_AGE_MS` / `_FAIL_TTL_MS` | `900000` / `3600000` / `300000` | Warm ACP idle recycle, max lifetime, and failure cache TTL (ms). |
-| `CURSOR_BRIDGE_CCE_CLI_CONCURRENCY` | `3` | Concurrent CLI CCE lane slots (`1`–`8`). |
+| `CURSOR_BRIDGE_CCE_CLI_CONCURRENCY` | `3` | Concurrent CLI CCE lane slots (1–8). |
 | `CURSOR_BRIDGE_DELEGATION` | `on` | Set `off` to disable and hide `cursor_do`. |
 | `CURSOR_BRIDGE_CDP_PORT` / `_TIMEOUT` / `_NO_AUTOLAUNCH` / `_RUNTIME_MODE` | `9223` / `300000` / unset / `normal` | IDE CDP port, query timeout (ms), skip autolaunch (`1`), and startup mode. |
 | `CURSOR_EXE` | auto | Override Cursor IDE binary path (fails closed if missing). |
