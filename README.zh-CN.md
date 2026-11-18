@@ -210,4 +210,4 @@ npm run verify          # 一键串联构建 + 单测 + 双冒烟 + 安装校验
 
 - [LINUX DO](https://linux.do) · [MIT License](./LICENSE)
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=78d133dcb77a)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=29909232eb40)](https://github.com/Vanyangyang/cursor-bridge)

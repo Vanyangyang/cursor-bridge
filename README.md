@@ -210,4 +210,4 @@ This repository also still contains the standalone **Grok Build Supervisor** plu
 
 - [LINUX DO](https://linux.do) · [MIT License](./LICENSE)
 
-[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=78d133dcb77a)](https://github.com/Vanyangyang/cursor-bridge)
+[![Cursor Bridge Star History](https://raw.githubusercontent.com/Vanyangyang/cursor-bridge/main/assets/star-history.svg?v=29909232eb40)](https://github.com/Vanyangyang/cursor-bridge)
